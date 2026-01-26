@@ -9,6 +9,7 @@ export interface CreateMeetingMinuteInput {
   start_at: Date;
   location?: string;
   meeting_link?: string;
+  linkedTaskId?: string;
 }
 
 export function useCreateMeetingMinute() {
@@ -29,26 +30,31 @@ export function useCreateMeetingMinute() {
       if (orgError) throw orgError;
       if (!userOrg?.org_id) throw new Error("Geen organisatie gevonden");
 
-      // 2. Maak task aan met category='meeting'
-      const { data: task, error: taskError } = await supabase
-        .from("tasks")
-        .insert({
-          title: input.title,
-          org_id: userOrg.org_id,
-          category: 'meeting',
-          start_at: input.start_at.toISOString(),
-          is_all_day: false,
-        })
-        .select('id')
-        .single();
+      let taskId = input.linkedTaskId;
 
-      if (taskError) throw taskError;
+      // 2. Maak alleen nieuwe task als geen linkedTaskId meegegeven
+      if (!taskId) {
+        const { data: task, error: taskError } = await supabase
+          .from("tasks")
+          .insert({
+            title: input.title,
+            org_id: userOrg.org_id,
+            category: 'meeting',
+            start_at: input.start_at.toISOString(),
+            is_all_day: false,
+          })
+          .select('id')
+          .single();
+
+        if (taskError) throw taskError;
+        taskId = task.id;
+      }
 
       // 3. Maak meeting_minutes aan gekoppeld aan task
       const { data: minute, error: minuteError } = await supabase
         .from("meeting_minutes")
         .insert({
-          task_id: task.id,
+          task_id: taskId,
           org_id: userOrg.org_id,
           meeting_type: input.meeting_type,
           location: input.location || null,
@@ -61,13 +67,16 @@ export function useCreateMeetingMinute() {
         .single();
 
       if (minuteError) {
-        // Cleanup: verwijder task als minute creation failed
-        await supabase.from("tasks").delete().eq("id", task.id);
+        // Cleanup: verwijder task als minute creation failed (alleen als we de task aangemaakt hebben)
+        if (!input.linkedTaskId && taskId) {
+          await supabase.from("tasks").delete().eq("id", taskId);
+        }
         throw minuteError;
       }
 
       // 4. Invalidate query cache
       queryClient.invalidateQueries({ queryKey: MEETING_MINUTES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ['task-meeting-minutes', taskId] });
 
       return minute.id;
     } finally {

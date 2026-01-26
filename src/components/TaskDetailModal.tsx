@@ -44,6 +44,7 @@ import { ReminderDialog } from "./ReminderDialog";
 import { ProcessTimeline } from "./ProcessTimeline";
 import { AttachmentPreviewModal } from "./AttachmentPreviewModal";
 import { ActionTimeline, ActionHistoryItem, ActiveSubtaskInfo } from "./ActionTimeline";
+import { TaskMeetingMinutesSection } from "./tasks/TaskMeetingMinutesSection";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -140,7 +141,8 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
     description: true,
     actions: true,
     steps: true,
-    attachments: true
+    attachments: true,
+    notulen: false
   });
   const [actionHistory, setActionHistory] = useState<ActionHistoryItem[]>([]);
   const [loadingActions, setLoadingActions] = useState(false);
@@ -1224,6 +1226,31 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                 </CollapsibleContent>
               </Collapsible>
             )}
+
+            {/* Notulen Section */}
+            <Collapsible 
+              open={sectionsOpen.notulen} 
+              onOpenChange={() => toggleSection('notulen')}
+            >
+              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg hover:bg-muted/20 transition-colors duration-150 group">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-primary/80" />
+                  <h3 className="font-semibold text-foreground">Notulen</h3>
+                </div>
+                <ChevronDown className={cn(
+                  "h-4 w-4 text-muted-foreground/60 transition-transform duration-200",
+                  sectionsOpen.notulen && "rotate-180"
+                )} />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-3 animate-accordion-down">
+                <div className="px-3">
+                  <TaskMeetingMinutesSection
+                    taskId={task.id}
+                    taskTitle={task.title}
+                  />
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         </DialogContent>
       </Dialog>

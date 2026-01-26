@@ -1,3 +1,4 @@
+import React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -43,6 +44,8 @@ interface CreateMeetingMinuteDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: (minuteId: string) => void;
+  defaultTitle?: string;
+  linkedTaskId?: string;
 }
 
 const MEETING_TYPES = [
@@ -82,13 +85,15 @@ export function CreateMeetingMinuteDialog({
   open,
   onOpenChange,
   onSuccess,
+  defaultTitle,
+  linkedTaskId,
 }: CreateMeetingMinuteDialogProps) {
   const { createMeetingMinute, isCreating } = useCreateMeetingMinute();
 
   const form = useForm<CreateMeetingMinuteFormData>({
     resolver: zodResolver(createMeetingMinuteSchema),
     defaultValues: {
-      title: "",
+      title: defaultTitle || "",
       meeting_type: undefined,
       start_at: new Date(),
       start_time: "14:00",
@@ -96,6 +101,20 @@ export function CreateMeetingMinuteDialog({
       meeting_link: "",
     },
   });
+
+  // Reset form with defaultTitle when dialog opens
+  React.useEffect(() => {
+    if (open) {
+      form.reset({
+        title: defaultTitle || "",
+        meeting_type: undefined,
+        start_at: new Date(),
+        start_time: "14:00",
+        location: "",
+        meeting_link: "",
+      });
+    }
+  }, [open, defaultTitle, form]);
 
   const onSubmit = async (values: CreateMeetingMinuteFormData) => {
     try {
@@ -110,6 +129,7 @@ export function CreateMeetingMinuteDialog({
         start_at: startDateTime,
         location: values.location || undefined,
         meeting_link: values.meeting_link || undefined,
+        linkedTaskId: linkedTaskId,
       });
 
       toast.success("Notulen aangemaakt", {
