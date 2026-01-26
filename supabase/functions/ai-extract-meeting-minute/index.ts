@@ -50,6 +50,35 @@ interface ExtractedMeetingData {
 interface TextExtractionResult {
   text: string;
   method: 'pdf-parse' | 'mammoth' | 'direct' | 'unsupported' | 'failed';
+  error?: string;
+}
+
+// Library caching for performance
+let pdfParseLib: any = null;
+let mammothLib: any = null;
+
+async function loadPdfLibrary() {
+  if (!pdfParseLib) {
+    try {
+      pdfParseLib = (await import("https://esm.sh/pdf-parse@1.1.1")).default;
+    } catch (error) {
+      console.error('Failed to load pdf-parse library:', error);
+      throw new Error('PDF library kon niet geladen worden');
+    }
+  }
+  return pdfParseLib;
+}
+
+async function loadMammothLibrary() {
+  if (!mammothLib) {
+    try {
+      mammothLib = (await import("https://esm.sh/mammoth@1.6.0")).default;
+    } catch (error) {
+      console.error('Failed to load mammoth library:', error);
+      throw new Error('Word library kon niet geladen worden');
+    }
+  }
+  return mammothLib;
 }
 
 // Text extraction from binary files using dynamic imports
@@ -57,6 +86,8 @@ async function extractTextFromFile(
   base64Content: string,
   mimeType: string
 ): Promise<TextExtractionResult> {
+  console.log(`📁 extractTextFromFile called with mimeType: ${mimeType}, content length: ${base64Content.length}`);
+  
   try {
     // Decode base64 to Uint8Array
     const binaryString = atob(base64Content);
@@ -64,18 +95,33 @@ async function extractTextFromFile(
     for (let i = 0; i < binaryString.length; i++) {
       bytes[i] = binaryString.charCodeAt(i);
     }
+    console.log(`📁 Decoded ${bytes.length} bytes from base64`);
 
     // PDF Extractie
     if (mimeType === 'application/pdf') {
       try {
-        // Dynamic import for pdf-parse
-        const pdfParse = (await import("https://esm.sh/pdf-parse@1.1.1")).default;
+        const pdfParse = await loadPdfLibrary();
         const pdfData = await pdfParse(bytes);
+        
+        if (!pdfData.text || pdfData.text.trim().length === 0) {
+          console.warn('📄 PDF parsed but contains no text (possibly scanned)');
+          return { 
+            text: '', 
+            method: 'pdf-parse',
+            error: 'PDF bevat geen leesbare tekst. Dit kan een gescand document zijn. Kopieer de tekst naar een .txt bestand en probeer opnieuw.'
+          };
+        }
+        
         console.log(`📄 PDF parsed: ${pdfData.numpages} pages, ${pdfData.text.length} chars`);
         return { text: pdfData.text, method: 'pdf-parse' };
       } catch (pdfError) {
         console.error('PDF parse error:', pdfError);
-        return { text: '', method: 'failed' };
+        const errorMessage = pdfError instanceof Error ? pdfError.message : 'Onbekende PDF fout';
+        return { 
+          text: '', 
+          method: 'failed',
+          error: `Kon PDF niet lezen: ${errorMessage}. Probeer een ander bestand of kopieer de tekst naar .txt.`
+        };
       }
     }
 
@@ -85,27 +131,59 @@ async function extractTextFromFile(
       mimeType === 'application/msword'
     ) {
       try {
-        // Dynamic import for mammoth
-        const mammoth = (await import("https://esm.sh/mammoth@1.6.0")).default;
+        const mammoth = await loadMammothLibrary();
         const result = await mammoth.extractRawText({ buffer: bytes });
+        
+        if (!result.value || result.value.trim().length === 0) {
+          console.warn('📝 Word parsed but contains no text');
+          return { 
+            text: '', 
+            method: 'mammoth',
+            error: 'Word document bevat geen leesbare tekst. Kopieer de inhoud naar een .txt bestand.'
+          };
+        }
+        
         console.log(`📝 Word parsed: ${result.value.length} chars`);
         return { text: result.value, method: 'mammoth' };
       } catch (wordError) {
         console.error('Word parse error:', wordError);
-        return { text: '', method: 'failed' };
+        const errorMessage = wordError instanceof Error ? wordError.message : 'Onbekende Word fout';
+        return { 
+          text: '', 
+          method: 'failed',
+          error: `Kon Word document niet lezen: ${errorMessage}. Probeer .docx in plaats van .doc, of kopieer naar .txt.`
+        };
       }
     }
 
     // Plain text / Markdown - decode als UTF-8
     if (mimeType === 'text/plain' || mimeType === 'text/markdown') {
-      const decoder = new TextDecoder('utf-8');
-      return { text: decoder.decode(bytes), method: 'direct' };
+      try {
+        const decoder = new TextDecoder('utf-8');
+        const text = decoder.decode(bytes);
+        console.log(`📝 Text decoded: ${text.length} chars`);
+        return { text, method: 'direct' };
+      } catch (decodeError) {
+        return { 
+          text: '', 
+          method: 'failed',
+          error: 'Kon tekstbestand niet decoderen. Controleer de encoding (UTF-8 vereist).'
+        };
+      }
     }
 
-    return { text: '', method: 'unsupported' };
+    return { 
+      text: '', 
+      method: 'unsupported',
+      error: `Bestandstype "${mimeType}" wordt niet ondersteund. Gebruik PDF, Word (.docx), of tekst (.txt, .md).`
+    };
   } catch (error) {
     console.error('Text extraction error:', error);
-    return { text: '', method: 'failed' };
+    return { 
+      text: '', 
+      method: 'failed',
+      error: error instanceof Error ? error.message : 'Onverwachte fout bij bestandsverwerking'
+    };
   }
 }
 
@@ -177,12 +255,23 @@ serve(async (req) => {
       console.log(`📁 Processing file with MIME type: ${mimeType}`);
       const extraction = await extractTextFromFile(fileContent, mimeType);
       
-      if (!extraction.text || extraction.method === 'failed' || extraction.method === 'unsupported') {
+      if (extraction.error) {
+        console.error(`❌ Extraction failed: ${extraction.error}`);
         return new Response(JSON.stringify({ 
           data: getEmptyResult(),
-          error: extraction.method === 'unsupported' 
-            ? 'Bestandstype niet ondersteund' 
-            : 'Kon bestand niet lezen'
+          error: extraction.error,
+          extraction_method: extraction.method
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (!extraction.text || extraction.text.trim().length === 0) {
+        return new Response(JSON.stringify({ 
+          data: getEmptyResult(),
+          error: 'Geen leesbare tekst gevonden in bestand',
+          extraction_method: extraction.method
         }), {
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
