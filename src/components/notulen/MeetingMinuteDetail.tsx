@@ -16,6 +16,11 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -33,17 +38,22 @@ import {
   Save,
   FileDown,
   Trash2,
+  Paperclip,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MeetingMinute } from "@/hooks/useMeetingMinutes";
 import { useUpdateMeetingMinute } from "@/hooks/notulen/useUpdateMeetingMinute";
 import { useDeleteMeetingMinute } from "@/hooks/notulen/useDeleteMeetingMinute";
+import { useAttachments } from "@/hooks/notulen/useAttachments";
 import { generateMeetingMinutesPDF } from "@/utils/generateMeetingMinutesPDF";
 import { StatusSelector } from "./StatusSelector";
 import { EditableMetaSection } from "./EditableMetaSection";
 import { EditableAgendaSection } from "./EditableAgendaSection";
 import { EditableDecisionsSection } from "./EditableDecisionsSection";
 import { EditableAttendeesSection } from "./EditableAttendeesSection";
+import { AttachmentUploadZone } from "./AttachmentUploadZone";
+import { AttachmentList } from "./AttachmentList";
 import { toast } from "sonner";
 
 interface MeetingMinuteDetailProps {
@@ -143,6 +153,8 @@ export function MeetingMinuteDetail({
 }: MeetingMinuteDetailProps) {
   const { updateMeetingMinute, isUpdating } = useUpdateMeetingMinute();
   const { deleteMeetingMinute, isDeleting } = useDeleteMeetingMinute();
+  const { attachments, isLoading: attachmentsLoading } = useAttachments(minute?.id || null);
+  const [attachmentsOpen, setAttachmentsOpen] = useState(true);
   
   // Edit mode state
   const [isEditMode, setIsEditMode] = useState(false);
@@ -359,6 +371,44 @@ export function MeetingMinuteDetail({
 
               {/* ATTENDEES Section */}
               <EditableAttendeesSection minute={minute} isEditMode={isEditMode} />
+
+              {/* ATTACHMENTS Section */}
+              <Collapsible open={attachmentsOpen} onOpenChange={setAttachmentsOpen}>
+                <CollapsibleTrigger className="flex items-center justify-between w-full py-2 group">
+                  <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                    <Paperclip className="h-4 w-4" />
+                    <span>Bijlagen</span>
+                    {attachments.length > 0 && (
+                      <Badge variant="secondary" className="ml-1 h-5 px-1.5">
+                        {attachments.length}
+                      </Badge>
+                    )}
+                  </div>
+                  <ChevronDown className={cn(
+                    "h-4 w-4 text-muted-foreground transition-transform",
+                    attachmentsOpen && "rotate-180"
+                  )} />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-2">
+                  <Card className="p-4 space-y-4">
+                    {/* Upload zone alleen in edit mode */}
+                    {isEditMode && (
+                      <AttachmentUploadZone
+                        meetingMinuteId={minute.id}
+                        orgId={minute.org_id}
+                        compact
+                      />
+                    )}
+                    
+                    {/* Attachment list */}
+                    <AttachmentList
+                      attachments={attachments}
+                      isLoading={attachmentsLoading}
+                      isEditMode={isEditMode}
+                    />
+                  </Card>
+                </CollapsibleContent>
+              </Collapsible>
             </div>
           </ScrollArea>
 
