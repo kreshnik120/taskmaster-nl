@@ -14,11 +14,13 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { User } from "@supabase/supabase-js";
+import { usePendingMinutesCount } from "@/hooks/notulen/usePendingMinutesCount";
+
 interface MenuItem {
   title: string;
   url: string;
   icon: any;
-  badge?: 'taskCount' | 'validationCount';
+  badge?: 'taskCount' | 'validationCount' | 'pendingMinutesCount';
   requiresEdit?: boolean;
   requiresAdmin?: boolean;
 }
@@ -58,7 +60,8 @@ const menuGroups: MenuGroup[] = [{
   }, {
     title: "Notulen",
     url: "/notulen",
-    icon: FileText
+    icon: FileText,
+    badge: 'pendingMinutesCount'
   }]
 }, {
   label: "Recruitment",
@@ -125,6 +128,7 @@ interface CollapsibleGroupProps {
   group: MenuGroup;
   activeTaskCount?: number;
   validationCount?: number;
+  pendingMinutesCount?: number;
   canEdit: boolean;
   isAdmin: boolean;
   isOpen: boolean;
@@ -134,6 +138,7 @@ const CollapsibleGroup = ({
   group,
   activeTaskCount,
   validationCount,
+  pendingMinutesCount,
   canEdit,
   isAdmin,
   isOpen,
@@ -150,6 +155,7 @@ const CollapsibleGroup = ({
   const getBadgeCount = (badgeType?: string) => {
     if (badgeType === 'taskCount') return activeTaskCount;
     if (badgeType === 'validationCount') return validationCount;
+    if (badgeType === 'pendingMinutesCount') return pendingMinutesCount;
     return undefined;
   };
   return <Collapsible open={isOpen} onOpenChange={onToggle} className="mb-2">
@@ -200,6 +206,7 @@ export function AppSidebar() {
   } = useUserRole();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const queryClient = useQueryClient();
+  const { pendingCount } = usePendingMinutesCount();
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     "Mijn Werk": true,
@@ -348,6 +355,7 @@ export function AppSidebar() {
                   group={group} 
                   activeTaskCount={activeTaskCount} 
                   validationCount={validationCount} 
+                  pendingMinutesCount={pendingCount}
                   canEdit={canEdit()} 
                   isAdmin={isAdmin()}
                   isOpen={openGroups[group.label] ?? false}
