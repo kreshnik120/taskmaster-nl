@@ -334,7 +334,7 @@ const Kanban = () => {
       { name: "Backlog", status: "BACKLOG" as const, order: 0, project_id: projectId },
       { name: "Klaar", status: "READY" as const, order: 1, project_id: projectId },
       { name: "Bezig", status: "DOING" as const, order: 2, project_id: projectId },
-      { name: "Geblokkeerd", status: "BLOCKED" as const, order: 3, project_id: projectId },
+      { name: "In afwachting", status: "BLOCKED" as const, order: 3, project_id: projectId },
       { name: "Review", status: "REVIEW" as const, order: 4, project_id: projectId },
       { name: "Afgerond", status: "DONE" as const, order: 5, project_id: projectId },
     ];
@@ -719,10 +719,10 @@ const Kanban = () => {
           }}
         />
         <KPICard 
-          icon={AlertCircle} 
-          title="Geblokkeerd" 
+          icon={Clock} 
+          title="In afwachting" 
           value={blockedCount} 
-          variant="urgent"
+          variant="time"
           isActive={lastScrolledKpi === "blocked"}
           onClick={() => {
             const blockedColumn = columns.find(c => c.status === 'BLOCKED');
@@ -884,8 +884,8 @@ const Kanban = () => {
               }}
               className="gap-2"
             >
-              <AlertCircle className="h-4 w-4 text-destructive" />
-              Toon blocked
+              <Clock className="h-4 w-4 text-amber-500" />
+              Toon in afwachting
             </Button>
           )}
           <Button onClick={() => setDialogOpen(true)} size="sm" className="gap-2">
