@@ -31,15 +31,20 @@ import {
   Loader2,
   X,
   Save,
+  FileDown,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MeetingMinute } from "@/hooks/useMeetingMinutes";
 import { useUpdateMeetingMinute } from "@/hooks/notulen/useUpdateMeetingMinute";
+import { useDeleteMeetingMinute } from "@/hooks/notulen/useDeleteMeetingMinute";
+import { generateMeetingMinutesPDF } from "@/utils/generateMeetingMinutesPDF";
 import { StatusSelector } from "./StatusSelector";
 import { EditableMetaSection } from "./EditableMetaSection";
 import { EditableAgendaSection } from "./EditableAgendaSection";
 import { EditableDecisionsSection } from "./EditableDecisionsSection";
 import { EditableAttendeesSection } from "./EditableAttendeesSection";
+import { toast } from "sonner";
 
 interface MeetingMinuteDetailProps {
   minute: MeetingMinute | null;
@@ -137,10 +142,13 @@ export function MeetingMinuteDetail({
   onOpenChange,
 }: MeetingMinuteDetailProps) {
   const { updateMeetingMinute, isUpdating } = useUpdateMeetingMinute();
+  const { deleteMeetingMinute, isDeleting } = useDeleteMeetingMinute();
   
   // Edit mode state
   const [isEditMode, setIsEditMode] = useState(false);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   
   // Edited values
   const [editedLocation, setEditedLocation] = useState("");
@@ -183,36 +191,17 @@ export function MeetingMinuteDetail({
     }
   }, [open]);
 
-  // Keyboard support
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isEditMode && open) {
-        e.preventDefault();
-        handleCancelEdit();
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isEditMode, open, hasChanges]);
-
-  const handleCancelEdit = () => {
+  const handleCancelEdit = useCallback(() => {
     if (hasChanges) {
       setShowDiscardDialog(true);
     } else {
       setIsEditMode(false);
       resetEditedValues();
     }
-  };
+  }, [hasChanges, resetEditedValues]);
 
-  const handleConfirmDiscard = () => {
-    setShowDiscardDialog(false);
-    setIsEditMode(false);
-    resetEditedValues();
-  };
-
-  const handleSave = async () => {
-    if (!minute) return;
+  const handleSave = useCallback(async () => {
+    if (!minute || isUpdating) return;
 
     await updateMeetingMinute(minute.id, {
       location: editedLocation || null,
@@ -223,11 +212,68 @@ export function MeetingMinuteDetail({
     });
 
     setIsEditMode(false);
+  }, [minute, isUpdating, updateMeetingMinute, editedLocation, editedMeetingLink, editedNextMeetingDate, editedContent, editedStatus]);
+
+  // Keyboard support: Escape + Cmd/Ctrl+S
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!open) return;
+      
+      // Escape = Cancel edit
+      if (e.key === "Escape" && isEditMode) {
+        e.preventDefault();
+        handleCancelEdit();
+      }
+      
+      // Cmd/Ctrl + S = Save
+      if ((e.metaKey || e.ctrlKey) && e.key === "s" && isEditMode) {
+        e.preventDefault();
+        if (hasChanges && !isUpdating) {
+          handleSave();
+        }
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isEditMode, open, hasChanges, isUpdating, handleCancelEdit, handleSave]);
+
+  const handleConfirmDiscard = () => {
+    setShowDiscardDialog(false);
+    setIsEditMode(false);
+    resetEditedValues();
   };
 
   const handleEnterEditMode = () => {
     resetEditedValues();
     setIsEditMode(true);
+  };
+
+  const handleExportPDF = async () => {
+    if (!minute) return;
+    
+    setIsExporting(true);
+    try {
+      await generateMeetingMinutesPDF({ minute });
+      toast.success("PDF gedownload");
+    } catch (error) {
+      console.error('PDF generation error:', error);
+      toast.error("Kon PDF niet genereren");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!minute) return;
+    
+    try {
+      await deleteMeetingMinute(minute.id);
+      setShowDeleteDialog(false);
+      onOpenChange(false); // Close sheet
+    } catch (error) {
+      // Error already handled in hook with toast
+    }
   };
 
   if (!minute) return null;
@@ -331,6 +377,17 @@ export function MeetingMinuteDetail({
 
             {isEditMode ? (
               <>
+                {/* Delete button - left side */}
+                <Button 
+                  variant="ghost" 
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10 mr-auto"
+                  onClick={() => setShowDeleteDialog(true)}
+                  disabled={isDeleting || isUpdating}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Verwijderen
+                </Button>
+                
                 <Button 
                   variant="outline" 
                   onClick={handleCancelEdit}
@@ -342,6 +399,7 @@ export function MeetingMinuteDetail({
                 <Button 
                   onClick={handleSave} 
                   disabled={isUpdating || !hasChanges}
+                  title="Cmd/Ctrl + S"
                 >
                   {isUpdating ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -352,10 +410,24 @@ export function MeetingMinuteDetail({
                 </Button>
               </>
             ) : (
-              <Button variant="outline" onClick={handleEnterEditMode}>
-                <Edit2 className="h-4 w-4 mr-2" />
-                Bewerken
-              </Button>
+              <div className="flex gap-2 w-full sm:w-auto">
+                <Button 
+                  variant="outline" 
+                  onClick={handleExportPDF}
+                  disabled={isExporting}
+                >
+                  {isExporting ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <FileDown className="h-4 w-4 mr-2" />
+                  )}
+                  Exporteer PDF
+                </Button>
+                <Button variant="outline" onClick={handleEnterEditMode}>
+                  <Edit2 className="h-4 w-4 mr-2" />
+                  Bewerken
+                </Button>
+              </div>
             )}
           </SheetFooter>
         </SheetContent>
@@ -374,6 +446,30 @@ export function MeetingMinuteDetail({
             <AlertDialogCancel>Terug</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmDiscard}>
               Wijzigingen negeren
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Notulen verwijderen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              "{minute.tasks?.title}" wordt permanent verwijderd inclusief alle agenda items, 
+              beslissingen en deelnemers. Deze actie kan niet ongedaan worden gemaakt.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Annuleren</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Verwijderen
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -40,16 +40,33 @@ export function useUpdateMeetingMinute() {
 
       if (error) throw error;
 
-      await queryClient.invalidateQueries({ queryKey: MEETING_MINUTES_QUERY_KEY });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: MEETING_MINUTES_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: ['pending-minutes-count'] }),
+        queryClient.invalidateQueries({ queryKey: ['task-meeting-minutes'] }),
+      ]);
       
       if (updates.status) {
-        const statusLabels: Record<string, string> = {
-          draft: 'Concept',
-          pending_approval: 'Wacht op goedkeuring',
-          approved: 'Goedgekeurd',
-          archived: 'Gearchiveerd',
-        };
-        toast.success(`Status gewijzigd naar "${statusLabels[updates.status]}"`);
+        // Enhanced status-specific messages
+        if (updates.status === 'pending_approval') {
+          toast.success("Notulen ingediend ter goedkeuring", {
+            description: "Reviewers worden op de hoogte gesteld",
+          });
+        } else if (updates.status === 'approved') {
+          toast.success("Notulen goedgekeurd", {
+            description: "De notulen zijn nu definitief",
+          });
+        } else if (updates.status === 'archived') {
+          toast.success("Notulen gearchiveerd");
+        } else {
+          const statusLabels: Record<string, string> = {
+            draft: 'Concept',
+            pending_approval: 'Wacht op goedkeuring',
+            approved: 'Goedgekeurd',
+            archived: 'Gearchiveerd',
+          };
+          toast.success(`Status gewijzigd naar "${statusLabels[updates.status]}"`);
+        }
       } else {
         toast.success("Wijzigingen opgeslagen");
       }
