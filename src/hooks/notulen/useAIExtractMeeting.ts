@@ -144,20 +144,42 @@ export function useAIExtractMeeting(): UseAIExtractMeetingReturn {
         body: { fileContent: base64Content, mimeType }
       });
 
-      if (invokeError) throw invokeError;
+      if (invokeError) {
+        console.error('Edge function invoke error:', invokeError);
+        throw new Error(invokeError.message || 'Fout bij verbinding met AI service');
+      }
 
+      // Check voor specifieke extraction errors
       if (data?.error) {
+        console.error('Extraction error from edge function:', data.error);
         setError(data.error);
-        toast.error(data.error);
+        toast.error("Document verwerking mislukt", {
+          description: data.error,
+          duration: 6000,
+        });
         return null;
       }
 
-      setExtractedData(data?.data || null);
-      return data?.data || null;
+      if (!data?.data) {
+        console.error('No data returned from edge function');
+        setError('Geen data ontvangen van AI service');
+        toast.error("Kon document niet analyseren");
+        return null;
+      }
+
+      console.log(`✅ Extraction successful via ${data.extraction_method || 'unknown'}`);
+      setExtractedData(data.data);
+      return data.data;
     } catch (err) {
+      console.error('AI extraction error:', err);
       const message = err instanceof Error ? err.message : 'Extractie mislukt';
       setError(message);
-      toast.error("Kon document niet analyseren");
+      toast.error("Document verwerking mislukt", {
+        description: message.length > 100 
+          ? "Probeer een ander bestand of kopieer de tekst naar .txt" 
+          : message,
+        duration: 5000,
+      });
       return null;
     } finally {
       setIsExtracting(false);

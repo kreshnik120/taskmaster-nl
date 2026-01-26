@@ -245,31 +245,36 @@ export function CreateMeetingMinuteDialog({
         </DialogHeader>
 
         {/* AI Import section */}
-        <div className="flex items-center gap-2 py-2 border-b">
-          <input
-            ref={aiFileInputRef}
-            type="file"
-            accept=".txt,.md,.pdf,.doc,.docx"
-            onChange={handleAIImportFile}
-            className="hidden"
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleAIImportClick}
-            disabled={isCreating || isExtracting || isUploading}
-          >
-            {isExtracting ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Sparkles className="h-4 w-4 mr-2" />
-            )}
-            {isExtracting ? "Analyseren..." : "Importeer van bestand"}
-          </Button>
-          <span className="text-xs text-muted-foreground">
-            (PDF, Word, .txt, .md)
-          </span>
+        <div className="flex flex-col gap-1 py-2 border-b">
+          <div className="flex items-center gap-2">
+            <input
+              ref={aiFileInputRef}
+              type="file"
+              accept=".txt,.md,.pdf,.doc,.docx"
+              onChange={handleAIImportFile}
+              className="hidden"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleAIImportClick}
+              disabled={isCreating || isExtracting || isUploading}
+            >
+              {isExtracting ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4 mr-2" />
+              )}
+              {isExtracting ? "Analyseren..." : "Importeer van bestand"}
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              (PDF, Word, .txt, .md)
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground/70 italic">
+            Tip: Bij problemen met PDF, kopieer de tekst naar een .txt bestand
+          </p>
         </div>
 
         {/* Show extracted data preview */}
