@@ -3183,6 +3183,130 @@ export type Database = {
           },
         ]
       }
+      meeting_attendees: {
+        Row: {
+          attended: boolean | null
+          created_at: string | null
+          external_email: string | null
+          external_name: string | null
+          id: string
+          meeting_id: string
+          role: string | null
+          user_id: string | null
+        }
+        Insert: {
+          attended?: boolean | null
+          created_at?: string | null
+          external_email?: string | null
+          external_name?: string | null
+          id?: string
+          meeting_id: string
+          role?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          attended?: boolean | null
+          created_at?: string | null
+          external_email?: string | null
+          external_name?: string | null
+          id?: string
+          meeting_id?: string
+          role?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_attendees_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meeting_minutes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_attendees_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meeting_minutes: {
+        Row: {
+          agenda_items: Json | null
+          approved_at: string | null
+          approved_by: string | null
+          content: string | null
+          created_at: string | null
+          decisions: Json | null
+          id: string
+          location: string | null
+          meeting_link: string | null
+          meeting_type: string | null
+          next_meeting_date: string | null
+          org_id: string
+          status: string | null
+          task_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          agenda_items?: Json | null
+          approved_at?: string | null
+          approved_by?: string | null
+          content?: string | null
+          created_at?: string | null
+          decisions?: Json | null
+          id?: string
+          location?: string | null
+          meeting_link?: string | null
+          meeting_type?: string | null
+          next_meeting_date?: string | null
+          org_id: string
+          status?: string | null
+          task_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          agenda_items?: Json | null
+          approved_at?: string | null
+          approved_by?: string | null
+          content?: string | null
+          created_at?: string | null
+          decisions?: Json | null
+          id?: string
+          location?: string | null
+          meeting_link?: string | null
+          meeting_type?: string | null
+          next_meeting_date?: string | null
+          org_id?: string
+          status?: string | null
+          task_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_minutes_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_minutes_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_minutes_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: true
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       message_feedback: {
         Row: {
           created_at: string | null
