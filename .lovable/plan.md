@@ -1,15 +1,15 @@
 
-# Fase 5: PDF Export, In-App Notificaties & UI Polish - Implementatieplan
+# Fase 6A: Bestand Uploads voor Notulen Module - Implementatieplan
 
 ## 1. Overzicht
 
 | Aspect | Details |
 |--------|---------|
-| **Scope** | PDF Export, Pending Count Badge, Toast Notificaties, Loading Skeletons, Keyboard Shortcuts, Delete Functionaliteit |
-| **Risico niveau** | LAAG-MEDIUM (nieuwe dependency voor PDF, rest is hergebruik patronen) |
-| **Nieuwe dependency** | `jspdf` + `jspdf-autotable` (lightweight, geen React component rendering nodig) |
-| **Nieuwe bestanden** | 4 nieuwe files (3 hooks + 1 utility) |
-| **Bestaande wijzigingen** | MeetingMinuteDetail.tsx, AppSidebar.tsx, useUpdateMeetingMinute.ts |
+| **Scope** | Storage bucket, database tabel, 3 hooks, 3 componenten, 2 updates |
+| **Risico niveau** | MEDIUM (storage + RLS configuratie) |
+| **Bestaande patronen** | `TaskAttachmentUpload.tsx`, `AttachmentPreviewModal.tsx`, `fileHelpers.ts` |
+| **Nieuwe bestanden** | 6 nieuwe files + 1 migratie |
+| **Geschatte omvang** | ~700 regels code |
 
 ---
 
@@ -18,46 +18,305 @@
 ```text
 src/
 ├── hooks/notulen/
-│   ├── useDeleteMeetingMinute.ts      (NIEUW - delete met cascade)
-│   └── usePendingMinutesCount.ts      (NIEUW - realtime badge count)
-├── utils/
-│   └── generateMeetingMinutesPDF.ts   (NIEUW - PDF generatie utility)
-├── components/
-│   └── notulen/
-│       └── MeetingMinuteDetail.tsx    (UPDATE - PDF, delete, skeletons, shortcuts)
-│   └── AppSidebar.tsx                 (UPDATE - badge count)
-└── hooks/notulen/
-    └── useUpdateMeetingMinute.ts      (UPDATE - verbeterde toasts)
+│   ├── useAttachments.ts              (NIEUW - query + realtime)
+│   ├── useUploadAttachment.ts         (NIEUW - upload met progress)
+│   └── useDeleteAttachment.ts         (NIEUW - delete storage + db)
+├── components/notulen/
+│   ├── AttachmentUploadZone.tsx       (NIEUW - drag & drop UI)
+│   ├── AttachmentList.tsx             (NIEUW - lijst met acties)
+│   ├── AttachmentPreviewModal.tsx     (NIEUW - preview modal)
+│   ├── MeetingMinuteDetail.tsx        (UPDATE - bijlagen sectie)
+│   └── CreateMeetingMinuteDialog.tsx  (UPDATE - pending uploads)
+└── lib/
+    └── fileHelpers.ts                 (BESTAAND - hergebruiken)
+
+supabase/migrations/
+└── [timestamp]_meeting_minute_attachments.sql (NIEUW)
 ```
 
 ---
 
-## 3. Dependency Keuze: jspdf + jspdf-autotable
+## 3. Database Migratie
 
-### Waarom NIET @react-pdf/renderer:
-- Vereist complete component tree rendering in een apart React process
-- Zwaardere bundle size (~300KB vs ~80KB)
-- Complexer voor eenvoudige tabellen
+### Tabel: `meeting_minute_attachments`
 
-### Waarom WEL jspdf + jspdf-autotable:
-- Lightweight, directe PDF generatie
-- Uitstekende tabel support via autotable plugin
-- Simpele API: `doc.text()`, `doc.autoTable()`
-- Breed gebruikt in de industry
-- Geen React rendering pipeline nodig
+```sql
+-- Storage bucket voor meeting attachments
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'meeting-attachments',
+  'meeting-attachments',
+  false,
+  10485760,  -- 10MB
+  ARRAY[
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain',
+    'image/png',
+    'image/jpeg',
+    'image/jpg',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  ]
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- Tabel voor attachment metadata
+CREATE TABLE public.meeting_minute_attachments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  meeting_minute_id UUID NOT NULL REFERENCES public.meeting_minutes(id) ON DELETE CASCADE,
+  org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  file_name TEXT NOT NULL,
+  file_path TEXT NOT NULL,
+  file_size BIGINT NOT NULL,
+  file_type TEXT NOT NULL,
+  uploaded_by UUID NOT NULL REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes voor performance
+CREATE INDEX idx_meeting_minute_attachments_meeting 
+  ON public.meeting_minute_attachments(meeting_minute_id);
+CREATE INDEX idx_meeting_minute_attachments_org 
+  ON public.meeting_minute_attachments(org_id);
+
+-- Enable RLS
+ALTER TABLE public.meeting_minute_attachments ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies (4 stuks)
+CREATE POLICY "Org members can view attachments"
+ON public.meeting_minute_attachments FOR SELECT
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM public.user_organizations
+    WHERE user_organizations.org_id = meeting_minute_attachments.org_id
+    AND user_organizations.user_id = auth.uid()
+  )
+);
+
+CREATE POLICY "Org members can insert attachments"
+ON public.meeting_minute_attachments FOR INSERT
+TO authenticated
+WITH CHECK (
+  uploaded_by = auth.uid()
+  AND EXISTS (
+    SELECT 1 FROM public.user_organizations
+    WHERE user_organizations.org_id = meeting_minute_attachments.org_id
+    AND user_organizations.user_id = auth.uid()
+  )
+);
+
+CREATE POLICY "Org members can delete attachments"
+ON public.meeting_minute_attachments FOR DELETE
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM public.user_organizations
+    WHERE user_organizations.org_id = meeting_minute_attachments.org_id
+    AND user_organizations.user_id = auth.uid()
+  )
+);
+
+-- Storage Policies
+CREATE POLICY "Authenticated users can upload meeting attachments"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (bucket_id = 'meeting-attachments');
+
+CREATE POLICY "Org members can view meeting attachments"
+ON storage.objects FOR SELECT
+TO authenticated
+USING (bucket_id = 'meeting-attachments');
+
+CREATE POLICY "Org members can delete meeting attachments"
+ON storage.objects FOR DELETE
+TO authenticated
+USING (bucket_id = 'meeting-attachments');
+```
 
 ---
 
-## 4. Hook: `useDeleteMeetingMinute.ts`
+## 4. Hook: `useAttachments.ts`
 
 ### Verantwoordelijkheid
-Delete meeting_minute record (meeting_attendees cascaden automatisch via FK)
+Fetch attachments voor een specifieke meeting minute met realtime updates
 
 ### Interface
 
 ```typescript
-interface UseDeleteMeetingMinuteReturn {
-  deleteMeetingMinute: (minuteId: string) => Promise<void>;
+interface MeetingAttachment {
+  id: string;
+  meeting_minute_id: string;
+  org_id: string;
+  file_name: string;
+  file_path: string;
+  file_size: number;
+  file_type: string;
+  uploaded_by: string;
+  uploaded_by_name: string; // via JOIN
+  created_at: string;
+}
+
+interface UseAttachmentsReturn {
+  attachments: MeetingAttachment[];
+  isLoading: boolean;
+  isError: boolean;
+  refetch: () => void;
+}
+
+export function useAttachments(meetingMinuteId: string | null): UseAttachmentsReturn
+```
+
+### Implementatie Strategie
+
+```typescript
+// Query met JOIN op profiles voor uploaded_by naam
+const { data, error } = await supabase
+  .from("meeting_minute_attachments")
+  .select(`
+    *,
+    profiles:uploaded_by(name)
+  `)
+  .eq('meeting_minute_id', meetingMinuteId)
+  .order("created_at", { ascending: false });
+
+// Transform data
+return data.map(item => ({
+  ...item,
+  uploaded_by_name: item.profiles?.name || 'Onbekend',
+}));
+
+// Realtime subscription voor updates
+useEffect(() => {
+  const channel = supabase
+    .channel(`meeting-attachments-${meetingMinuteId}`)
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'meeting_minute_attachments',
+      filter: `meeting_minute_id=eq.${meetingMinuteId}`,
+    }, () => {
+      queryClient.invalidateQueries({ queryKey: ['meeting-attachments', meetingMinuteId] });
+    })
+    .subscribe();
+
+  return () => { supabase.removeChannel(channel); };
+}, [meetingMinuteId, queryClient]);
+```
+
+---
+
+## 5. Hook: `useUploadAttachment.ts`
+
+### Verantwoordelijkheid
+Upload bestanden naar storage met progress tracking en database registratie
+
+### Interface
+
+```typescript
+interface UploadAttachmentInput {
+  meetingMinuteId: string;
+  orgId: string;
+  file: File;
+}
+
+interface UploadProgress {
+  fileName: string;
+  progress: number; // 0-100
+  status: 'pending' | 'uploading' | 'success' | 'error';
+  error?: string;
+}
+
+interface UseUploadAttachmentReturn {
+  uploadAttachment: (input: UploadAttachmentInput) => Promise<void>;
+  uploadMultiple: (meetingMinuteId: string, orgId: string, files: File[]) => Promise<UploadResult>;
+  isUploading: boolean;
+  uploadProgress: UploadProgress[];
+}
+```
+
+### Validatie & Upload Flow
+
+```typescript
+const ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+] as const;
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILES_PER_UPLOAD = 5;
+
+// Validatie VOOR upload
+function validateFile(file: File): { valid: boolean; error?: string } {
+  if (file.size > MAX_FILE_SIZE) {
+    return { valid: false, error: "Bestand te groot. Maximum is 10 MB." };
+  }
+  if (!ALLOWED_MIME_TYPES.includes(file.type as any)) {
+    return { valid: false, error: "Bestandstype niet toegestaan." };
+  }
+  return { valid: true };
+}
+
+// Upload flow
+async function uploadAttachment({ meetingMinuteId, orgId, file }: UploadAttachmentInput) {
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  // 1. Sanitize filename
+  const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+  const filePath = `${orgId}/${meetingMinuteId}/${crypto.randomUUID()}_${sanitizedName}`;
+  
+  // 2. Upload to storage
+  const { error: uploadError } = await supabase.storage
+    .from('meeting-attachments')
+    .upload(filePath, file);
+  
+  if (uploadError) throw uploadError;
+  
+  // 3. Insert database record
+  const { error: dbError } = await supabase
+    .from('meeting_minute_attachments')
+    .insert({
+      meeting_minute_id: meetingMinuteId,
+      org_id: orgId,
+      file_name: file.name,
+      file_path: filePath,
+      file_size: file.size,
+      file_type: file.type,
+      uploaded_by: user?.id,
+    });
+  
+  if (dbError) {
+    // Rollback: delete from storage
+    await supabase.storage.from('meeting-attachments').remove([filePath]);
+    throw dbError;
+  }
+  
+  queryClient.invalidateQueries({ queryKey: ['meeting-attachments', meetingMinuteId] });
+  toast.success(`${file.name} geüpload`);
+}
+```
+
+---
+
+## 6. Hook: `useDeleteAttachment.ts`
+
+### Verantwoordelijkheid
+Verwijder attachment uit storage en database
+
+### Interface
+
+```typescript
+interface UseDeleteAttachmentReturn {
+  deleteAttachment: (attachmentId: string, filePath: string) => Promise<void>;
   isDeleting: boolean;
 }
 ```
@@ -65,780 +324,419 @@ interface UseDeleteMeetingMinuteReturn {
 ### Implementatie
 
 ```typescript
-import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { MEETING_MINUTES_QUERY_KEY } from "@/hooks/useMeetingMinutes";
-import { toast } from "sonner";
-
-export function useDeleteMeetingMinute() {
-  const queryClient = useQueryClient();
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  const deleteMeetingMinute = async (minuteId: string): Promise<void> => {
-    setIsDeleting(true);
-    try {
-      // 1. Haal task_id op voordat we deleten
-      const { data: minute } = await supabase
-        .from('meeting_minutes')
-        .select('task_id')
-        .eq('id', minuteId)
-        .single();
-
-      // 2. Delete meeting_minutes (attendees cascade automatisch)
-      const { error: minuteError } = await supabase
-        .from('meeting_minutes')
-        .delete()
-        .eq('id', minuteId);
-
-      if (minuteError) throw minuteError;
-
-      // 3. Delete gekoppelde task (optioneel - meeting task heeft geen andere purpose)
-      if (minute?.task_id) {
-        await supabase
-          .from('tasks')
-          .delete()
-          .eq('id', minute.task_id)
-          .eq('category', 'meeting'); // Safety check
-      }
-
-      await queryClient.invalidateQueries({ queryKey: MEETING_MINUTES_QUERY_KEY });
-      toast.success("Notulen verwijderd");
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Onbekende fout';
-      toast.error("Kon notulen niet verwijderen", { description: message });
-      throw error;
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  return { deleteMeetingMinute, isDeleting };
+async function deleteAttachment(attachmentId: string, filePath: string) {
+  setIsDeleting(true);
+  try {
+    // 1. Delete from database
+    const { data: attachment, error: fetchError } = await supabase
+      .from('meeting_minute_attachments')
+      .select('meeting_minute_id')
+      .eq('id', attachmentId)
+      .single();
+    
+    if (fetchError) throw fetchError;
+    
+    const { error: dbError } = await supabase
+      .from('meeting_minute_attachments')
+      .delete()
+      .eq('id', attachmentId);
+    
+    if (dbError) throw dbError;
+    
+    // 2. Delete from storage
+    const { error: storageError } = await supabase.storage
+      .from('meeting-attachments')
+      .remove([filePath]);
+    
+    if (storageError) console.error('Storage cleanup failed:', storageError);
+    
+    queryClient.invalidateQueries({ 
+      queryKey: ['meeting-attachments', attachment?.meeting_minute_id] 
+    });
+    toast.success("Bijlage verwijderd");
+  } catch (error) {
+    toast.error("Kon bijlage niet verwijderen");
+    throw error;
+  } finally {
+    setIsDeleting(false);
+  }
 }
 ```
 
 ---
 
-## 5. Hook: `usePendingMinutesCount.ts`
+## 7. Component: `AttachmentUploadZone.tsx`
 
-### Verantwoordelijkheid
-Realtime count van meeting_minutes met status='pending_approval' voor sidebar badge
-
-### Interface
+### Props Interface
 
 ```typescript
-interface UsePendingMinutesCountReturn {
-  pendingCount: number;
-  isLoading: boolean;
+interface AttachmentUploadZoneProps {
+  meetingMinuteId: string;
+  orgId: string;
+  disabled?: boolean;
+  compact?: boolean;
+  onUploadComplete?: () => void;
 }
 ```
 
-### Implementatie
-
-```typescript
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
-
-export const PENDING_MINUTES_COUNT_KEY = ['pending-minutes-count'] as const;
-
-export function usePendingMinutesCount() {
-  const queryClient = useQueryClient();
-
-  const query = useQuery({
-    queryKey: PENDING_MINUTES_COUNT_KEY,
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from('meeting_minutes')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending_approval');
-
-      if (error) throw error;
-      return count || 0;
-    },
-    staleTime: 1000 * 30, // 30 sec cache
-    refetchInterval: 1000 * 60, // Refetch every minute
-  });
-
-  // Realtime subscription
-  useEffect(() => {
-    const channel = supabase
-      .channel('pending-minutes-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'meeting_minutes',
-        },
-        () => {
-          queryClient.invalidateQueries({ queryKey: PENDING_MINUTES_COUNT_KEY });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
-
-  return {
-    pendingCount: query.data || 0,
-    isLoading: query.isLoading,
-  };
-}
-```
-
----
-
-## 6. Utility: `generateMeetingMinutesPDF.ts`
-
-### Verantwoordelijkheid
-Genereer en download A4 PDF met alle notulen secties
-
-### Interface
-
-```typescript
-interface GeneratePDFOptions {
-  minute: MeetingMinute;
-  organizationName?: string;
-}
-
-export async function generateMeetingMinutesPDF(options: GeneratePDFOptions): Promise<void>
-```
-
-### PDF Layout (A4)
+### UI Specificaties
 
 ```text
-┌────────────────────────────────────────────────────────────┐
-│ NOTULEN                                                    │
-│ ═══════════════════════════════════════════════════════════│
-│ Titel: Teamoverleg Q1 2026                                 │
-│ Datum: zondag 26 januari 2026 om 14:00                    │
-│ Type: Team  |  Status: Goedgekeurd                        │
-│ Locatie: Kantoor Amsterdam                                │
-│ Meeting link: https://meet.google.com/abc-def-ghi         │
-├────────────────────────────────────────────────────────────┤
-│ DEELNEMERS                                                 │
-│ ┌──────────────────┬────────────┬─────────────┐           │
-│ │ Naam             │ Rol        │ Aanwezig    │           │
-│ ├──────────────────┼────────────┼─────────────┤           │
-│ │ Jan Jansen       │ Voorzitter │ ✓           │           │
-│ │ Marie de Vries   │ Notulist   │ ✓           │           │
-│ │ Piet Bakker      │ Deelnemer  │ ✗           │           │
-│ └──────────────────┴────────────┴─────────────┘           │
-├────────────────────────────────────────────────────────────┤
-│ AGENDA                                                     │
-│ ┌─────┬───────────────────────────────┬───────┬──────────┐│
-│ │ Nr  │ Onderwerp                     │ Duur  │ Besproken││
-│ ├─────┼───────────────────────────────┼───────┼──────────┤│
-│ │ 1   │ Opening en welkom             │ 5 min │ ✓        ││
-│ │ 2   │ Voortgang project X           │ 15 min│ ✓        ││
-│ │ 3   │ Rondvraag en sluiting         │ 10 min│ ✗        ││
-│ └─────┴───────────────────────────────┴───────┴──────────┘│
-├────────────────────────────────────────────────────────────┤
-│ BESLISSINGEN                                               │
-│ ┌─────────────────────────────────────────────────────────┐│
-│ │ • Deadline wordt verschoven naar 15 februari           ││
-│ │   Besloten door: Jan Jansen op 26 jan 2026            ││
-│ │ • Extra budget van €5000 goedgekeurd                   ││
-│ │   Besloten door: - op 26 jan 2026                     ││
-│ └─────────────────────────────────────────────────────────┘│
-├────────────────────────────────────────────────────────────┤
-│ NOTITIES                                                   │
-│ Lorem ipsum dolor sit amet, consectetur adipiscing elit.   │
-│ Sed do eiusmod tempor incididunt ut labore et dolore...   │
-├────────────────────────────────────────────────────────────┤
-│ VOLGENDE VERGADERING                                       │
-│ 2 februari 2026                                           │
-└────────────────────────────────────────────────────────────┘
-│ Gegenereerd op 26 januari 2026 | TaskFlow                  │
-└────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────┐
+│  ┌──────────────────────────────────────────┐  │
+│  │       📎 Sleep bestanden hier            │  │
+│  │          of klik om te selecteren        │  │
+│  │                                          │  │
+│  │   PDF, Word, Excel, afbeeldingen        │  │
+│  │           (max. 10MB per bestand)       │  │
+│  └──────────────────────────────────────────┘  │
+│                                                │
+│  Uploaden:                                     │
+│  ├─ document.pdf     ████████░░ 80%           │
+│  └─ notes.docx       ██████████ ✓             │
+└────────────────────────────────────────────────┘
 ```
+
+### Features
+- Drag & drop zone met visuele feedback (border color change)
+- Click to upload fallback via hidden input
+- Multi-file support (max 5 tegelijk) met validatie
+- Progress bar per file tijdens upload
+- File type icons via `getFileIcon()` helper
+- "Bezig met uploaden..." state
+- Error state met bestandsnaam
+- Nederlandse labels
+
+### Gebaseerd op
+Hergebruik patroon van `TaskAttachmentUpload.tsx` (regels 191-220 voor drag/drop zone)
+
+---
+
+## 8. Component: `AttachmentList.tsx`
+
+### Props Interface
+
+```typescript
+interface AttachmentListProps {
+  attachments: MeetingAttachment[];
+  isLoading: boolean;
+  isEditMode: boolean;
+  onDelete?: (id: string, filePath: string) => void;
+}
+```
+
+### UI Specificaties
+
+```text
+┌─────────────────────────────────────────────────────┐
+│ 📄 vergadernotities-jan.pdf         2.4 MB         │
+│    Geüpload door Jan op 26 jan 2026    [👁] [⬇] [🗑]│
+├─────────────────────────────────────────────────────┤
+│ 📷 whiteboard-foto.jpg              856 KB         │
+│    Geüpload door Anna op 26 jan 2026   [👁] [⬇] [🗑]│
+├─────────────────────────────────────────────────────┤
+│ 📊 budget-overzicht.xlsx            124 KB         │
+│    Geüpload door Kees op 26 jan 2026   [👁] [⬇] [🗑]│
+└─────────────────────────────────────────────────────┘
+```
+
+### Features
+- File type icon via `getFileCategory()` + icon mapping
+- Bestandsnaam (truncated met `title` tooltip)
+- Bestandsgrootte via `formatFileSize()` helper
+- Geüpload door (naam + datum in Nederlandse formatting)
+- Download knop → `supabase.storage.download()` + blob URL
+- Preview knop (alleen voor images + PDF) → opent `AttachmentPreviewModal`
+- Delete knop (alleen in edit mode) met AlertDialog confirmation
+- Empty state: "Nog geen bijlagen toegevoegd"
+- Loading state met Skeleton components
+
+---
+
+## 9. Component: `AttachmentPreviewModal.tsx`
+
+### Hergebruik
+De bestaande `src/components/AttachmentPreviewModal.tsx` kan bijna 1-op-1 hergebruikt worden. 
+Enige aanpassing: bucket naam wijzigen van `'task-attachments'` naar `'meeting-attachments'`.
+
+**Optie A**: Maak bucket een prop
+**Optie B**: Maak een aparte `MeetingAttachmentPreviewModal.tsx` (copy + paste + bucket change)
+
+### Aanbeveling
+Optie A is cleaner - voeg `bucket` prop toe aan bestaande component. Maar voor scope isolatie van Notulen module: Optie B (dedicated component).
+
+### Features
+- Modal/Dialog met max-width 5xl
+- Image preview (native img tag, zoom controls)
+- PDF preview (iframe met blob URL)
+- Download fallback voor andere types
+- Bestandsinfo in header (naam, type badge)
+- Keyboard support (Escape to close)
+
+---
+
+## 10. Update: `MeetingMinuteDetail.tsx`
+
+### Nieuwe Sectie: "Bijlagen"
+
+Toevoegen na de "Deelnemers" sectie (na `EditableAttendeesSection`):
+
+```typescript
+// Nieuwe imports
+import { Paperclip } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useAttachments } from "@/hooks/notulen/useAttachments";
+import { AttachmentUploadZone } from "./AttachmentUploadZone";
+import { AttachmentList } from "./AttachmentList";
+
+// In component
+const { attachments, isLoading: attachmentsLoading } = useAttachments(minute?.id || null);
+
+// Nieuwe sectie (collapsible)
+<Collapsible defaultOpen={attachments.length > 0}>
+  <CollapsibleTrigger className="flex items-center justify-between w-full">
+    <div className="flex items-center gap-2">
+      <Paperclip className="h-4 w-4" />
+      <span className="font-medium">Bijlagen</span>
+      {attachments.length > 0 && (
+        <Badge variant="secondary" className="ml-1">
+          {attachments.length}
+        </Badge>
+      )}
+    </div>
+    <ChevronDown className="h-4 w-4" />
+  </CollapsibleTrigger>
+  <CollapsibleContent className="pt-3">
+    <Card className="p-4 space-y-4">
+      {/* Upload zone alleen in edit mode */}
+      {isEditMode && (
+        <AttachmentUploadZone
+          meetingMinuteId={minute.id}
+          orgId={minute.org_id}
+          compact
+        />
+      )}
+      
+      {/* Attachment list */}
+      <AttachmentList
+        attachments={attachments}
+        isLoading={attachmentsLoading}
+        isEditMode={isEditMode}
+        onDelete={handleDeleteAttachment}
+      />
+    </Card>
+  </CollapsibleContent>
+</Collapsible>
+```
+
+---
+
+## 11. Update: `CreateMeetingMinuteDialog.tsx`
+
+### Nieuwe Features
+- State voor pending files
+- AttachmentUploadZone component (in simpele modus)
+- Na notulen aanmaken → upload pending files
 
 ### Implementatie
 
 ```typescript
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { format } from 'date-fns';
-import { nl } from 'date-fns/locale';
-import { MeetingMinute } from '@/hooks/useMeetingMinutes';
+// Nieuwe state
+const [pendingFiles, setPendingFiles] = useState<File[]>([]);
 
-const TYPE_LABELS: Record<string, string> = {
-  team: 'Team',
-  board: 'Bestuur',
-  project: 'Project',
-  klant: 'Klant',
-  overig: 'Overig',
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  draft: 'Concept',
-  pending_approval: 'Wacht op goedkeuring',
-  approved: 'Goedgekeurd',
-  archived: 'Gearchiveerd',
-};
-
-const ROLE_LABELS: Record<string, string> = {
-  voorzitter: 'Voorzitter',
-  notulist: 'Notulist',
-  deelnemer: 'Deelnemer',
-  afwezig: 'Afgemeld',
-};
-
-export async function generateMeetingMinutesPDF({
-  minute,
-  organizationName = 'TaskFlow',
-}: {
-  minute: MeetingMinute;
-  organizationName?: string;
-}): Promise<void> {
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4',
-  });
-
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 20;
-  let yPos = 20;
-
-  // ===== HEADER =====
-  doc.setFontSize(24);
-  doc.setFont('helvetica', 'bold');
-  doc.text('NOTULEN', margin, yPos);
-  yPos += 10;
-
-  doc.setDrawColor(0);
-  doc.setLineWidth(0.5);
-  doc.line(margin, yPos, pageWidth - margin, yPos);
-  yPos += 10;
-
-  // ===== META INFO =====
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.text(minute.tasks?.title || 'Naamloos', margin, yPos);
-  yPos += 7;
-
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-
-  if (minute.tasks?.start_at) {
-    const dateStr = format(
-      new Date(minute.tasks.start_at),
-      "EEEE d MMMM yyyy 'om' HH:mm",
-      { locale: nl }
-    );
-    doc.text(`Datum: ${dateStr}`, margin, yPos);
-    yPos += 5;
-  }
-
-  const typeLabel = TYPE_LABELS[minute.meeting_type || 'overig'];
-  const statusLabel = STATUS_LABELS[minute.status || 'draft'];
-  doc.text(`Type: ${typeLabel}  |  Status: ${statusLabel}`, margin, yPos);
-  yPos += 5;
-
-  if (minute.location) {
-    doc.text(`Locatie: ${minute.location}`, margin, yPos);
-    yPos += 5;
-  }
-
-  if (minute.meeting_link) {
-    doc.text(`Meeting link: ${minute.meeting_link}`, margin, yPos);
-    yPos += 5;
-  }
-
-  yPos += 5;
-
-  // ===== DEELNEMERS =====
-  if (minute.meeting_attendees.length > 0) {
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.text('DEELNEMERS', margin, yPos);
-    yPos += 2;
-
-    autoTable(doc, {
-      startY: yPos,
-      head: [['Naam', 'Rol', 'Aanwezig']],
-      body: minute.meeting_attendees.map((att) => [
-        att.profiles?.name || att.external_name || 'Onbekend',
-        ROLE_LABELS[att.role || 'deelnemer'] || att.role || '-',
-        att.attended ? '✓' : '✗',
-      ]),
-      margin: { left: margin, right: margin },
-      styles: { fontSize: 9 },
-      headStyles: { fillColor: [66, 66, 66] },
-    });
-
-    yPos = (doc as any).lastAutoTable.finalY + 10;
-  }
-
-  // ===== AGENDA =====
-  if (minute.agenda_items.length > 0) {
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.text('AGENDA', margin, yPos);
-    yPos += 2;
-
-    autoTable(doc, {
-      startY: yPos,
-      head: [['Nr', 'Onderwerp', 'Duur', 'Besproken']],
-      body: minute.agenda_items
-        .sort((a, b) => a.order - b.order)
-        .map((item) => [
-          item.order.toString(),
-          item.title,
-          `${item.duration_min} min`,
-          item.discussed ? '✓' : '✗',
-        ]),
-      margin: { left: margin, right: margin },
-      styles: { fontSize: 9 },
-      headStyles: { fillColor: [66, 66, 66] },
-      columnStyles: {
-        0: { cellWidth: 15 },
-        2: { cellWidth: 20 },
-        3: { cellWidth: 20 },
-      },
-    });
-
-    yPos = (doc as any).lastAutoTable.finalY + 10;
-  }
-
-  // ===== BESLISSINGEN =====
-  if (minute.decisions.length > 0) {
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.text('BESLISSINGEN', margin, yPos);
-    yPos += 7;
-
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-
-    for (const decision of minute.decisions) {
-      // Check page break
-      if (yPos > 260) {
-        doc.addPage();
-        yPos = 20;
-      }
-
-      doc.text(`• ${decision.text}`, margin + 2, yPos);
-      yPos += 5;
-
-      const decidedDate = decision.decided_at
-        ? format(new Date(decision.decided_at), 'd MMM yyyy', { locale: nl })
-        : '';
-      const decidedBy = decision.decided_by || '-';
-      doc.setFontSize(8);
-      doc.setTextColor(100);
-      doc.text(`  Besloten door: ${decidedBy} op ${decidedDate}`, margin + 4, yPos);
-      doc.setTextColor(0);
-      doc.setFontSize(10);
-      yPos += 6;
-    }
-
-    yPos += 5;
-  }
-
-  // ===== NOTITIES =====
-  if (minute.content) {
-    // Check page break
-    if (yPos > 240) {
-      doc.addPage();
-      yPos = 20;
-    }
-
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.text('NOTITIES', margin, yPos);
-    yPos += 7;
-
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-
-    const textLines = doc.splitTextToSize(
-      minute.content,
-      pageWidth - margin * 2
-    );
-    doc.text(textLines, margin, yPos);
-    yPos += textLines.length * 5 + 5;
-  }
-
-  // ===== VOLGENDE VERGADERING =====
-  if (minute.next_meeting_date) {
-    if (yPos > 260) {
-      doc.addPage();
-      yPos = 20;
-    }
-
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.text('VOLGENDE VERGADERING', margin, yPos);
-    yPos += 7;
-
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    const nextDate = format(
-      new Date(minute.next_meeting_date),
-      'd MMMM yyyy',
-      { locale: nl }
-    );
-    doc.text(nextDate, margin, yPos);
-  }
-
-  // ===== FOOTER =====
-  const pageCount = doc.internal.getNumberOfPages();
-  for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i);
-    doc.setFontSize(8);
-    doc.setTextColor(128);
-    const footerText = `Gegenereerd op ${format(new Date(), 'd MMMM yyyy', { locale: nl })} | ${organizationName}`;
-    doc.text(footerText, margin, 285);
-    doc.text(`Pagina ${i} van ${pageCount}`, pageWidth - margin - 25, 285);
-  }
-
-  // ===== DOWNLOAD =====
-  const fileName = `notulen-${minute.tasks?.title?.replace(/\s+/g, '-').toLowerCase() || 'export'}-${format(new Date(), 'yyyy-MM-dd')}.pdf`;
-  doc.save(fileName);
-}
-```
-
----
-
-## 7. Update: `MeetingMinuteDetail.tsx`
-
-### Nieuwe Features
-
-1. **PDF Export Button** (naast Bewerken knop)
-2. **Delete Button** (in edit mode, met AlertDialog)
-3. **Loading Skeleton** (wanneer minute nog niet geladen is, optioneel)
-4. **Cmd+S Keyboard Shortcut** (in edit mode)
-
-### Nieuwe Imports
-
-```typescript
-import { FileDown, Trash2 } from "lucide-react";
-import { useDeleteMeetingMinute } from "@/hooks/notulen/useDeleteMeetingMinute";
-import { generateMeetingMinutesPDF } from "@/utils/generateMeetingMinutesPDF";
-```
-
-### PDF Export Handler
-
-```typescript
-const [isExporting, setIsExporting] = useState(false);
-
-const handleExportPDF = async () => {
-  if (!minute) return;
+// In onSubmit, na createMeetingMinute:
+if (pendingFiles.length > 0) {
+  // Get org_id from user context
+  const { data: userOrg } = await supabase
+    .from('user_organizations')
+    .select('org_id')
+    .limit(1)
+    .maybeSingle();
   
-  setIsExporting(true);
-  try {
-    await generateMeetingMinutesPDF({ minute });
-    toast.success("PDF gedownload");
-  } catch (error) {
-    toast.error("Kon PDF niet genereren");
-  } finally {
-    setIsExporting(false);
+  if (userOrg?.org_id) {
+    for (const file of pendingFiles) {
+      await uploadAttachment({
+        meetingMinuteId: minuteId,
+        orgId: userOrg.org_id,
+        file,
+      });
+    }
+  }
+}
+
+// Reset pending files
+setPendingFiles([]);
+
+// In form, na meeting_link field:
+<div className="space-y-2">
+  <FormLabel>Bijlagen (optioneel)</FormLabel>
+  <PendingAttachmentUpload
+    files={pendingFiles}
+    onFilesChange={setPendingFiles}
+    disabled={isCreating}
+  />
+</div>
+```
+
+**Note**: Voor CreateMeetingMinuteDialog gebruiken we een vereenvoudigde "pending files" component 
+(geen upload naar storage tot notulen is aangemaakt). Dit volgt het patroon van `TaskAttachmentUpload.tsx`.
+
+---
+
+## 12. Bestaande Helpers Hergebruiken
+
+### `src/lib/fileHelpers.ts`
+Volledig hergebruiken:
+- `getFileCategory()` - Bepaal file type
+- `formatFileSize()` - Human readable file size
+- `canPreview()` - Check of preview mogelijk is
+- `getFileCategoryLabel()` - Nederlandse labels
+- `getFileCategoryColor()` - Badge kleuren
+
+### File Icons (nieuw of uitbreiden)
+```typescript
+const getFileIcon = (filename: string) => {
+  const category = getFileCategory(filename);
+  switch (category) {
+    case 'pdf': return <FileText className="h-4 w-4 text-red-500" />;
+    case 'word': return <FileText className="h-4 w-4 text-blue-500" />;
+    case 'excel': return <FileSpreadsheet className="h-4 w-4 text-green-500" />;
+    case 'image': return <ImageIcon className="h-4 w-4 text-purple-500" />;
+    default: return <File className="h-4 w-4 text-muted-foreground" />;
   }
 };
 ```
 
-### Delete Handler + Dialog
+---
 
-```typescript
-const { deleteMeetingMinute, isDeleting } = useDeleteMeetingMinute();
-const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+## 13. Error Handling (Nederlandse Berichten)
 
-const handleDelete = async () => {
-  if (!minute) return;
-  
-  await deleteMeetingMinute(minute.id);
-  setShowDeleteDialog(false);
-  onOpenChange(false); // Sluit sheet
-};
-```
+### Validatie Errors
+| Error | Bericht |
+|-------|---------|
+| File too large | "Bestand te groot. Maximum is 10 MB." |
+| Invalid type | "Bestandstype niet toegestaan. Gebruik PDF, Word, Excel of afbeeldingen." |
+| Too many files | "Maximaal 5 bestanden tegelijk uploaden." |
 
-### Keyboard Shortcut (Cmd+S)
+### Upload Errors
+| Error | Bericht |
+|-------|---------|
+| Upload failed | "Upload mislukt. Probeer het opnieuw." |
+| Network error | "Geen verbinding. Controleer je internet." |
+| Storage limit | "Opslag limiet bereikt. Neem contact op met beheerder." |
 
-```typescript
-useEffect(() => {
-  const handleKeyDown = (e: KeyboardEvent) => {
-    // Escape handling (bestaand)
-    if (e.key === "Escape" && isEditMode && open) {
-      e.preventDefault();
-      handleCancelEdit();
-    }
-    
-    // NEW: Cmd/Ctrl + S = Save
-    if ((e.metaKey || e.ctrlKey) && e.key === "s" && isEditMode && open) {
-      e.preventDefault();
-      if (hasChanges && !isUpdating) {
-        handleSave();
-      }
-    }
-  };
-
-  document.addEventListener("keydown", handleKeyDown);
-  return () => document.removeEventListener("keydown", handleKeyDown);
-}, [isEditMode, open, hasChanges, isUpdating]);
-```
-
-### Updated Footer (View Mode)
-
-```typescript
-{!isEditMode && (
-  <div className="flex gap-2 w-full sm:w-auto">
-    <Button 
-      variant="outline" 
-      onClick={handleExportPDF}
-      disabled={isExporting}
-    >
-      {isExporting ? (
-        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-      ) : (
-        <FileDown className="h-4 w-4 mr-2" />
-      )}
-      Exporteer PDF
-    </Button>
-    <Button variant="outline" onClick={handleEnterEditMode}>
-      <Edit2 className="h-4 w-4 mr-2" />
-      Bewerken
-    </Button>
-  </div>
-)}
-```
-
-### Updated Footer (Edit Mode)
-
-```typescript
-{isEditMode && (
-  <>
-    {/* Delete button - left side */}
-    <Button 
-      variant="ghost" 
-      className="text-destructive hover:text-destructive mr-auto"
-      onClick={() => setShowDeleteDialog(true)}
-      disabled={isDeleting || isUpdating}
-    >
-      <Trash2 className="h-4 w-4 mr-2" />
-      Verwijderen
-    </Button>
-    
-    <Button 
-      variant="outline" 
-      onClick={handleCancelEdit}
-      disabled={isUpdating}
-    >
-      <X className="h-4 w-4 mr-2" />
-      Annuleren
-    </Button>
-    <Button 
-      onClick={handleSave} 
-      disabled={isUpdating || !hasChanges}
-    >
-      {isUpdating ? (
-        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-      ) : (
-        <Save className="h-4 w-4 mr-2" />
-      )}
-      Opslaan
-    </Button>
-  </>
-)}
-```
-
-### Delete Confirmation Dialog
-
-```typescript
-<AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-  <AlertDialogContent>
-    <AlertDialogHeader>
-      <AlertDialogTitle>Notulen verwijderen?</AlertDialogTitle>
-      <AlertDialogDescription>
-        "{minute.tasks?.title}" wordt permanent verwijderd inclusief alle agenda items, 
-        beslissingen en deelnemers. Deze actie kan niet ongedaan worden gemaakt.
-      </AlertDialogDescription>
-    </AlertDialogHeader>
-    <AlertDialogFooter>
-      <AlertDialogCancel disabled={isDeleting}>Annuleren</AlertDialogCancel>
-      <AlertDialogAction
-        onClick={handleDelete}
-        disabled={isDeleting}
-        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-      >
-        {isDeleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-        Verwijderen
-      </AlertDialogAction>
-    </AlertDialogFooter>
-  </AlertDialogContent>
-</AlertDialog>
-```
+### Delete Errors
+| Error | Bericht |
+|-------|---------|
+| Delete failed | "Kon bijlage niet verwijderen. Probeer het opnieuw." |
 
 ---
 
-## 8. Update: `AppSidebar.tsx`
+## 14. Security Overwegingen
 
-### Nieuwe Badge voor Notulen
-
-```typescript
-// Nieuwe import
-import { usePendingMinutesCount } from "@/hooks/notulen/usePendingMinutesCount";
-
-// In AppSidebar component
-const { pendingCount } = usePendingMinutesCount();
-```
-
-### Update MenuItem Interface & menuGroups
-
-```typescript
-// Extend badge type
-badge?: 'taskCount' | 'validationCount' | 'pendingMinutesCount';
-
-// Update Notulen item in menuGroups
-{
-  title: "Notulen",
-  url: "/notulen",
-  icon: FileText,
-  badge: 'pendingMinutesCount', // NIEUW
-}
-```
-
-### Update getBadgeCount functie
-
-```typescript
-const getBadgeCount = (badgeType?: string) => {
-  if (badgeType === 'taskCount') return activeTaskCount;
-  if (badgeType === 'validationCount') return validationCount;
-  if (badgeType === 'pendingMinutesCount') return pendingCount; // NIEUW
-  return undefined;
-};
-```
-
-### Pass pendingCount naar CollapsibleGroup
-
-```typescript
-<CollapsibleGroup 
-  group={group} 
-  activeTaskCount={activeTaskCount} 
-  validationCount={validationCount} 
-  pendingMinutesCount={pendingCount}  // NIEUW
-  canEdit={canEdit()} 
-  isAdmin={isAdmin()}
-  isOpen={openGroups[group.label] ?? false}
-  onToggle={() => toggleGroup(group.label)}
-/>
-```
+| Aspect | Implementatie |
+|--------|---------------|
+| File path | `{org_id}/{meeting_minute_id}/{uuid}_{sanitized_filename}` |
+| Filename sanitization | `file.name.replace(/[^a-zA-Z0-9.-]/g, '_')` |
+| Signed URLs | 1 uur expiry via `createSignedUrl()` |
+| Direct access | Niet mogelijk (private bucket) |
+| Content-Type | Server-side validatie door Supabase bucket config |
+| RLS | Org membership check op alle operaties |
+| Uploaded_by check | INSERT vereist `uploaded_by = auth.uid()` |
 
 ---
 
-## 9. Update: `useUpdateMeetingMinute.ts` (Verbeterde Toasts)
-
-### Enhanced Status Change Toasts
-
-```typescript
-if (updates.status) {
-  const statusLabels: Record<string, string> = {
-    draft: 'Concept',
-    pending_approval: 'Wacht op goedkeuring',
-    approved: 'Goedgekeurd',
-    archived: 'Gearchiveerd',
-  };
-  
-  // Specifiekere berichten per status transition
-  if (updates.status === 'pending_approval') {
-    toast.success("Notulen ingediend ter goedkeuring", {
-      description: "Reviewers worden op de hoogte gesteld",
-    });
-  } else if (updates.status === 'approved') {
-    toast.success("Notulen goedgekeurd", {
-      description: "De notulen zijn nu definitief",
-    });
-  } else if (updates.status === 'archived') {
-    toast.success("Notulen gearchiveerd");
-  } else {
-    toast.success(`Status gewijzigd naar "${statusLabels[updates.status]}"`);
-  }
-} else {
-  toast.success("Wijzigingen opgeslagen");
-}
-```
-
----
-
-## 10. Implementatie Volgorde
+## 15. Implementatie Volgorde
 
 | Stap | Bestand | Prioriteit |
 |------|---------|------------|
-| 1 | Install `jspdf` + `jspdf-autotable` | HIGH |
-| 2 | `src/utils/generateMeetingMinutesPDF.ts` | HIGH |
-| 3 | `src/hooks/notulen/useDeleteMeetingMinute.ts` | HIGH |
-| 4 | `src/hooks/notulen/usePendingMinutesCount.ts` | MEDIUM |
-| 5 | Update `MeetingMinuteDetail.tsx` (PDF + Delete + Shortcuts) | HIGH |
-| 6 | Update `AppSidebar.tsx` (badge count) | MEDIUM |
-| 7 | Update `useUpdateMeetingMinute.ts` (toasts) | LOW |
+| 1 | Database migratie (bucket + tabel + RLS) | HIGH |
+| 2 | `src/hooks/notulen/useAttachments.ts` | HIGH |
+| 3 | `src/hooks/notulen/useUploadAttachment.ts` | HIGH |
+| 4 | `src/hooks/notulen/useDeleteAttachment.ts` | HIGH |
+| 5 | `src/components/notulen/AttachmentUploadZone.tsx` | HIGH |
+| 6 | `src/components/notulen/AttachmentList.tsx` | HIGH |
+| 7 | `src/components/notulen/AttachmentPreviewModal.tsx` | MEDIUM |
+| 8 | Update `MeetingMinuteDetail.tsx` | HIGH |
+| 9 | Update `CreateMeetingMinuteDialog.tsx` | MEDIUM |
 
 ---
 
-## 11. Acceptatie Criteria Checklist
+## 16. Acceptatie Criteria Checklist
 
-| Criterium | Implementatie |
-|-----------|---------------|
-| PDF export genereert A4 document | jspdf + autoTable |
-| PDF bevat alle secties | Header, deelnemers, agenda, beslissingen, notities, footer |
-| Nederlandse teksten in PDF | TYPE_LABELS, STATUS_LABELS, date-fns nl locale |
-| Toast notificaties bij status | Enhanced messages in useUpdateMeetingMinute |
-| Badge count op sidebar | usePendingMinutesCount + realtime subscription |
-| Cmd+S shortcut werkt | Keyboard event listener |
-| Delete met confirmation | AlertDialog + useDeleteMeetingMinute |
-| Cascade delete werkt | task + meeting_minutes verwijderd |
-| Geen console errors | Proper error handling |
-| TypeScript compileert | Typed interfaces |
+### Database & Storage
+- [ ] Storage bucket `meeting-attachments` bestaat met juiste MIME types
+- [ ] Bucket file_size_limit = 10MB
+- [ ] Tabel `meeting_minute_attachments` met correcte schema
+- [ ] RLS policies actief (SELECT, INSERT, DELETE)
+- [ ] Storage policies actief
+- [ ] Indexes aangemaakt
+
+### Functionaliteit
+- [ ] Drag & drop upload werkt
+- [ ] Click to upload werkt
+- [ ] Multi-file upload werkt (max 5)
+- [ ] Progress indicator tijdens upload
+- [ ] File type validatie werkt (VOOR upload)
+- [ ] File size validatie werkt (10MB)
+- [ ] Download via blob URL werkt
+- [ ] Preview werkt (images + PDF)
+- [ ] Delete met confirmation werkt
+- [ ] Attachments tonen in MeetingMinuteDetail
+- [ ] Attachments tonen in CreateDialog (pending)
+
+### UX
+- [ ] Nederlandse labels overal
+- [ ] Loading states correct
+- [ ] Error states met duidelijke berichten
+- [ ] Empty states
+- [ ] File type icons correct
+
+### Technisch
+- [ ] TypeScript compileert zonder errors
+- [ ] Geen console errors
+- [ ] Query invalidation correct
+- [ ] Realtime updates werken
 
 ---
 
-## 12. Wat NIET wordt gebouwd
+## 17. Wat NIET wordt gebouwd
 
 | Item | Reden |
 |------|-------|
-| Email notificaties | Externe provider nodig |
-| Notificatie center/inbox | Te complex voor deze fase |
-| Recurring meetings | Out of scope |
-| Meeting templates | Out of scope |
-| Loading skeletons in detail | Minute wordt altijd meegegeven, geen async fetch in detail |
+| OCR/tekst extractie | Fase 6B |
+| Thumbnail generatie | Server-side processing nodig |
+| Virus scanning | Extern systeem nodig |
+| Version history | Out of scope |
+| File renaming | Out of scope |
 
 ---
 
-## 13. Bestandsoverzicht
+## 18. Bestandsoverzicht
 
 | Bestand | Actie | Regels (geschat) |
 |---------|-------|------------------|
-| `src/utils/generateMeetingMinutesPDF.ts` | NIEUW | ~180 |
-| `src/hooks/notulen/useDeleteMeetingMinute.ts` | NIEUW | ~50 |
-| `src/hooks/notulen/usePendingMinutesCount.ts` | NIEUW | ~45 |
-| `src/components/notulen/MeetingMinuteDetail.tsx` | UPDATE | +80 |
-| `src/components/AppSidebar.tsx` | UPDATE | +15 |
-| `src/hooks/notulen/useUpdateMeetingMinute.ts` | UPDATE | +10 |
+| Migration file | NIEUW | ~80 |
+| `src/hooks/notulen/useAttachments.ts` | NIEUW | ~80 |
+| `src/hooks/notulen/useUploadAttachment.ts` | NIEUW | ~120 |
+| `src/hooks/notulen/useDeleteAttachment.ts` | NIEUW | ~50 |
+| `src/components/notulen/AttachmentUploadZone.tsx` | NIEUW | ~180 |
+| `src/components/notulen/AttachmentList.tsx` | NIEUW | ~150 |
+| `src/components/notulen/AttachmentPreviewModal.tsx` | NIEUW | ~80 |
+| `src/components/notulen/MeetingMinuteDetail.tsx` | UPDATE | +50 |
+| `src/components/notulen/CreateMeetingMinuteDialog.tsx` | UPDATE | +40 |
 
-**Totaal: ~380 nieuwe/gewijzigde regels**
+**Totaal: ~830 regels nieuwe/gewijzigde code**
 
 ---
 
-## 14. Technische Risico's en Mitigaties
+## 19. Technische Risico's en Mitigaties
 
 | Risico | Mitigatie |
 |--------|-----------|
-| jspdf bundle size impact | ~80KB gzipped, acceptable voor PDF feature |
-| PDF rendering op mobile | jspdf werkt browser-agnostic, download via blob URL |
-| Pending count query performance | HEAD query met count, geen volledige data fetch |
-| Keyboard shortcut conflicts | Check isEditMode + open before triggering |
-| Delete cascade fails | Transaction-like pattern: minute first, then task |
-
----
-
-## 15. Package Installation
-
-```bash
-npm install jspdf jspdf-autotable
-npm install --save-dev @types/jspdf
-```
-
-Note: `jspdf-autotable` ships with its own types.
+| Storage bucket setup failure | Expliciete `ON CONFLICT DO NOTHING` in migratie |
+| RLS policy recursion | Simpele EXISTS checks, geen geneste queries |
+| Orphaned storage files | Database delete first, storage cleanup in finally block |
+| Upload timeout | Client-side progress tracking, user feedback |
+| Large file blocking UI | Async upload met progress state |
+| Signed URL expired | 1 uur expiry, regenereren bij download |
