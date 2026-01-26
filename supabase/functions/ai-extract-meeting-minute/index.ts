@@ -47,6 +47,68 @@ interface ExtractedMeetingData {
   };
 }
 
+interface TextExtractionResult {
+  text: string;
+  method: 'pdf-parse' | 'mammoth' | 'direct' | 'unsupported' | 'failed';
+}
+
+// Text extraction from binary files using dynamic imports
+async function extractTextFromFile(
+  base64Content: string,
+  mimeType: string
+): Promise<TextExtractionResult> {
+  try {
+    // Decode base64 to Uint8Array
+    const binaryString = atob(base64Content);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    // PDF Extractie
+    if (mimeType === 'application/pdf') {
+      try {
+        // Dynamic import for pdf-parse
+        const pdfParse = (await import("https://esm.sh/pdf-parse@1.1.1")).default;
+        const pdfData = await pdfParse(bytes);
+        console.log(`📄 PDF parsed: ${pdfData.numpages} pages, ${pdfData.text.length} chars`);
+        return { text: pdfData.text, method: 'pdf-parse' };
+      } catch (pdfError) {
+        console.error('PDF parse error:', pdfError);
+        return { text: '', method: 'failed' };
+      }
+    }
+
+    // Word Extractie (.docx, .doc)
+    if (
+      mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      mimeType === 'application/msword'
+    ) {
+      try {
+        // Dynamic import for mammoth
+        const mammoth = (await import("https://esm.sh/mammoth@1.6.0")).default;
+        const result = await mammoth.extractRawText({ buffer: bytes });
+        console.log(`📝 Word parsed: ${result.value.length} chars`);
+        return { text: result.value, method: 'mammoth' };
+      } catch (wordError) {
+        console.error('Word parse error:', wordError);
+        return { text: '', method: 'failed' };
+      }
+    }
+
+    // Plain text / Markdown - decode als UTF-8
+    if (mimeType === 'text/plain' || mimeType === 'text/markdown') {
+      const decoder = new TextDecoder('utf-8');
+      return { text: decoder.decode(bytes), method: 'direct' };
+    }
+
+    return { text: '', method: 'unsupported' };
+  } catch (error) {
+    console.error('Text extraction error:', error);
+    return { text: '', method: 'failed' };
+  }
+}
+
 // Sanitization functions (pattern from ai-task-scorer)
 function sanitizeAIContent(content: string): string {
   let cleaned = content;
@@ -69,7 +131,7 @@ function extractJsonObject(content: string): string | null {
   return match ? match[0] : null;
 }
 
-function repairAndParse(jsonStr: string): any {
+function repairAndParse(jsonStr: string): ExtractedMeetingData {
   let repaired = jsonStr;
   repaired = repaired.replace(/,\s*([}\]])/g, '$1');
   repaired = repaired.replace(/[\uFEFF\u200B-\u200D\u2060]/g, '');
@@ -104,9 +166,34 @@ serve(async (req) => {
   }
 
   try {
-    const { documentText } = await req.json();
+    const body = await req.json();
+    const { documentText, fileContent, mimeType } = body;
+
+    let textToAnalyze = documentText;
+    let extractionMethod = 'direct';
+
+    // Als fileContent aanwezig is, extraheer tekst uit bestand
+    if (fileContent && mimeType) {
+      console.log(`📁 Processing file with MIME type: ${mimeType}`);
+      const extraction = await extractTextFromFile(fileContent, mimeType);
+      
+      if (!extraction.text || extraction.method === 'failed' || extraction.method === 'unsupported') {
+        return new Response(JSON.stringify({ 
+          data: getEmptyResult(),
+          error: extraction.method === 'unsupported' 
+            ? 'Bestandstype niet ondersteund' 
+            : 'Kon bestand niet lezen'
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      
+      textToAnalyze = extraction.text;
+      extractionMethod = extraction.method;
+    }
     
-    if (!documentText || typeof documentText !== 'string') {
+    if (!textToAnalyze || typeof textToAnalyze !== 'string') {
       return new Response(JSON.stringify({ error: 'Document tekst is verplicht' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -114,8 +201,8 @@ serve(async (req) => {
     }
 
     // Limit text length
-    const truncatedText = documentText.substring(0, 50000);
-    console.log(`📄 [ai-extract-meeting-minute] Processing ${truncatedText.length} characters`);
+    const truncatedText = textToAnalyze.substring(0, 50000);
+    console.log(`📄 [ai-extract-meeting-minute] Processing ${truncatedText.length} characters via ${extractionMethod}`);
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -267,7 +354,10 @@ REGELS:
       });
     }
 
-    return new Response(JSON.stringify({ data: extractedData }), {
+    return new Response(JSON.stringify({ 
+      data: extractedData,
+      extraction_method: extractionMethod
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 

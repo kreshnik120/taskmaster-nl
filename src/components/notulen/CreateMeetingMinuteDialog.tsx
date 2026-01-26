@@ -249,7 +249,7 @@ export function CreateMeetingMinuteDialog({
           <input
             ref={aiFileInputRef}
             type="file"
-            accept=".txt,.md"
+            accept=".txt,.md,.pdf,.doc,.docx"
             onChange={handleAIImportFile}
             className="hidden"
           />
@@ -268,7 +268,7 @@ export function CreateMeetingMinuteDialog({
             {isExtracting ? "Analyseren..." : "Importeer van bestand"}
           </Button>
           <span className="text-xs text-muted-foreground">
-            (.txt, .md)
+            (PDF, Word, .txt, .md)
           </span>
         </div>
 
