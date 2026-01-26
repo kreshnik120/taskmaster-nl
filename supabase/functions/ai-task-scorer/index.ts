@@ -35,6 +35,184 @@ interface AIScoreResult {
   reasoning: string;
 }
 
+// ============ ROBUST JSON PARSING UTILITIES ============
+
+/**
+ * Strips common AI response prefixes and markdown formatting
+ */
+function sanitizeAIContent(content: string): string {
+  let cleaned = content;
+  
+  // 1. Remove common AI prefixes
+  const prefixPatterns = [
+    /^(Hier is|Here's|Here is|Sure!|Certainly!|Of course!)[^\n{]*\n*/gi,
+    /^(Het resultaat|The result)[^\n{]*\n*/gi,
+    /^(Analyseren|Analyzing|Processing)[^\n{]*\n*/gi,
+    /^(Based on|Op basis van)[^\n{]*\n*/gi,
+  ];
+  for (const pattern of prefixPatterns) {
+    cleaned = cleaned.replace(pattern, '');
+  }
+  
+  // 2. Remove markdown code blocks (multiple variants)
+  cleaned = cleaned
+    .replace(/```json\s*/gi, '')
+    .replace(/```typescript\s*/gi, '')
+    .replace(/```\s*/g, '')
+    .replace(/`/g, '');
+  
+  // 3. Remove control characters except newlines and spaces
+  cleaned = cleaned.replace(/[\x00-\x09\x0B\x0C\x0E-\x1F]/g, '');
+  
+  return cleaned.trim();
+}
+
+/**
+ * Attempts multiple regex patterns to extract JSON
+ */
+function extractJsonObject(content: string): string | null {
+  // Pattern 1: Full object with tasks array
+  const fullObjectMatch = content.match(/\{\s*"tasks"\s*:\s*\[[\s\S]*?\]\s*\}/);
+  if (fullObjectMatch) return fullObjectMatch[0];
+  
+  // Pattern 2: Any JSON object (greedy but balanced)
+  const simpleObjectMatch = content.match(/\{[\s\S]*\}/);
+  if (simpleObjectMatch) return simpleObjectMatch[0];
+  
+  // Pattern 3: JSON array directly - wrap it
+  const arrayMatch = content.match(/\[[\s\S]*\]/);
+  if (arrayMatch) return `{"tasks": ${arrayMatch[0]}}`;
+  
+  return null;
+}
+
+/**
+ * Repairs common JSON issues and parses
+ */
+function repairAndParse(jsonStr: string): any {
+  let repaired = jsonStr;
+  
+  // 1. Fix trailing commas in arrays and objects
+  repaired = repaired.replace(/,\s*([}\]])/g, '$1');
+  
+  // 2. Remove BOM and zero-width characters
+  repaired = repaired.replace(/[\uFEFF\u200B-\u200D\u2060]/g, '');
+  
+  // 3. Normalize whitespace in strings (but preserve structure)
+  repaired = repaired.replace(/\r\n/g, '\n');
+  
+  return JSON.parse(repaired);
+}
+
+/**
+ * Generates fallback score based on task heuristics
+ */
+function generateFallbackScore(task: TaskInput): AIScoreResult {
+  let baseScore = 50; // NORMAL default
+  
+  // Deadline-based boost
+  if (task.due_at) {
+    const daysUntilDue = Math.ceil(
+      (new Date(task.due_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+    );
+    if (daysUntilDue <= 0) baseScore += 30; // Overdue
+    else if (daysUntilDue <= 3) baseScore += 20;
+    else if (daysUntilDue <= 7) baseScore += 10;
+  }
+  
+  // Priority-based adjustment
+  if (task.priority === 'high') baseScore += 15;
+  else if (task.priority === 'low') baseScore -= 10;
+  
+  // Transition-related boost
+  if (task.transition_related) baseScore += 20;
+  
+  // Revenue impact boost
+  if (task.revenue_impact_eur && task.revenue_impact_eur > 5000) baseScore += 15;
+  
+  // Cap score
+  baseScore = Math.min(100, Math.max(0, baseScore));
+  
+  const label: "NORMAL" | "CRITICAL" | "LOW_PRIORITY" = 
+    baseScore >= 75 ? 'CRITICAL' 
+    : baseScore >= 31 ? 'NORMAL' 
+    : 'LOW_PRIORITY';
+  
+  return {
+    task_id: task.id,
+    priority_score: baseScore,
+    label,
+    breakdown: {
+      klant_impact: 50,
+      omzet_bescherming: task.revenue_impact_eur ? 70 : 50,
+      overgang_voorbereiding: task.transition_related ? 80 : 40,
+      compliance: 50,
+      operationeel: 50,
+    },
+    explanation: '⚠️ Score berekend met fallback methode (AI parsing mislukt)',
+    reasoning: 'Heuristische score op basis van deadline, prioriteit en omzet impact',
+  };
+}
+
+/**
+ * Main parsing function with multi-layer extraction and fallback
+ */
+function parseAIResponse(
+  content: string, 
+  batch: TaskInput[]
+): { tasks: AIScoreResult[]; usedFallback: boolean } {
+  
+  console.log('[AI-SCORER] 🔍 Parsing AI response...');
+  console.log('[AI-SCORER] Raw content length:', content.length);
+  
+  // Layer 2: Sanitize
+  const sanitized = sanitizeAIContent(content);
+  console.log('[AI-SCORER] Sanitized preview:', sanitized.slice(0, 200));
+  
+  // Layer 3: Extract JSON
+  const jsonStr = extractJsonObject(sanitized);
+  
+  if (!jsonStr) {
+    console.warn('[AI-SCORER] ⚠️ No JSON found in response, using fallback scores');
+    console.error('[AI-SCORER] Raw content:', content.slice(0, 500));
+    return {
+      tasks: batch.map(generateFallbackScore),
+      usedFallback: true,
+    };
+  }
+  
+  // Layer 4: Repair and parse
+  try {
+    const parsed = repairAndParse(jsonStr);
+    
+    if (parsed.tasks && Array.isArray(parsed.tasks)) {
+      console.log(`[AI-SCORER] ✅ Parsed ${parsed.tasks.length} tasks from AI`);
+      return { tasks: parsed.tasks, usedFallback: false };
+    }
+    
+    if (Array.isArray(parsed)) {
+      console.log(`[AI-SCORER] ✅ Parsed ${parsed.length} tasks from array`);
+      return { tasks: parsed, usedFallback: false };
+    }
+    
+    console.warn('[AI-SCORER] ⚠️ Unexpected JSON structure, using fallback');
+    console.error('[AI-SCORER] Parsed structure:', JSON.stringify(parsed).slice(0, 300));
+    return { tasks: batch.map(generateFallbackScore), usedFallback: true };
+    
+  } catch (parseError) {
+    console.error('[AI-SCORER] ❌ JSON parse error:', parseError);
+    console.error('[AI-SCORER] Failed JSON (first 500):', jsonStr.slice(0, 500));
+    
+    // Return fallback scores instead of throwing
+    return {
+      tasks: batch.map(generateFallbackScore),
+      usedFallback: true,
+    };
+  }
+}
+
+// ============ END ROBUST JSON PARSING UTILITIES ============
+
 Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
@@ -158,6 +336,7 @@ Geef ALLEEN het JSON object terug, geen andere tekst.`;
           ],
           temperature: 0.3,
           max_tokens: 2000,
+          response_format: { type: "json_object" },
         }),
       });
 
@@ -180,25 +359,20 @@ Geef ALLEEN het JSON object terug, geen andere tekst.`;
       const content = data.choices?.[0]?.message?.content;
 
       if (!content) {
-        throw new Error('Geen response van AI ontvangen');
-      }
-
-      // Parse JSON from AI response
-      let parsedResults;
-      try {
-        // Try to extract JSON if wrapped in markdown code blocks
-        const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || content.match(/\{[\s\S]*\}/);
-        const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : content;
-        parsedResults = JSON.parse(jsonStr);
-      } catch (parseError) {
-        console.error('[AI-SCORER] JSON parse error:', parseError);
-        console.error('[AI-SCORER] Raw content:', content);
-        throw new Error('Kon AI response niet parsen als JSON');
-      }
-
-      if (parsedResults.tasks) {
-        results.push(...parsedResults.tasks);
-        console.log(`[AI-SCORER] Batch verwerkt: ${parsedResults.tasks.length} taken geanalyseerd`);
+        // No content - use fallback scores for this batch
+        console.warn('[AI-SCORER] ⚠️ Geen content van AI, fallback scores gebruiken');
+        const fallbackScores = batch.map(generateFallbackScore);
+        results.push(...fallbackScores);
+      } else {
+        // Use robust parsing with fallback
+        const { tasks: batchResults, usedFallback } = parseAIResponse(content, batch);
+        
+        if (usedFallback) {
+          console.warn(`[AI-SCORER] ⚠️ Batch ${Math.floor(i / batchSize) + 1}: Fallback scores gebruikt`);
+        }
+        
+        results.push(...batchResults);
+        console.log(`[AI-SCORER] Batch verwerkt: ${batchResults.length} taken ${usedFallback ? '(fallback)' : '(AI)'}`);
       }
 
       // Small delay between batches to avoid rate limits
@@ -216,11 +390,14 @@ Geef ALLEEN het JSON object terug, geen andere tekst.`;
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
     console.log(`[AI-SCORER] ✅ KLAAR: ${results.length} taken geanalyseerd in ${duration}s`);
 
+    const fallbackUsed = results.some(r => r.explanation?.includes('fallback'));
+    
     return jsonResponse({
       generated_at: new Date().toISOString(),
       results,
       model: 'google/gemini-2.5-flash',
-      method: 'AI-driven scoring'
+      method: 'AI-driven scoring',
+      fallback_used: fallbackUsed,
     });
 
   } catch (error) {
