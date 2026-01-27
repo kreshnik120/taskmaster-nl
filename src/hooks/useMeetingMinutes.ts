@@ -21,8 +21,22 @@ export interface Decision {
   linked_task_id?: string | null;
 }
 
-// Action Item structuur (uit JSONB) - Fase 7C
+// Betrokkene structuur (Fase 7D)
+export interface Betrokkene {
+  naam: string;
+  rol?: string;
+  relatie: 'assignee' | 'uitleg_ontvanger' | 'stakeholder';
+}
+
+// Externe partij structuur (Fase 7D)
+export interface ExternePartij {
+  naam: string;
+  type: 'klant' | 'zzper' | 'locatie' | 'leverancier';
+}
+
+// Action Item structuur (uit JSONB) - Fase 7C + 7D uitbreiding
 export interface ActionItem {
+  // Fase 7C - Basis
   action: string;
   assignee: string | null;
   deadline: string | null;
@@ -30,6 +44,16 @@ export interface ActionItem {
   urgency?: 'critical' | 'high' | 'medium' | 'low';
   source_quote?: string;
   confidence?: number;
+  
+  // Fase 7D - Enterprise context
+  onderwerp?: string;
+  doelgroep?: string;
+  actie_type?: 'Communicatie' | 'Administratie' | 'Planning' | 'Onderzoek' | 'Beslissing' | 'Overig';
+  achtergrond?: string;
+  betrokkenen?: Betrokkene[];
+  externe_partij?: ExternePartij;
+  actieplan?: string[];
+  suggestie?: string;
 }
 
 // Meeting Minutes met gekoppelde data

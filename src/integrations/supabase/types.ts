@@ -5718,6 +5718,7 @@ export type Database = {
         Row: {
           accepted_at: string | null
           accepted_by: string | null
+          ai_context: Json | null
           application_id: string | null
           assignee_id: string | null
           category: string | null
@@ -5755,6 +5756,7 @@ export type Database = {
         Insert: {
           accepted_at?: string | null
           accepted_by?: string | null
+          ai_context?: Json | null
           application_id?: string | null
           assignee_id?: string | null
           category?: string | null
@@ -5792,6 +5794,7 @@ export type Database = {
         Update: {
           accepted_at?: string | null
           accepted_by?: string | null
+          ai_context?: Json | null
           application_id?: string | null
           assignee_id?: string | null
           category?: string | null

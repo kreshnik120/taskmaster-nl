@@ -35,6 +35,22 @@ interface ExtractedMeetingData {
     urgency?: 'critical' | 'high' | 'medium' | 'low';
     source_quote?: string;
     confidence?: number;
+    // Fase 7D: Enterprise context velden
+    onderwerp?: string;
+    doelgroep?: string;
+    actie_type?: 'Communicatie' | 'Administratie' | 'Planning' | 'Onderzoek' | 'Beslissing' | 'Overig';
+    achtergrond?: string;
+    betrokkenen?: Array<{
+      naam: string;
+      rol?: string;
+      relatie: 'assignee' | 'uitleg_ontvanger' | 'stakeholder';
+    }>;
+    externe_partij?: {
+      naam: string;
+      type: 'klant' | 'zzper' | 'locatie' | 'leverancier';
+    };
+    actieplan?: string[];
+    suggestie?: string;
   }>;
   notes: string | null;
   summary: string | null;
