@@ -26,6 +26,11 @@ export interface ExtractedMeetingData {
     action: string;
     assignee: string | null;
     deadline: string | null;
+    // Fase 7C: Classificatie velden voor Notulen Assistent
+    classification?: 'TAAK' | 'IDEE' | 'INFORMATIE';
+    urgency?: 'critical' | 'high' | 'medium' | 'low';
+    source_quote?: string;
+    confidence?: number; // 0.0 - 1.0
   }>;
   notes: string | null;
   summary: string | null;

@@ -40,6 +40,7 @@ import {
   Trash2,
   Paperclip,
   ChevronDown,
+  Wand2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MeetingMinute } from "@/hooks/useMeetingMinutes";
@@ -54,6 +55,7 @@ import { EditableDecisionsSection } from "./EditableDecisionsSection";
 import { EditableAttendeesSection } from "./EditableAttendeesSection";
 import { AttachmentUploadZone } from "./AttachmentUploadZone";
 import { AttachmentList } from "./AttachmentList";
+import { NotulenAssistent } from "./NotulenAssistent";
 import { toast } from "sonner";
 
 interface MeetingMinuteDetailProps {
@@ -155,12 +157,16 @@ export function MeetingMinuteDetail({
   const { deleteMeetingMinute, isDeleting } = useDeleteMeetingMinute();
   const { attachments, isLoading: attachmentsLoading } = useAttachments(minute?.id || null);
   const [attachmentsOpen, setAttachmentsOpen] = useState(true);
+  const [showAssistent, setShowAssistent] = useState(false);
   
   // Edit mode state
   const [isEditMode, setIsEditMode] = useState(false);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  
+  // Action items uit minute
+  const actionItems = minute?.action_items || [];
   
   // Edited values
   const [editedLocation, setEditedLocation] = useState("");
@@ -473,6 +479,15 @@ export function MeetingMinuteDetail({
                   )}
                   Exporteer PDF
                 </Button>
+                {actionItems.length > 0 && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowAssistent(true)}
+                  >
+                    <Wand2 className="h-4 w-4 mr-2" />
+                    Notulen Assistent ({actionItems.length})
+                  </Button>
+                )}
                 <Button variant="outline" onClick={handleEnterEditMode}>
                   <Edit2 className="h-4 w-4 mr-2" />
                   Bewerken
@@ -502,6 +517,7 @@ export function MeetingMinuteDetail({
       </AlertDialog>
 
       {/* Delete confirmation dialog */}
+      {/* Delete confirmation dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -524,6 +540,18 @@ export function MeetingMinuteDetail({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Notulen Assistent Sheet - Fase 7C */}
+      <NotulenAssistent
+        open={showAssistent}
+        onOpenChange={setShowAssistent}
+        meetingMinuteId={minute.id}
+        actionItems={actionItems}
+        onTasksCreated={(count) => {
+          toast.success(`${count} taken aangemaakt vanuit notulen`);
+          setShowAssistent(false);
+        }}
+      />
     </>
   );
 }

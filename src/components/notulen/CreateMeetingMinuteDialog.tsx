@@ -103,6 +103,15 @@ export function CreateMeetingMinuteDialog({
     decisions?: Array<{ decision: string; owner?: string | null; deadline?: string | null }>;
     content?: string;
     participants?: Array<{ name: string; role?: string | null; present?: boolean }>;
+    action_items?: Array<{
+      action: string;
+      assignee?: string | null;
+      deadline?: string | null;
+      classification?: 'TAAK' | 'IDEE' | 'INFORMATIE';
+      urgency?: 'critical' | 'high' | 'medium' | 'low';
+      source_quote?: string;
+      confidence?: number;
+    }>;
   } | null>(null);
   const aiFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -199,12 +208,13 @@ export function CreateMeetingMinuteDialog({
       decisions: decisionsToUse,
       content: [extractedData.notes, extractedData.summary].filter(Boolean).join('\n\n') || undefined,
       participants: extractedData.participants,
+      action_items: extractedData.action_items, // Fase 7C
     });
     
     clearExtractedData();
     toast.success("Gegevens toegepast", {
       description: extractedData.agenda_items?.length 
-        ? `${extractedData.agenda_items.length} agenda items en ${decisionsToUse.length} beslissingen/acties`
+        ? `${extractedData.agenda_items.length} agenda items, ${decisionsToUse.length} beslissingen/acties, ${extractedData.action_items?.length || 0} action items`
         : undefined
     });
   };
@@ -228,6 +238,7 @@ export function CreateMeetingMinuteDialog({
         decisions: extractedContent?.decisions,
         content: extractedContent?.content,
         participants: extractedContent?.participants,
+        action_items: extractedContent?.action_items, // Fase 7C
       });
 
       // Upload pending files after successful creation

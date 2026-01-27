@@ -5,7 +5,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Interface definitions
+// Interface definitions - Fase 7C: Extended with classification fields
 interface ExtractedMeetingData {
   title: string | null;
   meeting_date: string | null;
@@ -30,6 +30,11 @@ interface ExtractedMeetingData {
     action: string;
     assignee: string | null;
     deadline: string | null;
+    // Fase 7C: Classificatie velden
+    classification?: 'TAAK' | 'IDEE' | 'INFORMATIE';
+    urgency?: 'critical' | 'high' | 'medium' | 'low';
+    source_quote?: string;
+    confidence?: number;
   }>;
   notes: string | null;
   summary: string | null;
@@ -239,7 +244,15 @@ Analyseer dit PDF document en extraheer de volgende informatie. Retourneer ALLEE
   "participants": [{"name": "Voornaam + Achternaam", "role": "Functie/Rol of null", "present": true}],
   "agenda_items": [{"item": "Agendapunt of besproken onderwerp", "discussed": true}],
   "decisions": [{"decision": "Besluit, afspraak of actiepunt", "owner": "Verantwoordelijke persoon of null", "deadline": "YYYY-MM-DD of null"}],
-  "action_items": [{"action": "Specifieke actie", "assignee": "Toegewezen aan of null", "deadline": "YYYY-MM-DD of null"}],
+  "action_items": [{
+    "action": "Specifieke actie",
+    "assignee": "Toegewezen aan of null",
+    "deadline": "YYYY-MM-DD of null",
+    "classification": "TAAK|IDEE|INFORMATIE",
+    "urgency": "critical|high|medium|low",
+    "source_quote": "Exacte quote uit het document",
+    "confidence": 0.0-1.0
+  }],
   "notes": "Belangrijke notities als één string of null",
   "summary": "Korte samenvatting in 2-3 zinnen of null",
   "confidence_scores": {
@@ -270,9 +283,26 @@ BELANGRIJKE INSTRUCTIES:
    - Alles waar een naam + actie bij staat
    - Besluiten die impliciet zijn ("we gaan...")
 
-3. Als je twijfelt, neem het WEL op (better safe than sorry)
+3. ACTION_ITEMS CLASSIFICATIE (KRITIEK - voor elke action_item):
+   - "TAAK": Concrete actie met actiewerkwoord EN (eigenaar OF deadline)
+     Voorbeelden: "Jan maakt rapport", "Review voor vrijdag", "Team evalueert voorstel"
+   - "IDEE": Suggestie zonder concrete toewijzing
+     Indicatoren: "zou kunnen", "misschien", "overwegen", "mogelijkheid"
+     Voorbeelden: "We zouden kunnen kijken naar...", "Misschien is het een idee om..."
+   - "INFORMATIE": Feitelijke mededeling, status update, geen actie vereist
+     Voorbeelden: "Budget is goedgekeurd", "Project loopt op schema"
 
-4. REGELS:
+4. URGENTIE voor action_items:
+   - "critical": Expliciete urgentie OF deadline < 24 uur OF blocker
+   - "high": Deadline < 3 dagen OF "zo snel mogelijk"
+   - "medium": Deadline < 1 week OF normale prioriteit
+   - "low": Geen deadline, nice-to-have
+
+5. VERPLICHT voor elke action_item:
+   - source_quote: EXACTE tekst uit het document (kopieer letterlijk - hallucinatie preventie)
+   - confidence: 0.0-1.0 (hoe zeker je bent van de classificatie)
+
+6. REGELS:
    - Retourneer ALLEEN de JSON, geen markdown of uitleg
    - Gebruik Nederlandse teksten waar van toepassing
    - Bij ontbrekende informatie: null of lege array
@@ -315,7 +345,7 @@ BELANGRIJKE INSTRUCTIES:
     
     const extractedData = repairAndParse(jsonStr);
     
-    // Normalize result
+    // Normalize result with Fase 7C fields
     const normalizedData: ExtractedMeetingData = {
       title: extractedData.title || null,
       meeting_date: extractedData.meeting_date || null,
@@ -325,7 +355,17 @@ BELANGRIJKE INSTRUCTIES:
       participants: Array.isArray(extractedData.participants) ? extractedData.participants : [],
       agenda_items: Array.isArray(extractedData.agenda_items) ? extractedData.agenda_items : [],
       decisions: Array.isArray(extractedData.decisions) ? extractedData.decisions : [],
-      action_items: Array.isArray(extractedData.action_items) ? extractedData.action_items : [],
+      action_items: Array.isArray(extractedData.action_items) 
+        ? extractedData.action_items.map((item: any) => ({
+            action: item.action || '',
+            assignee: item.assignee || null,
+            deadline: item.deadline || null,
+            classification: item.classification || null,
+            urgency: item.urgency || null,
+            source_quote: item.source_quote || null,
+            confidence: typeof item.confidence === 'number' ? item.confidence : null,
+          }))
+        : [],
       notes: extractedData.notes || null,
       summary: extractedData.summary || null,
       confidence_scores: {
@@ -354,7 +394,7 @@ BELANGRIJKE INSTRUCTIES:
   }
 }
 
-// System prompt for text-based analysis
+// System prompt for text-based analysis - Fase 7C: Updated with classification
 const systemPrompt = `Je bent een expert in het analyseren van vergaderdocumenten voor Nederlandse zorginstellingen.
 
 Extraheer de volgende informatie uit het document en retourneer ALLEEN een JSON object:
@@ -368,41 +408,37 @@ Extraheer de volgende informatie uit het document en retourneer ALLEEN een JSON 
   "participants": [{"name": "Voornaam + Achternaam", "role": "Functie/Rol of null", "present": true}],
   "agenda_items": [{"item": "Agendapunt of besproken onderwerp", "discussed": true}],
   "decisions": [{"decision": "Besluit, afspraak of actiepunt", "owner": "Verantwoordelijke persoon of null", "deadline": "YYYY-MM-DD of null"}],
-  "action_items": [{"action": "Specifieke actie", "assignee": "Toegewezen aan of null", "deadline": "YYYY-MM-DD of null"}],
+  "action_items": [{
+    "action": "Specifieke actie",
+    "assignee": "Toegewezen aan of null",
+    "deadline": "YYYY-MM-DD of null",
+    "classification": "TAAK|IDEE|INFORMATIE",
+    "urgency": "critical|high|medium|low",
+    "source_quote": "Exacte quote uit het document",
+    "confidence": 0.0-1.0
+  }],
   "notes": "Belangrijke notities als één string of null",
   "summary": "Korte samenvatting in 2-3 zinnen of null",
-  "confidence_scores": {
-    "title": 0-100,
-    "meeting_date": 0-100,
-    "meeting_time": 0-100,
-    "location": 0-100,
-    "meeting_type": 0-100,
-    "participants": 0-100,
-    "agenda_items": 0-100,
-    "decisions": 0-100,
-    "action_items": 0-100,
-    "overall": 0-100
-  }
+  "confidence_scores": {...}
 }
 
-BELANGRIJKE INSTRUCTIES:
-1. PARTICIPANTS: Extraheer ALLE personen die in het document worden genoemd:
-   - Kijk naar "Aanwezigen:", "Deelnemers:", "Afwezig:", namen in handtekeningen
-   - Namen die acties krijgen toegewezen zijn ook participants
-   - Gebruik volledige namen waar mogelijk
+CLASSIFICATIE REGELS voor action_items:
+- TAAK: Concrete actie met actiewerkwoord + (eigenaar OF deadline)
+- IDEE: Suggestie met "zou kunnen", "misschien", "overwegen"
+- INFORMATIE: Feitelijke mededeling, status update
 
-2. DECISIONS: Dit zijn NIET alleen formele besluiten. Neem ook op:
-   - Actiepunten en to-do items
-   - Afspraken die zijn gemaakt
-   - Vervolgacties met verantwoordelijke
-   - Alles waar een naam + actie bij staat
+URGENTIE:
+- critical: < 24 uur of blocker
+- high: < 3 dagen
+- medium: < 1 week
+- low: geen deadline
 
-3. Als je twijfelt, neem het WEL op
+VERPLICHT: source_quote = exacte tekst uit document, confidence = 0.0-1.0
 
-4. REGELS:
-   - Retourneer ALLEEN de JSON, geen markdown of uitleg
-   - Bij ontbrekende informatie: null of lege array
-   - meeting_type: team, board, project, klant, of overig`;
+REGELS:
+- Retourneer ALLEEN de JSON, geen markdown
+- Bij ontbrekende informatie: null of lege array
+- meeting_type: team, board, project, klant, of overig`;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {

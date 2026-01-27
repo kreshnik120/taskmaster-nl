@@ -15,6 +15,16 @@ export interface CreateMeetingMinuteInput {
   decisions?: Array<{ decision: string; owner?: string | null; deadline?: string | null }>;
   content?: string;
   participants?: Array<{ name: string; role?: string | null; present?: boolean }>;
+  // Fase 7C: Action items met classificatie
+  action_items?: Array<{
+    action: string;
+    assignee?: string | null;
+    deadline?: string | null;
+    classification?: 'TAAK' | 'IDEE' | 'INFORMATIE';
+    urgency?: 'critical' | 'high' | 'medium' | 'low';
+    source_quote?: string;
+    confidence?: number;
+  }>;
 }
 
 export function useCreateMeetingMinute() {
@@ -85,6 +95,7 @@ export function useCreateMeetingMinute() {
           agenda_items: formattedAgendaItems,
           decisions: formattedDecisions,
           content: input.content || null,
+          action_items: input.action_items || [], // Fase 7C
         })
         .select('id')
         .single();
