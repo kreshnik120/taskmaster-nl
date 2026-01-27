@@ -231,15 +231,15 @@ async function analyzeWithGeminiMultimodal(
 Analyseer dit PDF document en extraheer de volgende informatie. Retourneer ALLEEN een valide JSON object:
 
 {
-  "title": "Titel van de vergadering",
+  "title": "Titel van de vergadering of document",
   "meeting_date": "YYYY-MM-DD format of null",
   "meeting_time": "HH:MM format of null",
   "location": "Locatie of null",
   "meeting_type": "team|board|project|klant|overig of null",
-  "participants": [{"name": "Naam", "role": "Rol/Functie of null", "present": true/false}],
-  "agenda_items": [{"item": "Agendapunt tekst", "discussed": true/false}],
-  "decisions": [{"decision": "Besluit tekst", "owner": "Verantwoordelijke of null", "deadline": "YYYY-MM-DD of null"}],
-  "action_items": [{"action": "Actie tekst", "assignee": "Toegewezen aan of null", "deadline": "YYYY-MM-DD of null"}],
+  "participants": [{"name": "Voornaam + Achternaam", "role": "Functie/Rol of null", "present": true}],
+  "agenda_items": [{"item": "Agendapunt of besproken onderwerp", "discussed": true}],
+  "decisions": [{"decision": "Besluit, afspraak of actiepunt", "owner": "Verantwoordelijke persoon of null", "deadline": "YYYY-MM-DD of null"}],
+  "action_items": [{"action": "Specifieke actie", "assignee": "Toegewezen aan of null", "deadline": "YYYY-MM-DD of null"}],
   "notes": "Belangrijke notities als één string of null",
   "summary": "Korte samenvatting in 2-3 zinnen of null",
   "confidence_scores": {
@@ -256,12 +256,28 @@ Analyseer dit PDF document en extraheer de volgende informatie. Retourneer ALLEE
   }
 }
 
-REGELS:
-- Retourneer ALLEEN de JSON, geen markdown of uitleg
-- Gebruik Nederlandse teksten waar van toepassing
-- Bij ontbrekende informatie: null of lege array
-- Confidence scores 0-100: hoe zeker je bent dat de extractie correct is
-- meeting_type moet exact een van deze waarden zijn: team, board, project, klant, overig`
+BELANGRIJKE INSTRUCTIES:
+1. PARTICIPANTS: Extraheer ALLE personen die in het document worden genoemd:
+   - Kijk naar "Aanwezigen:", "Deelnemers:", "Afwezig:", namen in handtekeningen
+   - Namen die acties krijgen toegewezen zijn ook participants
+   - Gebruik volledige namen waar mogelijk (voornaam + achternaam)
+   - Markeer als present: true tenzij expliciet vermeld als afwezig
+
+2. DECISIONS: Dit zijn NIET alleen formele besluiten. Neem ook op:
+   - Actiepunten en to-do items
+   - Afspraken die zijn gemaakt ("afgesproken wordt dat...")
+   - Vervolgacties met verantwoordelijke
+   - Alles waar een naam + actie bij staat
+   - Besluiten die impliciet zijn ("we gaan...")
+
+3. Als je twijfelt, neem het WEL op (better safe than sorry)
+
+4. REGELS:
+   - Retourneer ALLEEN de JSON, geen markdown of uitleg
+   - Gebruik Nederlandse teksten waar van toepassing
+   - Bij ontbrekende informatie: null of lege array
+   - Confidence scores 0-100: hoe zeker je bent
+   - meeting_type moet exact een van deze waarden zijn: team, board, project, klant, overig`
               }
             ]
           }
@@ -344,15 +360,15 @@ const systemPrompt = `Je bent een expert in het analyseren van vergaderdocumente
 Extraheer de volgende informatie uit het document en retourneer ALLEEN een JSON object:
 
 {
-  "title": "Titel van de vergadering",
+  "title": "Titel van de vergadering of document",
   "meeting_date": "YYYY-MM-DD format of null",
   "meeting_time": "HH:MM format of null",
   "location": "Locatie of null",
   "meeting_type": "team|board|project|klant|overig of null",
-  "participants": [{"name": "Naam", "role": "Rol/Functie of null", "present": true/false}],
-  "agenda_items": [{"item": "Agendapunt tekst", "discussed": true/false}],
-  "decisions": [{"decision": "Besluit tekst", "owner": "Verantwoordelijke of null", "deadline": "YYYY-MM-DD of null"}],
-  "action_items": [{"action": "Actie tekst", "assignee": "Toegewezen aan of null", "deadline": "YYYY-MM-DD of null"}],
+  "participants": [{"name": "Voornaam + Achternaam", "role": "Functie/Rol of null", "present": true}],
+  "agenda_items": [{"item": "Agendapunt of besproken onderwerp", "discussed": true}],
+  "decisions": [{"decision": "Besluit, afspraak of actiepunt", "owner": "Verantwoordelijke persoon of null", "deadline": "YYYY-MM-DD of null"}],
+  "action_items": [{"action": "Specifieke actie", "assignee": "Toegewezen aan of null", "deadline": "YYYY-MM-DD of null"}],
   "notes": "Belangrijke notities als één string of null",
   "summary": "Korte samenvatting in 2-3 zinnen of null",
   "confidence_scores": {
@@ -369,12 +385,24 @@ Extraheer de volgende informatie uit het document en retourneer ALLEEN een JSON 
   }
 }
 
-REGELS:
-- Retourneer ALLEEN de JSON, geen markdown of uitleg
-- Gebruik Nederlandse teksten waar van toepassing
-- Bij ontbrekende informatie: null of lege array
-- Confidence scores 0-100: hoe zeker je bent dat de extractie correct is
-- meeting_type moet exact een van deze waarden zijn: team, board, project, klant, overig`;
+BELANGRIJKE INSTRUCTIES:
+1. PARTICIPANTS: Extraheer ALLE personen die in het document worden genoemd:
+   - Kijk naar "Aanwezigen:", "Deelnemers:", "Afwezig:", namen in handtekeningen
+   - Namen die acties krijgen toegewezen zijn ook participants
+   - Gebruik volledige namen waar mogelijk
+
+2. DECISIONS: Dit zijn NIET alleen formele besluiten. Neem ook op:
+   - Actiepunten en to-do items
+   - Afspraken die zijn gemaakt
+   - Vervolgacties met verantwoordelijke
+   - Alles waar een naam + actie bij staat
+
+3. Als je twijfelt, neem het WEL op
+
+4. REGELS:
+   - Retourneer ALLEEN de JSON, geen markdown of uitleg
+   - Bij ontbrekende informatie: null of lege array
+   - meeting_type: team, board, project, klant, of overig`;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
