@@ -99,17 +99,41 @@ export function useCreateMeetingMinute() {
 
       // 5. Insert participants as meeting_attendees
       if (input.participants && input.participants.length > 0) {
+        // Map AI-extracted roles to valid database values
+        const validRoles = ['voorzitter', 'notulist', 'deelnemer', 'afwezig'] as const;
+        type ValidRole = typeof validRoles[number];
+        
+        const mapRole = (role: string | null | undefined): ValidRole => {
+          if (!role) return 'deelnemer';
+          const lowerRole = role.toLowerCase();
+          // Direct match
+          if (validRoles.includes(lowerRole as ValidRole)) {
+            return lowerRole as ValidRole;
+          }
+          // Common mappings
+          if (lowerRole.includes('voorzitter') || lowerRole.includes('chair')) return 'voorzitter';
+          if (lowerRole.includes('notulist') || lowerRole.includes('secretaris')) return 'notulist';
+          if (lowerRole.includes('afwezig') || lowerRole.includes('absent')) return 'afwezig';
+          // Default
+          return 'deelnemer';
+        };
+
         const attendeesToInsert = input.participants.map(p => ({
           meeting_id: minute.id,
           external_name: p.name,
-          role: (p.role as 'voorzitter' | 'notulist' | 'deelnemer' | 'gast') || 'deelnemer',
+          role: mapRole(p.role),
           attended: p.present ?? true,
           user_id: null,
         }));
         
-        await supabase
+        const { error: attendeesError } = await supabase
           .from('meeting_attendees')
           .insert(attendeesToInsert);
+        
+        if (attendeesError) {
+          console.error('Failed to insert attendees:', attendeesError);
+          // Don't throw - attendees are secondary, meeting is created successfully
+        }
       }
 
       // 6. Invalidate query cache

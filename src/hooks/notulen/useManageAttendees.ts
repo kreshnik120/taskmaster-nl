@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { MEETING_MINUTES_QUERY_KEY } from "@/hooks/useMeetingMinutes";
 import { toast } from "sonner";
 
-export type AttendeeRole = 'voorzitter' | 'notulist' | 'deelnemer' | 'gast';
+export type AttendeeRole = 'voorzitter' | 'notulist' | 'deelnemer' | 'afwezig';
 
 export interface AddInternalAttendeeInput {
   meeting_id: string;
