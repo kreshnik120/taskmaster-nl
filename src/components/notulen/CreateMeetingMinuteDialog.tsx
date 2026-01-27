@@ -184,10 +184,19 @@ export function CreateMeetingMinuteDialog({
     }
     if (extractedData.location) form.setValue('location', extractedData.location);
     
+    // Fallback: als geen decisions, map action_items naar decisions format
+    const decisionsToUse = extractedData.decisions && extractedData.decisions.length > 0 
+      ? extractedData.decisions 
+      : (extractedData.action_items || []).map(a => ({
+          decision: a.action,
+          owner: a.assignee || null,
+          deadline: a.deadline || null
+        }));
+    
     // Bewaar extracted content voor later gebruik bij submit
     setExtractedContent({
       agenda_items: extractedData.agenda_items,
-      decisions: extractedData.decisions,
+      decisions: decisionsToUse,
       content: [extractedData.notes, extractedData.summary].filter(Boolean).join('\n\n') || undefined,
       participants: extractedData.participants,
     });
@@ -195,7 +204,7 @@ export function CreateMeetingMinuteDialog({
     clearExtractedData();
     toast.success("Gegevens toegepast", {
       description: extractedData.agenda_items?.length 
-        ? `${extractedData.agenda_items.length} agenda items en ${extractedData.decisions?.length || 0} beslissingen`
+        ? `${extractedData.agenda_items.length} agenda items en ${decisionsToUse.length} beslissingen/acties`
         : undefined
     });
   };
