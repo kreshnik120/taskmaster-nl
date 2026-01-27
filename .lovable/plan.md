@@ -1,395 +1,200 @@
 
-# Fase 7B: Complete Extracted Data Persistentie
+# Fix: Beslissingen en Deelnemers Worden Niet Opgeslagen
 
-## 1. Overzicht
+## 1. Probleem Samenvatting
 
-| Aspect | Details |
-|--------|---------|
-| **Scope** | Volledige opslag van AI-geëxtraheerde data bij notulen creatie |
-| **Risico niveau** | MEDIUM (uitbreiding bestaande flow) |
-| **Wijzigingen** | 3 bestanden |
-| **Geschatte omvang** | ~100 regels |
-| **Impact** | Geëxtraheerde agenda, beslissingen en deelnemers worden echt opgeslagen |
-
----
-
-## 2. Probleemanalyse
-
-### Huidige Situatie
-```text
-┌─────────────────────────────────────────────────────────────────────┐
-│ PDF → Gemini → ExtractedDataPreview                                  │
-│                      ↓                                               │
-│   ┌─────────────────────────────────────────────────────────────┐   │
-│   │ applyExtractedData() - REGEL 166-180                        │   │
-│   │                                                              │   │
-│   │ ✅ title → form.setValue('title')                           │   │
-│   │ ✅ meeting_type → form.setValue('meeting_type')             │   │
-│   │ ✅ meeting_date → form.setValue('start_at')                 │   │
-│   │ ✅ meeting_time → form.setValue('start_time')               │   │
-│   │ ✅ location → form.setValue('location')                     │   │
-│   │                                                              │   │
-│   │ ❌ participants → WEGGEGOOID                                │   │
-│   │ ❌ agenda_items → WEGGEGOOID                                │   │
-│   │ ❌ decisions → WEGGEGOOID                                   │   │
-│   │ ❌ action_items → WEGGEGOOID                                │   │
-│   │ ❌ notes/summary → WEGGEGOOID                               │   │
-│   └─────────────────────────────────────────────────────────────┘   │
-│                      ↓                                               │
-│   createMeetingMinute() → agenda_items: [], decisions: []           │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### Gewenste Situatie
-```text
-┌─────────────────────────────────────────────────────────────────────┐
-│ PDF → Gemini → ExtractedDataPreview                                  │
-│                      ↓                                               │
-│   applyExtractedData() - OPSLAAN in extractedContent state          │
-│                      ↓                                               │
-│   createMeetingMinute({                                              │
-│     title, meeting_type, start_at, location,                        │
-│     agenda_items: extractedContent.agenda_items,                    │
-│     decisions: extractedContent.decisions,                          │
-│     content: extractedContent.notes + summary,                      │
-│     participants: extractedContent.participants                     │
-│   })                                                                 │
-│                      ↓                                               │
-│   meeting_minutes tabel: VOLLEDIG GEVULD                            │
-│   meeting_attendees tabel: DEELNEMERS TOEGEVOEGD                    │
-└─────────────────────────────────────────────────────────────────────┘
-```
+| Aspect | Status |
+|--------|--------|
+| **Root Cause** | Gemini AI extraheert geen `decisions` of `participants` uit het PDF |
+| **Bewijs** | Database toont `decisions: []` terwijl `agenda_items` wel gevuld is (9 items) |
+| **Frontend Code** | Correct - geen bugs gevonden |
+| **Backend Code** | Correct - geen bugs gevonden |
+| **Probleem** | AI Prompt is te strikt / document bevat geen expliciete "besluiten" |
 
 ---
 
-## 3. Technische Wijzigingen
+## 2. Bewijsvoering
 
-### 3A. Hook: `useCreateMeetingMinute.ts` - Uitbreiden Input Interface
-
-**Bestand**: `src/hooks/useCreateMeetingMinute.ts`
-
-**Wijziging 1**: Uitbreid `CreateMeetingMinuteInput` interface (regel 6-13):
-```typescript
-export interface CreateMeetingMinuteInput {
-  title: string;
-  meeting_type: 'team' | 'board' | 'project' | 'klant' | 'overig';
-  start_at: Date;
-  location?: string;
-  meeting_link?: string;
-  linkedTaskId?: string;
-  // NIEUW: Extracted data fields
-  agenda_items?: Array<{ item: string; discussed: boolean }>;
-  decisions?: Array<{ decision: string; owner?: string | null; deadline?: string | null }>;
-  content?: string;
-  participants?: Array<{ name: string; role?: string | null; present?: boolean }>;
+### Database Query Resultaat
+```json
+{
+  "agenda_items": [9 items correct opgeslagen],
+  "decisions": [],  // LEEG
+  "content": "..." // Correct gevuld
 }
+// meeting_attendees: 0 rijen
 ```
 
-**Wijziging 2**: Update insert statement (regel 54-65):
-```typescript
-// Transform agenda_items naar database format
-const formattedAgendaItems = (input.agenda_items || []).map((item, index) => ({
-  id: crypto.randomUUID(),
-  order: index + 1,
-  title: item.item,
-  duration_min: 15, // Default
-  discussed: item.discussed || false,
-}));
-
-// Transform decisions naar database format
-const formattedDecisions = (input.decisions || []).map(d => ({
-  id: crypto.randomUUID(),
-  text: d.decision,
-  decided_by: d.owner || null,
-  decided_at: d.deadline || new Date().toISOString(),
-  linked_task_id: null,
-}));
-
-const { data: minute, error: minuteError } = await supabase
-  .from("meeting_minutes")
-  .insert({
-    task_id: taskId,
-    org_id: userOrg.org_id,
-    meeting_type: input.meeting_type,
-    location: input.location || null,
-    meeting_link: input.meeting_link || null,
-    status: 'draft',
-    agenda_items: formattedAgendaItems,
-    decisions: formattedDecisions,
-    content: input.content || null,
-  })
-  .select('id')
-  .single();
-```
-
-**Wijziging 3**: Voeg deelnemers toe na minute creatie (na regel 67):
-```typescript
-// Insert participants as meeting_attendees
-if (input.participants && input.participants.length > 0) {
-  const attendeesToInsert = input.participants.map(p => ({
-    minute_id: minute.id,
-    external_name: p.name,
-    role: p.role || null,
-    attended: p.present ?? true,
-    user_id: null, // External participants
-  }));
-  
-  await supabase
-    .from('meeting_attendees')
-    .insert(attendeesToInsert);
-}
+### Code Flow Verificatie
+```text
+ExtractedDataPreview → extractedData.decisions = []
+                       extractedData.participants = []
+        ↓
+applyExtractedData() → setExtractedContent({ decisions: [], participants: [] })
+        ↓
+onSubmit() → createMeetingMinute({ decisions: [], participants: [] })
+        ↓
+useCreateMeetingMinute → formattedDecisions = [] (want input.decisions was [])
+                         attendeesToInsert niet uitgevoerd (want participants.length = 0)
 ```
 
 ---
 
-### 3B. Dialog: `CreateMeetingMinuteDialog.tsx` - Extracted Data Bewaren
+## 3. Oplossing
+
+### Stap 1: Verbeter AI Prompt voor Betere Extractie
+
+**Bestand**: `supabase/functions/ai-extract-meeting-minute/index.ts`
+
+**Locatie**: Regel 229-264 (Gemini multimodal prompt)
+
+**Wijzigingen**:
+1. Verduidelijk dat "actiepunten", "afspraken", "to-do's" ook als decisions gelden
+2. Verduidelijk dat "aanwezigen", "namen in tekst" ook als participants gelden
+3. Voeg expliciete instructie toe om ALLE genoemde personen te extraheren
+
+```typescript
+text: `Je bent een expert in het analyseren van vergaderdocumenten voor Nederlandse zorginstellingen.
+
+Analyseer dit PDF document en extraheer de volgende informatie. Retourneer ALLEEN een valide JSON object:
+
+{
+  "title": "Titel van de vergadering of document",
+  "meeting_date": "YYYY-MM-DD format of null",
+  "meeting_time": "HH:MM format of null",
+  "location": "Locatie of null",
+  "meeting_type": "team|board|project|klant|overig of null",
+  "participants": [{"name": "Voornaam + Achternaam", "role": "Functie/Rol of null", "present": true}],
+  "agenda_items": [{"item": "Agendapunt of besproken onderwerp", "discussed": true}],
+  "decisions": [{"decision": "Besluit, afspraak of actiepunt", "owner": "Verantwoordelijke persoon of null", "deadline": "YYYY-MM-DD of null"}],
+  "action_items": [{"action": "Specifieke actie", "assignee": "Toegewezen aan of null", "deadline": "YYYY-MM-DD of null"}],
+  "notes": "Belangrijke notities als één string of null",
+  "summary": "Korte samenvatting in 2-3 zinnen of null",
+  "confidence_scores": {...}
+}
+
+BELANGRIJKE INSTRUCTIES:
+1. PARTICIPANTS: Extraheer ALLE personen die in het document worden genoemd:
+   - Kijk naar "Aanwezigen:", "Deelnemers:", namen in handtekeningen
+   - Namen die acties krijgen toegewezen zijn ook participants
+   - Gebruik volledige namen waar mogelijk
+
+2. DECISIONS: Dit zijn NIET alleen formele besluiten. Neem ook op:
+   - Actiepunten en to-do items
+   - Afspraken die zijn gemaakt
+   - Vervolgacties met verantwoordelijke
+   - Alles waar een naam + actie bij staat
+
+3. Als je twijfelt, neem het WEL op (better safe than sorry)
+
+4. Confidence scores: geef eerlijke scores (0-100)`
+```
+
+### Stap 2: Fallback voor action_items → decisions
 
 **Bestand**: `src/components/notulen/CreateMeetingMinuteDialog.tsx`
 
-**Wijziging 1**: Voeg state toe voor extracted content (na regel 100):
-```typescript
-const [extractedContent, setExtractedContent] = useState<{
-  agenda_items?: Array<{ item: string; discussed: boolean }>;
-  decisions?: Array<{ decision: string; owner?: string | null; deadline?: string | null }>;
-  content?: string;
-  participants?: Array<{ name: string; role?: string | null; present?: boolean }>;
-} | null>(null);
-```
+**Locatie**: Regel 188-193 (`applyExtractedData` functie)
 
-**Wijziging 2**: Update `applyExtractedData` (regel 166-180):
+**Wijziging**: Als `decisions` leeg is maar `action_items` niet, gebruik action_items als fallback:
+
 ```typescript
 const applyExtractedData = () => {
   if (!extractedData) return;
   
-  // Form velden toepassen (bestaande code)
+  // Form velden toepassen (bestaande code blijft)
   if (extractedData.title) form.setValue('title', extractedData.title);
-  if (extractedData.meeting_type) form.setValue('meeting_type', extractedData.meeting_type);
-  if (extractedData.meeting_date) {
-    form.setValue('start_at', new Date(extractedData.meeting_date));
-  }
-  if (extractedData.meeting_time) {
-    form.setValue('start_time', extractedData.meeting_time);
-  }
-  if (extractedData.location) form.setValue('location', extractedData.location);
+  // ... etc
   
-  // NIEUW: Bewaar extracted content voor later gebruik
+  // Fallback: als geen decisions, map action_items naar decisions format
+  const decisionsToUse = extractedData.decisions.length > 0 
+    ? extractedData.decisions 
+    : (extractedData.action_items || []).map(a => ({
+        decision: a.action,
+        owner: a.assignee || null,
+        deadline: a.deadline || null
+      }));
+  
+  // Bewaar extracted content voor later gebruik bij submit
   setExtractedContent({
     agenda_items: extractedData.agenda_items,
-    decisions: extractedData.decisions,
-    content: [extractedData.notes, extractedData.summary].filter(Boolean).join('\n\n'),
+    decisions: decisionsToUse,
+    content: [extractedData.notes, extractedData.summary].filter(Boolean).join('\n\n') || undefined,
     participants: extractedData.participants,
   });
   
+  // Update toast message
   clearExtractedData();
   toast.success("Gegevens toegepast", {
     description: extractedData.agenda_items?.length 
-      ? `${extractedData.agenda_items.length} agenda items en ${extractedData.decisions?.length || 0} beslissingen`
+      ? `${extractedData.agenda_items.length} agenda items en ${decisionsToUse.length} beslissingen/acties`
       : undefined
   });
 };
-```
-
-**Wijziging 3**: Update `onSubmit` om extracted content mee te sturen (regel 183-225):
-```typescript
-const onSubmit = async (values: CreateMeetingMinuteFormData) => {
-  try {
-    const [hours, minutes] = values.start_time.split(":").map(Number);
-    const startDateTime = new Date(values.start_at);
-    startDateTime.setHours(hours, minutes, 0, 0);
-
-    const minuteId = await createMeetingMinute({
-      title: values.title,
-      meeting_type: values.meeting_type,
-      start_at: startDateTime,
-      location: values.location || undefined,
-      meeting_link: values.meeting_link || undefined,
-      linkedTaskId: linkedTaskId,
-      // NIEUW: Pass extracted content
-      agenda_items: extractedContent?.agenda_items,
-      decisions: extractedContent?.decisions,
-      content: extractedContent?.content,
-      participants: extractedContent?.participants,
-    });
-
-    // ... rest blijft hetzelfde
-  }
-};
-```
-
-**Wijziging 4**: Reset extractedContent bij dialog close (in handleOpenChange en useEffect):
-```typescript
-// In handleOpenChange (regel 227-234):
-const handleOpenChange = (newOpen: boolean) => {
-  if (!newOpen) {
-    form.reset();
-    setPendingFiles([]);
-    clearExtractedData();
-    setExtractedContent(null);  // NIEUW
-  }
-  onOpenChange(newOpen);
-};
-
-// In useEffect (regel 116-129):
-React.useEffect(() => {
-  if (open) {
-    form.reset({ ... });
-    setPendingFiles([]);
-    clearExtractedData();
-    setExtractedContent(null);  // NIEUW
-  }
-}, [open, ...]);
-```
-
----
-
-### 3C. ExtractedDataPreview: Toon Meer Details
-
-**Bestand**: `src/components/notulen/ExtractedDataPreview.tsx`
-
-**Wijziging**: Toon agenda items en beslissingen met preview (regel 112-131):
-```typescript
-{/* Agenda - toon items */}
-{data.agenda_items.length > 0 && (
-  <div className="space-y-1">
-    <div className="flex items-center gap-2 text-sm font-medium">
-      <ListChecks className="h-3.5 w-3.5" />
-      Agenda ({data.agenda_items.length} items)
-      <ConfidenceBadge score={data.confidence_scores?.agenda_items || 0} />
-    </div>
-    <ul className="text-xs text-muted-foreground space-y-0.5 pl-5 list-disc">
-      {data.agenda_items.slice(0, 3).map((item, i) => (
-        <li key={i} className="truncate">{item.item}</li>
-      ))}
-      {data.agenda_items.length > 3 && (
-        <li className="italic">+{data.agenda_items.length - 3} meer...</li>
-      )}
-    </ul>
-  </div>
-)}
-
-{/* Decisions - toon items */}
-{data.decisions.length > 0 && (
-  <div className="space-y-1">
-    <div className="flex items-center gap-2 text-sm font-medium">
-      <FileText className="h-3.5 w-3.5" />
-      Beslissingen ({data.decisions.length})
-      <ConfidenceBadge score={data.confidence_scores?.decisions || 0} />
-    </div>
-    <ul className="text-xs text-muted-foreground space-y-0.5 pl-5 list-disc">
-      {data.decisions.slice(0, 2).map((d, i) => (
-        <li key={i} className="truncate">{d.decision}</li>
-      ))}
-      {data.decisions.length > 2 && (
-        <li className="italic">+{data.decisions.length - 2} meer...</li>
-      )}
-    </ul>
-  </div>
-)}
 ```
 
 ---
 
 ## 4. Implementatie Volgorde
 
-| Stap | Bestand | Wijziging |
-|------|---------|-----------|
-| 1 | `useCreateMeetingMinute.ts` | Extend interface + insert agenda/decisions/content |
-| 2 | `useCreateMeetingMinute.ts` | Insert participants in meeting_attendees |
-| 3 | `CreateMeetingMinuteDialog.tsx` | Add extractedContent state |
-| 4 | `CreateMeetingMinuteDialog.tsx` | Update applyExtractedData + onSubmit |
-| 5 | `ExtractedDataPreview.tsx` | Toon agenda/beslissingen preview |
+| Stap | Bestand | Wijziging | Impact |
+|------|---------|-----------|--------|
+| 1 | `supabase/functions/ai-extract-meeting-minute/index.ts` | Verbeterde prompt met duidelijkere instructies | Gemini extraheert meer data |
+| 2 | `src/components/notulen/CreateMeetingMinuteDialog.tsx` | Fallback action_items → decisions | Geen data verlies |
+| 3 | Deploy edge function | Activeer nieuwe prompt | - |
 
 ---
 
-## 5. Data Transformatie
-
-### Extracted → Database Format
-
-| AI Extract Format | Database Format |
-|-------------------|-----------------|
-| `{ item: "...", discussed: true }` | `{ id: uuid, order: 1, title: "...", duration_min: 15, discussed: true }` |
-| `{ decision: "...", owner: "..." }` | `{ id: uuid, text: "...", decided_by: "...", decided_at: "...", linked_task_id: null }` |
-| `{ name: "...", role: "...", present: true }` | `meeting_attendees` row met `external_name`, `role`, `attended` |
-
----
-
-## 6. Acceptatie Criteria
-
-| Criterium | Verificatie |
-|-----------|-------------|
-| PDF import vult agenda_items | Check `meeting_minutes.agenda_items` in DB |
-| PDF import vult decisions | Check `meeting_minutes.decisions` in DB |
-| PDF import vult content | Check `meeting_minutes.content` in DB |
-| PDF import voegt deelnemers toe | Check `meeting_attendees` tabel |
-| Notulen detail toont agenda | Open MeetingMinuteDetail |
-| Notulen detail toont beslissingen | Open MeetingMinuteDetail |
-| ExtractedDataPreview toont items | Visuele check in dialog |
-
----
-
-## 7. Bestandsoverzicht
-
-| Bestand | Wijzigingen |
-|---------|-------------|
-| `src/hooks/useCreateMeetingMinute.ts` | +interface fields, +transform, +attendees insert (~40 regels) |
-| `src/components/notulen/CreateMeetingMinuteDialog.tsx` | +extractedContent state, +applyExtractedData update (~30 regels) |
-| `src/components/notulen/ExtractedDataPreview.tsx` | +agenda/decisions list preview (~30 regels) |
-
----
-
-## 8. Flow Na Implementatie
+## 5. Verwacht Resultaat Na Fix
 
 ```text
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Complete Data Persistentie                        │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                       │
-│   PDF Upload                                                          │
-│       ↓                                                               │
-│   Gemini Multimodal Analyse                                          │
-│       ↓                                                               │
-│   ExtractedDataPreview                                                │
-│   ┌───────────────────────────────────────────────────────────────┐  │
-│   │ ✓ Titel: "Teamoverleg Q1 2026"                                │  │
-│   │ ✓ Datum: 2026-01-26                                            │  │
-│   │ ✓ Type: team                                                   │  │
-│   │ ✓ Deelnemers (4): Jan, Piet, Marie, Lisa                      │  │
-│   │ ✓ Agenda (5 items):                                            │  │
-│   │   • Opening en mededelingen                                    │  │
-│   │   • Voortgang project X                                        │  │
-│   │   • +3 meer...                                                 │  │
-│   │ ✓ Beslissingen (2):                                            │  │
-│   │   • Budget wordt goedgekeurd                                   │  │
-│   │   • +1 meer...                                                 │  │
-│   │                                                                 │  │
-│   │ [Negeren] [Toepassen]                                          │  │
-│   └───────────────────────────────────────────────────────────────┘  │
-│       ↓                                                               │
-│   "Toepassen" klikt → extractedContent state gevuld                  │
-│       ↓                                                               │
-│   Form submit → createMeetingMinute({                                │
-│     agenda_items: [...],                                             │
-│     decisions: [...],                                                │
-│     content: "...",                                                  │
-│     participants: [...]                                              │
-│   })                                                                 │
-│       ↓                                                               │
-│   Database:                                                          │
-│   ├── tasks: title, start_at                                        │
-│   ├── meeting_minutes: VOLLEDIG agenda_items, decisions, content    │
-│   └── meeting_attendees: 4 rows met deelnemers                      │
-│       ↓                                                               │
-│   Notulen pagina: Alle data zichtbaar!                               │
-│                                                                       │
-└─────────────────────────────────────────────────────────────────────┘
+PDF Upload
+    ↓
+Gemini Multimodal (verbeterde prompt)
+    ↓
+ExtractedDataPreview:
+  ✓ Participants: 4 (Leonie, Erik, Elham, Bloezem)
+  ✓ Decisions: 8 (inclusief action_items als fallback)
+  ✓ Agenda: 9 items
+    ↓
+Database:
+  ├── meeting_minutes.decisions: [8 items]
+  └── meeting_attendees: 4 rijen
 ```
 
 ---
 
-## 9. Toekomstige Uitbreidingen (Fase 7C)
+## 6. Technische Details
 
-| Feature | Beschrijving |
-|---------|--------------|
-| Action Items → Taken | `action_items` automatisch omzetten naar `tasks` met eigenaar |
-| Deelnemers Matchen | `participants.name` matchen met bestaande `profiles` |
-| Beslissingen Tracken | Dashboard voor beslissingen across alle notulen |
+### Gewijzigde Bestanden
+
+| Bestand | Wijzigingen |
+|---------|-------------|
+| `supabase/functions/ai-extract-meeting-minute/index.ts` | Verbeterde prompt (~30 regels) |
+| `src/components/notulen/CreateMeetingMinuteDialog.tsx` | action_items fallback (~10 regels) |
+
+### Geen Wijzigingen Nodig In
+
+| Bestand | Reden |
+|---------|-------|
+| `useCreateMeetingMinute.ts` | Insert logica is al correct |
+| `ExtractedDataPreview.tsx` | Preview logica is al correct |
+| `useAIExtractMeeting.ts` | Hook is al correct |
+
+---
+
+## 7. Test Verificatie
+
+Na implementatie, test met dezelfde PDF:
+
+1. Upload PDF via "Importeer van bestand"
+2. Controleer ExtractedDataPreview:
+   - Toont het nu participants?
+   - Toont het nu decisions?
+3. Klik "Toepassen" en "Aanmaken"
+4. Controleer database:
+   ```sql
+   SELECT decisions, (SELECT COUNT(*) FROM meeting_attendees WHERE meeting_id = mm.id) as attendee_count
+   FROM meeting_minutes mm
+   ORDER BY created_at DESC LIMIT 1;
+   ```
