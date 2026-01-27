@@ -74,7 +74,7 @@ async function fetchMeetingMinutes(): Promise<MeetingMinute[]> {
     .from("meeting_minutes")
     .select(`
       *,
-      tasks!inner(id, title, start_at, due_at),
+      tasks!meeting_minutes_task_id_fkey(id, title, start_at, due_at),
       meeting_attendees(
         id,
         role,
