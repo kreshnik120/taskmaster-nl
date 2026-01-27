@@ -1,208 +1,323 @@
 
-# Fix: ExtractedDataPreview Scrollbaar Maken met Sticky Buttons
 
-## 1. Probleem Samenvatting
+# Fase 7C: Notulen Assistent - Implementatieplan
 
-| Aspect | Huidige Status |
-|--------|---------------|
-| **Scrollable content** | Geen `overflow-y-auto` of `max-height` |
-| **Button positie** | Inline in content, verdwijnt bij veel data |
-| **Structuur** | Flat layout zonder flex container |
-| **Gevolg** | Gebruiker kan niet alle data controleren |
+## Samenvatting
 
-## 2. Huidige Layout Structuur
+Dit plan implementeert de Notulen Assistent met intelligente item classificatie en bulk taak creatie. We bouwen in 8 stappen, beginnend met database migraties.
+
+---
+
+## Stap 1: Database Migratie
+
+**Twee kolommen toevoegen:**
+
+1. **`meeting_minutes.action_items`** (JSONB)
+   - Bewaart AI-geëxtraheerde action items met classificatie
+   - Vergelijkbaar met bestaande `decisions` en `agenda_items` kolommen
+
+2. **`tasks.source_meeting_minute_id`** (UUID)
+   - Linkt taken terug naar de bron meeting minute
+   - Foreign key naar `meeting_minutes(id)`
+
+```sql
+-- 1. Action items JSONB kolom voor meeting minutes
+ALTER TABLE meeting_minutes 
+ADD COLUMN action_items JSONB DEFAULT '[]'::jsonb;
+
+-- 2. Source link van tasks naar meeting minutes
+ALTER TABLE tasks 
+ADD COLUMN source_meeting_minute_id UUID REFERENCES meeting_minutes(id);
+
+-- 3. Index voor efficiënte queries
+CREATE INDEX idx_tasks_source_meeting_minute_id 
+ON tasks(source_meeting_minute_id) 
+WHERE source_meeting_minute_id IS NOT NULL;
+```
+
+---
+
+## Stap 2: Interface Uitbreiding
+
+**Bestand:** `src/hooks/notulen/useAIExtractMeeting.ts`
+
+Breid de `action_items` array uit (backwards compatible - alle nieuwe velden optional):
+
+```typescript
+action_items: Array<{
+  action: string;                                    // BEHOUDEN
+  assignee: string | null;                           // BEHOUDEN
+  deadline: string | null;                           // BEHOUDEN
+  classification?: 'TAAK' | 'IDEE' | 'INFORMATIE';   // NIEUW
+  urgency?: 'critical' | 'high' | 'medium' | 'low';  // NIEUW
+  source_quote?: string;                             // NIEUW
+  confidence?: number;                               // NIEUW (0.0-1.0)
+}>;
+```
+
+---
+
+## Stap 3: AI Prompt Updates
+
+**Bestand:** `supabase/functions/ai-extract-meeting-minute/index.ts`
+
+Update op 4 locaties:
+
+1. **Interface definitie** (regel 29-34)
+2. **Multimodal prompt** (regel 229-280)
+3. **System prompt** (regel 358-405)
+4. **Normalisatie functies** (regel 319-343, 550-574, 673-697)
+
+**Classificatie instructies toevoegen:**
 
 ```text
-<Card>
-  <CardHeader> (header met titel)
-  <CardContent className="space-y-4"> (GEEN scroll, GEEN max-height)
-    - Basic Info (5 velden)
-    - Participants sectie
-    - Agenda sectie  
-    - Decisions sectie
-    - Summary sectie
-    - Warning sectie
-    - Buttons (NIET sticky - verdwijnt onder fold)
-  </CardContent>
-</Card>
+ACTION_ITEMS CLASSIFICATIE:
+
+Classificeer elk action_item als:
+
+1. "TAAK" - Concrete actie met actiewerkwoord + (eigenaar OF deadline)
+   Voorbeelden: "Jan maakt rapport", "Review voor vrijdag"
+   
+2. "IDEE" - Suggestie zonder concrete toewijzing
+   Indicatoren: "zou kunnen", "misschien", "overwegen"
+   
+3. "INFORMATIE" - Feitelijke mededeling, geen actie vereist
+   Voorbeelden: "Budget goedgekeurd", "Project loopt op schema"
+
+URGENTIE:
+- critical: < 24 uur of blocker
+- high: < 3 dagen
+- medium: < 1 week
+- low: geen deadline
+
+VERPLICHT: source_quote = exacte tekst uit document (hallucinatie preventie)
 ```
 
-## 3. Gewenste Layout Structuur
+**Output structuur update:**
 
-```text
-<Card className="flex flex-col max-h-[60vh]">
-  <CardHeader> (header met titel - fixed)
-  <CardContent className="flex flex-col min-h-0 flex-1 p-0">
-    
-    <!-- Scrollable content area -->
-    <div className="flex-1 overflow-y-auto min-h-0 px-6 py-4 space-y-4">
-      - Basic Info
-      - Participants sectie
-      - Agenda sectie  
-      - Decisions sectie
-      - Summary sectie
-      - Warning sectie
-    </div>
-    
-    <!-- Sticky buttons - altijd zichtbaar -->
-    <div className="shrink-0 border-t px-6 py-4 bg-background">
-      [Negeren] [Toepassen]
-    </div>
-    
-  </CardContent>
-</Card>
+```json
+"action_items": [{
+  "action": "Beschrijving",
+  "assignee": "Naam of null",
+  "deadline": "YYYY-MM-DD of null",
+  "classification": "TAAK",
+  "urgency": "high",
+  "source_quote": "Exacte quote uit document",
+  "confidence": 0.85
+}]
 ```
 
-## 4. Technische Wijzigingen
+---
 
-### Bestand: `src/components/notulen/ExtractedDataPreview.tsx`
+## Stap 4: Persistentie Updates
 
-**Wijziging 1**: Card container met max-height en flex layout (regel 54)
+### 4a. useCreateMeetingMinute.ts
+
+**Wijzigingen:**
+
+1. Voeg `action_items` toe aan `CreateMeetingMinuteInput` interface
+2. Bewaar action_items als JSONB bij insert
+
 ```typescript
-// Huidige code:
-<Card className="border-primary/50">
+interface CreateMeetingMinuteInput {
+  // ... bestaande velden ...
+  action_items?: Array<{
+    action: string;
+    assignee?: string | null;
+    deadline?: string | null;
+    classification?: 'TAAK' | 'IDEE' | 'INFORMATIE';
+    urgency?: 'critical' | 'high' | 'medium' | 'low';
+    source_quote?: string;
+    confidence?: number;
+  }>;
+}
 
-// Nieuwe code:
-<Card className="border-primary/50 flex flex-col max-h-[60vh]">
+// In insert:
+action_items: input.action_items || [],
 ```
 
-**Wijziging 2**: CardContent als flex container (regel 67)
+### 4b. CreateMeetingMinuteDialog.tsx
+
+**Wijzigingen:**
+
+1. Voeg `action_items` toe aan `extractedContent` state
+2. Pass action_items door bij submit
+
 ```typescript
-// Huidige code:
-<CardContent className="space-y-4">
+// In applyExtractedData():
+setExtractedContent({
+  ...existing,
+  action_items: extractedData.action_items,
+});
 
-// Nieuwe code:
-<CardContent className="flex flex-col min-h-0 flex-1 p-0">
+// In onSubmit():
+action_items: extractedContent?.action_items,
 ```
 
-**Wijziging 3**: Wrap content in scrollable div (na regel 67, voor Basic Info)
+---
+
+## Stap 5: Nieuwe Hook - useCreateTasksFromItems
+
+**Nieuw bestand:** `src/hooks/notulen/useCreateTasksFromItems.ts`
+
 ```typescript
-{/* Scrollable content area */}
-<div className="flex-1 overflow-y-auto min-h-0 px-6 py-4 space-y-4">
-  {/* Basic Info */}
-  <div className="space-y-1">
-    ... alle FieldRow componenten
-  </div>
-
-  {/* Participants */}
-  ...
-
-  {/* Agenda */}
-  ...
-
-  {/* Decisions */}
-  ...
-
-  {/* Summary */}
-  ...
-
-  {/* Low confidence warning */}
-  ...
-</div>
-```
-
-**Wijziging 4**: Sticky button bar (vervang huidige buttons sectie, regel 166-185)
-```typescript
-{/* Sticky button bar - altijd zichtbaar */}
-<div className="shrink-0 border-t px-6 py-4 bg-background">
-  <div className="flex gap-2">
-    <Button 
-      variant="outline" 
-      size="sm" 
-      onClick={onCancel}
-      disabled={isApplying}
-    >
-      <X className="h-3.5 w-3.5 mr-1" />
-      Negeren
-    </Button>
-    <Button 
-      size="sm" 
-      onClick={onApply}
-      disabled={isApplying}
-    >
-      <Check className="h-3.5 w-3.5 mr-1" />
-      Toepassen
-    </Button>
-  </div>
-</div>
-```
-
-## 5. Volledige Nieuwe Component Structuur
-
-```tsx
-export function ExtractedDataPreview({ data, onApply, onCancel, isApplying }: Props) {
-  const overallConfidence = data.confidence_scores?.overall || 0;
-  
-  return (
-    <Card className="border-primary/50 flex flex-col max-h-[60vh]">
-      {/* Fixed header */}
-      <CardHeader className="pb-3 shrink-0">
-        ...titel en overall confidence...
-      </CardHeader>
-      
-      <CardContent className="flex flex-col min-h-0 flex-1 p-0">
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto min-h-0 px-6 py-4 space-y-4">
-          {/* Basic Info */}
-          {/* Participants */}
-          {/* Agenda */}
-          {/* Decisions */}
-          {/* Summary */}
-          {/* Warning */}
-        </div>
-        
-        {/* Sticky buttons */}
-        <div className="shrink-0 border-t px-6 py-4 bg-background">
-          <div className="flex gap-2">
-            <Button variant="outline" ...>Negeren</Button>
-            <Button ...>Toepassen</Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+interface UseCreateTasksFromItemsReturn {
+  createTasks: (items: ActionItem[], meetingMinuteId: string) => Promise<string[]>;
+  isCreating: boolean;
+  progress: { current: number; total: number };
 }
 ```
 
-## 6. CSS Uitleg
+**Functionaliteit:**
+- Haalt org_id op
+- Mapt urgency naar priority enum (critical→CRITICAL, etc.)
+- Bulk insert met `source_meeting_minute_id`
+- Progress tracking
+- Toast notifications
 
-| Class | Functie |
-|-------|---------|
-| `max-h-[60vh]` | Beperkt card hoogte tot 60% van viewport |
-| `flex flex-col` | Verticale flex layout |
-| `min-h-0` | Essentieel voor flexbox scrolling (voorkomt overflow) |
-| `flex-1` | Neemt beschikbare ruimte |
-| `overflow-y-auto` | Toont scrollbar wanneer nodig |
-| `shrink-0` | Voorkomt dat element krimpt (buttons blijven zichtbaar) |
-| `border-t` | Visuele scheiding tussen content en buttons |
+**Priority mapping:**
 
-## 7. Acceptatie Criteria
+| AI Urgency | Database Priority |
+|------------|-------------------|
+| `critical` | `CRITICAL` |
+| `high` | `HIGH` |
+| `medium` | `MEDIUM` |
+| `low` | `LOW` |
+
+---
+
+## Stap 6: NotulenAssistent Component
+
+**Nieuw bestand:** `src/components/notulen/NotulenAssistent.tsx`
+
+**UI Layout:**
+
+```text
+┌────────────────────────────────────────────────────────┐
+│ Notulen Assistent                                 [X]  │
+│ Selecteer items om als taak aan te maken               │
+├────────────────────────────────────────────────────────┤
+│ [Alle] [TAAK] [IDEE] [INFO]    [Selecteer alle TAKEN]  │
+├────────────────────────────────────────────────────────┤
+│ [✓] Jan maakt rapport af voor vrijdag                  │
+│     [TAAK] Jan | vrijdag | ████████░░ 85%              │
+│     ▼ "Jan zei: ik maak het rapport af..."             │
+├────────────────────────────────────────────────────────┤
+│ [ ] We zouden kunnen overwegen...                      │
+│     [IDEE] - | - | ████░░░░░░ 45%                      │
+├────────────────────────────────────────────────────────┤
+│ 1 van 3 geselecteerd      [Annuleren] [Maak 1 taak →]  │
+└────────────────────────────────────────────────────────┘
+```
+
+**Features:**
+
+| Feature | Beschrijving |
+|---------|--------------|
+| Pre-selection | `classification === 'TAAK' && confidence >= 0.8` → aangevinkt |
+| Filter toggles | Alle / TAAK / IDEE / INFO |
+| Classificatie badges | TAAK=blauw, IDEE=paars, INFO=grijs |
+| Confidence indicator | Groen (≥80) / Oranje (50-79) / Rood (<50) |
+| Source quote | Uitklapbaar per item (italic, grijs) |
+| Bulk acties | "Selecteer alle TAKEN", "Deselecteer alles" |
+| Counter | "X van Y geselecteerd" |
+| Submit | "Maak X taken aan" met loading state |
+
+---
+
+## Stap 7: MeetingMinuteDetail Integratie
+
+**Bestand:** `src/components/notulen/MeetingMinuteDetail.tsx`
+
+**Wijzigingen:**
+
+1. State toevoegen: `const [showAssistent, setShowAssistent] = useState(false)`
+2. Parse action_items uit minute JSONB
+3. Knop toevoegen in SheetFooter (view mode)
+4. NotulenAssistent Sheet component
+
+```tsx
+// In footer (view mode), na "Exporteer PDF":
+{actionItems.length > 0 && (
+  <Button 
+    variant="outline"
+    onClick={() => setShowAssistent(true)}
+  >
+    <Wand2 className="h-4 w-4 mr-2" />
+    Notulen Assistent ({actionItems.length})
+  </Button>
+)}
+```
+
+---
+
+## Stap 8: useMeetingMinutes Update
+
+**Bestand:** `src/hooks/useMeetingMinutes.ts`
+
+Voeg `action_items` toe aan de MeetingMinute interface en query.
+
+---
+
+## Implementatie Volgorde
+
+| # | Bestand | Type | Beschrijving |
+|---|---------|------|--------------|
+| 1 | Database | MIGRATIE | +`action_items` op meeting_minutes, +`source_meeting_minute_id` op tasks |
+| 2 | `useAIExtractMeeting.ts` | UPDATE | Interface uitbreiding (+4 velden) |
+| 3 | `ai-extract-meeting-minute/index.ts` | UPDATE | Interface + prompts + normalisatie |
+| 4 | `useCreateMeetingMinute.ts` | UPDATE | Accepteer en bewaar action_items |
+| 5 | `CreateMeetingMinuteDialog.tsx` | UPDATE | Pass action_items door |
+| 6 | `useMeetingMinutes.ts` | UPDATE | Voeg action_items toe aan interface |
+| 7 | `useCreateTasksFromItems.ts` | NIEUW | Bulk taak creatie hook |
+| 8 | `NotulenAssistent.tsx` | NIEUW | Sheet component met checkboxes |
+| 9 | `MeetingMinuteDetail.tsx` | UPDATE | Knop + sheet integratie |
+
+---
+
+## Acceptatie Criteria
 
 | Criterium | Verificatie |
 |-----------|-------------|
-| Content scrollt bij veel data | Visuele test met 23 beslissingen |
-| Alle deelnemers bereikbaar | Scroll naar bottom |
-| Alle agenda items bereikbaar | Scroll door lijst |
-| Alle beslissingen bereikbaar | Scroll naar #23 |
-| Buttons altijd zichtbaar | Check bij scroll |
-| Smooth scroll | Test scroll behavior |
-| Mobile responsive | Check op 375px breed |
-| Geen console errors | Browser DevTools |
+| Database migratie succesvol | Kolommen bestaan in schema |
+| AI retourneert classification | Test met PDF upload |
+| AI retourneert source_quote | Check AI response |
+| action_items worden bewaard | Check meeting_minutes.action_items |
+| Pre-selection werkt | TAAK + confidence ≥ 0.8 = aangevinkt |
+| Classificatie badges correct | TAAK=blauw, IDEE=paars, INFO=grijs |
+| Confidence kleuren correct | Groen/Oranje/Rood |
+| Filter knoppen functioneel | Click test |
+| "Selecteer alle TAKEN" werkt | Alle TAAK items geselecteerd |
+| Bulk taak creatie werkt | Tasks verschijnen in lijst |
+| source_meeting_minute_id gevuld | Check tasks tabel |
+| Nederlandse UI teksten | Visuele verificatie |
+| Geen console errors | DevTools check |
+| TypeScript compileert | Build test |
 
-## 8. Implementatie Volgorde
+---
 
-| Stap | Wijziging |
-|------|-----------|
-| 1 | Update Card className met flex en max-height |
-| 2 | Update CardContent className |
-| 3 | Wrap content sections in scrollable div |
-| 4 | Move buttons to sticky footer div |
-| 5 | Test met veel data |
+## Beperkingen (Buiten Scope)
 
-## 9. Bestandsoverzicht
+- Eigenaar dropdown suggestie
+- Deadline picker in Assistent
+- Email notificaties
+- Decisions en attendees classificatie
 
-| Bestand | Wijzigingen |
-|---------|-------------|
-| `src/components/notulen/ExtractedDataPreview.tsx` | Layout restructure (~20 regels aangepast) |
+---
 
-Geen andere bestanden hoeven gewijzigd te worden.
+## Technische Details
+
+### Nieuwe Dependencies
+Geen - gebruikt bestaande shadcn/ui componenten.
+
+### Hergebruikte Patterns
+- `ConfidenceBadge` uit ExtractedDataPreview
+- Sheet pattern uit MeetingMinuteDetail
+- Bulk insert pattern uit useManageAgendaItems
+- Toast pattern uit andere hooks
+
+### Backwards Compatibility
+- Alle nieuwe interface velden zijn optional
+- Bestaande meetings zonder action_items tonen lege array
+- Geen breaking changes
+
