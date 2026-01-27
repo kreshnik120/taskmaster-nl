@@ -1,165 +1,147 @@
 
-# Fix: Beslissingen en Deelnemers Worden Niet Opgeslagen
 
-## 1. Probleem Samenvatting
+# Fix: Deelnemers Worden Niet Opgeslagen - Database Constraint Mismatch
 
-| Aspect | Status |
+## 1. Root Cause Analyse
+
+| Aspect | Detail |
 |--------|--------|
-| **Root Cause** | Gemini AI extraheert geen `decisions` of `participants` uit het PDF |
-| **Bewijs** | Database toont `decisions: []` terwijl `agenda_items` wel gevuld is (9 items) |
-| **Frontend Code** | Correct - geen bugs gevonden |
-| **Backend Code** | Correct - geen bugs gevonden |
-| **Probleem** | AI Prompt is te strikt / document bevat geen expliciete "besluiten" |
+| **Probleem** | Database CHECK constraint accepteert `'gast'` NIET |
+| **Database accepteert** | `voorzitter`, `notulist`, `deelnemer`, `afwezig` |
+| **Code stuurt** | `gast` als fallback (regel 105) |
+| **Gevolg** | INSERT faalt silently, 0 attendees opgeslagen |
+
+### Bewijs - Database Constraint
+```sql
+CHECK ((role = ANY (ARRAY['voorzitter', 'notulist', 'deelnemer', 'afwezig'])))
+```
+
+### Bewijs - Code met verkeerde waarde
+```typescript
+// useCreateMeetingMinute.ts regel 105
+role: (p.role as 'voorzitter' | 'notulist' | 'deelnemer' | 'gast') || 'deelnemer',
+//                                                        ^^^^^^ FOUT!
+```
 
 ---
 
-## 2. Bewijsvoering
+## 2. Waarom Decisions WEL Werken
 
-### Database Query Resultaat
-```json
-{
-  "agenda_items": [9 items correct opgeslagen],
-  "decisions": [],  // LEEG
-  "content": "..." // Correct gevuld
-}
-// meeting_attendees: 0 rijen
-```
+| Component | Storage Type | Constraint |
+|-----------|--------------|------------|
+| Decisions | JSONB in `meeting_minutes.decisions` | Geen CHECK constraint |
+| Attendees | Separate `meeting_attendees` tabel | CHECK constraint op `role` |
 
-### Code Flow Verificatie
-```text
-ExtractedDataPreview → extractedData.decisions = []
-                       extractedData.participants = []
-        ↓
-applyExtractedData() → setExtractedContent({ decisions: [], participants: [] })
-        ↓
-onSubmit() → createMeetingMinute({ decisions: [], participants: [] })
-        ↓
-useCreateMeetingMinute → formattedDecisions = [] (want input.decisions was [])
-                         attendeesToInsert niet uitgevoerd (want participants.length = 0)
-```
+Decisions worden opgeslagen als JSONB in dezelfde tabel - geen foreign keys, geen constraints.  
+Attendees vereisen een INSERT in aparte tabel met strikte `role` constraint.
 
 ---
 
 ## 3. Oplossing
 
-### Stap 1: Verbeter AI Prompt voor Betere Extractie
+### Stap 1: Fix `useCreateMeetingMinute.ts`
 
-**Bestand**: `supabase/functions/ai-extract-meeting-minute/index.ts`
+**Locatie**: Regel 100-113
 
-**Locatie**: Regel 229-264 (Gemini multimodal prompt)
-
-**Wijzigingen**:
-1. Verduidelijk dat "actiepunten", "afspraken", "to-do's" ook als decisions gelden
-2. Verduidelijk dat "aanwezigen", "namen in tekst" ook als participants gelden
-3. Voeg expliciete instructie toe om ALLE genoemde personen te extraheren
-
+**Huidige code** (met bugs):
 ```typescript
-text: `Je bent een expert in het analyseren van vergaderdocumenten voor Nederlandse zorginstellingen.
-
-Analyseer dit PDF document en extraheer de volgende informatie. Retourneer ALLEEN een valide JSON object:
-
-{
-  "title": "Titel van de vergadering of document",
-  "meeting_date": "YYYY-MM-DD format of null",
-  "meeting_time": "HH:MM format of null",
-  "location": "Locatie of null",
-  "meeting_type": "team|board|project|klant|overig of null",
-  "participants": [{"name": "Voornaam + Achternaam", "role": "Functie/Rol of null", "present": true}],
-  "agenda_items": [{"item": "Agendapunt of besproken onderwerp", "discussed": true}],
-  "decisions": [{"decision": "Besluit, afspraak of actiepunt", "owner": "Verantwoordelijke persoon of null", "deadline": "YYYY-MM-DD of null"}],
-  "action_items": [{"action": "Specifieke actie", "assignee": "Toegewezen aan of null", "deadline": "YYYY-MM-DD of null"}],
-  "notes": "Belangrijke notities als één string of null",
-  "summary": "Korte samenvatting in 2-3 zinnen of null",
-  "confidence_scores": {...}
+if (input.participants && input.participants.length > 0) {
+  const attendeesToInsert = input.participants.map(p => ({
+    meeting_id: minute.id,
+    external_name: p.name,
+    role: (p.role as 'voorzitter' | 'notulist' | 'deelnemer' | 'gast') || 'deelnemer',
+    attended: p.present ?? true,
+    user_id: null,
+  }));
+  
+  await supabase
+    .from('meeting_attendees')
+    .insert(attendeesToInsert);
 }
-
-BELANGRIJKE INSTRUCTIES:
-1. PARTICIPANTS: Extraheer ALLE personen die in het document worden genoemd:
-   - Kijk naar "Aanwezigen:", "Deelnemers:", namen in handtekeningen
-   - Namen die acties krijgen toegewezen zijn ook participants
-   - Gebruik volledige namen waar mogelijk
-
-2. DECISIONS: Dit zijn NIET alleen formele besluiten. Neem ook op:
-   - Actiepunten en to-do items
-   - Afspraken die zijn gemaakt
-   - Vervolgacties met verantwoordelijke
-   - Alles waar een naam + actie bij staat
-
-3. Als je twijfelt, neem het WEL op (better safe than sorry)
-
-4. Confidence scores: geef eerlijke scores (0-100)`
 ```
 
-### Stap 2: Fallback voor action_items → decisions
-
-**Bestand**: `src/components/notulen/CreateMeetingMinuteDialog.tsx`
-
-**Locatie**: Regel 188-193 (`applyExtractedData` functie)
-
-**Wijziging**: Als `decisions` leeg is maar `action_items` niet, gebruik action_items als fallback:
-
+**Correcte code**:
 ```typescript
-const applyExtractedData = () => {
-  if (!extractedData) return;
+if (input.participants && input.participants.length > 0) {
+  // Map AI-extracted roles to valid database values
+  const validRoles = ['voorzitter', 'notulist', 'deelnemer', 'afwezig'] as const;
+  type ValidRole = typeof validRoles[number];
   
-  // Form velden toepassen (bestaande code blijft)
-  if (extractedData.title) form.setValue('title', extractedData.title);
-  // ... etc
+  const mapRole = (role: string | null | undefined): ValidRole => {
+    if (!role) return 'deelnemer';
+    const lowerRole = role.toLowerCase();
+    // Direct match
+    if (validRoles.includes(lowerRole as ValidRole)) {
+      return lowerRole as ValidRole;
+    }
+    // Common mappings
+    if (lowerRole.includes('voorzitter') || lowerRole.includes('chair')) return 'voorzitter';
+    if (lowerRole.includes('notulist') || lowerRole.includes('secretaris')) return 'notulist';
+    if (lowerRole.includes('afwezig') || lowerRole.includes('absent')) return 'afwezig';
+    // Default
+    return 'deelnemer';
+  };
+
+  const attendeesToInsert = input.participants.map(p => ({
+    meeting_id: minute.id,
+    external_name: p.name,
+    role: mapRole(p.role),
+    attended: p.present ?? true,
+    user_id: null,
+  }));
   
-  // Fallback: als geen decisions, map action_items naar decisions format
-  const decisionsToUse = extractedData.decisions.length > 0 
-    ? extractedData.decisions 
-    : (extractedData.action_items || []).map(a => ({
-        decision: a.action,
-        owner: a.assignee || null,
-        deadline: a.deadline || null
-      }));
+  const { error: attendeesError } = await supabase
+    .from('meeting_attendees')
+    .insert(attendeesToInsert);
   
-  // Bewaar extracted content voor later gebruik bij submit
-  setExtractedContent({
-    agenda_items: extractedData.agenda_items,
-    decisions: decisionsToUse,
-    content: [extractedData.notes, extractedData.summary].filter(Boolean).join('\n\n') || undefined,
-    participants: extractedData.participants,
-  });
-  
-  // Update toast message
-  clearExtractedData();
-  toast.success("Gegevens toegepast", {
-    description: extractedData.agenda_items?.length 
-      ? `${extractedData.agenda_items.length} agenda items en ${decisionsToUse.length} beslissingen/acties`
-      : undefined
-  });
-};
+  if (attendeesError) {
+    console.error('Failed to insert attendees:', attendeesError);
+    // Don't throw - attendees are secondary, meeting is created successfully
+  }
+}
+```
+
+### Stap 2: Update TypeScript Types (optioneel maar aanbevolen)
+
+**Bestand**: `src/hooks/notulen/useManageAttendees.ts` regel 7
+
+**Wijziging**:
+```typescript
+// Huidige (incorrect):
+export type AttendeeRole = 'voorzitter' | 'notulist' | 'deelnemer' | 'gast';
+
+// Correct (match database):
+export type AttendeeRole = 'voorzitter' | 'notulist' | 'deelnemer' | 'afwezig';
 ```
 
 ---
 
 ## 4. Implementatie Volgorde
 
-| Stap | Bestand | Wijziging | Impact |
-|------|---------|-----------|--------|
-| 1 | `supabase/functions/ai-extract-meeting-minute/index.ts` | Verbeterde prompt met duidelijkere instructies | Gemini extraheert meer data |
-| 2 | `src/components/notulen/CreateMeetingMinuteDialog.tsx` | Fallback action_items → decisions | Geen data verlies |
-| 3 | Deploy edge function | Activeer nieuwe prompt | - |
+| Stap | Bestand | Wijziging |
+|------|---------|-----------|
+| 1 | `useCreateMeetingMinute.ts` | Fix role mapping + add error handling |
+| 2 | `useManageAttendees.ts` | Update AttendeeRole type |
 
 ---
 
-## 5. Verwacht Resultaat Na Fix
+## 5. Data Flow Na Fix
 
 ```text
 PDF Upload
     ↓
-Gemini Multimodal (verbeterde prompt)
+Gemini extraheert: participants: [
+  { name: "Leonie", role: "Projectleider", present: true },
+  { name: "Erik", role: "Voorzitter", present: true }
+]
     ↓
-ExtractedDataPreview:
-  ✓ Participants: 4 (Leonie, Erik, Elham, Bloezem)
-  ✓ Decisions: 8 (inclusief action_items als fallback)
-  ✓ Agenda: 9 items
+mapRole("Projectleider") → "deelnemer"
+mapRole("Voorzitter") → "voorzitter"
     ↓
-Database:
-  ├── meeting_minutes.decisions: [8 items]
-  └── meeting_attendees: 4 rijen
+INSERT INTO meeting_attendees (role = 'deelnemer') ✅
+INSERT INTO meeting_attendees (role = 'voorzitter') ✅
+    ↓
+Database: 10 attendees opgeslagen!
 ```
 
 ---
@@ -170,31 +152,18 @@ Database:
 
 | Bestand | Wijzigingen |
 |---------|-------------|
-| `supabase/functions/ai-extract-meeting-minute/index.ts` | Verbeterde prompt (~30 regels) |
-| `src/components/notulen/CreateMeetingMinuteDialog.tsx` | action_items fallback (~10 regels) |
-
-### Geen Wijzigingen Nodig In
-
-| Bestand | Reden |
-|---------|-------|
-| `useCreateMeetingMinute.ts` | Insert logica is al correct |
-| `ExtractedDataPreview.tsx` | Preview logica is al correct |
-| `useAIExtractMeeting.ts` | Hook is al correct |
+| `src/hooks/useCreateMeetingMinute.ts` | +mapRole functie, +error handling (~20 regels) |
+| `src/hooks/notulen/useManageAttendees.ts` | Fix AttendeeRole type (1 regel) |
 
 ---
 
-## 7. Test Verificatie
+## 7. Acceptatie Criteria
 
-Na implementatie, test met dezelfde PDF:
+| Criterium | Verificatie |
+|-----------|-------------|
+| PDF import met 10 deelnemers | Check `meeting_attendees` tabel = 10 rijen |
+| Onbekende rollen worden 'deelnemer' | Test met "Projectleider" rol |
+| "Voorzitter" wordt correct gemapt | Check database waarde |
+| Error handling logt failures | Check console bij INSERT error |
+| Bestaande functionaliteit blijft werken | Test handmatig toevoegen deelnemer |
 
-1. Upload PDF via "Importeer van bestand"
-2. Controleer ExtractedDataPreview:
-   - Toont het nu participants?
-   - Toont het nu decisions?
-3. Klik "Toepassen" en "Aanmaken"
-4. Controleer database:
-   ```sql
-   SELECT decisions, (SELECT COUNT(*) FROM meeting_attendees WHERE meeting_id = mm.id) as attendee_count
-   FROM meeting_minutes mm
-   ORDER BY created_at DESC LIMIT 1;
-   ```
