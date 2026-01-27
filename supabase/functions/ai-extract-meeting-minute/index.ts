@@ -49,25 +49,12 @@ interface ExtractedMeetingData {
 
 interface TextExtractionResult {
   text: string;
-  method: 'pdf-parse' | 'mammoth' | 'direct' | 'unsupported' | 'failed';
+  method: 'mammoth' | 'direct' | 'unsupported' | 'failed';
   error?: string;
 }
 
-// Library caching for performance
-let pdfParseLib: any = null;
+// Library caching for Word documents (mammoth works in Deno)
 let mammothLib: any = null;
-
-async function loadPdfLibrary() {
-  if (!pdfParseLib) {
-    try {
-      pdfParseLib = (await import("https://esm.sh/pdf-parse@1.1.1")).default;
-    } catch (error) {
-      console.error('Failed to load pdf-parse library:', error);
-      throw new Error('PDF library kon niet geladen worden');
-    }
-  }
-  return pdfParseLib;
-}
 
 async function loadMammothLibrary() {
   if (!mammothLib) {
@@ -81,7 +68,7 @@ async function loadMammothLibrary() {
   return mammothLib;
 }
 
-// Text extraction from binary files using dynamic imports
+// Text extraction from binary files (Word and Text only - PDF uses Gemini multimodal)
 async function extractTextFromFile(
   base64Content: string,
   mimeType: string
@@ -96,34 +83,6 @@ async function extractTextFromFile(
       bytes[i] = binaryString.charCodeAt(i);
     }
     console.log(`📁 Decoded ${bytes.length} bytes from base64`);
-
-    // PDF Extractie
-    if (mimeType === 'application/pdf') {
-      try {
-        const pdfParse = await loadPdfLibrary();
-        const pdfData = await pdfParse(bytes);
-        
-        if (!pdfData.text || pdfData.text.trim().length === 0) {
-          console.warn('📄 PDF parsed but contains no text (possibly scanned)');
-          return { 
-            text: '', 
-            method: 'pdf-parse',
-            error: 'PDF bevat geen leesbare tekst. Dit kan een gescand document zijn. Kopieer de tekst naar een .txt bestand en probeer opnieuw.'
-          };
-        }
-        
-        console.log(`📄 PDF parsed: ${pdfData.numpages} pages, ${pdfData.text.length} chars`);
-        return { text: pdfData.text, method: 'pdf-parse' };
-      } catch (pdfError) {
-        console.error('PDF parse error:', pdfError);
-        const errorMessage = pdfError instanceof Error ? pdfError.message : 'Onbekende PDF fout';
-        return { 
-          text: '', 
-          method: 'failed',
-          error: `Kon PDF niet lezen: ${errorMessage}. Probeer een ander bestand of kopieer de tekst naar .txt.`
-        };
-      }
-    }
 
     // Word Extractie (.docx, .doc)
     if (
@@ -187,7 +146,7 @@ async function extractTextFromFile(
   }
 }
 
-// Sanitization functions (pattern from ai-task-scorer)
+// Sanitization functions
 function sanitizeAIContent(content: string): string {
   let cleaned = content;
   const prefixPatterns = [
@@ -238,74 +197,149 @@ function getEmptyResult(): ExtractedMeetingData {
   };
 }
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
-
+// Gemini multimodal PDF analysis - sends PDF directly to Gemini
+async function analyzeWithGeminiMultimodal(
+  base64Content: string,
+  apiKey: string
+): Promise<{ data: ExtractedMeetingData | null; error?: string }> {
+  console.log('📄 [Gemini Multimodal] Analyzing PDF directly...');
+  
   try {
-    const body = await req.json();
-    const { documentText, fileContent, mimeType } = body;
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "file",
+                file: {
+                  filename: "document.pdf",
+                  file_data: `data:application/pdf;base64,${base64Content}`
+                }
+              },
+              {
+                type: "text",
+                text: `Je bent een expert in het analyseren van vergaderdocumenten voor Nederlandse zorginstellingen.
 
-    let textToAnalyze = documentText;
-    let extractionMethod = 'direct';
+Analyseer dit PDF document en extraheer de volgende informatie. Retourneer ALLEEN een valide JSON object:
 
-    // Als fileContent aanwezig is, extraheer tekst uit bestand
-    if (fileContent && mimeType) {
-      console.log(`📁 Processing file with MIME type: ${mimeType}`);
-      const extraction = await extractTextFromFile(fileContent, mimeType);
+{
+  "title": "Titel van de vergadering",
+  "meeting_date": "YYYY-MM-DD format of null",
+  "meeting_time": "HH:MM format of null",
+  "location": "Locatie of null",
+  "meeting_type": "team|board|project|klant|overig of null",
+  "participants": [{"name": "Naam", "role": "Rol/Functie of null", "present": true/false}],
+  "agenda_items": [{"item": "Agendapunt tekst", "discussed": true/false}],
+  "decisions": [{"decision": "Besluit tekst", "owner": "Verantwoordelijke of null", "deadline": "YYYY-MM-DD of null"}],
+  "action_items": [{"action": "Actie tekst", "assignee": "Toegewezen aan of null", "deadline": "YYYY-MM-DD of null"}],
+  "notes": "Belangrijke notities als één string of null",
+  "summary": "Korte samenvatting in 2-3 zinnen of null",
+  "confidence_scores": {
+    "title": 0-100,
+    "meeting_date": 0-100,
+    "meeting_time": 0-100,
+    "location": 0-100,
+    "meeting_type": 0-100,
+    "participants": 0-100,
+    "agenda_items": 0-100,
+    "decisions": 0-100,
+    "action_items": 0-100,
+    "overall": 0-100
+  }
+}
+
+REGELS:
+- Retourneer ALLEEN de JSON, geen markdown of uitleg
+- Gebruik Nederlandse teksten waar van toepassing
+- Bij ontbrekende informatie: null of lege array
+- Confidence scores 0-100: hoe zeker je bent dat de extractie correct is
+- meeting_type moet exact een van deze waarden zijn: team, board, project, klant, overig`
+              }
+            ]
+          }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.1,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Gemini multimodal error:", response.status, errorText);
       
-      if (extraction.error) {
-        console.error(`❌ Extraction failed: ${extraction.error}`);
-        return new Response(JSON.stringify({ 
-          data: getEmptyResult(),
-          error: extraction.error,
-          extraction_method: extraction.method
-        }), {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
+      if (response.status === 429) {
+        return { data: null, error: 'AI service is tijdelijk overbelast. Probeer het later opnieuw.' };
       }
-
-      if (!extraction.text || extraction.text.trim().length === 0) {
-        return new Response(JSON.stringify({ 
-          data: getEmptyResult(),
-          error: 'Geen leesbare tekst gevonden in bestand',
-          extraction_method: extraction.method
-        }), {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
+      if (response.status === 402) {
+        return { data: null, error: 'AI credits zijn op. Neem contact op met de beheerder.' };
       }
       
-      textToAnalyze = extraction.text;
-      extractionMethod = extraction.method;
+      return { data: null, error: 'Kon PDF niet analyseren. Probeer een ander bestand of kopieer de tekst naar .txt.' };
+    }
+
+    const aiResult = await response.json();
+    const content = aiResult.choices?.[0]?.message?.content || '';
+    console.log('✅ [Gemini Multimodal] Response received');
+
+    // Parse with robust fallback
+    const sanitized = sanitizeAIContent(content);
+    const jsonStr = extractJsonObject(sanitized);
+    if (!jsonStr) {
+      console.error('[Gemini Multimodal] No JSON found in response');
+      return { data: null, error: 'Kon PDF analyse resultaat niet verwerken' };
     }
     
-    if (!textToAnalyze || typeof textToAnalyze !== 'string') {
-      return new Response(JSON.stringify({ error: 'Document tekst is verplicht' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
+    const extractedData = repairAndParse(jsonStr);
+    
+    // Normalize result
+    const normalizedData: ExtractedMeetingData = {
+      title: extractedData.title || null,
+      meeting_date: extractedData.meeting_date || null,
+      meeting_time: extractedData.meeting_time || null,
+      location: extractedData.location || null,
+      meeting_type: extractedData.meeting_type || null,
+      participants: Array.isArray(extractedData.participants) ? extractedData.participants : [],
+      agenda_items: Array.isArray(extractedData.agenda_items) ? extractedData.agenda_items : [],
+      decisions: Array.isArray(extractedData.decisions) ? extractedData.decisions : [],
+      action_items: Array.isArray(extractedData.action_items) ? extractedData.action_items : [],
+      notes: extractedData.notes || null,
+      summary: extractedData.summary || null,
+      confidence_scores: {
+        title: extractedData.confidence_scores?.title || 0,
+        meeting_date: extractedData.confidence_scores?.meeting_date || 0,
+        meeting_time: extractedData.confidence_scores?.meeting_time || 0,
+        location: extractedData.confidence_scores?.location || 0,
+        meeting_type: extractedData.confidence_scores?.meeting_type || 0,
+        participants: extractedData.confidence_scores?.participants || 0,
+        agenda_items: extractedData.confidence_scores?.agenda_items || 0,
+        decisions: extractedData.confidence_scores?.decisions || 0,
+        action_items: extractedData.confidence_scores?.action_items || 0,
+        overall: extractedData.confidence_scores?.overall || 0
+      }
+    };
 
-    // Limit text length
-    const truncatedText = textToAnalyze.substring(0, 50000);
-    console.log(`📄 [ai-extract-meeting-minute] Processing ${truncatedText.length} characters via ${extractionMethod}`);
+    console.log(`✅ [Gemini Multimodal] Extracted: title="${normalizedData.title}", confidence=${normalizedData.confidence_scores.overall}%`);
+    return { data: normalizedData };
+    
+  } catch (error) {
+    console.error("Gemini multimodal error:", error);
+    return { 
+      data: null, 
+      error: error instanceof Error ? error.message : 'Onverwachte fout bij PDF analyse' 
+    };
+  }
+}
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      console.error("LOVABLE_API_KEY not configured");
-      return new Response(JSON.stringify({ 
-        data: getEmptyResult(),
-        error: 'AI service niet beschikbaar'
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-
-    const systemPrompt = `Je bent een expert in het analyseren van vergaderdocumenten voor Nederlandse zorginstellingen.
+// System prompt for text-based analysis
+const systemPrompt = `Je bent een expert in het analyseren van vergaderdocumenten voor Nederlandse zorginstellingen.
 
 Extraheer de volgende informatie uit het document en retourneer ALLEEN een JSON object:
 
@@ -341,6 +375,209 @@ REGELS:
 - Bij ontbrekende informatie: null of lege array
 - Confidence scores 0-100: hoe zeker je bent dat de extractie correct is
 - meeting_type moet exact een van deze waarden zijn: team, board, project, klant, overig`;
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const body = await req.json();
+    const { documentText, fileContent, mimeType } = body;
+
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      console.error("LOVABLE_API_KEY not configured");
+      return new Response(JSON.stringify({ 
+        data: getEmptyResult(),
+        error: 'AI service niet beschikbaar'
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Als fileContent aanwezig is, check eerst voor PDF multimodal
+    if (fileContent && mimeType) {
+      console.log(`📁 Processing file with MIME type: ${mimeType}`);
+      
+      // PDF: gebruik Gemini multimodal (SKIP text extraction)
+      if (mimeType === 'application/pdf') {
+        console.log('📄 Using Gemini multimodal for PDF analysis');
+        
+        const multimodalResult = await analyzeWithGeminiMultimodal(fileContent, LOVABLE_API_KEY);
+        
+        if (multimodalResult.error || !multimodalResult.data) {
+          return new Response(JSON.stringify({ 
+            data: getEmptyResult(),
+            error: multimodalResult.error || 'PDF analyse mislukt',
+            extraction_method: 'gemini-multimodal'
+          }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+        
+        return new Response(JSON.stringify({ 
+          data: multimodalResult.data,
+          extraction_method: 'gemini-multimodal'
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      
+      // Word/Text: bestaande text extraction flow
+      const extraction = await extractTextFromFile(fileContent, mimeType);
+      
+      if (extraction.error) {
+        console.error(`❌ Extraction failed: ${extraction.error}`);
+        return new Response(JSON.stringify({ 
+          data: getEmptyResult(),
+          error: extraction.error,
+          extraction_method: extraction.method
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (!extraction.text || extraction.text.trim().length === 0) {
+        return new Response(JSON.stringify({ 
+          data: getEmptyResult(),
+          error: 'Geen leesbare tekst gevonden in bestand',
+          extraction_method: extraction.method
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Use extracted text for AI analysis
+      const truncatedText = extraction.text.substring(0, 50000);
+      console.log(`📄 [ai-extract-meeting-minute] Processing ${truncatedText.length} characters via ${extraction.method}`);
+
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: `Analyseer dit vergaderdocument:\n\n${truncatedText}` }
+          ],
+          response_format: { type: "json_object" },
+          temperature: 0.1,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("AI API error:", response.status, errorText);
+        
+        if (response.status === 429) {
+          return new Response(JSON.stringify({ 
+            data: getEmptyResult(),
+            error: 'AI service is tijdelijk overbelast. Probeer het later opnieuw.'
+          }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+        
+        if (response.status === 402) {
+          return new Response(JSON.stringify({ 
+            data: getEmptyResult(),
+            error: 'AI credits zijn op. Neem contact op met de beheerder.'
+          }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+        
+        return new Response(JSON.stringify({ 
+          data: getEmptyResult(),
+          error: 'AI analyse mislukt'
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const aiResult = await response.json();
+      const content = aiResult.choices?.[0]?.message?.content || '';
+      console.log(`✅ [ai-extract-meeting-minute] AI response received`);
+
+      // Parse with robust fallback
+      let extractedData: ExtractedMeetingData;
+      try {
+        const sanitized = sanitizeAIContent(content);
+        const jsonStr = extractJsonObject(sanitized);
+        if (!jsonStr) throw new Error('No JSON found');
+        extractedData = repairAndParse(jsonStr);
+        
+        // Validate and ensure all required fields exist
+        extractedData = {
+          title: extractedData.title || null,
+          meeting_date: extractedData.meeting_date || null,
+          meeting_time: extractedData.meeting_time || null,
+          location: extractedData.location || null,
+          meeting_type: extractedData.meeting_type || null,
+          participants: Array.isArray(extractedData.participants) ? extractedData.participants : [],
+          agenda_items: Array.isArray(extractedData.agenda_items) ? extractedData.agenda_items : [],
+          decisions: Array.isArray(extractedData.decisions) ? extractedData.decisions : [],
+          action_items: Array.isArray(extractedData.action_items) ? extractedData.action_items : [],
+          notes: extractedData.notes || null,
+          summary: extractedData.summary || null,
+          confidence_scores: {
+            title: extractedData.confidence_scores?.title || 0,
+            meeting_date: extractedData.confidence_scores?.meeting_date || 0,
+            meeting_time: extractedData.confidence_scores?.meeting_time || 0,
+            location: extractedData.confidence_scores?.location || 0,
+            meeting_type: extractedData.confidence_scores?.meeting_type || 0,
+            participants: extractedData.confidence_scores?.participants || 0,
+            agenda_items: extractedData.confidence_scores?.agenda_items || 0,
+            decisions: extractedData.confidence_scores?.decisions || 0,
+            action_items: extractedData.confidence_scores?.action_items || 0,
+            overall: extractedData.confidence_scores?.overall || 0
+          }
+        };
+        
+        console.log(`✅ [ai-extract-meeting-minute] Extracted: title="${extractedData.title}", confidence=${extractedData.confidence_scores.overall}%`);
+      } catch (parseError) {
+        console.error("JSON parse error:", parseError);
+        return new Response(JSON.stringify({ 
+          data: getEmptyResult(),
+          error: 'Kon AI resultaat niet verwerken'
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      return new Response(JSON.stringify({ 
+        data: extractedData,
+        extraction_method: extraction.method
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Direct text analysis (no file)
+    let textToAnalyze = documentText;
+    
+    if (!textToAnalyze || typeof textToAnalyze !== 'string') {
+      return new Response(JSON.stringify({ error: 'Document tekst is verplicht' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Limit text length
+    const truncatedText = textToAnalyze.substring(0, 50000);
+    console.log(`📄 [ai-extract-meeting-minute] Processing ${truncatedText.length} characters via direct text`);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -445,7 +682,7 @@ REGELS:
 
     return new Response(JSON.stringify({ 
       data: extractedData,
-      extraction_method: extractionMethod
+      extraction_method: 'direct'
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
