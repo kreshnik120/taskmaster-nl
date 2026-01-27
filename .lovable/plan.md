@@ -1,83 +1,45 @@
 
 
-# Fix: Ambigue Foreign Key Relatie in useMeetingMinutes
+# Fix: useTaskMeetingMinutes.ts - Ambigue Foreign Key
 
-## Probleem Analyse
+## Probleem
 
-### Root Cause
-Na de Fase 7C database migratie zijn er **twee foreign key relaties** tussen `meeting_minutes` en `tasks`:
+**Bestand:** `src/hooks/useTaskMeetingMinutes.ts`  
+**Regel:** 15  
+**Huidige code:** `tasks!inner(id, title, start_at, due_at)`  
+**Error:** `PGRST201` - Ambigue foreign key relatie
 
-| Relatie | Richting | Foreign Key |
-|---------|----------|-------------|
-| Origineel | `meeting_minutes.task_id → tasks.id` | `meeting_minutes_task_id_fkey` |
-| Nieuw (Fase 7C) | `tasks.source_meeting_minute_id → meeting_minutes.id` | `tasks_source_meeting_minute_id_fkey` |
-
-### Error
-```
-PGRST201: Could not embed because more than one relationship was found for 'meeting_minutes' and 'tasks'
-```
-
-PostgREST kan niet bepalen welke relatie te gebruiken bij `tasks!inner`.
+Dit is exact dezelfde bug die eerder in `useMeetingMinutes.ts` is gefixt.
 
 ---
 
 ## Oplossing
 
-### Bestand: `src/hooks/useMeetingMinutes.ts`
+**Wijzig regel 15:**
 
-**Wijziging**: Specificeer de exacte foreign key in de select query.
-
-**Huidige code (regel 75-86)**:
 ```typescript
-.select(`
-  *,
-  tasks!inner(id, title, start_at, due_at),
-  meeting_attendees(...)
-`)
-```
+// VAN:
+tasks!inner(id, title, start_at, due_at)
 
-**Nieuwe code**:
-```typescript
-.select(`
-  *,
-  tasks!meeting_minutes_task_id_fkey(id, title, start_at, due_at),
-  meeting_attendees(...)
-`)
+// NAAR:
+tasks!meeting_minutes_task_id_fkey(id, title, start_at, due_at)
 ```
-
-De syntax `tasks!meeting_minutes_task_id_fkey` vertelt PostgREST expliciet om de originele foreign key te gebruiken (meeting_minutes.task_id → tasks.id).
 
 ---
 
-## Implementatie Details
+## Impact
 
 | Aspect | Waarde |
 |--------|--------|
-| Bestand | `src/hooks/useMeetingMinutes.ts` |
-| Regel | 77 |
-| Wijziging | `tasks!inner` → `tasks!meeting_minutes_task_id_fkey` |
-| Impact | Minimaal - alleen de query syntax |
-| Risico | Laag - bestaande functionaliteit ongewijzigd |
+| Bestand | `src/hooks/useTaskMeetingMinutes.ts` |
+| Regel | 15 |
+| Wijziging | 1 regel |
+| Risico | Laag |
+| Effect | Task detail pagina kan weer meeting minutes laden |
 
 ---
 
-## Verwacht Resultaat
+## Na Fix
 
-Na deze fix:
-- Meeting minutes laden correct
-- Teller toont juiste aantallen
-- Bestaande notulen zijn weer zichtbaar
-- Nieuwe notulen verschijnen direct na aanmaken
-
----
-
-## Aanvullende Context
-
-De `!inner` modifier kan nog steeds worden toegevoegd als je alleen meeting minutes wilt die een gekoppelde task hebben:
-
-```typescript
-tasks!meeting_minutes_task_id_fkey!inner(id, title, start_at, due_at)
-```
-
-Echter, omdat `task_id` verplicht is in `meeting_minutes`, is `!inner` technisch gezien niet nodig. De huidige query werkt ook zonder inner join.
+Deze hook wordt gebruikt in `TaskMeetingMinutesSection.tsx` om notulen te tonen die gekoppeld zijn aan een specifieke taak. Na de fix werkt deze weergave weer correct.
 
