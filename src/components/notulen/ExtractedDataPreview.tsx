@@ -108,7 +108,7 @@ export function ExtractedDataPreview({
           </div>
         )}
 
-        {/* Agenda */}
+        {/* Agenda - toon items */}
         {data.agenda_items.length > 0 && (
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-sm font-medium">
@@ -116,10 +116,18 @@ export function ExtractedDataPreview({
               Agenda ({data.agenda_items.length} items)
               <ConfidenceBadge score={data.confidence_scores?.agenda_items || 0} />
             </div>
+            <ul className="text-xs text-muted-foreground space-y-0.5 pl-5 list-disc">
+              {data.agenda_items.slice(0, 3).map((item, i) => (
+                <li key={i} className="truncate">{item.item}</li>
+              ))}
+              {data.agenda_items.length > 3 && (
+                <li className="italic">+{data.agenda_items.length - 3} meer...</li>
+              )}
+            </ul>
           </div>
         )}
 
-        {/* Decisions */}
+        {/* Decisions - toon items */}
         {data.decisions.length > 0 && (
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-sm font-medium">
@@ -127,6 +135,14 @@ export function ExtractedDataPreview({
               Beslissingen ({data.decisions.length})
               <ConfidenceBadge score={data.confidence_scores?.decisions || 0} />
             </div>
+            <ul className="text-xs text-muted-foreground space-y-0.5 pl-5 list-disc">
+              {data.decisions.slice(0, 2).map((d, i) => (
+                <li key={i} className="truncate">{d.decision}</li>
+              ))}
+              {data.decisions.length > 2 && (
+                <li className="italic">+{data.decisions.length - 2} meer...</li>
+              )}
+            </ul>
           </div>
         )}
 

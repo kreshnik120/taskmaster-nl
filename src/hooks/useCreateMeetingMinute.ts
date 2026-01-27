@@ -10,6 +10,11 @@ export interface CreateMeetingMinuteInput {
   location?: string;
   meeting_link?: string;
   linkedTaskId?: string;
+  // Extracted data fields
+  agenda_items?: Array<{ item: string; discussed: boolean }>;
+  decisions?: Array<{ decision: string; owner?: string | null; deadline?: string | null }>;
+  content?: string;
+  participants?: Array<{ name: string; role?: string | null; present?: boolean }>;
 }
 
 export function useCreateMeetingMinute() {
@@ -50,7 +55,24 @@ export function useCreateMeetingMinute() {
         taskId = task.id;
       }
 
-      // 3. Maak meeting_minutes aan gekoppeld aan task
+      // 3. Transform extracted data to database format
+      const formattedAgendaItems = (input.agenda_items || []).map((item, index) => ({
+        id: crypto.randomUUID(),
+        order: index + 1,
+        title: item.item,
+        duration_min: 15,
+        discussed: item.discussed || false,
+      }));
+
+      const formattedDecisions = (input.decisions || []).map(d => ({
+        id: crypto.randomUUID(),
+        text: d.decision,
+        decided_by: d.owner || null,
+        decided_at: d.deadline || new Date().toISOString(),
+        linked_task_id: null,
+      }));
+
+      // 4. Maak meeting_minutes aan gekoppeld aan task
       const { data: minute, error: minuteError } = await supabase
         .from("meeting_minutes")
         .insert({
@@ -60,8 +82,9 @@ export function useCreateMeetingMinute() {
           location: input.location || null,
           meeting_link: input.meeting_link || null,
           status: 'draft',
-          agenda_items: [],
-          decisions: [],
+          agenda_items: formattedAgendaItems,
+          decisions: formattedDecisions,
+          content: input.content || null,
         })
         .select('id')
         .single();
@@ -74,7 +97,22 @@ export function useCreateMeetingMinute() {
         throw minuteError;
       }
 
-      // 4. Invalidate query cache
+      // 5. Insert participants as meeting_attendees
+      if (input.participants && input.participants.length > 0) {
+        const attendeesToInsert = input.participants.map(p => ({
+          meeting_id: minute.id,
+          external_name: p.name,
+          role: (p.role as 'voorzitter' | 'notulist' | 'deelnemer' | 'gast') || 'deelnemer',
+          attended: p.present ?? true,
+          user_id: null,
+        }));
+        
+        await supabase
+          .from('meeting_attendees')
+          .insert(attendeesToInsert);
+      }
+
+      // 6. Invalidate query cache
       queryClient.invalidateQueries({ queryKey: MEETING_MINUTES_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ['task-meeting-minutes', taskId] });
 

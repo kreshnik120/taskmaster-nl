@@ -98,6 +98,12 @@ export function CreateMeetingMinuteDialog({
   const { extractFromFile, isExtracting, extractedData, clearExtractedData } = useAIExtractMeeting();
   
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [extractedContent, setExtractedContent] = useState<{
+    agenda_items?: Array<{ item: string; discussed: boolean }>;
+    decisions?: Array<{ decision: string; owner?: string | null; deadline?: string | null }>;
+    content?: string;
+    participants?: Array<{ name: string; role?: string | null; present?: boolean }>;
+  } | null>(null);
   const aiFileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<CreateMeetingMinuteFormData>({
@@ -125,6 +131,7 @@ export function CreateMeetingMinuteDialog({
       });
       setPendingFiles([]);
       clearExtractedData();
+      setExtractedContent(null);
     }
   }, [open, defaultTitle, form, clearExtractedData]);
 
@@ -166,6 +173,7 @@ export function CreateMeetingMinuteDialog({
   const applyExtractedData = () => {
     if (!extractedData) return;
     
+    // Form velden toepassen
     if (extractedData.title) form.setValue('title', extractedData.title);
     if (extractedData.meeting_type) form.setValue('meeting_type', extractedData.meeting_type);
     if (extractedData.meeting_date) {
@@ -176,8 +184,20 @@ export function CreateMeetingMinuteDialog({
     }
     if (extractedData.location) form.setValue('location', extractedData.location);
     
+    // Bewaar extracted content voor later gebruik bij submit
+    setExtractedContent({
+      agenda_items: extractedData.agenda_items,
+      decisions: extractedData.decisions,
+      content: [extractedData.notes, extractedData.summary].filter(Boolean).join('\n\n') || undefined,
+      participants: extractedData.participants,
+    });
+    
     clearExtractedData();
-    toast.success("Gegevens toegepast");
+    toast.success("Gegevens toegepast", {
+      description: extractedData.agenda_items?.length 
+        ? `${extractedData.agenda_items.length} agenda items en ${extractedData.decisions?.length || 0} beslissingen`
+        : undefined
+    });
   };
 
   const onSubmit = async (values: CreateMeetingMinuteFormData) => {
@@ -194,6 +214,11 @@ export function CreateMeetingMinuteDialog({
         location: values.location || undefined,
         meeting_link: values.meeting_link || undefined,
         linkedTaskId: linkedTaskId,
+        // Pass extracted content
+        agenda_items: extractedContent?.agenda_items,
+        decisions: extractedContent?.decisions,
+        content: extractedContent?.content,
+        participants: extractedContent?.participants,
       });
 
       // Upload pending files after successful creation
@@ -229,6 +254,7 @@ export function CreateMeetingMinuteDialog({
       form.reset();
       setPendingFiles([]);
       clearExtractedData();
+      setExtractedContent(null);
     }
     onOpenChange(newOpen);
   };
