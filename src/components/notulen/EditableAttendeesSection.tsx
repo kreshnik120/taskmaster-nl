@@ -41,7 +41,7 @@ const ROLE_OPTIONS: { value: AttendeeRole; label: string }[] = [
   { value: 'voorzitter', label: 'Voorzitter' },
   { value: 'notulist', label: 'Notulist' },
   { value: 'deelnemer', label: 'Deelnemer' },
-  { value: 'gast', label: 'Gast' },
+  { value: 'afwezig', label: 'Afwezig' },
 ];
 
 export function EditableAttendeesSection({ minute, isEditMode }: EditableAttendeesSectionProps) {
