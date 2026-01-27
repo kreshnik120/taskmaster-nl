@@ -21,6 +21,17 @@ export interface Decision {
   linked_task_id?: string | null;
 }
 
+// Action Item structuur (uit JSONB) - Fase 7C
+export interface ActionItem {
+  action: string;
+  assignee: string | null;
+  deadline: string | null;
+  classification?: 'TAAK' | 'IDEE' | 'INFORMATIE';
+  urgency?: 'critical' | 'high' | 'medium' | 'low';
+  source_quote?: string;
+  confidence?: number;
+}
+
 // Meeting Minutes met gekoppelde data
 export interface MeetingMinute {
   id: string;
@@ -31,6 +42,7 @@ export interface MeetingMinute {
   meeting_link: string | null;
   agenda_items: AgendaItem[];
   decisions: Decision[];
+  action_items: ActionItem[]; // Fase 7C
   content: string | null;
   status: 'draft' | 'pending_approval' | 'approved' | 'archived' | null;
   approved_by: string | null;
@@ -89,6 +101,7 @@ async function fetchMeetingMinutes(): Promise<MeetingMinute[]> {
     meeting_link: item.meeting_link,
     agenda_items: (item.agenda_items as unknown as AgendaItem[]) || [],
     decisions: (item.decisions as unknown as Decision[]) || [],
+    action_items: (item.action_items as unknown as ActionItem[]) || [], // Fase 7C
     content: item.content,
     status: item.status as MeetingMinute['status'],
     approved_by: item.approved_by,

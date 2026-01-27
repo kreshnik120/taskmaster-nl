@@ -3291,6 +3291,7 @@ export type Database = {
       }
       meeting_minutes: {
         Row: {
+          action_items: Json | null
           agenda_items: Json | null
           approved_at: string | null
           approved_by: string | null
@@ -3308,6 +3309,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          action_items?: Json | null
           agenda_items?: Json | null
           approved_at?: string | null
           approved_by?: string | null
@@ -3325,6 +3327,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          action_items?: Json | null
           agenda_items?: Json | null
           approved_at?: string | null
           approved_by?: string | null
@@ -5742,6 +5745,7 @@ export type Database = {
           reporter_id: string | null
           revenue_impact_eur: number | null
           sequence_number: number | null
+          source_meeting_minute_id: string | null
           start_at: string | null
           status: string | null
           title: string
@@ -5778,6 +5782,7 @@ export type Database = {
           reporter_id?: string | null
           revenue_impact_eur?: number | null
           sequence_number?: number | null
+          source_meeting_minute_id?: string | null
           start_at?: string | null
           status?: string | null
           title: string
@@ -5814,6 +5819,7 @@ export type Database = {
           reporter_id?: string | null
           revenue_impact_eur?: number | null
           sequence_number?: number | null
+          source_meeting_minute_id?: string | null
           start_at?: string | null
           status?: string | null
           title?: string
@@ -5868,6 +5874,13 @@ export type Database = {
             columns: ["reporter_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_source_meeting_minute_id_fkey"
+            columns: ["source_meeting_minute_id"]
+            isOneToOne: false
+            referencedRelation: "meeting_minutes"
             referencedColumns: ["id"]
           },
         ]
