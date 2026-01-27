@@ -1,169 +1,208 @@
 
+# Fix: ExtractedDataPreview Scrollbaar Maken met Sticky Buttons
 
-# Fix: Deelnemers Worden Niet Opgeslagen - Database Constraint Mismatch
+## 1. Probleem Samenvatting
 
-## 1. Root Cause Analyse
+| Aspect | Huidige Status |
+|--------|---------------|
+| **Scrollable content** | Geen `overflow-y-auto` of `max-height` |
+| **Button positie** | Inline in content, verdwijnt bij veel data |
+| **Structuur** | Flat layout zonder flex container |
+| **Gevolg** | Gebruiker kan niet alle data controleren |
 
-| Aspect | Detail |
-|--------|--------|
-| **Probleem** | Database CHECK constraint accepteert `'gast'` NIET |
-| **Database accepteert** | `voorzitter`, `notulist`, `deelnemer`, `afwezig` |
-| **Code stuurt** | `gast` als fallback (regel 105) |
-| **Gevolg** | INSERT faalt silently, 0 attendees opgeslagen |
-
-### Bewijs - Database Constraint
-```sql
-CHECK ((role = ANY (ARRAY['voorzitter', 'notulist', 'deelnemer', 'afwezig'])))
-```
-
-### Bewijs - Code met verkeerde waarde
-```typescript
-// useCreateMeetingMinute.ts regel 105
-role: (p.role as 'voorzitter' | 'notulist' | 'deelnemer' | 'gast') || 'deelnemer',
-//                                                        ^^^^^^ FOUT!
-```
-
----
-
-## 2. Waarom Decisions WEL Werken
-
-| Component | Storage Type | Constraint |
-|-----------|--------------|------------|
-| Decisions | JSONB in `meeting_minutes.decisions` | Geen CHECK constraint |
-| Attendees | Separate `meeting_attendees` tabel | CHECK constraint op `role` |
-
-Decisions worden opgeslagen als JSONB in dezelfde tabel - geen foreign keys, geen constraints.  
-Attendees vereisen een INSERT in aparte tabel met strikte `role` constraint.
-
----
-
-## 3. Oplossing
-
-### Stap 1: Fix `useCreateMeetingMinute.ts`
-
-**Locatie**: Regel 100-113
-
-**Huidige code** (met bugs):
-```typescript
-if (input.participants && input.participants.length > 0) {
-  const attendeesToInsert = input.participants.map(p => ({
-    meeting_id: minute.id,
-    external_name: p.name,
-    role: (p.role as 'voorzitter' | 'notulist' | 'deelnemer' | 'gast') || 'deelnemer',
-    attended: p.present ?? true,
-    user_id: null,
-  }));
-  
-  await supabase
-    .from('meeting_attendees')
-    .insert(attendeesToInsert);
-}
-```
-
-**Correcte code**:
-```typescript
-if (input.participants && input.participants.length > 0) {
-  // Map AI-extracted roles to valid database values
-  const validRoles = ['voorzitter', 'notulist', 'deelnemer', 'afwezig'] as const;
-  type ValidRole = typeof validRoles[number];
-  
-  const mapRole = (role: string | null | undefined): ValidRole => {
-    if (!role) return 'deelnemer';
-    const lowerRole = role.toLowerCase();
-    // Direct match
-    if (validRoles.includes(lowerRole as ValidRole)) {
-      return lowerRole as ValidRole;
-    }
-    // Common mappings
-    if (lowerRole.includes('voorzitter') || lowerRole.includes('chair')) return 'voorzitter';
-    if (lowerRole.includes('notulist') || lowerRole.includes('secretaris')) return 'notulist';
-    if (lowerRole.includes('afwezig') || lowerRole.includes('absent')) return 'afwezig';
-    // Default
-    return 'deelnemer';
-  };
-
-  const attendeesToInsert = input.participants.map(p => ({
-    meeting_id: minute.id,
-    external_name: p.name,
-    role: mapRole(p.role),
-    attended: p.present ?? true,
-    user_id: null,
-  }));
-  
-  const { error: attendeesError } = await supabase
-    .from('meeting_attendees')
-    .insert(attendeesToInsert);
-  
-  if (attendeesError) {
-    console.error('Failed to insert attendees:', attendeesError);
-    // Don't throw - attendees are secondary, meeting is created successfully
-  }
-}
-```
-
-### Stap 2: Update TypeScript Types (optioneel maar aanbevolen)
-
-**Bestand**: `src/hooks/notulen/useManageAttendees.ts` regel 7
-
-**Wijziging**:
-```typescript
-// Huidige (incorrect):
-export type AttendeeRole = 'voorzitter' | 'notulist' | 'deelnemer' | 'gast';
-
-// Correct (match database):
-export type AttendeeRole = 'voorzitter' | 'notulist' | 'deelnemer' | 'afwezig';
-```
-
----
-
-## 4. Implementatie Volgorde
-
-| Stap | Bestand | Wijziging |
-|------|---------|-----------|
-| 1 | `useCreateMeetingMinute.ts` | Fix role mapping + add error handling |
-| 2 | `useManageAttendees.ts` | Update AttendeeRole type |
-
----
-
-## 5. Data Flow Na Fix
+## 2. Huidige Layout Structuur
 
 ```text
-PDF Upload
-    ↓
-Gemini extraheert: participants: [
-  { name: "Leonie", role: "Projectleider", present: true },
-  { name: "Erik", role: "Voorzitter", present: true }
-]
-    ↓
-mapRole("Projectleider") → "deelnemer"
-mapRole("Voorzitter") → "voorzitter"
-    ↓
-INSERT INTO meeting_attendees (role = 'deelnemer') ✅
-INSERT INTO meeting_attendees (role = 'voorzitter') ✅
-    ↓
-Database: 10 attendees opgeslagen!
+<Card>
+  <CardHeader> (header met titel)
+  <CardContent className="space-y-4"> (GEEN scroll, GEEN max-height)
+    - Basic Info (5 velden)
+    - Participants sectie
+    - Agenda sectie  
+    - Decisions sectie
+    - Summary sectie
+    - Warning sectie
+    - Buttons (NIET sticky - verdwijnt onder fold)
+  </CardContent>
+</Card>
 ```
 
----
+## 3. Gewenste Layout Structuur
 
-## 6. Technische Details
+```text
+<Card className="flex flex-col max-h-[60vh]">
+  <CardHeader> (header met titel - fixed)
+  <CardContent className="flex flex-col min-h-0 flex-1 p-0">
+    
+    <!-- Scrollable content area -->
+    <div className="flex-1 overflow-y-auto min-h-0 px-6 py-4 space-y-4">
+      - Basic Info
+      - Participants sectie
+      - Agenda sectie  
+      - Decisions sectie
+      - Summary sectie
+      - Warning sectie
+    </div>
+    
+    <!-- Sticky buttons - altijd zichtbaar -->
+    <div className="shrink-0 border-t px-6 py-4 bg-background">
+      [Negeren] [Toepassen]
+    </div>
+    
+  </CardContent>
+</Card>
+```
 
-### Gewijzigde Bestanden
+## 4. Technische Wijzigingen
 
-| Bestand | Wijzigingen |
-|---------|-------------|
-| `src/hooks/useCreateMeetingMinute.ts` | +mapRole functie, +error handling (~20 regels) |
-| `src/hooks/notulen/useManageAttendees.ts` | Fix AttendeeRole type (1 regel) |
+### Bestand: `src/components/notulen/ExtractedDataPreview.tsx`
 
----
+**Wijziging 1**: Card container met max-height en flex layout (regel 54)
+```typescript
+// Huidige code:
+<Card className="border-primary/50">
+
+// Nieuwe code:
+<Card className="border-primary/50 flex flex-col max-h-[60vh]">
+```
+
+**Wijziging 2**: CardContent als flex container (regel 67)
+```typescript
+// Huidige code:
+<CardContent className="space-y-4">
+
+// Nieuwe code:
+<CardContent className="flex flex-col min-h-0 flex-1 p-0">
+```
+
+**Wijziging 3**: Wrap content in scrollable div (na regel 67, voor Basic Info)
+```typescript
+{/* Scrollable content area */}
+<div className="flex-1 overflow-y-auto min-h-0 px-6 py-4 space-y-4">
+  {/* Basic Info */}
+  <div className="space-y-1">
+    ... alle FieldRow componenten
+  </div>
+
+  {/* Participants */}
+  ...
+
+  {/* Agenda */}
+  ...
+
+  {/* Decisions */}
+  ...
+
+  {/* Summary */}
+  ...
+
+  {/* Low confidence warning */}
+  ...
+</div>
+```
+
+**Wijziging 4**: Sticky button bar (vervang huidige buttons sectie, regel 166-185)
+```typescript
+{/* Sticky button bar - altijd zichtbaar */}
+<div className="shrink-0 border-t px-6 py-4 bg-background">
+  <div className="flex gap-2">
+    <Button 
+      variant="outline" 
+      size="sm" 
+      onClick={onCancel}
+      disabled={isApplying}
+    >
+      <X className="h-3.5 w-3.5 mr-1" />
+      Negeren
+    </Button>
+    <Button 
+      size="sm" 
+      onClick={onApply}
+      disabled={isApplying}
+    >
+      <Check className="h-3.5 w-3.5 mr-1" />
+      Toepassen
+    </Button>
+  </div>
+</div>
+```
+
+## 5. Volledige Nieuwe Component Structuur
+
+```tsx
+export function ExtractedDataPreview({ data, onApply, onCancel, isApplying }: Props) {
+  const overallConfidence = data.confidence_scores?.overall || 0;
+  
+  return (
+    <Card className="border-primary/50 flex flex-col max-h-[60vh]">
+      {/* Fixed header */}
+      <CardHeader className="pb-3 shrink-0">
+        ...titel en overall confidence...
+      </CardHeader>
+      
+      <CardContent className="flex flex-col min-h-0 flex-1 p-0">
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto min-h-0 px-6 py-4 space-y-4">
+          {/* Basic Info */}
+          {/* Participants */}
+          {/* Agenda */}
+          {/* Decisions */}
+          {/* Summary */}
+          {/* Warning */}
+        </div>
+        
+        {/* Sticky buttons */}
+        <div className="shrink-0 border-t px-6 py-4 bg-background">
+          <div className="flex gap-2">
+            <Button variant="outline" ...>Negeren</Button>
+            <Button ...>Toepassen</Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+```
+
+## 6. CSS Uitleg
+
+| Class | Functie |
+|-------|---------|
+| `max-h-[60vh]` | Beperkt card hoogte tot 60% van viewport |
+| `flex flex-col` | Verticale flex layout |
+| `min-h-0` | Essentieel voor flexbox scrolling (voorkomt overflow) |
+| `flex-1` | Neemt beschikbare ruimte |
+| `overflow-y-auto` | Toont scrollbar wanneer nodig |
+| `shrink-0` | Voorkomt dat element krimpt (buttons blijven zichtbaar) |
+| `border-t` | Visuele scheiding tussen content en buttons |
 
 ## 7. Acceptatie Criteria
 
 | Criterium | Verificatie |
 |-----------|-------------|
-| PDF import met 10 deelnemers | Check `meeting_attendees` tabel = 10 rijen |
-| Onbekende rollen worden 'deelnemer' | Test met "Projectleider" rol |
-| "Voorzitter" wordt correct gemapt | Check database waarde |
-| Error handling logt failures | Check console bij INSERT error |
-| Bestaande functionaliteit blijft werken | Test handmatig toevoegen deelnemer |
+| Content scrollt bij veel data | Visuele test met 23 beslissingen |
+| Alle deelnemers bereikbaar | Scroll naar bottom |
+| Alle agenda items bereikbaar | Scroll door lijst |
+| Alle beslissingen bereikbaar | Scroll naar #23 |
+| Buttons altijd zichtbaar | Check bij scroll |
+| Smooth scroll | Test scroll behavior |
+| Mobile responsive | Check op 375px breed |
+| Geen console errors | Browser DevTools |
 
+## 8. Implementatie Volgorde
+
+| Stap | Wijziging |
+|------|-----------|
+| 1 | Update Card className met flex en max-height |
+| 2 | Update CardContent className |
+| 3 | Wrap content sections in scrollable div |
+| 4 | Move buttons to sticky footer div |
+| 5 | Test met veel data |
+
+## 9. Bestandsoverzicht
+
+| Bestand | Wijzigingen |
+|---------|-------------|
+| `src/components/notulen/ExtractedDataPreview.tsx` | Layout restructure (~20 regels aangepast) |
+
+Geen andere bestanden hoeven gewijzigd te worden.
