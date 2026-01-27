@@ -16,6 +16,13 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { 
   Wand2, 
@@ -25,10 +32,16 @@ import {
   Square,
   Filter,
   Quote,
+  AlertTriangle,
+  Lightbulb,
+  Users,
+  Building2,
+  ListChecks,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ActionItem } from "@/hooks/useMeetingMinutes";
 import { useCreateTasksFromItems } from "@/hooks/notulen/useCreateTasksFromItems";
+import { useOrgMembers } from "@/hooks/notulen/useOrgMembers";
 
 interface NotulenAssistentProps {
   open: boolean;
@@ -65,6 +78,26 @@ function ClassificationBadge({ classification }: { classification?: string }) {
   );
 }
 
+// Actie type badge
+function ActieTypeBadge({ actieType }: { actieType?: string }) {
+  if (!actieType) return null;
+  
+  const colors: Record<string, string> = {
+    'Communicatie': 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20',
+    'Administratie': 'bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/20',
+    'Planning': 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border-cyan-500/20',
+    'Onderzoek': 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-500/20',
+    'Beslissing': 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20',
+    'Overig': 'bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-500/20',
+  };
+  
+  return (
+    <Badge variant="outline" className={cn("text-xs", colors[actieType] || colors['Overig'])}>
+      {actieType}
+    </Badge>
+  );
+}
+
 // Confidence indicator component
 function ConfidenceIndicator({ confidence }: { confidence?: number }) {
   const score = Math.round((confidence ?? 0) * 100);
@@ -95,19 +128,38 @@ function ConfidenceIndicator({ confidence }: { confidence?: number }) {
   );
 }
 
-// Item component
+// Item component - Fase 7D: Uitgebreide weergave
 function ActionItemRow({
   item,
   index,
   isSelected,
   onToggle,
+  teamMembers,
+  assigneeOverride,
+  onAssigneeChange,
 }: {
   item: ActionItem;
   index: number;
   isSelected: boolean;
   onToggle: (index: number) => void;
+  teamMembers: Array<{ id: string; name: string }>;
+  assigneeOverride?: string;
+  onAssigneeChange: (index: number, userId: string) => void;
 }) {
   const [isQuoteOpen, setIsQuoteOpen] = useState(false);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  
+  // Check if assignee is in system
+  const isAssigneeInSystem = useMemo(() => {
+    if (!item.assignee) return true;
+    if (item.assignee.toLowerCase() === 'team') return false;
+    return teamMembers.some(m => 
+      m.name.toLowerCase().includes(item.assignee!.toLowerCase())
+    );
+  }, [item.assignee, teamMembers]);
+
+  const hasExtraDetails = item.onderwerp || item.betrokkenen?.length || 
+                          item.actieplan?.length || item.suggestie || item.externe_partij;
   
   return (
     <div className={cn(
@@ -128,7 +180,7 @@ function ActionItemRow({
           {/* Action text */}
           <label 
             htmlFor={`item-${index}`}
-            className="text-sm cursor-pointer block"
+            className="text-sm font-medium cursor-pointer block"
           >
             {item.action}
           </label>
@@ -136,21 +188,125 @@ function ActionItemRow({
           {/* Meta row */}
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <ClassificationBadge classification={item.classification} />
+            <ActieTypeBadge actieType={item.actie_type} />
             
             {item.assignee && (
               <span className="text-muted-foreground">
-                {item.assignee}
+                👤 {item.assignee}
               </span>
             )}
             
             {item.deadline && (
               <span className="text-muted-foreground">
-                {item.deadline}
+                📅 {item.deadline}
               </span>
             )}
             
             <ConfidenceIndicator confidence={item.confidence} />
           </div>
+          
+          {/* Fase 7D: Assignee warnings */}
+          {item.assignee && !isAssigneeInSystem && (
+            <div className="flex flex-wrap items-center gap-2 p-2 rounded bg-amber-500/10 border border-amber-500/20">
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span className="text-xs text-amber-700 dark:text-amber-300">
+                {item.assignee.toLowerCase() === 'team' 
+                  ? '"Team" kan niet als assignee' 
+                  : `"${item.assignee}" niet gevonden`}
+              </span>
+              <Select 
+                value={assigneeOverride || ''}
+                onValueChange={(val) => onAssigneeChange(index, val)}
+              >
+                <SelectTrigger className="w-[140px] h-7 text-xs">
+                  <SelectValue placeholder="Selecteer..." />
+                </SelectTrigger>
+                <SelectContent className="bg-popover">
+                  <SelectItem value="none">Niet toewijzen</SelectItem>
+                  {teamMembers.map(m => (
+                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          
+          {/* Fase 7D: Extra details collapsible */}
+          {hasExtraDetails && (
+            <Collapsible open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+              <CollapsibleTrigger className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors">
+                <ListChecks className="h-3 w-3" />
+                <span>Details & actieplan</span>
+                <ChevronDown className={cn(
+                  "h-3 w-3 transition-transform",
+                  isDetailsOpen && "rotate-180"
+                )} />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-2 space-y-2">
+                {/* Onderwerp & Doelgroep */}
+                {(item.onderwerp || item.doelgroep) && (
+                  <div className="text-xs space-y-1 pl-2 border-l-2 border-muted">
+                    {item.onderwerp && (
+                      <p><span className="font-medium">Onderwerp:</span> {item.onderwerp}</p>
+                    )}
+                    {item.doelgroep && (
+                      <p><span className="font-medium">Doelgroep:</span> {item.doelgroep}</p>
+                    )}
+                  </div>
+                )}
+                
+                {/* Betrokkenen */}
+                {item.betrokkenen && item.betrokkenen.length > 0 && (
+                  <div className="text-xs">
+                    <div className="flex items-center gap-1 mb-1">
+                      <Users className="h-3 w-3 text-muted-foreground" />
+                      <span className="font-medium">Betrokkenen:</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1 pl-4">
+                      {item.betrokkenen.map((b, i) => (
+                        <Badge key={i} variant="secondary" className="text-xs">
+                          {b.naam} {b.rol && `(${b.rol})`}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Externe partij */}
+                {item.externe_partij && (
+                  <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 p-2 rounded">
+                    <Building2 className="h-3 w-3" />
+                    <span>
+                      Betreft {item.externe_partij.type}: <strong>{item.externe_partij.naam}</strong>
+                    </span>
+                  </div>
+                )}
+                
+                {/* Actieplan */}
+                {item.actieplan && item.actieplan.length > 0 && (
+                  <div className="text-xs bg-muted/50 p-2 rounded">
+                    <div className="flex items-center gap-1 mb-1">
+                      <ListChecks className="h-3 w-3 text-muted-foreground" />
+                      <span className="font-medium">Voorgesteld actieplan:</span>
+                    </div>
+                    <ol className="list-decimal list-inside space-y-0.5 pl-2">
+                      {item.actieplan.map((stap, i) => (
+                        <li key={i}>{stap}</li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+                
+                {/* Suggestie */}
+                {item.suggestie && (
+                  <div className="flex items-start gap-2 text-xs text-blue-600 dark:text-blue-400 bg-blue-500/10 p-2 rounded">
+                    <Lightbulb className="h-3 w-3 mt-0.5 shrink-0" />
+                    <span className="italic">{item.suggestie}</span>
+                  </div>
+                )}
+              </CollapsibleContent>
+            </Collapsible>
+          )}
           
           {/* Source quote collapsible */}
           {item.source_quote && (
@@ -184,9 +340,19 @@ export function NotulenAssistent({
   onTasksCreated,
 }: NotulenAssistentProps) {
   const { createTasks, isCreating } = useCreateTasksFromItems();
+  const { data: orgMembers = [] } = useOrgMembers();
+  
+  // Map org members to simple format
+  const teamMembers = useMemo(() => 
+    orgMembers.map(m => ({ id: m.id, name: m.name || 'Onbekend' })),
+    [orgMembers]
+  );
   
   // Filter state
   const [filter, setFilter] = useState<ClassificationFilter>('all');
+  
+  // Assignee overrides (index -> userId)
+  const [assigneeOverrides, setAssigneeOverrides] = useState<Map<number, string>>(new Map());
   
   // Pre-selection: TAAK met confidence >= 80%
   const initialSelection = useMemo(() => {
@@ -204,6 +370,7 @@ export function NotulenAssistent({
   // Reset selection when actionItems change
   useMemo(() => {
     setSelectedIndices(initialSelection);
+    setAssigneeOverrides(new Map());
   }, [initialSelection]);
   
   // Filtered items
@@ -232,6 +399,19 @@ export function NotulenAssistent({
       return next;
     });
   }, [getOriginalIndex]);
+  
+  // Assignee override handler
+  const handleAssigneeChange = useCallback((originalIndex: number, userId: string) => {
+    setAssigneeOverrides(prev => {
+      const next = new Map(prev);
+      if (userId === 'none' || !userId) {
+        next.delete(originalIndex);
+      } else {
+        next.set(originalIndex, userId);
+      }
+      return next;
+    });
+  }, []);
   
   // Bulk actions
   const handleSelectAllTaken = useCallback(() => {
@@ -272,7 +452,7 @@ export function NotulenAssistent({
   
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-[600px] flex flex-col">
+      <SheetContent className="w-full sm:max-w-[640px] flex flex-col">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <Wand2 className="h-5 w-5 text-primary" />
@@ -357,6 +537,9 @@ export function NotulenAssistent({
                     index={filteredIndex}
                     isSelected={selectedIndices.has(originalIndex)}
                     onToggle={handleToggle}
+                    teamMembers={teamMembers}
+                    assigneeOverride={assigneeOverrides.get(originalIndex)}
+                    onAssigneeChange={(_, userId) => handleAssigneeChange(originalIndex, userId)}
                   />
                 );
               })
