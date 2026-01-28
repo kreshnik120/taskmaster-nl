@@ -29,17 +29,44 @@ Deno.serve(async (req) => {
   console.log(`[${requestId}] WhatsApp Bridge request received`);
 
   try {
-    // 1. Validate API Key
+    // 1. Validate authentication (API Key OR Supabase Auth)
     const apiKey = req.headers.get("x-api-key");
     const expectedKey = Deno.env.get("WHATSAPP_BRIDGE_API_KEY");
+    const authHeader = req.headers.get("Authorization");
 
-    if (!apiKey || apiKey !== expectedKey) {
-      console.error(`[${requestId}] ❌ Invalid API key`);
+    const isValidApiKey = apiKey && apiKey === expectedKey;
+    const isValidAuth = authHeader && authHeader.startsWith("Bearer ");
+
+    if (!isValidApiKey && !isValidAuth) {
+      console.error(`[${requestId}] ❌ No valid authentication provided`);
       return new Response(
-        JSON.stringify({ success: false, error: "Invalid API key" }),
+        JSON.stringify({ success: false, error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // If using Supabase Auth, verify the user
+    if (isValidAuth && !isValidApiKey) {
+      const supabaseAuth = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: authHeader! } } }
+      );
+      
+      const { data: { user }, error: authError } = await supabaseAuth.auth.getUser();
+      
+      if (authError || !user) {
+        console.error(`[${requestId}] ❌ Invalid token`);
+        return new Response(
+          JSON.stringify({ success: false, error: "Invalid token" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      console.log(`[${requestId}] ✅ Authenticated user: ${user.email}`);
+    }
+
+    console.log(`[${requestId}] ✅ Auth method: ${isValidApiKey ? 'API Key' : 'Supabase Auth'}`);
 
     // 2. Parse request body
     const body: WhatsAppEvent = await req.json();
