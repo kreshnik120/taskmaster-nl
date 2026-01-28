@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 // Tab 1: Mijn Werk - Components
 import { TodayFocusCard } from "@/components/dashboard/TodayFocusCard";
 import { UpcomingRemindersWidget } from "@/components/UpcomingRemindersWidget";
+import { MyTasksFlowSection } from "@/components/dashboard/MyTasksFlowSection";
 
 // Tab 2: Team Overzicht - Components
 import { useDashboardStats } from "@/hooks/useDashboardStats";
@@ -114,6 +115,9 @@ export default function UnifiedDashboard() {
             <TodayFocusCard />
             <UpcomingRemindersWidget />
           </div>
+          
+          {/* Mijn Taken Kanban Flow */}
+          <MyTasksFlowSection />
         </TabsContent>
 
         {/* Tab 2: Team Overzicht */}
