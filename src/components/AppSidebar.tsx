@@ -1,4 +1,4 @@
-import { Home, Kanban, List, Calendar, Clock, BarChart3, Trash2, CheckCircle2, Brain, Users, ChevronDown, ChevronUp, Briefcase, Building2, Link2, LogOut, RefreshCw, Archive, Paperclip, FileText, LayoutDashboard } from "lucide-react";
+import { Home, Kanban, List, Calendar, Clock, BarChart3, Trash2, CheckCircle2, Brain, Users, ChevronDown, ChevronUp, Briefcase, Building2, Link2, LogOut, RefreshCw, Archive, Paperclip, FileText, LayoutDashboard, MessageCircle } from "lucide-react";
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarFooter } from "@/components/ui/sidebar";
@@ -15,12 +15,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { User } from "@supabase/supabase-js";
 import { usePendingMinutesCount } from "@/hooks/notulen/usePendingMinutesCount";
+import { useWhatsAppUnreadCount } from "@/hooks/whatsapp/useWhatsAppUnreadCount";
 
 interface MenuItem {
   title: string;
   url: string;
   icon: any;
-  badge?: 'taskCount' | 'validationCount' | 'pendingMinutesCount';
+  badge?: 'taskCount' | 'validationCount' | 'pendingMinutesCount' | 'whatsappUnreadCount';
   requiresEdit?: boolean;
   requiresAdmin?: boolean;
 }
@@ -37,6 +38,11 @@ const menuGroups: MenuGroup[] = [{
     url: "/dashboard",
     icon: LayoutDashboard,
     badge: 'taskCount'
+  }, {
+    title: "WhatsApp",
+    url: "/whatsapp",
+    icon: MessageCircle,
+    badge: 'whatsappUnreadCount'
   }, {
     title: "Lijstweergave",
     url: "/lijst",
@@ -125,6 +131,7 @@ interface CollapsibleGroupProps {
   activeTaskCount?: number;
   validationCount?: number;
   pendingMinutesCount?: number;
+  whatsappUnreadCount?: number;
   canEdit: boolean;
   isAdmin: boolean;
   isOpen: boolean;
@@ -135,6 +142,7 @@ const CollapsibleGroup = ({
   activeTaskCount,
   validationCount,
   pendingMinutesCount,
+  whatsappUnreadCount,
   canEdit,
   isAdmin,
   isOpen,
@@ -152,6 +160,7 @@ const CollapsibleGroup = ({
     if (badgeType === 'taskCount') return activeTaskCount;
     if (badgeType === 'validationCount') return validationCount;
     if (badgeType === 'pendingMinutesCount') return pendingMinutesCount;
+    if (badgeType === 'whatsappUnreadCount') return whatsappUnreadCount;
     return undefined;
   };
   return <Collapsible open={isOpen} onOpenChange={onToggle} className="mb-2">
@@ -203,6 +212,7 @@ export function AppSidebar() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const queryClient = useQueryClient();
   const { pendingCount } = usePendingMinutesCount();
+  const whatsappUnreadCount = useWhatsAppUnreadCount();
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     "Mijn Werk": true,
@@ -352,6 +362,7 @@ export function AppSidebar() {
                   activeTaskCount={activeTaskCount} 
                   validationCount={validationCount} 
                   pendingMinutesCount={pendingCount}
+                  whatsappUnreadCount={whatsappUnreadCount}
                   canEdit={canEdit()} 
                   isAdmin={isAdmin()}
                   isOpen={openGroups[group.label] ?? false}
