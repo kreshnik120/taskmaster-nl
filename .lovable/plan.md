@@ -1,366 +1,252 @@
 
-# WhatsApp Bridge Implementatie Plan
+# Implementatie Plan: Mijn Taken Kanban Flow in Mijn Werk Tab
 
 ## Overzicht
 
-Dit plan implementeert een complete WhatsApp integratie met:
-- 4 database tabellen voor sessions, contacts, chats en messages
-- Multi-tenant architectuur met org_id scoping
-- RLS policies voor data isolatie
-- Realtime voor berichten en chats
-- Een beveiligde Edge Function als proxy voor de VPS
+Dit plan voegt een embedded Kanban-sectie toe aan de "Mijn Werk" tab van het Unified Dashboard. De sectie toont alleen de taken van de huidige gebruiker met drag-and-drop functionaliteit, max 5 taken per kolom, en volledige accessibility ondersteuning.
 
 ---
 
-## DEEL 1: Database Schema
-
-### 1.1 Tabellen Structuur
+## Architectuur
 
 ```text
-+-------------------+     +--------------------+
-| whatsapp_sessions |     | whatsapp_contacts  |
-|-------------------|     |--------------------|
-| id (PK)           |<----| session_id (FK)    |
-| org_id (FK)       |     | org_id (FK)        |
-| phone_number      |     | phone_number       |
-| session_status    |     | display_name       |
-| session_data      |     | professional_id(FK)|
-| created_at        |     +--------------------+
-| updated_at        |              |
-+-------------------+              |
-                                   v
-+-------------------+     +-------------------+
-| whatsapp_chats    |     | whatsapp_messages |
-|-------------------|     |-------------------|
-| id (PK)           |<----| chat_id (FK)      |
-| session_id (FK)   |     | org_id (FK)       |
-| contact_id (FK)   |     | message_id        |
-| org_id (FK)       |     | message_type      |
-| chat_jid (UNIQUE) |     | message_body      |
-| chat_type         |     | sender_type       |
-| unread_count      |     | sender_phone      |
-| last_message_at   |     | sent_at           |
-| last_message_prev |     | status            |
-+-------------------+     +-------------------+
-```
-
-### 1.2 SQL Migratie
-
-De volgende tabellen worden aangemaakt:
-
-**whatsapp_sessions**
-- Houdt WhatsApp sessie status bij per organisatie
-- Linked aan organizations tabel
-- Slaat QR code/session data op in JSONB
-
-**whatsapp_contacts**
-- WhatsApp contacten per sessie
-- Optionele koppeling naar professionals tabel voor matching
-- Uniek per phone_number + session_id
-
-**whatsapp_chats**
-- Chat threads met contacten
-- Unique constraint op chat_jid (WhatsApp chat identifier)
-- Tracks unread count en laatste bericht preview
-
-**whatsapp_messages**
-- Alle berichten (inkomend en uitgaand)
-- Unique constraint op message_id (WhatsApp message ID)
-- Status tracking: received, delivered, read, failed
-
-### 1.3 RLS Policies
-
-Elke tabel krijgt dezelfde policy structuur:
-- **SELECT**: Alleen records met matching org_id via user_organizations
-- **INSERT/UPDATE/DELETE**: Zelfde org_id check
-
-Security definer functie `get_user_org_id()` voorkomt recursieve RLS.
-
-### 1.4 Realtime
-
-Realtime wordt enabled op:
-- `whatsapp_messages` - Voor live bericht updates
-- `whatsapp_chats` - Voor unread count en last message updates
-
----
-
-## DEEL 2: Edge Function `whatsapp-bridge`
-
-### 2.1 Architectuur
-
-```text
-┌─────────────┐    HTTPS + X-API-Key    ┌─────────────────┐
-│   VPS       │ ────────────────────────>│ whatsapp-bridge │
-│ (Baileys)   │                          │ Edge Function   │
-│ 72.x.x.x    │ <────────────────────────│                 │
-└─────────────┘    JSON Response         └────────┬────────┘
-                                                  │
-                                                  │ SUPABASE_SERVICE_ROLE_KEY
-                                                  │ (intern)
-                                                  v
-                                         ┌───────────────┐
-                                         │   Database    │
-                                         │ (whatsapp_*)  │
-                                         └───────────────┘
-```
-
-### 2.2 Authenticatie
-
-De functie valideert requests via:
-1. **X-API-Key header** - Moet matchen met `CITOZORG_API_KEY` secret
-2. **Request body validatie** - Verplichte velden per event type
-3. **org_id validatie** - Moet bestaan in organizations tabel
-
-### 2.3 Event Types
-
-| Event | Actie |
-|-------|-------|
-| `message.received` | Insert message, update chat, auto-create contact/chat |
-| `message.sent` | Insert message, update chat |
-| `session.connected` | Update session status = 'connected' |
-| `session.disconnected` | Update session status = 'disconnected' |
-| `session.qr` | Update session met QR data |
-
-### 2.4 Auto-Create Logic
-
-Bij `message.received`:
-1. Check of contact bestaat voor phone_number + session_id
-2. Zo niet: maak contact aan met display_name uit fromName
-3. Check of chat bestaat voor chat_jid + session_id
-4. Zo niet: maak chat aan met contact_id
-5. Insert message
-6. Update chat.last_message_at en chat.last_message_preview
-
-### 2.5 Request/Response Format
-
-**Request:**
-```json
-{
-  "event": "message.received",
-  "sessionId": "uuid",
-  "orgId": "uuid",
-  "data": {
-    "messageId": "3EB0ABC...",
-    "chatJid": "31612345678@s.whatsapp.net",
-    "from": "31612345678",
-    "fromName": "Contact Naam",
-    "body": "Hallo!",
-    "timestamp": 1706450000000,
-    "type": "text"
-  }
-}
-```
-
-**Response (success):**
-```json
-{
-  "success": true,
-  "messageId": "uuid",
-  "contactId": "uuid",
-  "chatId": "uuid"
-}
-```
-
-**Response (error):**
-```json
-{
-  "success": false,
-  "error": "Invalid API key"
-}
+┌─────────────────────────────────────────────────────────────────┐
+│ Mijn Werk Tab                                                    │
+├─────────────────────────────────────────────────────────────────┤
+│ ┌─────────────────────────┬─────────────────────────┐           │
+│ │ TodayFocusCard          │ UpcomingRemindersWidget │           │
+│ └─────────────────────────┴─────────────────────────┘           │
+│                                                                  │
+│ ─────────────────── border-t mt-6 pt-6 ─────────────────────    │
+│                                                                  │
+│ 📊 Mijn Taken (badge: n taken)        [Open volledig Kanban →]  │
+│ ┌──────────┬──────────┬──────────┬──────────┬──────────┐       │
+│ │ Start.   │ Actie    │ Afwacht  │ In afw.  │ Laatste  │       │
+│ │ (BACKLOG)│ (READY)  │ (DOING)  │ (BLOCKED)│ (REVIEW) │       │
+│ │          │          │          │          │          │       │
+│ │ TaskCard │ TaskCard │ TaskCard │          │          │       │
+│ │ TaskCard │          │          │          │          │       │
+│ │ [+2 meer]│          │          │          │          │       │
+│ └──────────┴──────────┴──────────┴──────────┴──────────┘       │
+│ ← horizontale scroll op mobile →                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## DEEL 3: Implementatie Details
+## Implementatie Stappen
 
-### 3.1 Bestanden
+### Stap 1: Nieuw Component - MyTasksFlowSection.tsx
 
-| Bestand | Doel |
-|---------|------|
-| `supabase/functions/whatsapp-bridge/index.ts` | Edge Function code |
-| `supabase/config.toml` | Toevoegen functie config |
+**Bestand:** `src/components/dashboard/MyTasksFlowSection.tsx`
 
-### 3.2 Config.toml Entry
+**Kernfunctionaliteit:**
+- Haalt alleen taken op waar `assignee_id` = huidige gebruiker
+- Filtert op `completed_at IS NULL` en `deleted_at IS NULL`
+- Toont max 5 kolommen: BACKLOG, READY, DOING, BLOCKED, REVIEW (geen DONE)
+- Max 5 taken per kolom zichtbaar, daarna "Bekijk meer (n)" link
 
-```toml
-[functions.whatsapp-bridge]
-verify_jwt = false
-# Purpose: WhatsApp Bridge proxy voor VPS communicatie
-# Auth: API key via X-API-Key header (CITOZORG_API_KEY)
+**Data Query:**
+```typescript
+// Kolommen laden (status in COLUMNS_TO_SHOW)
+const { data: columns } = await supabase
+  .from("columns")
+  .select("id, name, status, order")
+  .in("status", ["BACKLOG", "READY", "DOING", "BLOCKED", "REVIEW"])
+  .order("order");
+
+// Taken van huidige gebruiker laden
+const { data: tasks } = await supabase
+  .from("tasks")
+  .select(`
+    id, title, description, priority, assignee_id,
+    due_at, completed_at, column_id, order_key,
+    profiles:profiles!tasks_assignee_id_fkey(name, email)
+  `)
+  .eq("assignee_id", user.id)
+  .is("deleted_at", null)
+  .is("completed_at", null)
+  .order("due_at", { ascending: true });
 ```
 
-### 3.3 CORS Headers
+**Drag & Drop:**
+- Hergebruik `@dnd-kit/core` en `@dnd-kit/sortable` (al geinstalleerd)
+- `PointerSensor` met distance threshold van 10px
+- Optimistische UI update bij verplaatsen
+- Toast feedback bij succesvolle verplaatsing
 
-Extended headers voor VPS communicatie:
-- `x-api-key` toegevoegd aan allowed headers
+**Accessibility (WCAG 2.1 AA):**
+- `aria-live="polite"` voor status updates
+- `role="region"` met `aria-label` op kolommen
+- Keyboard alternatief via DropdownMenu per taak
+- Focus visible op alle interactieve elementen
+- Touch targets minimum 44px op mobile (w-72)
+
+### Stap 2: Wijziging UnifiedDashboard.tsx
+
+**Bestand:** `src/pages/UnifiedDashboard.tsx`
+
+**Wijzigingen:**
+1. Import toevoegen:
+   ```typescript
+   import { MyTasksFlowSection } from "@/components/dashboard/MyTasksFlowSection";
+   ```
+
+2. TabsContent "mijn-werk" uitbreiden met de nieuwe sectie:
+   ```tsx
+   <TabsContent value="mijn-werk" className="space-y-6 mt-6">
+     {/* Bestaande focus sectie - ONGEWIJZIGD */}
+     <div className="grid gap-6 md:grid-cols-2">
+       <TodayFocusCard />
+       <UpcomingRemindersWidget />
+     </div>
+     
+     {/* NIEUW: Mijn Taken Flow sectie */}
+     <MyTasksFlowSection />
+   </TabsContent>
+   ```
 
 ---
 
-## DEEL 4: VPS Configuratie
+## Component Structuur
 
-### 4.1 Edge Function URL
+### MyTasksFlowSection Props & State
 
+```typescript
+// Geen props nodig - component haalt eigen data op
+
+// State
+const [tasks, setTasks] = useState<Task[]>([]);
+const [columns, setColumns] = useState<Column[]>([]);
+const [loading, setLoading] = useState(true);
+const [user, setUser] = useState<User | null>(null);
+const [activeTask, setActiveTask] = useState<Task | null>(null);      // Voor DragOverlay
+const [selectedTask, setSelectedTask] = useState<Task | null>(null);  // Voor TaskDetailModal
+const [detailModalOpen, setDetailModalOpen] = useState(false);
+const [statusMessage, setStatusMessage] = useState("");               // Accessibility
 ```
-https://oelmsmcgryeoryhonexw.supabase.co/functions/v1/whatsapp-bridge
+
+### UI States
+
+| State | Weergave |
+|-------|----------|
+| Loading | Centered Loader2 spinner |
+| Geen taken | Empty state met CheckCircle2 icon + link naar /kanban |
+| Lege kolom | Subtiel "Geen taken" met Inbox icon |
+| Overflow | "Bekijk meer (n)" button die linkt naar /kanban |
+
+---
+
+## Responsive Design
+
+| Breakpoint | Kolom Breedte | Gedrag |
+|------------|---------------|--------|
+| Mobile (<768px) | `w-72` (288px) | Horizontale scroll met `snap-x snap-mandatory` |
+| Desktop (≥768px) | `w-64` (256px) | Alle kolommen in flex row, overflow-x-auto |
+
+---
+
+## Hergebruik Bestaande Componenten
+
+| Component | Bestand | Gebruik |
+|-----------|---------|---------|
+| TaskCard | `src/components/TaskCard.tsx` | Taakkaarten in kolommen (zonder subtasks prop) |
+| TaskDetailModal | `src/components/TaskDetailModal.tsx` | Detail modal bij klik op taak |
+| Card, Badge, Button | `@/components/ui/*` | Kolom headers en styling |
+| DropdownMenu | `@/components/ui/dropdown-menu` | Keyboard-toegankelijk verplaatsmenu |
+
+---
+
+## Bestaande Kolommen (Database)
+
+| ID | Naam | Status | Order |
+|----|------|--------|-------|
+| ...440001 | Start. | BACKLOG | 1 |
+| ...440002 | Actie uitgezet | READY | 2 |
+| ...440003 | Afwachten op antwoord | DOING | 3 |
+| ...440004 | In afwachting | BLOCKED | 4 |
+| ...440005 | Laatste actie uitvoeren | REVIEW | 5 |
+| ...440006 | Afgeronde taken | DONE | 6 (niet getoond) |
+
+---
+
+## Belangrijke Implementatie Details
+
+### 1. Kolom Toewijzing
+- Taken zonder `column_id` worden getoond in BACKLOG kolom
+- `getTasksForColumn` helper functie handelt dit af
+
+### 2. Overflow Handling
+```typescript
+const getVisibleTasks = (columnId: string) => {
+  const allTasks = getTasksForColumn(columnId);
+  return {
+    visible: allTasks.slice(0, MAX_VISIBLE_TASKS), // Max 5
+    overflow: Math.max(0, allTasks.length - MAX_VISIBLE_TASKS),
+    total: allTasks.length
+  };
+};
 ```
 
-### 4.2 Authenticatie
-
-Header: `X-API-Key: [CITOZORG_API_KEY waarde]`
-
-### 4.3 Test Command
-
-```bash
-curl -X POST \
-  "https://oelmsmcgryeoryhonexw.supabase.co/functions/v1/whatsapp-bridge" \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: YOUR_CITOZORG_API_KEY" \
-  -d '{
-    "event": "session.connected",
-    "sessionId": "test-session-id",
-    "orgId": "550e8400-e29b-41d4-a716-446655440000",
-    "data": {
-      "phoneNumber": "+31612345678"
-    }
-  }'
+### 3. Keyboard Accessibility
+Elk taakkaart krijgt een DropdownMenu met "Verplaats naar" submenu:
+```tsx
+<DropdownMenu>
+  <DropdownMenuTrigger asChild>
+    <Button variant="ghost" size="icon" className="h-6 w-6">
+      <MoreHorizontal className="h-3 w-3" />
+      <span className="sr-only">Acties voor {task.title}</span>
+    </Button>
+  </DropdownMenuTrigger>
+  <DropdownMenuContent>
+    <DropdownMenuLabel>Verplaats naar</DropdownMenuLabel>
+    {columns.filter(c => c.id !== task.column_id).map(c => (
+      <DropdownMenuItem onClick={() => moveTaskToColumn(task.id, c.id)}>
+        {c.name}
+      </DropdownMenuItem>
+    ))}
+  </DropdownMenuContent>
+</DropdownMenu>
 ```
 
 ---
 
-## Technische Details
+## Wijzigingen Overzicht
 
-### Database Migratie SQL
-
-```sql
--- 1. Sessions table
-CREATE TABLE whatsapp_sessions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  phone_number TEXT NOT NULL,
-  session_status TEXT DEFAULT 'disconnected',
-  session_data JSONB,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(org_id, phone_number)
-);
-
--- 2. Contacts table
-CREATE TABLE whatsapp_contacts (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  session_id UUID NOT NULL REFERENCES whatsapp_sessions(id) ON DELETE CASCADE,
-  phone_number TEXT NOT NULL,
-  display_name TEXT,
-  professional_id UUID REFERENCES professionals(id) ON DELETE SET NULL,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(session_id, phone_number)
-);
-
--- 3. Chats table
-CREATE TABLE whatsapp_chats (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  session_id UUID NOT NULL REFERENCES whatsapp_sessions(id) ON DELETE CASCADE,
-  contact_id UUID REFERENCES whatsapp_contacts(id) ON DELETE SET NULL,
-  chat_jid TEXT NOT NULL,
-  chat_type TEXT DEFAULT 'direct',
-  unread_count INTEGER DEFAULT 0,
-  last_message_at TIMESTAMPTZ,
-  last_message_preview TEXT,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(session_id, chat_jid)
-);
-
--- 4. Messages table
-CREATE TABLE whatsapp_messages (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  chat_id UUID NOT NULL REFERENCES whatsapp_chats(id) ON DELETE CASCADE,
-  message_id TEXT NOT NULL,
-  message_type TEXT DEFAULT 'text',
-  message_body TEXT,
-  sender_type TEXT DEFAULT 'contact',
-  sender_phone TEXT,
-  sent_at TIMESTAMPTZ NOT NULL,
-  status TEXT DEFAULT 'received',
-  created_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(chat_id, message_id)
-);
-
--- 5. Indexes for performance
-CREATE INDEX idx_whatsapp_sessions_org ON whatsapp_sessions(org_id);
-CREATE INDEX idx_whatsapp_contacts_session ON whatsapp_contacts(session_id);
-CREATE INDEX idx_whatsapp_chats_session ON whatsapp_chats(session_id);
-CREATE INDEX idx_whatsapp_messages_chat ON whatsapp_messages(chat_id);
-CREATE INDEX idx_whatsapp_messages_sent_at ON whatsapp_messages(sent_at DESC);
-
--- 6. Enable RLS
-ALTER TABLE whatsapp_sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE whatsapp_contacts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE whatsapp_chats ENABLE ROW LEVEL SECURITY;
-ALTER TABLE whatsapp_messages ENABLE ROW LEVEL SECURITY;
-
--- 7. Security definer function
-CREATE OR REPLACE FUNCTION get_user_org_id()
-RETURNS UUID
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT org_id FROM user_organizations WHERE user_id = auth.uid() LIMIT 1
-$$;
-
--- 8. RLS Policies (for each table)
--- Sessions
-CREATE POLICY "Users can view own org sessions" ON whatsapp_sessions
-  FOR SELECT USING (org_id = get_user_org_id());
-CREATE POLICY "Service role full access sessions" ON whatsapp_sessions
-  FOR ALL USING (auth.role() = 'service_role');
-
--- Contacts
-CREATE POLICY "Users can view own org contacts" ON whatsapp_contacts
-  FOR SELECT USING (org_id = get_user_org_id());
-CREATE POLICY "Service role full access contacts" ON whatsapp_contacts
-  FOR ALL USING (auth.role() = 'service_role');
-
--- Chats
-CREATE POLICY "Users can view own org chats" ON whatsapp_chats
-  FOR SELECT USING (org_id = get_user_org_id());
-CREATE POLICY "Service role full access chats" ON whatsapp_chats
-  FOR ALL USING (auth.role() = 'service_role');
-
--- Messages
-CREATE POLICY "Users can view own org messages" ON whatsapp_messages
-  FOR SELECT USING (org_id = get_user_org_id());
-CREATE POLICY "Service role full access messages" ON whatsapp_messages
-  FOR ALL USING (auth.role() = 'service_role');
-
--- 9. Enable Realtime
-ALTER PUBLICATION supabase_realtime ADD TABLE whatsapp_messages;
-ALTER PUBLICATION supabase_realtime ADD TABLE whatsapp_chats;
-```
-
-### Edge Function Code Structure
-
-De Edge Function bevat:
-1. **API Key validatie** - Check X-API-Key header tegen CITOZORG_API_KEY
-2. **Event router** - Switch op event type
-3. **Upsert helpers** - getOrCreateContact, getOrCreateChat
-4. **Message handlers** - handleMessageReceived, handleMessageSent
-5. **Session handlers** - handleSessionConnected, handleSessionDisconnected
-6. **Logging** - Uitgebreide logging voor debugging
+| Bestand | Actie | Beschrijving |
+|---------|-------|--------------|
+| `src/components/dashboard/MyTasksFlowSection.tsx` | NIEUW | Embedded Kanban component |
+| `src/pages/UnifiedDashboard.tsx` | WIJZIG | Import + toevoegen aan mijn-werk tab |
 
 ---
 
-## Verificatie Checklist
+## Niet Wijzigen
 
-Na implementatie:
-- [ ] Tabellen aangemaakt met correcte foreign keys
-- [ ] RLS policies actief op alle 4 tabellen
-- [ ] Realtime enabled op messages en chats
-- [ ] Edge Function deployed
-- [ ] CITOZORG_API_KEY werkt voor authenticatie
-- [ ] Test curl command succesvol
+- Sidebar items
+- TodayFocusCard.tsx
+- UpcomingRemindersWidget.tsx
+- KanbanColumn.tsx (hergebruik zonder wijziging)
+- TaskCard.tsx (hergebruik zonder wijziging)
+- TaskDetailModal.tsx (hergebruik zonder wijziging)
+- Geen nieuwe npm packages
+
+---
+
+## Acceptatie Criteria
+
+**Functioneel:**
+- Focus sectie blijft bovenaan
+- Mijn Taken sectie verschijnt onder focus met visuele scheiding
+- Alleen taken van huidige gebruiker worden getoond
+- Max 5 taken per kolom, daarna "Bekijk meer" link
+- Drag & drop werkt tussen kolommen
+- Keyboard dropdown als alternatief voor drag
+- Klik op taak opent TaskDetailModal
+- "Open volledig Kanban" linkt naar /kanban
+- Empty states correct weergegeven
+
+**Technisch:**
+- Geen TypeScript errors
+- Geen console errors
+- ARIA labels aanwezig
+- Responsive op alle breakpoints
