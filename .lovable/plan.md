@@ -1,195 +1,105 @@
 
-# Fix: Notule Verwijderen met Audit Trail
 
-## Probleem Analyse
+# Diagnose & Fix: Runtime Error bij Taak Aanmaken
 
-De huidige `useDeleteMeetingMinute` hook faalt wanneer taken gekoppeld zijn via `source_meeting_minute_id` door een foreign key constraint. Daarnaast wordt de foutmelding niet specifiek getoond ("Onbekende fout").
+## Situatie
 
-**Huidige Code Problemen:**
-1. De hook probeert direct de meeting minute te verwijderen zonder eerst gekoppelde taken te ontkoppelen
-2. Foreign key `tasks_source_meeting_minute_id_fkey` blokkeert de delete
-3. Error handling is te generiek
+Leonie krijgt een "Runtime Error" bij het aanmaken van een nieuwe taak. De exacte locatie (TaskDialog of Notulen Assistent) is onbekend, en er zijn geen specifieke error logs beschikbaar.
+
+## Mogelijke Oorzaken
+
+### 1. Chunk Loading Error (Meest Waarschijnlijk)
+De applicatie heeft een update ontvangen en de browser probeert verouderde code te laden.
+- **Indicatie**: Error bevat "Failed to fetch dynamically imported module"
+- **Oplossing**: Pagina herladen lost dit meestal op
+
+### 2. Database Constraint Violation
+De `tasks` tabel vereist bepaalde velden die mogelijk `null` zijn:
+- `org_id` is `NOT NULL` - als de organisatie niet correct wordt opgehaald
+- `priority` is `NOT NULL` - moet een geldige waarde hebben
+- `title` is `NOT NULL` - moet ingevuld zijn
+
+### 3. Null Reference Error
+In de `useCreateTasksFromItems.ts` (Notulen → Taken):
+- Regel 259: `item.action.substring(0, 100)` - kan falen als `item.action` `undefined` is
+- Als de AI extractie een item retourneert zonder `action` veld
 
 ---
 
-## Implementatie Plan
+## Voorgestelde Fixes
 
-### Bestand: `src/hooks/notulen/useDeleteMeetingMinute.ts`
+### Fix 1: Defensieve Null Checks in useCreateTasksFromItems
 
-**Volledige Herschrijving** met de volgende logica:
+**Bestand**: `src/hooks/notulen/useCreateTasksFromItems.ts`
 
-```text
-1. Haal notule info op inclusief task title (voor audit trail)
-2. Haal huidige user op (voor audit trail)
-3. Vind alle taken gekoppeld via source_meeting_minute_id
-4. Voor elke gekoppelde taak:
-   - Zet source_meeting_minute_id op null
-   - Voeg audit trail tekst toe aan description
-5. Verwijder de meeting minute (attendees cascade via FK)
-6. Verwijder de gekoppelde meeting task (task_id)
-7. Invalidate queries
-8. Toon success toast met aantal ontkoppelde taken
-```
-
-**Code Wijzigingen:**
+**Wijziging**: Voeg defensieve checks toe voor de task title:
 
 ```typescript
-const deleteMeetingMinute = async (minuteId: string): Promise<void> => {
-  setIsDeleting(true);
-  try {
-    // 1. Haal notule info op voor audit trail (inclusief task title)
-    const { data: minute, error: fetchError } = await supabase
-      .from('meeting_minutes')
-      .select('task_id, tasks!meeting_minutes_task_id_fkey(title)')
-      .eq('id', minuteId)
-      .maybeSingle();
+// Regel 258-259 wijzigen van:
+title: item.action.substring(0, 100),
 
-    if (fetchError) throw fetchError;
-
-    const notuleTitle = minute?.tasks?.title || 'Onbekende notule';
-
-    // 2. Haal huidige user op voor audit trail
-    const { data: { user } } = await supabase.auth.getUser();
-    const deletedBy = user?.email || user?.user_metadata?.name || 'Onbekend';
-
-    // 3. Maak audit trail tekst
-    const now = new Date();
-    const auditText = `
-
-⚠️ BRON VERWIJDERD
-────────────────────────────────────────
-Notule: "${notuleTitle}"
-Verwijderd op: ${now.toLocaleDateString('nl-NL')} ${now.toLocaleTimeString('nl-NL')}
-Verwijderd door: ${deletedBy}`;
-
-    // 4. Vind alle gekoppelde taken via source_meeting_minute_id
-    const { data: linkedTasks, error: findError } = await supabase
-      .from('tasks')
-      .select('id, description')
-      .eq('source_meeting_minute_id', minuteId);
-
-    if (findError) throw findError;
-
-    // 5. Update elke gekoppelde taak: ontkoppel en voeg audit trail toe
-    if (linkedTasks && linkedTasks.length > 0) {
-      for (const task of linkedTasks) {
-        const { error: updateError } = await supabase
-          .from('tasks')
-          .update({
-            source_meeting_minute_id: null,
-            description: (task.description || '') + auditText
-          })
-          .eq('id', task.id);
-
-        if (updateError) {
-          console.warn(`Could not update task ${task.id}:`, updateError.message);
-        }
-      }
-    }
-
-    // 6. Delete meeting_minutes (attendees cascade automatisch via FK)
-    const { error: minuteError } = await supabase
-      .from('meeting_minutes')
-      .delete()
-      .eq('id', minuteId);
-
-    if (minuteError) throw minuteError;
-
-    // 7. Delete gekoppelde meeting task
-    if (minute?.task_id) {
-      const { error: taskError } = await supabase
-        .from('tasks')
-        .delete()
-        .eq('id', minute.task_id)
-        .eq('category', 'meeting');
-
-      if (taskError) {
-        console.warn('Could not delete linked task:', taskError.message);
-      }
-    }
-
-    // 8. Invalidate queries en toon success
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: MEETING_MINUTES_QUERY_KEY }),
-      queryClient.invalidateQueries({ queryKey: ['pending-minutes-count'] }),
-      queryClient.invalidateQueries({ queryKey: ['task-meeting-minutes'] }),
-      queryClient.invalidateQueries({ queryKey: ['tasks'] }), // Ook tasks refreshen!
-    ]);
-    
-    const linkedCount = linkedTasks?.length || 0;
-    const message = linkedCount > 0 
-      ? `Notulen verwijderd. ${linkedCount} ${linkedCount === 1 ? 'taak' : 'taken'} ontkoppeld.`
-      : 'Notulen verwijderd';
-    toast.success(message);
-  } catch (error: unknown) {
-    // Verbeterde error handling met meer context
-    let message = 'Onbekende fout';
-    if (error instanceof Error) {
-      message = error.message;
-    } else if (typeof error === 'object' && error !== null) {
-      const pgError = error as { message?: string; code?: string; details?: string };
-      message = pgError.message || pgError.details || 'Database fout';
-      if (pgError.code) {
-        message = `[${pgError.code}] ${message}`;
-      }
-    }
-    toast.error("Kon notulen niet verwijderen", { description: message });
-    throw error;
-  } finally {
-    setIsDeleting(false);
-  }
-};
+// Naar:
+title: (item.action || 'Taak uit notule').substring(0, 100),
 ```
 
----
+### Fix 2: Verbeter TaskDialog Error Handling
 
-## Audit Trail Voorbeeld
+**Bestand**: `src/components/TaskDialog.tsx`
 
-Wanneer een notule "Team Overleg 2026-01-28" wordt verwijderd, krijgt elke gekoppelde taak deze tekst onderaan de description:
+**Wijziging**: Voeg betere error logging toe:
 
-```text
-⚠️ BRON VERWIJDERD
-────────────────────────────────────────
-Notule: "Team Overleg 2026-01-28"
-Verwijderd op: 28-1-2026 10:35:42
-Verwijderd door: k.atashi@citozorg.nl
+```typescript
+// In catch block (regel 283-284):
+} catch (error: any) {
+  console.error('[TaskDialog] Create task error:', error);
+  toast.error("Fout bij aanmaken taak", { 
+    description: error?.message || 'Onbekende fout - probeer de pagina te herladen'
+  });
+}
 ```
 
----
+### Fix 3: Voeg Retry Mechanisme toe na Chunk Error
 
-## Wijzigingen Samenvatting
-
-| Onderdeel | Wijziging |
-|-----------|-----------|
-| Query notule | Uitgebreid met `tasks!meeting_minutes_task_id_fkey(title)` |
-| User ophalen | Toegevoegd voor audit trail |
-| Gekoppelde taken | Opzoeken via `source_meeting_minute_id` |
-| Ontkoppeling | `source_meeting_minute_id = null` + audit tekst |
-| Query invalidatie | `['tasks']` key toegevoegd |
-| Success toast | Telt ontkoppelde taken |
-| Error handling | Verbeterd met Postgres error code parsing |
+De ErrorBoundary toont al een "Pagina Herladen" knop. Geen wijziging nodig.
 
 ---
 
 ## Technische Details
 
-- **Geen database migratie nodig** - alleen applicatielogica
-- **Audit trail is append-only** - komt onder bestaande description
-- **Parallel updates niet nodig** - sequential is veiliger voor foutafhandeling
-- **Nederlandse formatting** - `toLocaleDateString('nl-NL')` en `toLocaleTimeString('nl-NL')`
+### Bestanden die aangepast worden:
+
+| Bestand | Wijziging |
+|---------|-----------|
+| `src/hooks/notulen/useCreateTasksFromItems.ts` | Defensieve null check voor `item.action` |
+| `src/components/TaskDialog.tsx` | Verbeterde error logging |
+
+### Test Scenario's:
+
+1. **Nieuwe taak via Dashboard/Kanban/Lijst**
+   - Open TaskDialog
+   - Vul alleen titel in
+   - Sla op
+   - Verwacht: Taak wordt aangemaakt, geen error
+
+2. **Nieuwe taak via Notulen Assistent**
+   - Upload PDF met action items
+   - Selecteer items en klik "Maak taken"
+   - Verwacht: Taken worden aangemaakt, geen error
 
 ---
 
-## Test Scenario's
+## Aanbeveling voor Leonie
 
-1. **Notule zonder gekoppelde taken**
-   - Verwacht: Direct verwijderen, toast "Notulen verwijderd"
+**Directe oplossing**: Verzoek Leonie om:
+1. De pagina te herladen (Ctrl+F5 of Cmd+Shift+R)
+2. Opnieuw in te loggen
+3. De actie nogmaals te proberen
 
-2. **Notule met 1 gekoppelde taak**
-   - Verwacht: Taak behouden, audit trail toegevoegd, toast "Notulen verwijderd. 1 taak ontkoppeld."
+Als het probleem blijft bestaan, vraag dan om een screenshot van de error details (klik op "Component Stack" in het error scherm).
 
-3. **Notule met meerdere gekoppelde taken**
-   - Verwacht: Alle taken behouden, audit trail toegevoegd, toast "Notulen verwijderd. X taken ontkoppeld."
+---
 
-4. **RLS block**
-   - Verwacht: Duidelijke foutmelding met Postgres code
+## Samenvatting
+
+De Runtime Error is hoogstwaarschijnlijk een tijdelijk chunk loading probleem door een recente update. De voorgestelde code fixes voegen defensieve programmering toe om toekomstige null reference errors te voorkomen.
+
