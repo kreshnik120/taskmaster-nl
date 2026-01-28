@@ -46,27 +46,38 @@ Deno.serve(async (req) => {
     }
 
     // If using Supabase Auth, verify the user
+    let userId: string | null = null;
     if (isValidAuth && !isValidApiKey) {
+      // Create anon client with user's JWT for verification
       const supabaseAuth = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader! } } }
+        {
+          global: {
+            headers: { Authorization: authHeader! }
+          },
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false
+          }
+        }
       );
       
       const { data: { user }, error: authError } = await supabaseAuth.auth.getUser();
       
       if (authError || !user) {
-        console.error(`[${requestId}] ❌ Invalid token`);
+        console.error(`[${requestId}] ❌ Auth error:`, authError?.message);
         return new Response(
           JSON.stringify({ success: false, error: "Invalid token" }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       
-      console.log(`[${requestId}] ✅ Authenticated user: ${user.email}`);
+      userId = user.id;
+      console.log(`[${requestId}] ✅ Authenticated: ${user.email}`);
     }
 
-    console.log(`[${requestId}] ✅ Auth method: ${isValidApiKey ? 'API Key' : 'Supabase Auth'}`);
+    console.log(`[${requestId}] ✅ Auth: ${isValidApiKey ? 'API Key' : `User ${userId}`}`);
 
     // 2. Parse request body
     const body: WhatsAppEvent = await req.json();
