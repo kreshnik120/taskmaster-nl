@@ -1,248 +1,190 @@
 
-# Sidebar Refactoring Plan: Verwijder "Kanban bord" Menu Item
+# Plan: Kanban Pagina - Verwijder Toggle, Maak Team Overzicht
 
 ## Overzicht
 
-Dit plan implementeert de migratie van task-navigatie naar het Dashboard als centrale hub. De /kanban pagina blijft behouden voor team-breed overzicht, maar wordt verwijderd uit de sidebar. Alle task-specifieke navigatie gaat via dashboard met `taskId` URL parameter.
+Dit plan transformeert de Kanban pagina van een persoonlijk/team hybride naar een dedicated **Team Kanban Bord**. De "Mijn taken / Alle taken" toggle wordt verwijderd omdat de persoonlijke taakweergave nu in het Dashboard zit.
 
 ---
 
 ## Wijzigingen Overzicht
 
-| # | Bestand | Actie | Regels |
-|---|---------|-------|--------|
-| 1 | `AppSidebar.tsx` | Verwijder menu item | 41-44 |
-| 2 | `UnifiedDashboard.tsx` | Voeg taskId handling toe | imports + state + useEffect |
-| 3 | `MyTasksFlowSection.tsx` | Update 3 link teksten | 335, 351, 442 |
-| 4 | `UpcomingRemindersWidget.tsx` | Update navigatie | 128 |
-| 5 | `UpcomingTasksList.tsx` | Update handleClick | 35 |
-| 6 | `OverdueTasksList.tsx` | Update handleClick | 21 |
-| 7 | `ReminderNotification.tsx` | Update handleGoToTask | 62 |
-| 8 | `Bijlagen.tsx` | Update navigateToTask | 291-293 |
+| # | Regel(s) | Actie | Beschrijving |
+|---|----------|-------|--------------|
+| 1 | 18 | VERWIJDER | `useGlobalTaskFilter` import |
+| 2 | 12 | WIJZIG | Verwijder `User, Users` uit icons import |
+| 3 | 90 | VERWIJDER | Hook destructuring |
+| 4 | 164 | WIJZIG | Dependency array: `[user, showOnlyMyTasks]` → `[user]` |
+| 5 | 267-270 | VERWIJDER | If-block die filtert op `assignee_id` |
+| 6 | 771-776 | WIJZIG | Header titel en subtitle |
+| 7 | 779-799 | VERWIJDER | Toggle UI block (21 regels) |
 
 ---
 
 ## Gedetailleerde Wijzigingen
 
-### 1. AppSidebar.tsx
-**Actie:** Verwijder "Kanban bord" menu item uit menuGroups array
+### 1. Verwijder useGlobalTaskFilter Import (regel 18)
 
 ```typescript
-// VERWIJDER regels 41-44:
-{
-  title: "Kanban bord",
-  url: "/kanban",
-  icon: Kanban
-},
+// VERWIJDER:
+import { useGlobalTaskFilter } from "@/hooks/useGlobalTaskFilter";
 ```
 
-De Kanban icon import blijft behouden (wordt mogelijk elders gebruikt).
-
----
-
-### 2. UnifiedDashboard.tsx
-**Actie:** Voeg taskId URL parameter handling + TaskDetailModal toe
-
-**Nieuwe imports:**
-```typescript
-import { TaskDetailModal } from "@/components/TaskDetailModal";
-```
-
-**Nieuwe state:**
-```typescript
-const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-const [taskModalOpen, setTaskModalOpen] = useState(false);
-```
-
-**Nieuwe useEffect voor URL parameter:**
-```typescript
-useEffect(() => {
-  const taskId = searchParams.get('taskId');
-  if (taskId) {
-    setSelectedTaskId(taskId);
-    setTaskModalOpen(true);
-    // Switch to mijn-werk tab if not already there
-    if (activeTab !== 'mijn-werk') {
-      setSearchParams({ tab: 'mijn-werk', taskId });
-    }
-  }
-}, [searchParams]);
-```
-
-**Callback functies:**
-```typescript
-const handleTaskModalClose = (open: boolean) => {
-  setTaskModalOpen(open);
-  if (!open) {
-    setSelectedTaskId(null);
-    // Remove taskId from URL, keep tab
-    setSearchParams({ tab: activeTab });
-  }
-};
-
-const handleTaskUpdated = () => {
-  // Refresh via real-time subscription
-};
-```
-
-**TaskDetailModal in JSX (voor sluiting `</div>`):**
-```tsx
-{selectedTaskId && (
-  <TaskDetailModal
-    task={{ id: selectedTaskId } as any}
-    open={taskModalOpen}
-    onOpenChange={handleTaskModalClose}
-    onTaskUpdated={handleTaskUpdated}
-  />
-)}
-```
-
----
-
-### 3. MyTasksFlowSection.tsx
-**Actie:** Update 3 link teksten
-
-| Locatie | Van | Naar |
-|---------|-----|------|
-| Regel 335 (header button) | `Open volledig Kanban` | `Bekijk alle team taken` |
-| Regel 351 (empty state) | `Ga naar Kanban bord` | `Bekijk alle team taken` |
-| Regel 442 (overflow) | `Bekijk meer ({overflow})` | `+{overflow} meer in team overzicht` |
-
----
-
-### 4. UpcomingRemindersWidget.tsx
-**Actie:** Update navigatie (regel 128)
+### 2. Wijzig Icons Import (regel 12)
 
 ```typescript
-// Van:
-onClick={() => navigate(`/kanban/${reminder.task_id}`)}
+// VAN:
+import { Plus, Loader2, AlertCircle, Search, ListTodo, Clock, CheckCircle2, User, Users, ArrowUp, ArrowDown, ArrowUpDown, Calendar, GripVertical } from "lucide-react";
 
-// Naar:
-onClick={() => navigate(`/dashboard?tab=mijn-werk&taskId=${reminder.task_id}`)}
+// NAAR:
+import { Plus, Loader2, AlertCircle, Search, ListTodo, Clock, CheckCircle2, ArrowUp, ArrowDown, ArrowUpDown, Calendar, GripVertical } from "lucide-react";
+```
+
+### 3. Verwijder Hook Destructuring (regel 90)
+
+```typescript
+// VERWIJDER:
+const { showOnlyMyTasks, setShowOnlyMyTasks, userId: globalFilterUserId } = useGlobalTaskFilter();
+```
+
+### 4. Vereenvoudig Dependency Array (regel 164)
+
+```typescript
+// VAN:
+}, [user, showOnlyMyTasks]);
+
+// NAAR:
+}, [user]);
+```
+
+### 5. Verwijder Query Filter (regels 267-270)
+
+```typescript
+// VERWIJDER:
+// Filter by current user's tasks if toggle is on
+if (showOnlyMyTasks && user) {
+  query = query.eq("assignee_id", user.id);
+}
+```
+
+### 6. Update Header (regels 771-776)
+
+```typescript
+// VAN:
+<h1 className="text-xl font-medium text-foreground">
+  {fullGreeting}
+</h1>
+<p className="text-sm text-muted-foreground mt-0.5">
+  {activeTasks} actief • {blockedCount} blocked • {completedToday} vandaag afgerond
+</p>
+
+// NAAR:
+<h1 className="text-xl font-medium text-foreground">
+  Team Kanban Bord
+</h1>
+<p className="text-sm text-muted-foreground mt-0.5">
+  Team overzicht • {activeTasks} actief • {blockedCount} in afwachting • {completedToday} vandaag afgerond
+</p>
+```
+
+### 7. Verwijder Toggle UI (regels 778-800)
+
+```typescript
+// VERWIJDER VOLLEDIG (22 regels):
+{/* Mijn taken / Alle taken toggle */}
+<div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1">
+  <Button 
+    variant={showOnlyMyTasks ? "default" : "ghost"} 
+    size="sm"
+    onClick={() => setShowOnlyMyTasks(true)}
+    className="gap-1.5"
+  >
+    <User className="h-4 w-4" />
+    Mijn taken
+  </Button>
+  <Button 
+    variant={!showOnlyMyTasks ? "default" : "ghost"} 
+    size="sm"
+    onClick={() => setShowOnlyMyTasks(false)}
+    className="gap-1.5"
+  >
+    <Users className="h-4 w-4" />
+    Alle taken
+  </Button>
+</div>
 ```
 
 ---
 
-### 5. UpcomingTasksList.tsx
-**Actie:** Update handleClick functie (regel 35)
-
-```typescript
-// Van:
-navigate(`/kanban/${taskId}`);
-
-// Naar:
-navigate(`/dashboard?tab=mijn-werk&taskId=${taskId}`);
-```
-
----
-
-### 6. OverdueTasksList.tsx
-**Actie:** Update handleClick functie (regel 21)
-
-```typescript
-// Van:
-navigate(`/kanban/${taskId}`);
-
-// Naar:
-navigate(`/dashboard?tab=mijn-werk&taskId=${taskId}`);
-```
-
----
-
-### 7. ReminderNotification.tsx
-**Actie:** Update handleGoToTask functie (regel 62)
-
-```typescript
-// Van:
-navigate(`/kanban/${reminder.task_id}`);
-
-// Naar:
-navigate(`/dashboard?tab=mijn-werk&taskId=${reminder.task_id}`);
-```
-
----
-
-### 8. Bijlagen.tsx
-**Actie:** Update navigateToTask functie (regels 291-293)
-
-```typescript
-// Van:
-const navigateToTask = (taskId: string) => {
-  navigate(`/kanban/${taskId}`);
-};
-
-// Naar:
-const navigateToTask = (taskId: string) => {
-  navigate(`/dashboard?tab=mijn-werk&taskId=${taskId}`);
-};
-```
-
----
-
-## Niet Wijzigen
-
-| Bestand | Reden |
-|---------|-------|
-| `src/App.tsx` | Route `/kanban/:taskId?` BEHOUDEN voor backward compatibility |
-| `src/pages/Kanban.tsx` | Pagina BEHOUDEN - team overzicht |
-| Alle andere sidebar items | Alleen "Kanban bord" verwijderen |
-
----
-
-## Navigatie Flow Na Implementatie
+## Resultaat Na Implementatie
 
 ```text
 ┌─────────────────────────────────────────────────────────────────┐
-│ PRIMAIRE FLOW (nieuw)                                           │
+│ KANBAN PAGINA - VOOR                                            │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  Sidebar: Dashboard ───────> /dashboard?tab=mijn-werk           │
-│                                      │                           │
-│                                      v                           │
-│                              MyTasksFlowSection                  │
-│                                      │                           │
-│                          ┌───────────┴───────────┐              │
-│                          │                       │              │
-│                    Klik taak              "Bekijk alle          │
-│                          │                team taken"           │
-│                          v                       │              │
-│         /dashboard?tab=mijn-werk          ┌─────v─────┐        │
-│         &taskId=abc123                    │  /kanban   │        │
-│                │                          │ (alle team │        │
-│                v                          │   taken)   │        │
-│        TaskDetailModal                    └───────────┘        │
+│  "Goedemorgen, [naam]"                                          │
+│  X actief • X blocked • X vandaag afgerond                      │
+│                                                                  │
+│  [Mijn taken] [Alle taken]  [Sorteer ▼] [↑]                     │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+
+                              ↓
+
+┌─────────────────────────────────────────────────────────────────┐
+│ KANBAN PAGINA - NA                                              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  "Team Kanban Bord"                                             │
+│  Team overzicht • X actief • X in afwachting • X vandaag afgerond│
+│                                                                  │
+│  [Sorteer ▼] [↑]                                                │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
+## Niet Wijzigen
+
+| Item | Reden |
+|------|-------|
+| `useGlobalTaskFilter.ts` | Wordt nog gebruikt in Lijst.tsx en Kalender.tsx |
+| `useGreeting` hook call | Blijft in code (geen breaking change), maar output niet meer in header |
+| KPI stats bar | Blijft - toont team statistieken |
+| Sorteer controls | Blijft intact |
+| Zoekfunctie | Blijft intact |
+| Drag & drop | Blijft intact |
+| Alle andere features | Blijven intact |
+
+---
+
 ## Technische Details
 
-### TaskDetailModal Props
-Het component accepteert een task object. Voor deeplinks laden we alleen het ID, het modal haalt zelf de volledige task data op:
-```typescript
-task={{ id: selectedTaskId } as any}
-```
+### Bestand
+- `src/pages/Kanban.tsx` - 1 bestand, ~30 regels wijzigen/verwijderen
 
-### URL Parameter Beheer
-- Bij openen: `?tab=mijn-werk&taskId=abc123`
-- Bij sluiten: `?tab=mijn-werk` (taskId verwijderd)
-- Tab switch: taskId blijft behouden in URL
+### Impact
+- Kanban laadt nu ALTIJD alle team taken
+- Persoonlijke taakweergave blijft beschikbaar in Dashboard > Mijn Werk tab
+- Duidelijke scheiding: Dashboard = persoonlijk, Kanban = team
 
 ---
 
 ## Acceptatie Criteria
 
 **Functioneel:**
-- "Kanban bord" NIET zichtbaar in sidebar
-- Dashboard is primaire entry point voor taken
-- "Bekijk alle team taken" link werkt naar /kanban
-- Klik op taak in widgets opent TaskDetailModal in dashboard
-- URL `/dashboard?tab=mijn-werk&taskId=abc123` opent direct taak modal
-- Na modal sluiten: taskId verdwijnt uit URL, tab blijft
+- /kanban toont ALLE team taken (niet gefilterd op gebruiker)
+- Header toont "Team Kanban Bord"
+- Subtitle toont "Team overzicht • X actief • X in afwachting • X vandaag afgerond"
+- Toggle "Mijn taken / Alle taken" is VOLLEDIG VERWIJDERD
+- KPI stats tonen team-brede cijfers
+- Sorteer opties werken nog
+- Zoekfunctie werkt nog
+- Drag & drop werkt nog
 
 **Technisch:**
 - Geen TypeScript errors
 - Geen console errors
-- Route /kanban blijft werken (backward compatibility)
+- `useGlobalTaskFilter.ts` NIET verwijderd
