@@ -6496,6 +6496,234 @@ export type Database = {
           },
         ]
       }
+      whatsapp_chats: {
+        Row: {
+          chat_jid: string
+          chat_type: string | null
+          contact_id: string | null
+          created_at: string | null
+          id: string
+          last_message_at: string | null
+          last_message_preview: string | null
+          org_id: string
+          session_id: string
+          unread_count: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          chat_jid: string
+          chat_type?: string | null
+          contact_id?: string | null
+          created_at?: string | null
+          id?: string
+          last_message_at?: string | null
+          last_message_preview?: string | null
+          org_id: string
+          session_id: string
+          unread_count?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          chat_jid?: string
+          chat_type?: string | null
+          contact_id?: string | null
+          created_at?: string | null
+          id?: string
+          last_message_at?: string | null
+          last_message_preview?: string | null
+          org_id?: string
+          session_id?: string
+          unread_count?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_chats_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_chats_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_chats_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_contacts: {
+        Row: {
+          created_at: string | null
+          display_name: string | null
+          id: string
+          org_id: string
+          phone_number: string
+          professional_id: string | null
+          session_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          display_name?: string | null
+          id?: string
+          org_id: string
+          phone_number: string
+          professional_id?: string | null
+          session_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          display_name?: string | null
+          id?: string
+          org_id?: string
+          phone_number?: string
+          professional_id?: string | null
+          session_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_contacts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_contacts_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_contacts_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_admin_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_contacts_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_contacts_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_messages: {
+        Row: {
+          chat_id: string
+          created_at: string | null
+          id: string
+          message_body: string | null
+          message_id: string
+          message_type: string | null
+          org_id: string
+          sender_phone: string | null
+          sender_type: string | null
+          sent_at: string
+          status: string | null
+        }
+        Insert: {
+          chat_id: string
+          created_at?: string | null
+          id?: string
+          message_body?: string | null
+          message_id: string
+          message_type?: string | null
+          org_id: string
+          sender_phone?: string | null
+          sender_type?: string | null
+          sent_at: string
+          status?: string | null
+        }
+        Update: {
+          chat_id?: string
+          created_at?: string | null
+          id?: string
+          message_body?: string | null
+          message_id?: string
+          message_type?: string | null
+          org_id?: string
+          sender_phone?: string | null
+          sender_type?: string | null
+          sent_at?: string
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_messages_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_messages_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_sessions: {
+        Row: {
+          created_at: string | null
+          id: string
+          org_id: string
+          phone_number: string
+          session_data: Json | null
+          session_status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          org_id: string
+          phone_number: string
+          session_data?: Json | null
+          session_status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          org_id?: string
+          phone_number?: string
+          session_data?: Json | null
+          session_status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_sessions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       wtt_rules: {
         Row: {
           created_at: string
@@ -7055,6 +7283,7 @@ export type Database = {
           total_executions: number
         }[]
       }
+      get_user_whatsapp_org_id: { Args: never; Returns: string }
       has_acl_access: {
         Args: { _acl: Json; _user_id: string }
         Returns: boolean

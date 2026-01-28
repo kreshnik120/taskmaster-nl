@@ -1,5 +1,10 @@
 project_id = "oelmsmcgryeoryhonexw"
 
+[functions.whatsapp-bridge]
+verify_jwt = false
+# Purpose: WhatsApp Bridge proxy for VPS communication
+# Auth: API key via X-API-Key header (CITOZORG_API_KEY)
+
 [functions.deploy-test-webhook]
 verify_jwt = false
 # Purpose: CI/CD webhook that triggers AI chat test suite after deployments
