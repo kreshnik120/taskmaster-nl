@@ -262,12 +262,19 @@ Analyseer dit PDF document en extraheer de volgende informatie. Retourneer ALLEE
   "decisions": [{"decision": "Besluit, afspraak of actiepunt", "owner": "Verantwoordelijke persoon of null", "deadline": "YYYY-MM-DD of null"}],
   "action_items": [{
     "action": "Specifieke actie",
-    "assignee": "Toegewezen aan of null",
+    "assignee": "Toegewezen aan of null (NIET 'team' als waarde)",
     "deadline": "YYYY-MM-DD of null",
     "classification": "TAAK|IDEE|INFORMATIE",
     "urgency": "critical|high|medium|low",
-    "source_quote": "Exacte quote uit het document",
-    "confidence": 0.0-1.0
+    "source_quote": "VERPLICHT: Exacte quote uit het document",
+    "confidence": 0.0-1.0,
+    "onderwerp": "Kort onderwerp (2-5 woorden)",
+    "doelgroep": "Voor wie is dit relevant",
+    "actie_type": "Communicatie|Administratie|Planning|Onderzoek|Beslissing|Overig",
+    "betrokkenen": [{"naam": "string", "rol": "string of null", "relatie": "assignee|uitleg_ontvanger|stakeholder"}],
+    "externe_partij": {"naam": "string", "type": "klant|zzper|locatie|leverancier"} of null,
+    "actieplan": ["Stap 1 met werkwoord", "Stap 2", "..."],
+    "suggestie": "Directe actiezin voor de assignee"
   }],
   "notes": "Belangrijke notities als één string of null",
   "summary": "Korte samenvatting in 2-3 zinnen of null",
@@ -318,11 +325,46 @@ BELANGRIJKE INSTRUCTIES:
    - source_quote: EXACTE tekst uit het document (kopieer letterlijk - hallucinatie preventie)
    - confidence: 0.0-1.0 (hoe zeker je bent van de classificatie)
 
-6. REGELS:
+6. FASE 7D - ENTERPRISE CONTEXT voor elke action_item:
+   - onderwerp: Waar gaat dit over? (kort, 2-5 woorden)
+     Voorbeelden: "Begeleidersdiensten", "Factuurproces", "Teamcommunicatie"
+   
+   - doelgroep: Voor wie is dit relevant?
+     Voorbeelden: "ABCITO team", "ZZP'ers", "Klant IrisZorg"
+   
+   - actie_type: Classificeer het type actie:
+     * Communicatie: uitleg geven, informeren, overleggen
+     * Administratie: registreren, documenteren, verwerken
+     * Planning: inplannen, afstemmen, organiseren
+     * Onderzoek: uitzoeken, analyseren, controleren
+     * Beslissing: besluiten, goedkeuren, kiezen
+     * Overig: anders
+   
+   - betrokkenen: Array van personen met:
+     * naam: Persoonsnaam
+     * rol: Functie indien bekend (teamleider, planner, etc.) of null
+     * relatie: "assignee" (uitvoerder), "uitleg_ontvanger" (ontvangt info), "stakeholder" (belang)
+   
+   - externe_partij: Object of null
+     * naam: Organisatie/persoon naam
+     * type: "klant" (IrisZorg, Bloezem, Kwintes), "zzper" (Anouar, Sanae), "locatie", "leverancier"
+   
+   - actieplan: Array van 2-4 concrete stappen
+     * Begin elke stap met een werkwoord
+     * Wees specifiek, niet vaag
+     Voorbeeld: ["Plan meeting met team", "Bereid uitleg voor", "Geef presentatie", "Documenteer afspraken"]
+   
+   - suggestie: Eén directe, actionable zin
+     * Begin met werkwoord in gebiedende wijs
+     Voorbeeld: "Bel Sanae vandaag terug om haar status te bevestigen."
+
+7. BELANGRIJK:
+   - Als "team" als assignee staat → assignee = null, maar voeg "team" toe aan betrokkenen met relatie "stakeholder"
+   - externe_partij is null als geen externe partij betrokken
+   - source_quote blijft VERPLICHT voor elke extractie
    - Retourneer ALLEEN de JSON, geen markdown of uitleg
    - Gebruik Nederlandse teksten waar van toepassing
    - Bij ontbrekende informatie: null of lege array
-   - Confidence scores 0-100: hoe zeker je bent
    - meeting_type moet exact een van deze waarden zijn: team, board, project, klant, overig`
               }
             ]
@@ -380,6 +422,15 @@ BELANGRIJKE INSTRUCTIES:
             urgency: item.urgency || null,
             source_quote: item.source_quote || null,
             confidence: typeof item.confidence === 'number' ? item.confidence : null,
+            // Fase 7D velden
+            onderwerp: item.onderwerp || null,
+            doelgroep: item.doelgroep || null,
+            actie_type: item.actie_type || null,
+            achtergrond: item.achtergrond || null,
+            betrokkenen: Array.isArray(item.betrokkenen) ? item.betrokkenen : [],
+            externe_partij: item.externe_partij || null,
+            actieplan: Array.isArray(item.actieplan) ? item.actieplan : [],
+            suggestie: item.suggestie || null,
           }))
         : [],
       notes: extractedData.notes || null,
@@ -410,7 +461,7 @@ BELANGRIJKE INSTRUCTIES:
   }
 }
 
-// System prompt for text-based analysis - Fase 7C: Updated with classification
+// System prompt for text-based analysis - Fase 7D: Updated with enterprise context
 const systemPrompt = `Je bent een expert in het analyseren van vergaderdocumenten voor Nederlandse zorginstellingen.
 
 Extraheer de volgende informatie uit het document en retourneer ALLEEN een JSON object:
@@ -426,12 +477,19 @@ Extraheer de volgende informatie uit het document en retourneer ALLEEN een JSON 
   "decisions": [{"decision": "Besluit, afspraak of actiepunt", "owner": "Verantwoordelijke persoon of null", "deadline": "YYYY-MM-DD of null"}],
   "action_items": [{
     "action": "Specifieke actie",
-    "assignee": "Toegewezen aan of null",
+    "assignee": "Toegewezen aan of null (NIET 'team')",
     "deadline": "YYYY-MM-DD of null",
     "classification": "TAAK|IDEE|INFORMATIE",
     "urgency": "critical|high|medium|low",
-    "source_quote": "Exacte quote uit het document",
-    "confidence": 0.0-1.0
+    "source_quote": "VERPLICHT: Exacte quote uit het document",
+    "confidence": 0.0-1.0,
+    "onderwerp": "Kort onderwerp (2-5 woorden)",
+    "doelgroep": "Voor wie is dit relevant",
+    "actie_type": "Communicatie|Administratie|Planning|Onderzoek|Beslissing|Overig",
+    "betrokkenen": [{"naam": "string", "rol": "string of null", "relatie": "assignee|uitleg_ontvanger|stakeholder"}],
+    "externe_partij": {"naam": "string", "type": "klant|zzper|locatie|leverancier"} of null,
+    "actieplan": ["Stap 1 met werkwoord", "Stap 2", "..."],
+    "suggestie": "Directe actiezin voor de assignee"
   }],
   "notes": "Belangrijke notities als één string of null",
   "summary": "Korte samenvatting in 2-3 zinnen of null",
@@ -449,7 +507,20 @@ URGENTIE:
 - medium: < 1 week
 - low: geen deadline
 
-VERPLICHT: source_quote = exacte tekst uit document, confidence = 0.0-1.0
+FASE 7D - ENTERPRISE CONTEXT voor elke action_item:
+- onderwerp: Waar gaat dit over? (2-5 woorden) Vb: "Begeleidersdiensten", "Factuurproces"
+- doelgroep: Voor wie? Vb: "ABCITO team", "ZZP'ers", "Klant IrisZorg"
+- actie_type: Communicatie | Administratie | Planning | Onderzoek | Beslissing | Overig
+- betrokkenen: Array [{naam, rol (of null), relatie: assignee|uitleg_ontvanger|stakeholder}]
+- externe_partij: {naam, type: klant|zzper|locatie|leverancier} of null
+- actieplan: Array van 2-4 stappen, elk beginnend met werkwoord
+- suggestie: Directe actiezin in gebiedende wijs
+
+BELANGRIJK:
+- Als "team" als assignee → assignee = null, voeg "team" toe aan betrokkenen
+- externe_partij = null als geen externe partij
+- source_quote = exacte tekst uit document (VERPLICHT)
+- confidence = 0.0-1.0
 
 REGELS:
 - Retourneer ALLEEN de JSON, geen markdown
@@ -608,7 +679,26 @@ serve(async (req) => {
           participants: Array.isArray(extractedData.participants) ? extractedData.participants : [],
           agenda_items: Array.isArray(extractedData.agenda_items) ? extractedData.agenda_items : [],
           decisions: Array.isArray(extractedData.decisions) ? extractedData.decisions : [],
-          action_items: Array.isArray(extractedData.action_items) ? extractedData.action_items : [],
+          action_items: Array.isArray(extractedData.action_items) 
+            ? extractedData.action_items.map((item: any) => ({
+                action: item.action || '',
+                assignee: item.assignee || null,
+                deadline: item.deadline || null,
+                classification: item.classification || null,
+                urgency: item.urgency || null,
+                source_quote: item.source_quote || null,
+                confidence: typeof item.confidence === 'number' ? item.confidence : null,
+                // Fase 7D velden
+                onderwerp: item.onderwerp || null,
+                doelgroep: item.doelgroep || null,
+                actie_type: item.actie_type || null,
+                achtergrond: item.achtergrond || null,
+                betrokkenen: Array.isArray(item.betrokkenen) ? item.betrokkenen : [],
+                externe_partij: item.externe_partij || null,
+                actieplan: Array.isArray(item.actieplan) ? item.actieplan : [],
+                suggestie: item.suggestie || null,
+              }))
+            : [],
           notes: extractedData.notes || null,
           summary: extractedData.summary || null,
           confidence_scores: {
@@ -728,10 +818,29 @@ serve(async (req) => {
         meeting_time: extractedData.meeting_time || null,
         location: extractedData.location || null,
         meeting_type: extractedData.meeting_type || null,
-        participants: Array.isArray(extractedData.participants) ? extractedData.participants : [],
-        agenda_items: Array.isArray(extractedData.agenda_items) ? extractedData.agenda_items : [],
-        decisions: Array.isArray(extractedData.decisions) ? extractedData.decisions : [],
-        action_items: Array.isArray(extractedData.action_items) ? extractedData.action_items : [],
+          participants: Array.isArray(extractedData.participants) ? extractedData.participants : [],
+          agenda_items: Array.isArray(extractedData.agenda_items) ? extractedData.agenda_items : [],
+          decisions: Array.isArray(extractedData.decisions) ? extractedData.decisions : [],
+          action_items: Array.isArray(extractedData.action_items) 
+            ? extractedData.action_items.map((item: any) => ({
+                action: item.action || '',
+                assignee: item.assignee || null,
+                deadline: item.deadline || null,
+                classification: item.classification || null,
+                urgency: item.urgency || null,
+                source_quote: item.source_quote || null,
+                confidence: typeof item.confidence === 'number' ? item.confidence : null,
+                // Fase 7D velden
+                onderwerp: item.onderwerp || null,
+                doelgroep: item.doelgroep || null,
+                actie_type: item.actie_type || null,
+                achtergrond: item.achtergrond || null,
+                betrokkenen: Array.isArray(item.betrokkenen) ? item.betrokkenen : [],
+                externe_partij: item.externe_partij || null,
+                actieplan: Array.isArray(item.actieplan) ? item.actieplan : [],
+                suggestie: item.suggestie || null,
+              }))
+            : [],
         notes: extractedData.notes || null,
         summary: extractedData.summary || null,
         confidence_scores: {
