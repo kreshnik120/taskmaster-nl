@@ -332,7 +332,7 @@ export function MyTasksFlowSection() {
 
           <Button variant="outline" size="sm" asChild>
             <Link to="/kanban" className="gap-2">
-              Open volledig Kanban
+              Bekijk alle team taken
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>
@@ -348,7 +348,7 @@ export function MyTasksFlowSection() {
                 Je hebt momenteel geen openstaande taken
               </p>
               <Button variant="outline" asChild>
-                <Link to="/kanban">Ga naar Kanban bord</Link>
+                <Link to="/kanban">Bekijk alle team taken</Link>
               </Button>
             </CardContent>
           </Card>
@@ -439,7 +439,7 @@ export function MyTasksFlowSection() {
                                     className="w-full text-xs text-muted-foreground hover:text-foreground"
                                     onClick={() => navigate("/kanban")}
                                   >
-                                    Bekijk meer ({overflow})
+                                    +{overflow} meer in team overzicht
                                   </Button>
                                 )}
                               </>

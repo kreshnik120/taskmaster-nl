@@ -125,7 +125,7 @@ export function UpcomingRemindersWidget() {
                   variant="ghost"
                   size="sm"
                   className="opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={() => navigate(`/kanban/${reminder.task_id}`)}
+                  onClick={() => navigate(`/dashboard?tab=mijn-werk&taskId=${reminder.task_id}`)}
                 >
                   <ArrowRight className="h-4 w-4" />
                 </Button>

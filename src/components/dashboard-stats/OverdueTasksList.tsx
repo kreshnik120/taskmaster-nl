@@ -18,7 +18,7 @@ export function OverdueTasksList({ tasks, isLoading, maxItems = 5 }: OverdueTask
   const hasMore = tasks.length > maxItems;
 
   const handleClick = (taskId: string) => {
-    navigate(`/kanban/${taskId}`);
+    navigate(`/dashboard?tab=mijn-werk&taskId=${taskId}`);
   };
 
   if (isLoading) {
