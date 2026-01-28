@@ -1,102 +1,172 @@
 
+# WhatsApp Berichten Versturen - Implementatieplan
 
-# Fix: WhatsApp UI Toont Geen Berichten
+## Overzicht
+Implementatie van de functionaliteit om WhatsApp berichten te versturen vanuit de UI, via de Edge Function naar de VPS.
 
-## Probleem Gevonden
+## Architectuur
 
-De gebruiker k.atashi is lid van **2 organisaties** (ABCzorg en CitoZorg), maar de WhatsApp hooks gebruiken `.single()` op `user_organizations`. Dit veroorzaakt HTTP 406 errors:
-
+```text
+┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────┐
+│   UI Component  │────▶│  Edge Function       │────▶│   VPS Server    │
+│ WhatsAppChat    │     │  whatsapp-bridge     │     │  72.61.155.82   │
+│ Detail.tsx      │◀────│  (message.send)      │◀────│  :3001          │
+└─────────────────┘     └──────────────────────┘     └─────────────────┘
+        │                         │
+        │                         ▼
+        │               ┌──────────────────────┐
+        └──────────────▶│  whatsapp_messages   │
+          (realtime)    │  (Supabase DB)       │
+                        └──────────────────────┘
 ```
-"The result contains 2 rows"  
-"Cannot coerce the result to a single JSON object"
-```
 
-## Database Status
+## Benodigde Secrets
 
-| Tabel | Records | Status |
-|-------|---------|--------|
-| whatsapp_chats | 4 | Data aanwezig |
-| whatsapp_messages | 4 | Data aanwezig |
-| whatsapp_contacts | 4 | Data aanwezig |
-| RLS policies | Correct | Geen blokkade |
+| Secret | Waarde | Status |
+|--------|--------|--------|
+| WHATSAPP_VPS_API_KEY | `898b88e6d43cb61aa1b9b1a0bee322e62ef9187c9574ff25d1af21ac63acedfd` | **Nieuw toe te voegen** |
+| WHATSAPP_VPS_SESSION_ID | `9a8c604c-4237-4e00-a50e-0a37cedbfbef` | **Nieuw toe te voegen** |
 
-## Root Cause
+## Wijzigingen
+
+### 1. Edge Function: `whatsapp-bridge/index.ts`
+
+**Nieuwe event handler `message.send`:**
 
 ```typescript
-// useWhatsAppChats.ts, regel 34-38
-const { data: userOrg } = await supabase
-  .from('user_organizations')
-  .select('org_id')
-  .eq('user_id', user.id)
-  .single();  // ❌ FAALT bij 2+ organisaties
+case "message.send":
+  result = await handleSendMessage(supabase, sessionId, orgId, data, requestId);
+  break;
 ```
 
-## Oplossing
+**Nieuwe functie `handleSendMessage`:**
+- Ontvangt: `chatJid`, `body`, `chatId` uit data
+- Stuurt POST naar VPS: `http://72.61.155.82:3001/chats/{chatJid}/messages`
+- Headers: `x-api-key` (uit secret `WHATSAPP_VPS_API_KEY`)
+- Body: `{ sessionId: WHATSAPP_VPS_SESSION_ID, text: body }`
+- Slaat bericht op in `whatsapp_messages` met `sender_type: 'self'`, `status: 'sent'`
+- Update `last_message_at` en `last_message_preview` in `whatsapp_chats`
+- Retourneert `messageId`
 
-Vervang `.single()` door `.limit(1).maybeSingle()` of haal alle org_ids op en query chats voor ALLE organisaties van de gebruiker.
+### 2. Custom Hook: `useWhatsAppSendMessage.ts`
 
-### Optie A: Eerste org gebruiken (snelle fix)
+**Nieuwe hook voor berichten versturen:**
 
 ```typescript
-const { data: userOrg } = await supabase
-  .from('user_organizations')
-  .select('org_id')
-  .eq('user_id', user.id)
-  .limit(1)
-  .maybeSingle();
+export function useWhatsAppSendMessage(chatId: string, chatJid: string, orgId: string) {
+  const queryClient = useQueryClient();
+  
+  const mutation = useMutation({
+    mutationFn: async (text: string) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const response = await supabase.functions.invoke('whatsapp-bridge', {
+        body: {
+          event: 'message.send',
+          sessionId: '9a8c604c-4237-4e00-a50e-0a37cedbfbef',
+          orgId,
+          data: { chatJid, body: text, chatId }
+        }
+      });
+      
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['whatsapp-messages', chatId]);
+      queryClient.invalidateQueries(['whatsapp-chats']);
+    }
+  });
+  
+  return mutation;
+}
 ```
 
-### Optie B: Alle orgs tonen (betere UX)
+### 3. UI Component: `WhatsAppChatDetail.tsx`
+
+**Wijzigingen:**
+- Verwijder disabled state van Input en Button
+- Voeg `useState` toe voor `inputText`
+- Voeg `useWhatsAppSendMessage` hook toe
+- Implementeer `handleSend` functie:
+  - Valideer input (niet leeg)
+  - Roep mutation aan
+  - Clear input na success
+  - Toon toast bij error
+
+**Optimistic UI:**
+- Bericht direct tonen met `status: 'pending'`
+- Update naar `status: 'sent'` na server response
+- Rollback bij error
+
+### 4. Types Update: `whatsapp.ts`
+
+Update `sender_type` om 'user' te ondersteunen (alias voor 'self'):
 
 ```typescript
-// Haal alle org_ids op
-const { data: userOrgs } = await supabase
-  .from('user_organizations')
-  .select('org_id')
-  .eq('user_id', user.id);
-
-const orgIds = userOrgs?.map(o => o.org_id) ?? [];
-
-// Query chats voor alle orgs
-const { data } = await supabase
-  .from('whatsapp_chats')
-  .select(`*, contact:whatsapp_contacts!contact_id (*)`)
-  .in('org_id', orgIds)  // ✅ Alle organisaties
-  .order('last_message_at', { ascending: false });
+sender_type: 'contact' | 'self' | 'user';
 ```
 
-## Bestanden te Wijzigen
+## Dataflow
 
-| # | Bestand | Wijziging |
-|---|---------|-----------|
-| 1 | `src/hooks/whatsapp/useWhatsAppChats.ts` | Vervang `.single()` door multi-org query |
-| 2 | `src/hooks/whatsapp/useWhatsAppUnreadCount.ts` | Vervang `.single()` door multi-org query |
-| 3 | `src/hooks/whatsapp/useWhatsAppMessages.ts` | Controleren en eventueel fixen |
+1. **Gebruiker typt bericht** → Input component
+2. **Klik verstuur** → `handleSend()` 
+3. **Optimistic update** → Toon bericht met 'pending' status
+4. **Edge Function call** → `supabase.functions.invoke('whatsapp-bridge', {...})`
+5. **Edge Function** → POST naar VPS endpoint
+6. **VPS Response** → messageId terug
+7. **DB Insert** → Bericht opgeslagen in `whatsapp_messages`
+8. **Realtime update** → UI krijgt bevestiging via subscription
+9. **Chat update** → `last_message_at` en preview bijgewerkt
 
-## Aanbeveling
+## Veiligheidsoverwegingen
 
-Ik raad **Optie B** aan: toon chats van ALLE organisaties waar de gebruiker lid van is. Dit geeft een betere gebruikerservaring en voorkomt dat berichten "verdwijnen".
+- VPS API key wordt alleen server-side gebruikt (Edge Function)
+- Session ID wordt server-side opgeslagen als secret
+- Gebruiker moet ingelogd zijn (auth check in hook)
+- Org validatie gebeurt in Edge Function
 
-## Implementatie Stappen
+## Bestanden
 
-1. Update `useWhatsAppChats.ts`:
-   - Haal alle org_ids op met array query
-   - Gebruik `.in('org_id', orgIds)` filter
+| # | Bestand | Actie |
+|---|---------|-------|
+| 1 | `supabase/functions/whatsapp-bridge/index.ts` | Aanpassen - nieuwe `message.send` handler |
+| 2 | `src/hooks/whatsapp/useWhatsAppSendMessage.ts` | **Nieuw** - mutation hook |
+| 3 | `src/components/whatsapp/WhatsAppChatDetail.tsx` | Aanpassen - input activeren, send functie |
+| 4 | `src/types/whatsapp.ts` | Aanpassen - sender_type uitbreiden |
 
-2. Update `useWhatsAppUnreadCount.ts`:
-   - Som unread counts van alle organisaties
+## Test Scenario's
 
-3. Update `useWhatsAppMessages.ts`:
-   - Verwijder `.single()` indien aanwezig
+1. Verstuur tekst bericht → Verschijnt in UI + database
+2. Verstuur leeg bericht → Validatie error
+3. VPS timeout → Error toast + geen database entry
+4. Realtime update → Nieuwe inkomende berichten verschijnen nog steeds
 
-4. Test:
-   - Verifieer dat alle 4 chats verschijnen
-   - Verifieer unread badge in sidebar
+## Technische Details
 
-## Verwachte Resultaat
+**VPS Endpoint:**
+```
+POST http://72.61.155.82:3001/chats/{chatJid}/messages
+Headers:
+  Content-Type: application/json
+  x-api-key: [WHATSAPP_VPS_API_KEY]
+Body:
+  {
+    "sessionId": "[WHATSAPP_VPS_SESSION_ID]",
+    "text": "Berichttekst"
+  }
+Response:
+  {
+    "messageId": "uuid-van-verzonden-bericht"
+  }
+```
 
-Na de fix ziet k.atashi:
-- 3 chats van ABCzorg
-- 1 chat van CitoZorg
-- Totaal 4 unread berichten in sidebar badge
-
+**Database Insert:**
+```sql
+INSERT INTO whatsapp_messages (
+  org_id, chat_id, message_id, message_type, 
+  message_body, sender_type, sent_at, status
+) VALUES (
+  $orgId, $chatId, $vpsMessageId, 'text',
+  $body, 'self', NOW(), 'sent'
+);
+```
