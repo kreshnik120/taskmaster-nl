@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
   try {
     // 1. Validate API Key
     const apiKey = req.headers.get("x-api-key");
-    const expectedKey = Deno.env.get("CITOZORG_API_KEY");
+    const expectedKey = Deno.env.get("WHATSAPP_BRIDGE_API_KEY");
 
     if (!apiKey || apiKey !== expectedKey) {
       console.error(`[${requestId}] ❌ Invalid API key`);
