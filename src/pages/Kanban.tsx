@@ -9,13 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { KPICard } from "@/components/ui/kpi-card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Plus, Loader2, AlertCircle, Search, ListTodo, Clock, CheckCircle2, User, Users, ArrowUp, ArrowDown, ArrowUpDown, Calendar, GripVertical } from "lucide-react";
+import { Plus, Loader2, AlertCircle, Search, ListTodo, Clock, CheckCircle2, ArrowUp, ArrowDown, ArrowUpDown, Calendar, GripVertical } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAiScoring } from "@/hooks/useAiScoring";
 import { useGreeting } from "@/hooks/useGreeting";
-import { useGlobalTaskFilter } from "@/hooks/useGlobalTaskFilter";
+
 import { logger } from "@/lib/logger";
 
 const log = logger.create('Kanban');
@@ -86,8 +86,6 @@ const Kanban = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [lastScrolledKpi, setLastScrolledKpi] = useState<string | null>(null);
   
-  // Gebruik centrale hook voor filter state (elimineert handmatige localStorage logica)
-  const { showOnlyMyTasks, setShowOnlyMyTasks, userId: globalFilterUserId } = useGlobalTaskFilter();
   
   // Sorteer-voorkeur met localStorage persistentie (enterprise-niveau)
   const [sortBy, setSortBy] = useState<'due_at' | 'priority' | 'created_at' | 'manual'>(() => {
@@ -161,7 +159,7 @@ const Kanban = () => {
     if (user) {
       loadData();
     }
-  }, [user, showOnlyMyTasks]);
+  }, [user]);
 
   // Filter persistentie wordt nu afgehandeld door useGlobalTaskFilter hook
 
@@ -264,10 +262,6 @@ const Kanban = () => {
         .is("deleted_at", null)
         .is("completed_at", null);  // TOEGEVOEGD: Filter completed tasks uit actieve kolommen
       
-      // Filter by current user's tasks if toggle is on
-      if (showOnlyMyTasks && user) {
-        query = query.eq("assignee_id", user.id);
-      }
       
       const { data: tasksData, error: tasksError } = await query.order("order_key");
 
@@ -769,35 +763,13 @@ const Kanban = () => {
       <div className="flex items-center justify-between py-4 border-b mb-6">
         <div>
           <h1 className="text-xl font-medium text-foreground">
-            {fullGreeting}
+            Team Kanban Bord
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {activeTasks} actief • {blockedCount} blocked • {completedToday} vandaag afgerond
+            Team overzicht • {activeTasks} actief • {blockedCount} in afwachting • {completedToday} vandaag afgerond
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Mijn taken / Alle taken toggle */}
-          <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1">
-            <Button 
-              variant={showOnlyMyTasks ? "default" : "ghost"} 
-              size="sm"
-              onClick={() => setShowOnlyMyTasks(true)}
-              className="gap-1.5"
-            >
-              <User className="h-4 w-4" />
-              Mijn taken
-            </Button>
-            <Button 
-              variant={!showOnlyMyTasks ? "default" : "ghost"} 
-              size="sm"
-              onClick={() => setShowOnlyMyTasks(false)}
-              className="gap-1.5"
-            >
-              <Users className="h-4 w-4" />
-              Alle taken
-            </Button>
-          </div>
-          
           {/* Sorteer controls - subtiele pill-style */}
           <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1">
             <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
