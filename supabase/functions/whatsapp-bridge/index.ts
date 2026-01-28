@@ -343,7 +343,10 @@ async function handleSessionConnected(
     .select("id")
     .single();
 
-  if (error) throw error;
+  if (error) {
+    console.error(`[${requestId}] DB error:`, JSON.stringify(error));
+    throw new Error(`Database error: ${error.message || error.code || 'Unknown'}`);
+  }
 
   return { sessionId: session.id, status: "connected" };
 }
@@ -362,7 +365,10 @@ async function handleSessionDisconnected(
     .eq("id", sessionId)
     .eq("org_id", orgId);
 
-  if (error) throw error;
+  if (error) {
+    console.error(`[${requestId}] DB error:`, JSON.stringify(error));
+    throw new Error(`Database error: ${error.message || error.code || 'Unknown'}`);
+  }
 
   return { sessionId, status: "disconnected" };
 }
@@ -390,7 +396,10 @@ async function handleSessionQR(
     .select("id")
     .single();
 
-  if (error) throw error;
+  if (error) {
+    console.error(`[${requestId}] DB error:`, JSON.stringify(error));
+    throw new Error(`Database error: ${error.message || error.code || 'Unknown'}`);
+  }
 
   return { sessionId: session.id, status: "waiting_qr" };
 }
