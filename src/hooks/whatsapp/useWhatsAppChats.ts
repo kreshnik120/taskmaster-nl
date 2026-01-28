@@ -27,17 +27,17 @@ export function useWhatsAppChats(): UseWhatsAppChatsReturn {
   const { data: chats = [], isLoading, error } = useQuery({
     queryKey: ['whatsapp-chats'],
     queryFn: async () => {
-      // Get user's org_id
+      // Get user's org_ids (user can be member of multiple orgs)
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
 
-      const { data: userOrg } = await supabase
+      const { data: userOrgs } = await supabase
         .from('user_organizations')
         .select('org_id')
-        .eq('user_id', user.id)
-        .single();
+        .eq('user_id', user.id);
 
-      if (!userOrg?.org_id) return [];
+      const orgIds = userOrgs?.map(o => o.org_id) ?? [];
+      if (orgIds.length === 0) return [];
 
       const { data, error } = await supabase
         .from('whatsapp_chats')
@@ -46,7 +46,7 @@ export function useWhatsAppChats(): UseWhatsAppChatsReturn {
           contact:whatsapp_contacts!contact_id (*),
           linked_professional:professionals!linked_professional_id (id, full_name)
         `)
-        .eq('org_id', userOrg.org_id)
+        .in('org_id', orgIds)
         .order('last_message_at', { ascending: false, nullsFirst: false });
 
       if (error) throw error;
