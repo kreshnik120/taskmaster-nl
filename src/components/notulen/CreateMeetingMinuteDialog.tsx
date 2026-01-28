@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -35,15 +35,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Loader2, CalendarIcon, Paperclip, X, Sparkles } from "lucide-react";
+import { Loader2, CalendarIcon, Paperclip, X, Sparkles, FileCheck } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useCreateMeetingMinute } from "@/hooks/useCreateMeetingMinute";
 import { useUploadAttachment, ALLOWED_MIME_TYPES, MAX_FILE_SIZE } from "@/hooks/notulen/useUploadAttachment";
 import { formatFileSize } from "@/lib/fileHelpers";
 import { supabase } from "@/integrations/supabase/client";
-import { useAIExtractMeeting } from "@/hooks/notulen/useAIExtractMeeting";
-import { ExtractedDataPreview } from "./ExtractedDataPreview";
+import { useAIExtractMeeting, ExtractedMeetingData } from "@/hooks/notulen/useAIExtractMeeting";
 
 interface CreateMeetingMinuteDialogProps {
   open: boolean;
@@ -113,6 +112,9 @@ export function CreateMeetingMinuteDialog({
       confidence?: number;
     }>;
   } | null>(null);
+  // State voor auto-fill UX: originele extractie data en source file bewaren
+  const [originalExtractedData, setOriginalExtractedData] = useState<ExtractedMeetingData | null>(null);
+  const [sourceFile, setSourceFile] = useState<File | null>(null);
   const aiFileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<CreateMeetingMinuteFormData>({
@@ -126,6 +128,38 @@ export function CreateMeetingMinuteDialog({
       meeting_link: "",
     },
   });
+
+  // Herbruikbare functie om extracted data naar form velden te schrijven
+  const applyDataToForm = useCallback((data: ExtractedMeetingData) => {
+    // Form velden toepassen
+    if (data.title) form.setValue('title', data.title);
+    if (data.meeting_type) form.setValue('meeting_type', data.meeting_type);
+    if (data.meeting_date) {
+      form.setValue('start_at', new Date(data.meeting_date));
+    }
+    if (data.meeting_time) {
+      form.setValue('start_time', data.meeting_time);
+    }
+    if (data.location) form.setValue('location', data.location);
+    
+    // Fallback: als geen decisions, map action_items naar decisions format
+    const decisionsToUse = data.decisions && data.decisions.length > 0 
+      ? data.decisions 
+      : (data.action_items || []).map(a => ({
+          decision: a.action,
+          owner: a.assignee || null,
+          deadline: a.deadline || null
+        }));
+    
+    // Bewaar extracted content voor later gebruik bij submit
+    setExtractedContent({
+      agenda_items: data.agenda_items,
+      decisions: decisionsToUse,
+      content: [data.notes, data.summary].filter(Boolean).join('\n\n') || undefined,
+      participants: data.participants,
+      action_items: data.action_items,
+    });
+  }, [form]);
 
   // Reset form with defaultTitle when dialog opens
   React.useEffect(() => {
@@ -141,6 +175,8 @@ export function CreateMeetingMinuteDialog({
       setPendingFiles([]);
       clearExtractedData();
       setExtractedContent(null);
+      setOriginalExtractedData(null);
+      setSourceFile(null);
     }
   }, [open, defaultTitle, form, clearExtractedData]);
 
@@ -173,50 +209,71 @@ export function CreateMeetingMinuteDialog({
 
   const handleAIImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      await extractFromFile(file);
+    if (!file) return;
+    
+    const result = await extractFromFile(file);
+    
+    if (result) {
+      // Bewaar originele file voor bijlage
+      setSourceFile(file);
+      
+      // Bewaar originele extractie voor "Opnieuw toepassen"
+      setOriginalExtractedData(result);
+      
+      // Auto-fill formuliervelden
+      applyDataToForm(result);
+      
+      // Voeg bestand automatisch toe aan pendingFiles (voorkom duplicaten)
+      setPendingFiles(prev => {
+        const alreadyExists = prev.some(f => f.name === file.name && f.size === file.size);
+        if (alreadyExists) return prev;
+        return [...prev, file].slice(0, 5);
+      });
+      
+      // Clear de preview state (want we hebben auto-applied)
+      clearExtractedData();
+      
+      toast.success("Document geanalyseerd", {
+        description: "Formulier ingevuld en bestand toegevoegd als bijlage"
+      });
     }
+    
     e.target.value = '';
   };
 
-  const applyExtractedData = () => {
-    if (!extractedData) return;
-    
-    // Form velden toepassen
-    if (extractedData.title) form.setValue('title', extractedData.title);
-    if (extractedData.meeting_type) form.setValue('meeting_type', extractedData.meeting_type);
-    if (extractedData.meeting_date) {
-      form.setValue('start_at', new Date(extractedData.meeting_date));
-    }
-    if (extractedData.meeting_time) {
-      form.setValue('start_time', extractedData.meeting_time);
-    }
-    if (extractedData.location) form.setValue('location', extractedData.location);
-    
-    // Fallback: als geen decisions, map action_items naar decisions format
-    const decisionsToUse = extractedData.decisions && extractedData.decisions.length > 0 
-      ? extractedData.decisions 
-      : (extractedData.action_items || []).map(a => ({
-          decision: a.action,
-          owner: a.assignee || null,
-          deadline: a.deadline || null
-        }));
-    
-    // Bewaar extracted content voor later gebruik bij submit
-    setExtractedContent({
-      agenda_items: extractedData.agenda_items,
-      decisions: decisionsToUse,
-      content: [extractedData.notes, extractedData.summary].filter(Boolean).join('\n\n') || undefined,
-      participants: extractedData.participants,
-      action_items: extractedData.action_items, // Fase 7C
+  // Opnieuw toepassen: herstel naar originele AI data
+  const reApplyExtractedData = () => {
+    if (!originalExtractedData) return;
+    applyDataToForm(originalExtractedData);
+    toast.success("Gegevens opnieuw toegepast");
+  };
+
+  // Negeren: reset naar lege velden
+  const ignoreExtractedData = () => {
+    // Reset form naar lege waarden
+    form.reset({
+      title: defaultTitle || "",
+      meeting_type: undefined,
+      start_at: new Date(),
+      start_time: "14:00",
+      location: "",
+      meeting_link: "",
     });
     
+    // Verwijder source file uit pendingFiles
+    if (sourceFile) {
+      setPendingFiles(prev => prev.filter(f => 
+        !(f.name === sourceFile.name && f.size === sourceFile.size)
+      ));
+    }
+    
+    // Clear extracted content
+    setExtractedContent(null);
+    setOriginalExtractedData(null);
+    setSourceFile(null);
     clearExtractedData();
-    toast.success("Gegevens toegepast", {
-      description: extractedData.agenda_items?.length 
-        ? `${extractedData.agenda_items.length} agenda items, ${decisionsToUse.length} beslissingen/acties, ${extractedData.action_items?.length || 0} action items`
-        : undefined
-    });
+    
+    toast.info("Extractie genegeerd, formulier gereset");
   };
 
   const onSubmit = async (values: CreateMeetingMinuteFormData) => {
@@ -275,6 +332,8 @@ export function CreateMeetingMinuteDialog({
       setPendingFiles([]);
       clearExtractedData();
       setExtractedContent(null);
+      setOriginalExtractedData(null);
+      setSourceFile(null);
     }
     onOpenChange(newOpen);
   };
@@ -323,13 +382,30 @@ export function CreateMeetingMinuteDialog({
           </p>
         </div>
 
-        {/* Show extracted data preview */}
-        {extractedData && (
-          <ExtractedDataPreview
-            data={extractedData}
-            onApply={applyExtractedData}
-            onCancel={clearExtractedData}
-          />
+        {/* Toon "AI-data toegepast" balk als data WEL is toegepast */}
+        {originalExtractedData && (
+          <div className="flex items-center gap-2 py-2 px-3 bg-muted/50 rounded-lg border">
+            <FileCheck className="h-4 w-4 text-primary" />
+            <span className="text-sm flex-1">AI-data toegepast</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={ignoreExtractedData}
+              disabled={isCreating || isUploading}
+            >
+              Negeren
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={reApplyExtractedData}
+              disabled={isCreating || isUploading}
+            >
+              Opnieuw toepassen
+            </Button>
+          </div>
         )}
 
         <Form {...form}>
