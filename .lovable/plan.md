@@ -1,250 +1,244 @@
 
+# Dashboard Agent: Uitgebreide Task Statistieken
 
-# UX Verbetering: Auto-fill en PDF als Bijlage
+## Situatie Analyse
 
-## Overzicht
+De huidige codebase heeft al:
+- **Dashboard pagina** op route "/" met basisstatistieken
+- **RecruitmentKPIs** component voor sollicitatie/plaatsing tellingen
+- **TodayFocusCard** voor focus items
+- **useTasksQuery** shared hook voor taken data
 
-Deze wijzigingen verbeteren de "Importeer van bestand" flow door:
-1. Formuliervelden automatisch in te vullen na AI extractie
-2. De geüploade PDF automatisch toe te voegen als bijlage
-3. De knoppen aan te passen voor een logischer workflow
+De vraag is voor een nieuwe /dashboard route met gedetailleerde taakstatistieken per medewerker en per bron (notule).
 
 ---
 
-## Wijziging 1: CreateMeetingMinuteDialog.tsx
+## Voorgestelde Aanpak
 
-### 1A. Nieuwe state voor originele extractie data
+**Optie A: Nieuwe pagina /dashboard naast bestaande "/"**
+- Nieuwe route /dashboard met uitgebreide statistieken
+- Bestaande "/" blijft "werkbord" met taken
+- Sidebar krijgt twee items: "Dashboard" (/dashboard) en "Werkbord" (/)
 
-Voeg een state toe om de originele extractie data te bewaren voor "Opnieuw toepassen":
+**Optie B: Uitbreiden bestaande Dashboard**
+- Voeg statistieken toe aan bestaande "/" pagina
+- Gebruik tabs of sectie voor "Overzicht" vs "Taken"
 
-```typescript
-// Naast bestaande state (rond regel 101)
-const [originalExtractedData, setOriginalExtractedData] = useState<ExtractedMeetingData | null>(null);
-const [sourceFile, setSourceFile] = useState<File | null>(null);
-```
+Gezien de requirements kies ik **Optie A** - een nieuwe dedicated statistieken pagina.
 
-### 1B. Wijzig handleAIImportFile voor auto-fill en bijlage
+---
 
-```typescript
-const handleAIImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  
-  const result = await extractFromFile(file);
-  
-  if (result) {
-    // Bewaar originele file voor bijlage
-    setSourceFile(file);
-    
-    // Bewaar originele extractie voor "Opnieuw toepassen"
-    setOriginalExtractedData(result);
-    
-    // Auto-fill formuliervelden
-    applyDataToForm(result);
-    
-    // Voeg PDF automatisch toe aan pendingFiles (voorkom duplicaten)
-    setPendingFiles(prev => {
-      const alreadyExists = prev.some(f => f.name === file.name && f.size === file.size);
-      if (alreadyExists) return prev;
-      return [...prev, file].slice(0, 5);
-    });
-    
-    toast.success("Document geanalyseerd", {
-      description: "Formulier ingevuld en bestand toegevoegd als bijlage"
-    });
-  }
-  
-  e.target.value = '';
-};
-```
+## Implementatie Plan
 
-### 1C. Extraheer form-fill logica naar herbruikbare functie
+### Fase 1: Hook `useDashboardStats`
+
+**Bestand**: `src/hooks/useDashboardStats.ts`
+
+Query's voor:
+- Totaal taken, open, compleet, verlopen tellingen
+- Breakdown per priority (CRITICAL, HIGH, MEDIUM, LOW)
+- Breakdown per assignee met progress
+- Breakdown per bron (source_meeting_minute_id)
+- Verlopen taken lijst (due_at < now() AND completed_at IS NULL)
+- Komende taken (due_at binnen 7 dagen)
 
 ```typescript
-const applyDataToForm = (data: ExtractedMeetingData) => {
-  // Form velden toepassen
-  if (data.title) form.setValue('title', data.title);
-  if (data.meeting_type) form.setValue('meeting_type', data.meeting_type);
-  if (data.meeting_date) {
-    form.setValue('start_at', new Date(data.meeting_date));
-  }
-  if (data.meeting_time) {
-    form.setValue('start_time', data.meeting_time);
-  }
-  if (data.location) form.setValue('location', data.location);
-  
-  // Fallback: als geen decisions, map action_items naar decisions format
-  const decisionsToUse = data.decisions && data.decisions.length > 0 
-    ? data.decisions 
-    : (data.action_items || []).map(a => ({
-        decision: a.action,
-        owner: a.assignee || null,
-        deadline: a.deadline || null
-      }));
-  
-  // Bewaar extracted content voor later gebruik bij submit
-  setExtractedContent({
-    agenda_items: data.agenda_items,
-    decisions: decisionsToUse,
-    content: [data.notes, data.summary].filter(Boolean).join('\n\n') || undefined,
-    participants: data.participants,
-    action_items: data.action_items,
-  });
-};
-```
-
-### 1D. Wijzig applyExtractedData naar reApplyExtractedData
-
-```typescript
-const reApplyExtractedData = () => {
-  if (!originalExtractedData) return;
-  applyDataToForm(originalExtractedData);
-  toast.success("Gegevens opnieuw toegepast");
-};
-```
-
-### 1E. Voeg ignoreExtractedData functie toe
-
-```typescript
-const ignoreExtractedData = () => {
-  // Reset form naar lege waarden
-  form.reset({
-    title: defaultTitle || "",
-    meeting_type: undefined,
-    start_at: new Date(),
-    start_time: "14:00",
-    location: "",
-    meeting_link: "",
-  });
-  
-  // Verwijder source file uit pendingFiles
-  if (sourceFile) {
-    setPendingFiles(prev => prev.filter(f => 
-      !(f.name === sourceFile.name && f.size === sourceFile.size)
-    ));
-  }
-  
-  // Clear extracted content
-  setExtractedContent(null);
-  setOriginalExtractedData(null);
-  setSourceFile(null);
-  clearExtractedData();
-  
-  toast.info("Extractie genegeerd, formulier gereset");
-};
-```
-
-### 1F. Wijzig dialog reset (useEffect en handleOpenChange)
-
-```typescript
-// In useEffect (open change)
-if (open) {
-  // ... bestaande reset
-  setOriginalExtractedData(null);
-  setSourceFile(null);
-}
-
-// In handleOpenChange
-if (!newOpen) {
-  // ... bestaande reset
-  setOriginalExtractedData(null);
-  setSourceFile(null);
+interface DashboardStats {
+  totalTasks: number;
+  completedTasks: number;
+  openTasks: number;
+  overdueTasks: number;
+  byStatus: { todo: number; in_progress: number; done: number; };
+  byPriority: { critical: number; high: number; medium: number; low: number; };
+  byAssignee: Array<{
+    userId: string;
+    userName: string;
+    total: number;
+    completed: number;
+    open: number;
+    overdue: number;
+  }>;
+  bySource: Array<{
+    sourceId: string | null;
+    sourceName: string;
+    total: number;
+    completed: number;
+    open: number;
+  }>;
+  overdueTasksList: Array<{
+    id: string;
+    title: string;
+    assignee: string | null;
+    dueDate: string;
+    daysOverdue: number;
+    sourceName: string | null;
+  }>;
+  upcomingTasks: Array<{
+    id: string;
+    title: string;
+    assignee: string | null;
+    dueDate: string;
+    daysUntil: number;
+  }>;
 }
 ```
 
-### 1G. Wijzig ExtractedDataPreview rendering
+### Fase 2: Context Hook `useDashboardContext`
 
-Toon alleen preview als er nog geen data is toegepast (extractedData bestaat maar originalExtractedData nog niet):
+**Bestand**: `src/hooks/useDashboardContext.ts`
 
+Wrapper hook met filter ondersteuning:
+
+```typescript
+export function useDashboardContext(filters?: {
+  sourceId?: string;
+  assigneeId?: string;
+  includeCompleted?: boolean;
+})
+```
+
+### Fase 3: Dashboard Componenten
+
+**Map**: `src/components/dashboard-stats/`
+
+| Component | Doel |
+|-----------|------|
+| `StatCards.tsx` | 4 KPI kaarten (Totaal, Open, Compleet, Verlopen) |
+| `AssigneeProgress.tsx` | Per medewerker met progress bars |
+| `SourceProgress.tsx` | Per bron (notule) met progress bars |
+| `OverdueTasksList.tsx` | Waarschuwingslijst verlopen taken |
+| `UpcomingTasksList.tsx` | Komende taken (7 dagen) |
+| `DashboardHeader.tsx` | Titel + filter dropdowns |
+
+### Fase 4: Pagina Component
+
+**Bestand**: `src/pages/DashboardStats.tsx`
+
+Layout met alle componenten in een grid:
+- Header met filters
+- 4 StatCards in een rij
+- Per Medewerker sectie
+- Per Bron sectie
+- Verlopen waarschuwingen
+- Komende taken
+
+### Fase 5: Routing & Navigatie
+
+**Updates**:
+
+1. `src/App.tsx` - Nieuwe route:
 ```tsx
-{/* Show extracted data preview - alleen als nog niet toegepast */}
-{extractedData && !originalExtractedData && (
-  <ExtractedDataPreview
-    data={extractedData}
-    onApply={/* wordt nu automatisch gedaan */}
-    onCancel={clearExtractedData}
-  />
-)}
+<Route path="/dashboard" element={<DashboardStats />} />
+```
 
-{/* Toon "Opnieuw toepassen" / "Negeren" knoppen als data WEL is toegepast */}
-{originalExtractedData && (
-  <div className="flex items-center gap-2 py-2 px-3 bg-muted/50 rounded-lg border">
-    <Sparkles className="h-4 w-4 text-primary" />
-    <span className="text-sm flex-1">AI-data toegepast</span>
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      onClick={ignoreExtractedData}
-    >
-      Negeren
-    </Button>
-    <Button
-      type="button"
-      variant="secondary"
-      size="sm"
-      onClick={reApplyExtractedData}
-    >
-      Opnieuw toepassen
-    </Button>
-  </div>
-)}
+2. `src/components/AppSidebar.tsx` - Sidebar item aanpassen:
+```typescript
+// Wijzig bestaande Dashboard item naar:
+{
+  title: "Dashboard",
+  url: "/dashboard",  // Nieuwe stats pagina
+  icon: LayoutDashboard,
+},
+// Bestaande "/" wordt "Werkbord":
+{
+  title: "Werkbord",
+  url: "/",
+  icon: Home,
+  badge: 'taskCount'
+},
 ```
 
 ---
 
-## Wijziging 2: ExtractedDataPreview.tsx (Optioneel)
+## Database Queries
 
-De ExtractedDataPreview component hoeft niet te worden aangepast omdat:
-- De preview wordt nu alleen getoond tijdens het extractie proces (vóór auto-apply)
-- Na auto-apply wordt een compactere balk getoond in de dialog zelf
+### Hoofd Query (alle taken met relaties)
 
-Echter, voor edge cases waar de gebruiker de extractie cancelt vóór auto-apply:
-
-```tsx
-// Knop tekst blijft "Toepassen" (wordt niet meer getoond na auto-apply)
+```sql
+SELECT 
+  t.id, t.title, t.priority, t.status,
+  t.due_at, t.completed_at, t.assignee_id,
+  t.source_meeting_minute_id,
+  p.name as assignee_name,
+  mm.task_id as minute_task_id,
+  mt.title as minute_title
+FROM tasks t
+LEFT JOIN profiles p ON t.assignee_id = p.id
+LEFT JOIN meeting_minutes mm ON t.source_meeting_minute_id = mm.id
+LEFT JOIN tasks mt ON mm.task_id = mt.id
+WHERE t.deleted_at IS NULL
 ```
 
----
+### Aggregatie in JavaScript
 
-## Samenvatting Wijzigingen
-
-| Bestand | Wijziging |
-|---------|-----------|
-| `CreateMeetingMinuteDialog.tsx` | Nieuwe states voor originele data en source file |
-| `CreateMeetingMinuteDialog.tsx` | `handleAIImportFile` roept auto-fill aan en voegt file toe |
-| `CreateMeetingMinuteDialog.tsx` | Nieuwe `applyDataToForm` herbruikbare functie |
-| `CreateMeetingMinuteDialog.tsx` | `reApplyExtractedData` voor "Opnieuw toepassen" |
-| `CreateMeetingMinuteDialog.tsx` | `ignoreExtractedData` reset naar lege velden |
-| `CreateMeetingMinuteDialog.tsx` | Conditonele rendering voor preview vs applied state |
-| `CreateMeetingMinuteDialog.tsx` | Reset extra states bij dialog close |
+Client-side aggregatie voor flexibiliteit:
+- Group by assignee_id → per medewerker stats
+- Group by source_meeting_minute_id → per bron stats
+- Filter due_at < now() → verlopen
+- Filter due_at in (now, now+7d) → komend
 
 ---
 
-## Flow Na Implementatie
+## UI Design
+
+### StatCards Layout
 
 ```text
-1. Gebruiker klikt "Importeer van bestand"
-2. Selecteert PDF
-3. AI extractie start (loading spinner)
-4. Extractie succesvol:
-   a. Formuliervelden worden AUTOMATISCH ingevuld
-   b. PDF wordt toegevoegd aan bijlagen preview
-   c. Toast: "Document geanalyseerd - Formulier ingevuld en bestand toegevoegd als bijlage"
-   d. Compacte balk toont: "AI-data toegepast" + [Negeren] [Opnieuw toepassen]
-5. Gebruiker kan:
-   - Velden handmatig aanpassen en opslaan
-   - "Negeren" → alles wordt gereset naar leeg
-   - "Opnieuw toepassen" → overschrijft handmatige wijzigingen met AI data
-6. Bij opslaan wordt PDF correct geüpload als bijlage
+┌─────────────┬─────────────┬─────────────┬─────────────┐
+│   Totaal    │    Open     │   Compleet  │   Verlopen  │
+│     42      │     28      │     14      │      3      │
+└─────────────┴─────────────┴─────────────┴─────────────┘
 ```
+
+### Per Medewerker Sectie
+
+```text
+┌────────────────────────────────────────────────────────┐
+│ Per Medewerker                                         │
+├────────────────────────────────────────────────────────┤
+│ 🟢 Jan de Vries        [████████████░░] 8/10  2 verlopen│
+│ 🔵 Maria Bakker        [██████████████] 6/6   0 verlopen│
+│ 🟡 Pieter Jansen       [██████░░░░░░░░] 4/12  1 verlopen│
+└────────────────────────────────────────────────────────┘
+```
+
+### Klikbare Navigatie
+
+- Klik op medewerker → /lijst?assignee=userId
+- Klik op bron → /notulen?id=sourceId
+- Klik op verlopen taak → /kanban/taskId
 
 ---
 
 ## Technische Details
 
-- Geen Edge Function wijzigingen nodig
-- Geen database wijzigingen nodig
-- Bestaande extractie logica in `useAIExtractMeeting.ts` blijft ongewijzigd
-- Bestaande upload logica in `useUploadAttachment.ts` blijft ongewijzigd
+### Bestanden Aangemaakt
 
+| Bestand | Beschrijving |
+|---------|--------------|
+| `src/hooks/useDashboardStats.ts` | Hoofd statistieken hook |
+| `src/hooks/useDashboardContext.ts` | Context hook met filters |
+| `src/pages/DashboardStats.tsx` | Nieuwe dashboard pagina |
+| `src/components/dashboard-stats/StatCards.tsx` | KPI kaarten |
+| `src/components/dashboard-stats/AssigneeProgress.tsx` | Per medewerker |
+| `src/components/dashboard-stats/SourceProgress.tsx` | Per bron |
+| `src/components/dashboard-stats/OverdueTasksList.tsx` | Verlopen taken |
+| `src/components/dashboard-stats/UpcomingTasksList.tsx` | Komende taken |
+
+### Bestanden Gewijzigd
+
+| Bestand | Wijziging |
+|---------|-----------|
+| `src/App.tsx` | Route /dashboard toevoegen |
+| `src/components/AppSidebar.tsx` | Sidebar item toevoegen |
+
+---
+
+## Samenvatting
+
+Deze implementatie voegt een dedicated Dashboard Agent pagina toe met:
+- Gedetailleerde taakstatistieken
+- Per medewerker en per bron breakdowns
+- Verlopen en komende taken overzichten
+- Klikbare navigatie naar gefilterde views
+- Exporteerbare hooks voor andere agents
