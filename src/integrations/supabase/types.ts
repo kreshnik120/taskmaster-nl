@@ -6653,6 +6653,63 @@ export type Database = {
           },
         ]
       }
+      whatsapp_media: {
+        Row: {
+          created_at: string
+          file_name: string
+          file_size_bytes: number | null
+          file_type: string
+          id: string
+          message_id: string
+          mime_type: string
+          org_id: string
+          storage_bucket: string
+          storage_path: string
+          storage_url: string | null
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          file_size_bytes?: number | null
+          file_type: string
+          id?: string
+          message_id: string
+          mime_type: string
+          org_id: string
+          storage_bucket?: string
+          storage_path: string
+          storage_url?: string | null
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          file_size_bytes?: number | null
+          file_type?: string
+          id?: string
+          message_id?: string
+          mime_type?: string
+          org_id?: string
+          storage_bucket?: string
+          storage_path?: string
+          storage_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_media_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_media_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_messages: {
         Row: {
           chat_id: string
