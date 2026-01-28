@@ -1,74 +1,98 @@
 
 
-# Fix: Expliciete JWT Token aan getUser() meegeven
+# Fix: WhatsApp Bridge Error Handling & VPS Sessie
 
-## Probleem
+## Huidige status
 
-De Edge Function logs tonen:
+De **authenticatie is nu correct** - beide methodes werken:
+- API Key authenticatie: `✅ Auth: API Key`
+- JWT authenticatie: `✅ Authenticated: k.atashi@citozorg.nl`
+
+## Gevonden problemen
+
+### Probleem 1: VPS "Session not found" (geen code fix nodig)
+
 ```
-[6688e2e6] ❌ Auth error: Auth session missing!
+VPS error: 500 - {"error":"Session not found"}
 ```
 
-**Root cause:** De huidige code roept `supabaseAuth.auth.getUser()` aan zonder argument. In een stateless Edge Function omgeving is er geen "sessie" - de JWT moet **expliciet** worden meegegeven.
+De WhatsApp sessie op de VPS server is niet actief. De `WHATSAPP_VPS_SESSION_ID` verwijst naar een sessie die:
+- Niet bestaat
+- Is verlopen
+- WhatsApp is uitgelogd
 
-## Huidige code (regel 66)
+**Actie:** De VPS moet opnieuw worden verbonden met WhatsApp Web. Dit is een operationele taak, geen code fix.
+
+### Probleem 2: "[object Object]" error in handleSessionConnected
+
+De error handling gooit database errors als object in plaats van als Error, waardoor de foutmelding onduidelijk is.
+
+**Locatie:** `supabase/functions/whatsapp-bridge/index.ts` regel 346
+
+**Huidige code:**
+```typescript
+if (error) throw error;  // error is een object, geen Error
+```
+
+**Fix:** Verbeter error handling om database errors correct te verwerken:
 
 ```typescript
-const { data: { user }, error: authError } = await supabaseAuth.auth.getUser();
-```
-
-Dit zoekt naar een bestaande sessie, die er niet is in Deno.
-
-## Oplossing
-
-Geef de JWT token direct mee aan `getUser()`:
-
-```typescript
-const token = authHeader!.replace('Bearer ', '');
-const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(token);
-```
-
-## Volledige wijziging
-
-**Bestand:** `supabase/functions/whatsapp-bridge/index.ts`
-
-**Regels 64-66 worden:**
-
-```typescript
-      );
-      
-      const token = authHeader!.replace('Bearer ', '');
-      const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(token);
-```
-
-## Waarom dit werkt
-
-| Methode | Gedrag |
-|---------|--------|
-| `getUser()` (zonder arg) | Zoekt naar actieve sessie → "Auth session missing!" in stateless omgeving |
-| `getUser(token)` | Valideert de meegegeven JWT → Werkt in Edge Functions |
-
-## Alternatieve optie
-
-Als `getUser(token)` nog steeds problemen geeft, kun je ook `getClaims(token)` gebruiken:
-
-```typescript
-const token = authHeader!.replace('Bearer ', '');
-const { data, error: authError } = await supabaseAuth.auth.getClaims(token);
-
-if (authError || !data?.claims) {
-  return new Response(..., { status: 401 });
+if (error) {
+  console.error(`[${requestId}] DB error:`, JSON.stringify(error));
+  throw new Error(`Database error: ${error.message || error.code || 'Unknown'}`);
 }
-
-const userId = data.claims.sub;
-const userEmail = data.claims.email;
 ```
 
-Dit is de aanbevolen methode voor Edge Functions volgens de Supabase documentatie.
+## Wijzigingen
 
-## Bestand
+| Bestand | Regel | Actie |
+|---------|-------|-------|
+| `supabase/functions/whatsapp-bridge/index.ts` | 346, 362, 393 | Fix error handling in alle handlers |
 
-| Bestand | Actie |
-|---------|-------|
-| `supabase/functions/whatsapp-bridge/index.ts` | Regel 66: voeg token argument toe aan getUser() |
+## Volledige wijzigingen
+
+### handleSessionConnected (regel 346)
+
+```typescript
+// Oud:
+if (error) throw error;
+
+// Nieuw:
+if (error) {
+  console.error(`[${requestId}] DB error:`, JSON.stringify(error));
+  throw new Error(`Database error: ${error.message || error.code || 'Unknown'}`);
+}
+```
+
+### handleSessionDisconnected (regel 362)
+
+```typescript
+// Oud:
+if (error) throw error;
+
+// Nieuw:
+if (error) {
+  console.error(`[${requestId}] DB error:`, JSON.stringify(error));
+  throw new Error(`Database error: ${error.message || error.code || 'Unknown'}`);
+}
+```
+
+### handleSessionQR (regel 393)
+
+```typescript
+// Oud:
+if (error) throw error;
+
+// Nieuw:
+if (error) {
+  console.error(`[${requestId}] DB error:`, JSON.stringify(error));
+  throw new Error(`Database error: ${error.message || error.code || 'Unknown'}`);
+}
+```
+
+## Samenvatting
+
+1. **Authenticatie:** Werkt correct
+2. **Error handling:** Kleine code fix nodig voor duidelijkere foutmeldingen
+3. **VPS Sessie:** Moet opnieuw worden verbonden (operationele actie, niet in Lovable)
 
