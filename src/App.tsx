@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -72,8 +71,9 @@ const GlobalServicesMounter = () => {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <Toaster />
-      <Sonner />
+      <div id="sonner-container">
+        <Sonner />
+      </div>
       <BrowserRouter>
         <GlobalServicesMounter />
         <Routes>
