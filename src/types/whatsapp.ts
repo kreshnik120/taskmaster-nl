@@ -29,6 +29,20 @@ export interface WhatsAppContact {
   updated_at: string;
 }
 
+export interface WhatsAppMedia {
+  id: string;
+  org_id: string;
+  message_id: string;
+  file_name: string;
+  file_type: string;
+  file_size_bytes: number | null;
+  mime_type: string;
+  storage_bucket: string;
+  storage_path: string;
+  storage_url: string | null;
+  created_at: string;
+}
+
 export interface WhatsAppMessage {
   id: string;
   org_id: string;
@@ -41,6 +55,7 @@ export interface WhatsAppMessage {
   sent_at: string;
   status: 'pending' | 'sent' | 'delivered' | 'read' | 'received';
   created_at: string;
+  media?: WhatsAppMedia[];
 }
 
 export interface MessageGroup {

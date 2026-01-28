@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { decode as base64Decode } from "https://deno.land/std@0.177.0/encoding/base64.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,11 +8,19 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+interface MediaData {
+  base64: string;
+  mimetype: string;
+  filename: string;
+  filesize: number;
+}
+
 interface WhatsAppEvent {
   event: string;
   sessionId: string;
   orgId: string;
   data: Record<string, unknown>;
+  media?: MediaData;
 }
 
 // deno-lint-ignore no-explicit-any
@@ -82,9 +91,9 @@ Deno.serve(async (req) => {
 
     // 2. Parse request body
     const body: WhatsAppEvent = await req.json();
-    const { event, sessionId, orgId, data } = body;
+    const { event, sessionId, orgId, data, media } = body;
 
-    console.log(`[${requestId}] Event: ${event}, Session: ${sessionId}, Org: ${orgId}`);
+    console.log(`[${requestId}] Event: ${event}, Session: ${sessionId}, Org: ${orgId}${media ? ', has media' : ''}`);
 
     if (!event || !sessionId || !orgId) {
       return new Response(
@@ -119,7 +128,7 @@ Deno.serve(async (req) => {
 
     switch (event) {
       case "message.received":
-        result = await handleMessageReceived(supabase, sessionId, orgId, data, requestId);
+        result = await handleMessageReceived(supabase, sessionId, orgId, data, media, requestId);
         break;
 
       case "message.sent":
@@ -176,6 +185,7 @@ async function handleMessageReceived(
   sessionId: string,
   orgId: string,
   data: Record<string, unknown>,
+  media: MediaData | undefined,
   requestId: string
 ): Promise<Record<string, unknown>> {
   const { messageId, chatJid, from, fromName, body, timestamp, type } = data as {
@@ -229,7 +239,53 @@ async function handleMessageReceived(
     throw messageError;
   }
 
-  // 5. Update chat with last message info
+  // 5. Handle media upload if present
+  if (media && media.base64) {
+    try {
+      const storagePath = `${orgId}/${sessionId}/${messageId}/${media.filename}`;
+      const fileBuffer = base64Decode(media.base64);
+
+      console.log(`[${requestId}] Uploading media: ${media.filename} (${media.filesize} bytes)`);
+
+      const { error: uploadError } = await supabase.storage
+        .from('whatsapp-media')
+        .upload(storagePath, fileBuffer, {
+          contentType: media.mimetype,
+          upsert: false,
+        });
+
+      if (uploadError) {
+        console.error(`[${requestId}] Media upload error:`, uploadError);
+      } else {
+        const { data: urlData } = supabase.storage
+          .from('whatsapp-media')
+          .getPublicUrl(storagePath);
+
+        // Save to whatsapp_media table
+        const { error: mediaDbError } = await supabase.from('whatsapp_media').insert({
+          org_id: orgId,
+          message_id: message.id,
+          file_name: media.filename,
+          file_type: type || 'image',
+          file_size_bytes: media.filesize,
+          mime_type: media.mimetype,
+          storage_bucket: 'whatsapp-media',
+          storage_path: storagePath,
+          storage_url: urlData.publicUrl,
+        });
+
+        if (mediaDbError) {
+          console.error(`[${requestId}] Media DB error:`, mediaDbError);
+        } else {
+          console.log(`[${requestId}] ✅ Media stored: ${storagePath}`);
+        }
+      }
+    } catch (mediaErr) {
+      console.error(`[${requestId}] Media processing error:`, mediaErr);
+    }
+  }
+
+  // 6. Update chat with last message info
   await supabase
     .from("whatsapp_chats")
     .update({
