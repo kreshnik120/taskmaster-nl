@@ -1,4 +1,4 @@
-import { Home, Kanban, List, Calendar, Clock, BarChart3, Trash2, CheckCircle2, Brain, Users, ChevronDown, ChevronUp, Briefcase, Building2, Link2, LogOut, RefreshCw, Archive, Paperclip, FileText } from "lucide-react";
+import { Home, Kanban, List, Calendar, Clock, BarChart3, Trash2, CheckCircle2, Brain, Users, ChevronDown, ChevronUp, Briefcase, Building2, Link2, LogOut, RefreshCw, Archive, Paperclip, FileText, LayoutDashboard } from "lucide-react";
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarFooter } from "@/components/ui/sidebar";
@@ -34,6 +34,10 @@ const menuGroups: MenuGroup[] = [{
   defaultOpen: true,
   items: [{
     title: "Dashboard",
+    url: "/dashboard",
+    icon: LayoutDashboard
+  }, {
+    title: "Werkbord",
     url: "/",
     icon: Home,
     badge: 'taskCount'

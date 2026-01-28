@@ -8,6 +8,7 @@ import { NotificationService } from "@/components/NotificationService";
 import { ChatWidget } from "@/components/AIAssistant/ChatWidget";
 import { supabase } from "@/integrations/supabase/client";
 import Dashboard from "./pages/Dashboard";
+import DashboardStats from "./pages/DashboardStats";
 import Auth from "./pages/Auth";
 import Bijlagen from "./pages/Bijlagen";
 import Notulen from "./pages/Notulen";
@@ -85,6 +86,7 @@ const App = () => (
           {/* All authenticated routes wrapped in Layout */}
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/dashboard" element={<DashboardStats />} />
             <Route path="/kanban/:taskId?" element={<Kanban />} />
             <Route path="/lijst" element={<Lijst />} />
             <Route path="/kalender" element={<Kalender />} />
