@@ -1,98 +1,102 @@
 
 
-# Plan: WhatsApp Bridge API Key Creatie
+# Fix: WhatsApp UI Toont Geen Berichten
 
-## Overzicht
+## Probleem Gevonden
 
-Dit plan creëert een dedicated API key voor de WhatsApp Bridge integratie, gescheiden van de algemene CITOZORG_API_KEY.
-
----
-
-## Stappen
-
-### 1. Nieuwe API Key Genereren
-
-Ik genereer een cryptografisch veilige 64-karakter hexadecimale key:
+De gebruiker k.atashi is lid van **2 organisaties** (ABCzorg en CitoZorg), maar de WhatsApp hooks gebruiken `.single()` op `user_organizations`. Dit veroorzaakt HTTP 406 errors:
 
 ```
-wa_bridge_f8c2e9a7d3b1054e6f9c8a2b5d7e0f3a1b4c6d8e9f0a2b3c4d5e6f7a8b9c0d1e
+"The result contains 2 rows"  
+"Cannot coerce the result to a single JSON object"
 ```
 
-*(Format: `wa_bridge_` prefix + 64 hex karakters voor identificatie)*
+## Database Status
 
----
+| Tabel | Records | Status |
+|-------|---------|--------|
+| whatsapp_chats | 4 | Data aanwezig |
+| whatsapp_messages | 4 | Data aanwezig |
+| whatsapp_contacts | 4 | Data aanwezig |
+| RLS policies | Correct | Geen blokkade |
 
-### 2. Secret Toevoegen
-
-Voeg nieuwe secret toe aan Supabase:
-- **Naam:** `WHATSAPP_BRIDGE_API_KEY`
-- **Waarde:** De gegenereerde key
-
----
-
-### 3. Edge Function Updaten
-
-**Bestand:** `supabase/functions/whatsapp-bridge/index.ts`
-
-**Wijziging (regel 34):**
+## Root Cause
 
 ```typescript
-// VAN:
-const expectedKey = Deno.env.get("CITOZORG_API_KEY");
-
-// NAAR:
-const expectedKey = Deno.env.get("WHATSAPP_BRIDGE_API_KEY");
+// useWhatsAppChats.ts, regel 34-38
+const { data: userOrg } = await supabase
+  .from('user_organizations')
+  .select('org_id')
+  .eq('user_id', user.id)
+  .single();  // ❌ FAALT bij 2+ organisaties
 ```
 
----
+## Oplossing
 
-### 4. Gegevens voor VPS Configuratie
+Vervang `.single()` door `.limit(1).maybeSingle()` of haal alle org_ids op en query chats voor ALLE organisaties van de gebruiker.
 
-Na implementatie krijg je:
+### Optie A: Eerste org gebruiken (snelle fix)
 
-| Item | Waarde |
-|------|--------|
-| **API Key** | `wa_bridge_f8c2e9a7d3b1054e6f9c8a2b5d7e0f3a1b4c6d8e9f0a2b3c4d5e6f7a8b9c0d1e` |
-| **Test org_id (ABCzorg)** | `550e8400-e29b-41d4-a716-446655440000` |
-| **Test org_id (CitoZorg)** | `650e8400-e29b-41d4-a716-446655440001` |
-| **Endpoint** | `https://oelmsmcgryeoryhonexw.supabase.co/functions/v1/whatsapp-bridge` |
-
----
-
-### 5. VPS Test Command
-
-```bash
-curl -X POST \
-  'https://oelmsmcgryeoryhonexw.supabase.co/functions/v1/whatsapp-bridge' \
-  -H 'Content-Type: application/json' \
-  -H 'x-api-key: wa_bridge_f8c2e9a7d3b1054e6f9c8a2b5d7e0f3a1b4c6d8e9f0a2b3c4d5e6f7a8b9c0d1e' \
-  -d '{
-    "event": "session.connected",
-    "sessionId": "test-session-001",
-    "orgId": "550e8400-e29b-41d4-a716-446655440000",
-    "data": {
-      "phoneNumber": "+31612345678"
-    }
-  }'
+```typescript
+const { data: userOrg } = await supabase
+  .from('user_organizations')
+  .select('org_id')
+  .eq('user_id', user.id)
+  .limit(1)
+  .maybeSingle();
 ```
 
----
+### Optie B: Alle orgs tonen (betere UX)
 
-## Wijzigingen Samenvatting
+```typescript
+// Haal alle org_ids op
+const { data: userOrgs } = await supabase
+  .from('user_organizations')
+  .select('org_id')
+  .eq('user_id', user.id);
 
-| # | Actie | Details |
-|---|-------|---------|
-| 1 | Secret toevoegen | `WHATSAPP_BRIDGE_API_KEY` |
-| 2 | Edge function update | 1 regel wijzigen (regel 34) |
+const orgIds = userOrgs?.map(o => o.org_id) ?? [];
 
-**Impact:** Alleen de WhatsApp Bridge gebruikt deze nieuwe key. Andere functies die CITOZORG_API_KEY gebruiken blijven werken.
+// Query chats voor alle orgs
+const { data } = await supabase
+  .from('whatsapp_chats')
+  .select(`*, contact:whatsapp_contacts!contact_id (*)`)
+  .in('org_id', orgIds)  // ✅ Alle organisaties
+  .order('last_message_at', { ascending: false });
+```
 
----
+## Bestanden te Wijzigen
 
-## Acceptatie Criteria
+| # | Bestand | Wijziging |
+|---|---------|-----------|
+| 1 | `src/hooks/whatsapp/useWhatsAppChats.ts` | Vervang `.single()` door multi-org query |
+| 2 | `src/hooks/whatsapp/useWhatsAppUnreadCount.ts` | Vervang `.single()` door multi-org query |
+| 3 | `src/hooks/whatsapp/useWhatsAppMessages.ts` | Controleren en eventueel fixen |
 
-- [ ] Nieuwe secret `WHATSAPP_BRIDGE_API_KEY` bestaat
-- [ ] Edge function gebruikt nieuwe key
-- [ ] Test curl command retourneert success
-- [ ] Oude CITOZORG_API_KEY blijft bestaan (voor andere functies)
+## Aanbeveling
+
+Ik raad **Optie B** aan: toon chats van ALLE organisaties waar de gebruiker lid van is. Dit geeft een betere gebruikerservaring en voorkomt dat berichten "verdwijnen".
+
+## Implementatie Stappen
+
+1. Update `useWhatsAppChats.ts`:
+   - Haal alle org_ids op met array query
+   - Gebruik `.in('org_id', orgIds)` filter
+
+2. Update `useWhatsAppUnreadCount.ts`:
+   - Som unread counts van alle organisaties
+
+3. Update `useWhatsAppMessages.ts`:
+   - Verwijder `.single()` indien aanwezig
+
+4. Test:
+   - Verifieer dat alle 4 chats verschijnen
+   - Verifieer unread badge in sidebar
+
+## Verwachte Resultaat
+
+Na de fix ziet k.atashi:
+- 3 chats van ABCzorg
+- 1 chat van CitoZorg
+- Totaal 4 unread berichten in sidebar badge
 
