@@ -664,7 +664,7 @@ async function getOrCreateSession(
   orgId: string,
   requestId: string
 ) {
-  // Try to find existing session
+  // 1. Try to find existing session by ID
   const { data: existing } = await supabase
     .from("whatsapp_sessions")
     .select("id, phone_number")
@@ -673,7 +673,41 @@ async function getOrCreateSession(
 
   if (existing) return existing;
 
-  // Create new session
+  // 2. Check if there's an existing session with same org_id and phone_number="unknown"
+  const { data: existingUnknown } = await supabase
+    .from("whatsapp_sessions")
+    .select("id, phone_number")
+    .eq("org_id", orgId)
+    .eq("phone_number", "unknown")
+    .single();
+
+  if (existingUnknown) {
+    // Delete old session first, then create new one (can't update primary key)
+    console.log(`[${requestId}] Replacing existing unknown session: ${existingUnknown.id} -> ${sessionId}`);
+    
+    await supabase
+      .from("whatsapp_sessions")
+      .delete()
+      .eq("id", existingUnknown.id);
+    
+    const { data: newSession, error } = await supabase
+      .from("whatsapp_sessions")
+      .insert({
+        id: sessionId,
+        org_id: orgId,
+        phone_number: "unknown",
+        session_status: "connected",
+      })
+      .select("id, phone_number")
+      .single();
+
+    if (error) {
+      throw new Error(`Session creation failed: ${formatError(error)}`);
+    }
+    return newSession;
+  }
+
+  // 3. Create new session
   console.log(`[${requestId}] Creating new session: ${sessionId}`);
   const { data: newSession, error } = await supabase
     .from("whatsapp_sessions")
