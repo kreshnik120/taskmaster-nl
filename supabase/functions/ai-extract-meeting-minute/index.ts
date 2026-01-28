@@ -89,6 +89,106 @@ async function loadMammothLibrary() {
   return mammothLib;
 }
 
+// ============================================================
+// B-303 FIX: Retry helper with timeout and exponential backoff
+// ============================================================
+async function fetchAIWithRetry(
+  url: string,
+  options: RequestInit,
+  timeoutMs = 60000,
+  maxRetries = 3
+): Promise<Response> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    
+    try {
+      console.log(`🔄 [AI] Attempt ${attempt}/${maxRetries}...`);
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      
+      // Retry on transient errors (502, 503, 504)
+      if (response.status === 502 || response.status === 503 || response.status === 504) {
+        throw new Error(`Transient error (${response.status})`);
+      }
+      
+      console.log(`✅ [AI] Attempt ${attempt} succeeded with status ${response.status}`);
+      return response;
+    } catch (error: any) {
+      clearTimeout(timeout);
+      lastError = error;
+      
+      if (error.name === 'AbortError') {
+        console.warn(`⚠️ [AI] Attempt ${attempt}/${maxRetries} timed out after ${timeoutMs}ms`);
+      } else {
+        console.warn(`⚠️ [AI] Attempt ${attempt}/${maxRetries} failed: ${error.message}`);
+      }
+      
+      if (attempt < maxRetries) {
+        const delayMs = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+        console.log(`⏳ Retrying in ${delayMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+  
+  throw lastError || new Error('AI request failed after retries');
+}
+
+// ============================================================
+// B-303 FIX: JSON completeness validation
+// ============================================================
+function validateJsonCompleteness(jsonStr: string): { valid: boolean; issue?: string } {
+  // Count opening and closing brackets
+  const openBrackets = (jsonStr.match(/\[/g) || []).length;
+  const closeBrackets = (jsonStr.match(/\]/g) || []).length;
+  const openBraces = (jsonStr.match(/\{/g) || []).length;
+  const closeBraces = (jsonStr.match(/\}/g) || []).length;
+  
+  if (openBrackets !== closeBrackets) {
+    return { valid: false, issue: `Incomplete arrays: ${openBrackets} [ vs ${closeBrackets} ]` };
+  }
+  if (openBraces !== closeBraces) {
+    return { valid: false, issue: `Incomplete objects: ${openBraces} { vs ${closeBraces} }` };
+  }
+  
+  // Check for truncation indicators
+  if (jsonStr.includes('...') && !jsonStr.includes('"..."')) {
+    return { valid: false, issue: 'Response contains truncation indicators (...)' };
+  }
+  
+  return { valid: true };
+}
+
+// ============================================================
+// B-303 FIX: Log extraction statistics for consistency monitoring
+// ============================================================
+function logExtractionStats(data: ExtractedMeetingData, method: string): void {
+  const itemCounts = {
+    participants: data.participants.length,
+    agenda_items: data.agenda_items.length,
+    decisions: data.decisions.length,
+    action_items: data.action_items.length,
+  };
+
+  console.log(`📊 [EXTRACTION-STATS] Method: ${method} | Items extracted: ` + 
+    `participants=${itemCounts.participants}, ` +
+    `agenda=${itemCounts.agenda_items}, ` +
+    `decisions=${itemCounts.decisions}, ` +
+    `actions=${itemCounts.action_items}`);
+
+  // Warn if suspiciously low item count (potential truncation)
+  const totalItems = Object.values(itemCounts).reduce((a, b) => a + b, 0);
+  if (totalItems < 5 && data.summary) {
+    console.warn(`⚠️ [CONSISTENCY-WARNING] Low item count (${totalItems}) despite content presence. Possible truncation.`);
+  }
+}
+
 // Text extraction from binary files (Word and Text only - PDF uses Gemini multimodal)
 async function extractTextFromFile(
   base64Content: string,
@@ -196,6 +296,17 @@ function repairAndParse(jsonStr: string): ExtractedMeetingData {
   return JSON.parse(repaired);
 }
 
+// B-303 FIX: Enhanced parsing with completeness validation
+function parseAndValidate(jsonStr: string): ExtractedMeetingData {
+  const validation = validateJsonCompleteness(jsonStr);
+  if (!validation.valid) {
+    console.warn(`⚠️ JSON completeness issue: ${validation.issue}`);
+    throw new Error(`Incomplete JSON: ${validation.issue}`);
+  }
+  
+  return repairAndParse(jsonStr);
+}
+
 // Default empty result
 function getEmptyResult(): ExtractedMeetingData {
   return {
@@ -218,6 +329,17 @@ function getEmptyResult(): ExtractedMeetingData {
   };
 }
 
+// B-303 FIX: Completeness prompt addition
+const COMPLETENESS_INSTRUCTION = `
+
+CRITICAL COMPLETENESS REQUIREMENTS:
+- Extract ALL items found in the document without exception
+- Do NOT filter, summarize, abbreviate, or skip any items
+- Include every single participant, action_item, decision, and agenda_item even if similar
+- If the document has 50 items, return all 50 items
+- Never truncate or limit your output based on perceived relevance
+- Always complete all arrays fully before closing the JSON object`;
+
 // Gemini multimodal PDF analysis - sends PDF directly to Gemini
 async function analyzeWithGeminiMultimodal(
   base64Content: string,
@@ -226,7 +348,7 @@ async function analyzeWithGeminiMultimodal(
   console.log('📄 [Gemini Multimodal] Analyzing PDF directly...');
   
   try {
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetchAIWithRetry("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -365,13 +487,15 @@ BELANGRIJKE INSTRUCTIES:
    - Retourneer ALLEEN de JSON, geen markdown of uitleg
    - Gebruik Nederlandse teksten waar van toepassing
    - Bij ontbrekende informatie: null of lege array
-   - meeting_type moet exact een van deze waarden zijn: team, board, project, klant, overig`
+   - meeting_type moet exact een van deze waarden zijn: team, board, project, klant, overig
+${COMPLETENESS_INSTRUCTION}`
               }
             ]
           }
         ],
         response_format: { type: "json_object" },
         temperature: 0.1,
+        max_tokens: 8192,
       }),
     });
 
@@ -393,7 +517,7 @@ BELANGRIJKE INSTRUCTIES:
     const content = aiResult.choices?.[0]?.message?.content || '';
     console.log('✅ [Gemini Multimodal] Response received');
 
-    // Parse with robust fallback
+    // Parse with robust fallback and validation
     const sanitized = sanitizeAIContent(content);
     const jsonStr = extractJsonObject(sanitized);
     if (!jsonStr) {
@@ -401,7 +525,7 @@ BELANGRIJKE INSTRUCTIES:
       return { data: null, error: 'Kon PDF analyse resultaat niet verwerken' };
     }
     
-    const extractedData = repairAndParse(jsonStr);
+    const extractedData = parseAndValidate(jsonStr);
     
     // Normalize result with Fase 7C fields
     const normalizedData: ExtractedMeetingData = {
@@ -449,6 +573,9 @@ BELANGRIJKE INSTRUCTIES:
       }
     };
 
+    // B-303 FIX: Log extraction statistics
+    logExtractionStats(normalizedData, 'gemini-multimodal');
+    
     console.log(`✅ [Gemini Multimodal] Extracted: title="${normalizedData.title}", confidence=${normalizedData.confidence_scores.overall}%`);
     return { data: normalizedData };
     
@@ -525,7 +652,8 @@ BELANGRIJK:
 REGELS:
 - Retourneer ALLEEN de JSON, geen markdown
 - Bij ontbrekende informatie: null of lege array
-- meeting_type: team, board, project, klant, of overig`;
+- meeting_type: team, board, project, klant, of overig
+${COMPLETENESS_INSTRUCTION}`;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -607,7 +735,7 @@ serve(async (req) => {
       const truncatedText = extraction.text.substring(0, 50000);
       console.log(`📄 [ai-extract-meeting-minute] Processing ${truncatedText.length} characters via ${extraction.method}`);
 
-      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      const response = await fetchAIWithRetry("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${LOVABLE_API_KEY}`,
@@ -621,6 +749,7 @@ serve(async (req) => {
           ],
           response_format: { type: "json_object" },
           temperature: 0.1,
+          max_tokens: 8192,
         }),
       });
 
@@ -661,13 +790,13 @@ serve(async (req) => {
       const content = aiResult.choices?.[0]?.message?.content || '';
       console.log(`✅ [ai-extract-meeting-minute] AI response received`);
 
-      // Parse with robust fallback
+      // Parse with robust fallback and validation
       let extractedData: ExtractedMeetingData;
       try {
         const sanitized = sanitizeAIContent(content);
         const jsonStr = extractJsonObject(sanitized);
         if (!jsonStr) throw new Error('No JSON found');
-        extractedData = repairAndParse(jsonStr);
+        extractedData = parseAndValidate(jsonStr);
         
         // Validate and ensure all required fields exist
         extractedData = {
@@ -715,6 +844,9 @@ serve(async (req) => {
           }
         };
         
+        // B-303 FIX: Log extraction statistics
+        logExtractionStats(extractedData, extraction.method);
+        
         console.log(`✅ [ai-extract-meeting-minute] Extracted: title="${extractedData.title}", confidence=${extractedData.confidence_scores.overall}%`);
       } catch (parseError) {
         console.error("JSON parse error:", parseError);
@@ -749,7 +881,7 @@ serve(async (req) => {
     const truncatedText = textToAnalyze.substring(0, 50000);
     console.log(`📄 [ai-extract-meeting-minute] Processing ${truncatedText.length} characters via direct text`);
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetchAIWithRetry("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
@@ -763,6 +895,7 @@ serve(async (req) => {
         ],
         response_format: { type: "json_object" },
         temperature: 0.1,
+        max_tokens: 8192,
       }),
     });
 
@@ -803,13 +936,13 @@ serve(async (req) => {
     const content = aiResult.choices?.[0]?.message?.content || '';
     console.log(`✅ [ai-extract-meeting-minute] AI response received`);
 
-    // Parse with robust fallback
+    // Parse with robust fallback and validation
     let extractedData: ExtractedMeetingData;
     try {
       const sanitized = sanitizeAIContent(content);
       const jsonStr = extractJsonObject(sanitized);
       if (!jsonStr) throw new Error('No JSON found');
-      extractedData = repairAndParse(jsonStr);
+      extractedData = parseAndValidate(jsonStr);
       
       // Validate and ensure all required fields exist
       extractedData = {
@@ -856,6 +989,9 @@ serve(async (req) => {
           overall: extractedData.confidence_scores?.overall || 0
         }
       };
+      
+      // B-303 FIX: Log extraction statistics
+      logExtractionStats(extractedData, 'direct');
       
       console.log(`✅ [ai-extract-meeting-minute] Extracted: title="${extractedData.title}", confidence=${extractedData.confidence_scores.overall}%`);
     } catch (parseError) {
