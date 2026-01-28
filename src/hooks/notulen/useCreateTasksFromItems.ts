@@ -256,7 +256,7 @@ export function useCreateTasksFromItems() {
       // Serialize ai_context to plain JSON objects for Supabase
       const tasksToInsert = processedItems.map(({ item, assigneeMatch }) => ({
         org_id: userOrg.org_id,
-        title: item.action.substring(0, 100),
+        title: (item.action || 'Taak uit notule').substring(0, 100),
         description: generateTaskDescription(item, meetingMinuteForDesc),
         priority: mapPriority(item.urgency) as 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW',
         due_at: item.deadline ? new Date(item.deadline).toISOString() : null,

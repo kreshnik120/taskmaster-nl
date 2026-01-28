@@ -281,7 +281,10 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, de
       setPendingFiles([]);
       setExistingAttachments([]);
     } catch (error: any) {
-      toast.error("Fout: " + error.message);
+      console.error('[TaskDialog] Create/update task error:', error);
+      toast.error("Fout bij opslaan taak", { 
+        description: error?.message || 'Onbekende fout - probeer de pagina te herladen' 
+      });
     } finally {
       setLoading(false);
     }
