@@ -8,23 +8,23 @@ export function useWhatsAppUnreadCount() {
   const { data: unreadCount = 0 } = useQuery({
     queryKey: ['whatsapp-unread-total'],
     queryFn: async () => {
-      // Get user's org_id first
+      // Get user's org_ids (user can be member of multiple orgs)
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return 0;
 
-      const { data: userOrg } = await supabase
+      const { data: userOrgs } = await supabase
         .from('user_organizations')
         .select('org_id')
-        .eq('user_id', user.id)
-        .single();
+        .eq('user_id', user.id);
 
-      if (!userOrg?.org_id) return 0;
+      const orgIds = userOrgs?.map(o => o.org_id) ?? [];
+      if (orgIds.length === 0) return 0;
 
-      // Sum all unread counts for the org
+      // Sum all unread counts for all user's orgs
       const { data: chats } = await supabase
         .from('whatsapp_chats')
         .select('unread_count')
-        .eq('org_id', userOrg.org_id)
+        .in('org_id', orgIds)
         .gt('unread_count', 0);
 
       return chats?.reduce((sum, chat) => sum + (chat.unread_count || 0), 0) ?? 0;
