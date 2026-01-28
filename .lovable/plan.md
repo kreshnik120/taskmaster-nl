@@ -1,182 +1,195 @@
 
-# Fix: AI Prompts Uitbreiden met Fase 7D Extractie
+# Fix: Notule Verwijderen met Audit Trail
 
-## Probleem
+## Probleem Analyse
 
-De Edge Function `ai-extract-meeting-minute/index.ts` heeft de juiste interface voor Fase 7D velden, maar de AI prompts instrueren het model niet om deze velden te extraheren.
+De huidige `useDeleteMeetingMinute` hook faalt wanneer taken gekoppeld zijn via `source_meeting_minute_id` door een foreign key constraint. Daarnaast wordt de foutmelding niet specifiek getoond ("Onbekende fout").
 
----
-
-## Wijzigingen Overzicht
-
-| Locatie | Regels | Wijziging |
-|---------|--------|-----------|
-| Multimodal prompt | 250-326 | Uitbreiden met Fase 7D instructies |
-| System prompt | 414-457 | Uitbreiden met Fase 7D instructies |
-| Normalisatie (multimodal) | 374-384 | Map nieuwe velden |
-| Normalisatie (text) | 601-611 | Map nieuwe velden |
-| Normalisatie (direct) | 724-734 | Map nieuwe velden |
+**Huidige Code Problemen:**
+1. De hook probeert direct de meeting minute te verwijderen zonder eerst gekoppelde taken te ontkoppelen
+2. Foreign key `tasks_source_meeting_minute_id_fkey` blokkeert de delete
+3. Error handling is te generiek
 
 ---
 
-## Stap 1: Update Multimodal Prompt (PDF analyse)
+## Implementatie Plan
 
-**Locatie:** Regel 250-326 in `analyzeWithGeminiMultimodal`
+### Bestand: `src/hooks/notulen/useDeleteMeetingMinute.ts`
 
-**Wijziging:** Vervang het `action_items` JSON schema en voeg Fase 7D instructies toe:
-
-```json
-"action_items": [{
-  "action": "Specifieke actie",
-  "assignee": "Toegewezen aan of null (NIET 'team')",
-  "deadline": "YYYY-MM-DD of null",
-  "classification": "TAAK|IDEE|INFORMATIE",
-  "urgency": "critical|high|medium|low",
-  "source_quote": "VERPLICHT: Exacte quote uit het document",
-  "confidence": 0.0-1.0,
-  "onderwerp": "Kort onderwerp (2-5 woorden)",
-  "doelgroep": "Voor wie is dit relevant",
-  "actie_type": "Communicatie|Administratie|Planning|Onderzoek|Beslissing|Overig",
-  "betrokkenen": [{"naam": "string", "rol": "string of null", "relatie": "assignee|uitleg_ontvanger|stakeholder"}],
-  "externe_partij": {"naam": "string", "type": "klant|zzper|locatie|leverancier"} of null,
-  "actieplan": ["Stap 1 met werkwoord", "Stap 2", "..."],
-  "suggestie": "Directe actiezin voor de assignee"
-}]
-```
-
-**Nieuwe instructies toevoegen:**
+**Volledige Herschrijving** met de volgende logica:
 
 ```text
-FASE 7D - ENTERPRISE CONTEXT voor elke action_item:
-
-7. ONDERWERP: Waar gaat dit over? (kort, 2-5 woorden)
-   Voorbeelden: "Begeleidersdiensten", "Factuurproces", "Teamcommunicatie"
-
-8. DOELGROEP: Voor wie is dit relevant?
-   Voorbeelden: "ABCITO team", "ZZP'ers", "Klant IrisZorg"
-
-9. ACTIE_TYPE: Classificeer het type actie:
-   - Communicatie: uitleg geven, informeren, overleggen
-   - Administratie: registreren, documenteren, verwerken
-   - Planning: inplannen, afstemmen, organiseren
-   - Onderzoek: uitzoeken, analyseren, controleren
-   - Beslissing: besluiten, goedkeuren, kiezen
-   - Overig: anders
-
-10. BETROKKENEN: Array van personen met:
-    - naam: Persoonsnaam
-    - rol: Functie indien bekend (teamleider, planner, etc.)
-    - relatie: "assignee" (uitvoerder), "uitleg_ontvanger" (ontvangt info), "stakeholder" (belang)
-
-11. EXTERNE_PARTIJ: Object of null
-    - naam: Organisatie/persoon naam
-    - type: "klant" (IrisZorg, Bloezem), "zzper" (Anouar, Sanae), "locatie", "leverancier"
-
-12. ACTIEPLAN: Array van 2-4 concrete stappen
-    - Begin elke stap met een werkwoord
-    - Wees specifiek, niet vaag
-    Voorbeeld: ["Plan meeting met team", "Bereid uitleg voor", "Geef presentatie", "Documenteer afspraken"]
-
-13. SUGGESTIE: Eén directe, actionable zin
-    - Begin met werkwoord in gebiedende wijs
-    Voorbeeld: "Bel Sanae vandaag terug om haar status te bevestigen."
-
-BELANGRIJK:
-- Als "team" als assignee staat → assignee = null, maar voeg "team" toe aan betrokkenen
-- externe_partij is null als geen externe partij betrokken
-- source_quote blijft VERPLICHT voor elke extractie
+1. Haal notule info op inclusief task title (voor audit trail)
+2. Haal huidige user op (voor audit trail)
+3. Vind alle taken gekoppeld via source_meeting_minute_id
+4. Voor elke gekoppelde taak:
+   - Zet source_meeting_minute_id op null
+   - Voeg audit trail tekst toe aan description
+5. Verwijder de meeting minute (attendees cascade via FK)
+6. Verwijder de gekoppelde meeting task (task_id)
+7. Invalidate queries
+8. Toon success toast met aantal ontkoppelde taken
 ```
 
----
-
-## Stap 2: Update System Prompt (Word/Text analyse)
-
-**Locatie:** Regel 414-457 (`const systemPrompt`)
-
-**Wijziging:** Breid het JSON schema en instructies uit met dezelfde Fase 7D velden als hierboven.
-
----
-
-## Stap 3: Update Normalisatie Functies
-
-**Locatie 1:** Regel 374-384 (multimodal normalisatie)
-**Locatie 2:** Regel 601-611 (text extraction normalisatie)  
-**Locatie 3:** Regel 724-734 (direct text normalisatie)
-
-**Wijziging:** Voeg mapping toe voor de nieuwe velden:
+**Code Wijzigingen:**
 
 ```typescript
-action_items: Array.isArray(extractedData.action_items) 
-  ? extractedData.action_items.map((item: any) => ({
-      // Bestaande velden
-      action: item.action || '',
-      assignee: item.assignee || null,
-      deadline: item.deadline || null,
-      classification: item.classification || null,
-      urgency: item.urgency || null,
-      source_quote: item.source_quote || null,
-      confidence: typeof item.confidence === 'number' ? item.confidence : null,
-      // NIEUW - Fase 7D velden
-      onderwerp: item.onderwerp || null,
-      doelgroep: item.doelgroep || null,
-      actie_type: item.actie_type || null,
-      achtergrond: item.achtergrond || null,
-      betrokkenen: Array.isArray(item.betrokkenen) ? item.betrokkenen : [],
-      externe_partij: item.externe_partij || null,
-      actieplan: Array.isArray(item.actieplan) ? item.actieplan : [],
-      suggestie: item.suggestie || null,
-    }))
-  : [],
+const deleteMeetingMinute = async (minuteId: string): Promise<void> => {
+  setIsDeleting(true);
+  try {
+    // 1. Haal notule info op voor audit trail (inclusief task title)
+    const { data: minute, error: fetchError } = await supabase
+      .from('meeting_minutes')
+      .select('task_id, tasks!meeting_minutes_task_id_fkey(title)')
+      .eq('id', minuteId)
+      .maybeSingle();
+
+    if (fetchError) throw fetchError;
+
+    const notuleTitle = minute?.tasks?.title || 'Onbekende notule';
+
+    // 2. Haal huidige user op voor audit trail
+    const { data: { user } } = await supabase.auth.getUser();
+    const deletedBy = user?.email || user?.user_metadata?.name || 'Onbekend';
+
+    // 3. Maak audit trail tekst
+    const now = new Date();
+    const auditText = `
+
+⚠️ BRON VERWIJDERD
+────────────────────────────────────────
+Notule: "${notuleTitle}"
+Verwijderd op: ${now.toLocaleDateString('nl-NL')} ${now.toLocaleTimeString('nl-NL')}
+Verwijderd door: ${deletedBy}`;
+
+    // 4. Vind alle gekoppelde taken via source_meeting_minute_id
+    const { data: linkedTasks, error: findError } = await supabase
+      .from('tasks')
+      .select('id, description')
+      .eq('source_meeting_minute_id', minuteId);
+
+    if (findError) throw findError;
+
+    // 5. Update elke gekoppelde taak: ontkoppel en voeg audit trail toe
+    if (linkedTasks && linkedTasks.length > 0) {
+      for (const task of linkedTasks) {
+        const { error: updateError } = await supabase
+          .from('tasks')
+          .update({
+            source_meeting_minute_id: null,
+            description: (task.description || '') + auditText
+          })
+          .eq('id', task.id);
+
+        if (updateError) {
+          console.warn(`Could not update task ${task.id}:`, updateError.message);
+        }
+      }
+    }
+
+    // 6. Delete meeting_minutes (attendees cascade automatisch via FK)
+    const { error: minuteError } = await supabase
+      .from('meeting_minutes')
+      .delete()
+      .eq('id', minuteId);
+
+    if (minuteError) throw minuteError;
+
+    // 7. Delete gekoppelde meeting task
+    if (minute?.task_id) {
+      const { error: taskError } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', minute.task_id)
+        .eq('category', 'meeting');
+
+      if (taskError) {
+        console.warn('Could not delete linked task:', taskError.message);
+      }
+    }
+
+    // 8. Invalidate queries en toon success
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: MEETING_MINUTES_QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: ['pending-minutes-count'] }),
+      queryClient.invalidateQueries({ queryKey: ['task-meeting-minutes'] }),
+      queryClient.invalidateQueries({ queryKey: ['tasks'] }), // Ook tasks refreshen!
+    ]);
+    
+    const linkedCount = linkedTasks?.length || 0;
+    const message = linkedCount > 0 
+      ? `Notulen verwijderd. ${linkedCount} ${linkedCount === 1 ? 'taak' : 'taken'} ontkoppeld.`
+      : 'Notulen verwijderd';
+    toast.success(message);
+  } catch (error: unknown) {
+    // Verbeterde error handling met meer context
+    let message = 'Onbekende fout';
+    if (error instanceof Error) {
+      message = error.message;
+    } else if (typeof error === 'object' && error !== null) {
+      const pgError = error as { message?: string; code?: string; details?: string };
+      message = pgError.message || pgError.details || 'Database fout';
+      if (pgError.code) {
+        message = `[${pgError.code}] ${message}`;
+      }
+    }
+    toast.error("Kon notulen niet verwijderen", { description: message });
+    throw error;
+  } finally {
+    setIsDeleting(false);
+  }
+};
 ```
 
 ---
 
-## Bestanden te Wijzigen
+## Audit Trail Voorbeeld
 
-| Bestand | Wijziging |
-|---------|-----------|
-| `supabase/functions/ai-extract-meeting-minute/index.ts` | Update prompts + normalisatie |
+Wanneer een notule "Team Overleg 2026-01-28" wordt verwijderd, krijgt elke gekoppelde taak deze tekst onderaan de description:
 
----
-
-## Verwacht Resultaat
-
-Na deze fix zal de AI bij elke action_item de volgende velden retourneren:
-
-```json
-{
-  "action": "Uitleg geven over begeleidersdiensten",
-  "assignee": "Erik",
-  "deadline": "2026-01-30",
-  "classification": "TAAK",
-  "urgency": "high",
-  "source_quote": "IrisZorg: begeleidersdiensten uitzetten (met uitleg Erik)",
-  "confidence": 0.92,
-  "onderwerp": "Begeleidersdiensten",
-  "doelgroep": "ABCITO team",
-  "actie_type": "Communicatie",
-  "betrokkenen": [
-    {"naam": "Erik", "rol": null, "relatie": "assignee"},
-    {"naam": "Leonie", "rol": "teamleider", "relatie": "uitleg_ontvanger"},
-    {"naam": "Dilmar", "rol": "planner", "relatie": "uitleg_ontvanger"}
-  ],
-  "externe_partij": {"naam": "IrisZorg", "type": "klant"},
-  "actieplan": [
-    "Plan meeting met Leonie en Dilmar",
-    "Bereid uitleg voor over begeleidersdiensten",
-    "Geef presentatie tijdens meeting",
-    "Documenteer proces"
-  ],
-  "suggestie": "Plan vandaag nog een meeting met Leonie en Dilmar om de begeleidersdiensten voor IrisZorg te bespreken."
-}
+```text
+⚠️ BRON VERWIJDERD
+────────────────────────────────────────
+Notule: "Team Overleg 2026-01-28"
+Verwijderd op: 28-1-2026 10:35:42
+Verwijderd door: k.atashi@citozorg.nl
 ```
 
 ---
 
-## Verificatie
+## Wijzigingen Samenvatting
 
-Na implementatie:
-1. Deploy Edge Function (automatisch)
-2. Upload test PDF via Notulen Assistent
-3. Controleer dat action_items de nieuwe velden bevatten
-4. Controleer console logs voor extractie details
+| Onderdeel | Wijziging |
+|-----------|-----------|
+| Query notule | Uitgebreid met `tasks!meeting_minutes_task_id_fkey(title)` |
+| User ophalen | Toegevoegd voor audit trail |
+| Gekoppelde taken | Opzoeken via `source_meeting_minute_id` |
+| Ontkoppeling | `source_meeting_minute_id = null` + audit tekst |
+| Query invalidatie | `['tasks']` key toegevoegd |
+| Success toast | Telt ontkoppelde taken |
+| Error handling | Verbeterd met Postgres error code parsing |
+
+---
+
+## Technische Details
+
+- **Geen database migratie nodig** - alleen applicatielogica
+- **Audit trail is append-only** - komt onder bestaande description
+- **Parallel updates niet nodig** - sequential is veiliger voor foutafhandeling
+- **Nederlandse formatting** - `toLocaleDateString('nl-NL')` en `toLocaleTimeString('nl-NL')`
+
+---
+
+## Test Scenario's
+
+1. **Notule zonder gekoppelde taken**
+   - Verwacht: Direct verwijderen, toast "Notulen verwijderd"
+
+2. **Notule met 1 gekoppelde taak**
+   - Verwacht: Taak behouden, audit trail toegevoegd, toast "Notulen verwijderd. 1 taak ontkoppeld."
+
+3. **Notule met meerdere gekoppelde taken**
+   - Verwacht: Alle taken behouden, audit trail toegevoegd, toast "Notulen verwijderd. X taken ontkoppeld."
+
+4. **RLS block**
+   - Verwacht: Duidelijke foutmelding met Postgres code
