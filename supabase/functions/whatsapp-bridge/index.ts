@@ -63,7 +63,8 @@ Deno.serve(async (req) => {
         }
       );
       
-      const { data: { user }, error: authError } = await supabaseAuth.auth.getUser();
+      const token = authHeader!.replace('Bearer ', '');
+      const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(token);
       
       if (authError || !user) {
         console.error(`[${requestId}] ❌ Auth error:`, authError?.message);
