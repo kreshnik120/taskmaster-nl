@@ -35,11 +35,7 @@ const menuGroups: MenuGroup[] = [{
   items: [{
     title: "Dashboard",
     url: "/dashboard",
-    icon: LayoutDashboard
-  }, {
-    title: "Werkbord",
-    url: "/",
-    icon: Home,
+    icon: LayoutDashboard,
     badge: 'taskCount'
   }, {
     title: "Kanban bord",
