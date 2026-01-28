@@ -38,10 +38,6 @@ const menuGroups: MenuGroup[] = [{
     icon: LayoutDashboard,
     badge: 'taskCount'
   }, {
-    title: "Kanban bord",
-    url: "/kanban",
-    icon: Kanban
-  }, {
     title: "Lijstweergave",
     url: "/lijst",
     icon: List

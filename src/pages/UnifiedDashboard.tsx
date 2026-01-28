@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { TodayFocusCard } from "@/components/dashboard/TodayFocusCard";
 import { UpcomingRemindersWidget } from "@/components/UpcomingRemindersWidget";
 import { MyTasksFlowSection } from "@/components/dashboard/MyTasksFlowSection";
+import { TaskDetailModal } from "@/components/TaskDetailModal";
 
 // Tab 2: Team Overzicht - Components
 import { useDashboardStats } from "@/hooks/useDashboardStats";
@@ -41,6 +42,10 @@ export default function UnifiedDashboard() {
   
   // Tab 3: Recruitment data - inline fetch for UrgencyActionPanel
   const [urgencyApplications, setUrgencyApplications] = useState<Application[]>([]);
+  
+  // Task deeplink handling
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
 
   // Determine default tab based on user role
   const getDefaultTab = (): string => {
@@ -74,6 +79,34 @@ export default function UnifiedDashboard() {
   useEffect(() => {
     loadUrgencyApplications();
   }, []);
+
+  // Handle taskId from URL (for deeplinks)
+  useEffect(() => {
+    const taskId = searchParams.get('taskId');
+    if (taskId) {
+      setSelectedTaskId(taskId);
+      setTaskModalOpen(true);
+      // Switch to mijn-werk tab if not already there
+      if (activeTab !== 'mijn-werk') {
+        setSearchParams({ tab: 'mijn-werk', taskId });
+      }
+    }
+  }, [searchParams]);
+
+  // Callback when modal closes - remove taskId from URL
+  const handleTaskModalClose = (open: boolean) => {
+    setTaskModalOpen(open);
+    if (!open) {
+      setSelectedTaskId(null);
+      // Remove taskId from URL, keep tab
+      setSearchParams({ tab: activeTab });
+    }
+  };
+
+  // Callback when task is updated
+  const handleTaskUpdated = () => {
+    // Refresh happens via real-time subscription
+  };
 
   return (
     <div className="space-y-6">
@@ -171,6 +204,16 @@ export default function UnifiedDashboard() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Task Detail Modal for deeplinks */}
+      {selectedTaskId && (
+        <TaskDetailModal
+          task={{ id: selectedTaskId } as any}
+          open={taskModalOpen}
+          onOpenChange={handleTaskModalClose}
+          onTaskUpdated={handleTaskUpdated}
+        />
+      )}
     </div>
   );
 }

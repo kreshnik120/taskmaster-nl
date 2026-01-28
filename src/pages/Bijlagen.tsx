@@ -289,7 +289,7 @@ export default function Bijlagen() {
   };
 
   const navigateToTask = (taskId: string) => {
-    navigate(`/kanban/${taskId}`);
+    navigate(`/dashboard?tab=mijn-werk&taskId=${taskId}`);
   };
 
   // Stats

@@ -18,7 +18,7 @@ export function UpcomingTasksList({ tasks, isLoading, maxItems = 5 }: UpcomingTa
   const hasMore = tasks.length > maxItems;
 
   const handleClick = (taskId: string) => {
-    navigate(`/kanban/${taskId}`);
+    navigate(`/dashboard?tab=mijn-werk&taskId=${taskId}`);
   };
 
   const getUrgencyColor = (daysUntil: number) => {
