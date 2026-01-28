@@ -1,94 +1,74 @@
 
 
-# Fix: Correcte JWT Validatie in WhatsApp Bridge
+# Fix: Expliciete JWT Token aan getUser() meegeven
 
 ## Probleem
 
-De huidige JWT verificatie faalt met "Invalid token" omdat de Supabase client verkeerd is geconfigureerd:
-
-```typescript
-// HUIDIGE CODE (regel 50-54) - INCOMPLEET
-const supabaseAuth = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_ANON_KEY")!,
-  { global: { headers: { Authorization: authHeader! } } }
-);
+De Edge Function logs tonen:
+```
+[6688e2e6] ❌ Auth error: Auth session missing!
 ```
 
-**Root cause:** De client probeert de sessie te refreshen/persisteren, wat in Edge Functions niet werkt.
+**Root cause:** De huidige code roept `supabaseAuth.auth.getUser()` aan zonder argument. In een stateless Edge Function omgeving is er geen "sessie" - de JWT moet **expliciet** worden meegegeven.
+
+## Huidige code (regel 66)
+
+```typescript
+const { data: { user }, error: authError } = await supabaseAuth.auth.getUser();
+```
+
+Dit zoekt naar een bestaande sessie, die er niet is in Deno.
 
 ## Oplossing
 
-Voeg de ontbrekende auth configuratie toe:
+Geef de JWT token direct mee aan `getUser()`:
 
 ```typescript
-auth: {
-  autoRefreshToken: false,
-  persistSession: false
-}
+const token = authHeader!.replace('Bearer ', '');
+const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(token);
 ```
 
-## Wijziging
+## Volledige wijziging
 
 **Bestand:** `supabase/functions/whatsapp-bridge/index.ts`
 
-**Regels 48-69 vervangen met:**
+**Regels 64-66 worden:**
 
 ```typescript
-// If using Supabase Auth, verify the user
-let userId: string | null = null;
-if (isValidAuth && !isValidApiKey) {
-  // Create anon client with user's JWT for verification
-  const supabaseAuth = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    {
-      global: {
-        headers: { Authorization: authHeader! }
-      },
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    }
-  );
-  
-  const { data: { user }, error: authError } = await supabaseAuth.auth.getUser();
-  
-  if (authError || !user) {
-    console.error(`[${requestId}] ❌ Auth error:`, authError?.message);
-    return new Response(
-      JSON.stringify({ success: false, error: "Invalid token" }),
-      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-  
-  userId = user.id;
-  console.log(`[${requestId}] ✅ Authenticated: ${user.email}`);
-}
-
-console.log(`[${requestId}] ✅ Auth: ${isValidApiKey ? 'API Key' : `User ${userId}`}`);
+      );
+      
+      const token = authHeader!.replace('Bearer ', '');
+      const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(token);
 ```
 
 ## Waarom dit werkt
 
-| Configuratie | Effect |
-|--------------|--------|
-| `autoRefreshToken: false` | Voorkomt refresh attempts in stateless omgeving |
-| `persistSession: false` | Voorkomt storage errors (geen localStorage in Deno) |
-| `Authorization` header | Stuurt JWT mee voor validatie |
+| Methode | Gedrag |
+|---------|--------|
+| `getUser()` (zonder arg) | Zoekt naar actieve sessie → "Auth session missing!" in stateless omgeving |
+| `getUser(token)` | Valideert de meegegeven JWT → Werkt in Edge Functions |
 
-## Veiligheid
+## Alternatieve optie
 
-Met deze fix:
-- Fake tokens worden geweigerd (401 Invalid token)
-- Verlopen tokens worden geweigerd
-- Alleen geldige Supabase JWTs worden geaccepteerd
-- VPS API key authenticatie blijft werken
+Als `getUser(token)` nog steeds problemen geeft, kun je ook `getClaims(token)` gebruiken:
+
+```typescript
+const token = authHeader!.replace('Bearer ', '');
+const { data, error: authError } = await supabaseAuth.auth.getClaims(token);
+
+if (authError || !data?.claims) {
+  return new Response(..., { status: 401 });
+}
+
+const userId = data.claims.sub;
+const userEmail = data.claims.email;
+```
+
+Dit is de aanbevolen methode voor Edge Functions volgens de Supabase documentatie.
 
 ## Bestand
 
 | Bestand | Actie |
 |---------|-------|
-| `supabase/functions/whatsapp-bridge/index.ts` | Fix auth configuratie (regels 48-69) |
+| `supabase/functions/whatsapp-bridge/index.ts` | Regel 66: voeg token argument toe aan getUser() |
 
