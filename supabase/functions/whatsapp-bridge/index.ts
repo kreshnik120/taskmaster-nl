@@ -1,6 +1,18 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { decode as base64Decode } from "https://deno.land/std@0.177.0/encoding/base64.ts";
 
+// Helper function to format errors for readable logging
+function formatError(err: unknown): string {
+  if (err instanceof Error) {
+    return err.message;
+  }
+  if (typeof err === 'object' && err !== null) {
+    const e = err as { message?: string; code?: string; details?: string };
+    return e.message || e.details || JSON.stringify(err);
+  }
+  return String(err);
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -167,10 +179,10 @@ Deno.serve(async (req) => {
     );
 
   } catch (err: unknown) {
-    const error = err instanceof Error ? err : new Error(String(err));
-    console.error(`[${requestId}] ❌ Error:`, error);
+    const errorMessage = formatError(err);
+    console.error(`[${requestId}] ❌ Error:`, errorMessage, JSON.stringify(err));
     return new Response(
-      JSON.stringify({ success: false, error: error.message || "Internal server error" }),
+      JSON.stringify({ success: false, error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
@@ -385,23 +397,90 @@ async function handleSessionConnected(
 ): Promise<Record<string, unknown>> {
   const { phoneNumber } = data as { phoneNumber?: string };
 
-  console.log(`[${requestId}] Session connected: ${sessionId}`);
+  console.log(`[${requestId}] Session connected: ${sessionId}, phone: ${phoneNumber || 'unknown'}`);
 
+  // First, check if session with this ID already exists
+  const { data: existingById } = await supabase
+    .from("whatsapp_sessions")
+    .select("id")
+    .eq("id", sessionId)
+    .single();
+
+  if (existingById) {
+    // Update existing session
+    const { error: updateError } = await supabase
+      .from("whatsapp_sessions")
+      .update({
+        session_status: "connected",
+        phone_number: phoneNumber || "unknown",
+        session_data: null,
+      })
+      .eq("id", sessionId);
+
+    if (updateError) {
+      console.error(`[${requestId}] DB error:`, JSON.stringify(updateError));
+      throw new Error(`Session update failed: ${formatError(updateError)}`);
+    }
+    return { sessionId, status: "connected" };
+  }
+
+  // If phone_number provided, check for existing session with same phone in this org
+  if (phoneNumber && phoneNumber !== "unknown") {
+    const { data: existingByPhone } = await supabase
+      .from("whatsapp_sessions")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("phone_number", phoneNumber)
+      .single();
+
+    if (existingByPhone) {
+      // Update existing session - change ID to new session ID
+      const { error: deleteError } = await supabase
+        .from("whatsapp_sessions")
+        .delete()
+        .eq("id", existingByPhone.id);
+
+      if (deleteError) {
+        console.error(`[${requestId}] DB delete error:`, JSON.stringify(deleteError));
+      }
+
+      // Insert with new session ID
+      const { data: newSession, error: insertError } = await supabase
+        .from("whatsapp_sessions")
+        .insert({
+          id: sessionId,
+          org_id: orgId,
+          phone_number: phoneNumber,
+          session_status: "connected",
+          session_data: null,
+        })
+        .select("id")
+        .single();
+
+      if (insertError) {
+        console.error(`[${requestId}] DB error:`, JSON.stringify(insertError));
+        throw new Error(`Session creation failed: ${formatError(insertError)}`);
+      }
+      return { sessionId: newSession.id, status: "connected" };
+    }
+  }
+
+  // Create new session
   const { data: session, error } = await supabase
     .from("whatsapp_sessions")
-    .upsert({
+    .insert({
       id: sessionId,
       org_id: orgId,
       phone_number: phoneNumber || "unknown",
       session_status: "connected",
       session_data: null,
-    }, { onConflict: "id" })
+    })
     .select("id")
     .single();
 
   if (error) {
     console.error(`[${requestId}] DB error:`, JSON.stringify(error));
-    throw new Error(`Database error: ${error.message || error.code || 'Unknown'}`);
+    throw new Error(`Session creation failed: ${formatError(error)}`);
   }
 
   return { sessionId: session.id, status: "connected" };
@@ -423,7 +502,7 @@ async function handleSessionDisconnected(
 
   if (error) {
     console.error(`[${requestId}] DB error:`, JSON.stringify(error));
-    throw new Error(`Database error: ${error.message || error.code || 'Unknown'}`);
+    throw new Error(`Session disconnect failed: ${formatError(error)}`);
   }
 
   return { sessionId, status: "disconnected" };
@@ -440,21 +519,46 @@ async function handleSessionQR(
 
   console.log(`[${requestId}] Session QR update: ${sessionId}`);
 
+  // Check if session exists first
+  const { data: existing } = await supabase
+    .from("whatsapp_sessions")
+    .select("id")
+    .eq("id", sessionId)
+    .single();
+
+  if (existing) {
+    // Update existing session
+    const { error: updateError } = await supabase
+      .from("whatsapp_sessions")
+      .update({
+        session_status: "waiting_qr",
+        session_data: { qrCode },
+      })
+      .eq("id", sessionId);
+
+    if (updateError) {
+      console.error(`[${requestId}] DB error:`, JSON.stringify(updateError));
+      throw new Error(`Session QR update failed: ${formatError(updateError)}`);
+    }
+    return { sessionId, status: "waiting_qr" };
+  }
+
+  // Create new session
   const { data: session, error } = await supabase
     .from("whatsapp_sessions")
-    .upsert({
+    .insert({
       id: sessionId,
       org_id: orgId,
       phone_number: phoneNumber || "pending",
       session_status: "waiting_qr",
       session_data: { qrCode },
-    }, { onConflict: "id" })
+    })
     .select("id")
     .single();
 
   if (error) {
     console.error(`[${requestId}] DB error:`, JSON.stringify(error));
-    throw new Error(`Database error: ${error.message || error.code || 'Unknown'}`);
+    throw new Error(`Session QR creation failed: ${formatError(error)}`);
   }
 
   return { sessionId: session.id, status: "waiting_qr" };
@@ -582,7 +686,9 @@ async function getOrCreateSession(
     .select("id, phone_number")
     .single();
 
-  if (error) throw error;
+  if (error) {
+    throw new Error(`Session creation failed: ${formatError(error)}`);
+  }
   return newSession;
 }
 
@@ -626,7 +732,9 @@ async function getOrCreateContact(
     .select("id, display_name")
     .single();
 
-  if (error) throw error;
+  if (error) {
+    throw new Error(`Contact creation failed: ${formatError(error)}`);
+  }
   return newContact;
 }
 
@@ -663,6 +771,8 @@ async function getOrCreateChat(
     .select("id, unread_count")
     .single();
 
-  if (error) throw error;
+  if (error) {
+    throw new Error(`Chat creation failed: ${formatError(error)}`);
+  }
   return newChat;
 }
