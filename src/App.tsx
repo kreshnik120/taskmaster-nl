@@ -27,6 +27,7 @@ import Klanten from "./pages/Klanten";
 import Plaatsingen from "./pages/Plaatsingen";
 import Gebruikers from "./pages/Gebruikers";
 import NotFound from "./pages/NotFound";
+import WhatsApp from "./pages/WhatsApp";
 
 const queryClient = new QueryClient();
 
@@ -86,6 +87,8 @@ const App = () => (
           <Route element={<Layout />}>
             <Route path="/" element={<Navigate to="/dashboard?tab=mijn-werk" replace />} />
             <Route path="/dashboard" element={<UnifiedDashboard />} />
+            <Route path="/whatsapp" element={<WhatsApp />} />
+            <Route path="/whatsapp/chat/:chatId" element={<WhatsApp />} />
             <Route path="/kanban/:taskId?" element={<Kanban />} />
             <Route path="/lijst" element={<Lijst />} />
             <Route path="/kalender" element={<Kalender />} />

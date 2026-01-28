@@ -6505,6 +6505,7 @@ export type Database = {
           id: string
           last_message_at: string | null
           last_message_preview: string | null
+          linked_professional_id: string | null
           org_id: string
           session_id: string
           unread_count: number | null
@@ -6518,6 +6519,7 @@ export type Database = {
           id?: string
           last_message_at?: string | null
           last_message_preview?: string | null
+          linked_professional_id?: string | null
           org_id: string
           session_id: string
           unread_count?: number | null
@@ -6531,6 +6533,7 @@ export type Database = {
           id?: string
           last_message_at?: string | null
           last_message_preview?: string | null
+          linked_professional_id?: string | null
           org_id?: string
           session_id?: string
           unread_count?: number | null
@@ -6542,6 +6545,27 @@ export type Database = {
             columns: ["contact_id"]
             isOneToOne: false
             referencedRelation: "whatsapp_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_chats_linked_professional_id_fkey"
+            columns: ["linked_professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_chats_linked_professional_id_fkey"
+            columns: ["linked_professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_admin_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_chats_linked_professional_id_fkey"
+            columns: ["linked_professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_public"
             referencedColumns: ["id"]
           },
           {
