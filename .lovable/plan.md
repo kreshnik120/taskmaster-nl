@@ -1,172 +1,133 @@
 
-# WhatsApp Berichten Versturen - Implementatieplan
 
-## Overzicht
-Implementatie van de functionaliteit om WhatsApp berichten te versturen vanuit de UI, via de Edge Function naar de VPS.
+# Fix: Dual Authentication voor WhatsApp Bridge
 
-## Architectuur
+## Probleem
 
-```text
-┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────┐
-│   UI Component  │────▶│  Edge Function       │────▶│   VPS Server    │
-│ WhatsAppChat    │     │  whatsapp-bridge     │     │  72.61.155.82   │
-│ Detail.tsx      │◀────│  (message.send)      │◀────│  :3001          │
-└─────────────────┘     └──────────────────────┘     └─────────────────┘
-        │                         │
-        │                         ▼
-        │               ┌──────────────────────┐
-        └──────────────▶│  whatsapp_messages   │
-          (realtime)    │  (Supabase DB)       │
-                        └──────────────────────┘
-```
+De Edge Function geeft 401 "Invalid API key" omdat:
+- VPS webhook calls gebruiken `x-api-key` header
+- UI calls via `supabase.functions.invoke()` gebruiken `Authorization: Bearer <token>` header
+- Huidige code accepteert alleen `x-api-key`
 
-## Benodigde Secrets
+## Oplossing
 
-| Secret | Waarde | Status |
-|--------|--------|--------|
-| WHATSAPP_VPS_API_KEY | `898b88e6d43cb61aa1b9b1a0bee322e62ef9187c9574ff25d1af21ac63acedfd` | **Nieuw toe te voegen** |
-| WHATSAPP_VPS_SESSION_ID | `9a8c604c-4237-4e00-a50e-0a37cedbfbef` | **Nieuw toe te voegen** |
+Pas de authenticatie aan om beide methodes te ondersteunen:
 
-## Wijzigingen
+| Bron | Header | Validatie |
+|------|--------|-----------|
+| VPS Webhook | `x-api-key` | Vergelijk met `WHATSAPP_BRIDGE_API_KEY` secret |
+| UI (Supabase) | `Authorization: Bearer <token>` | Verifieer JWT met `supabase.auth.getUser()` |
 
-### 1. Edge Function: `whatsapp-bridge/index.ts`
+## Wijziging
 
-**Nieuwe event handler `message.send`:**
+**Bestand:** `supabase/functions/whatsapp-bridge/index.ts`
 
+**Locatie:** Regels 31-42 (authenticatie sectie)
+
+**Huidige code:**
 ```typescript
-case "message.send":
-  result = await handleSendMessage(supabase, sessionId, orgId, data, requestId);
-  break;
-```
+// 1. Validate API Key
+const apiKey = req.headers.get("x-api-key");
+const expectedKey = Deno.env.get("WHATSAPP_BRIDGE_API_KEY");
 
-**Nieuwe functie `handleSendMessage`:**
-- Ontvangt: `chatJid`, `body`, `chatId` uit data
-- Stuurt POST naar VPS: `http://72.61.155.82:3001/chats/{chatJid}/messages`
-- Headers: `x-api-key` (uit secret `WHATSAPP_VPS_API_KEY`)
-- Body: `{ sessionId: WHATSAPP_VPS_SESSION_ID, text: body }`
-- Slaat bericht op in `whatsapp_messages` met `sender_type: 'self'`, `status: 'sent'`
-- Update `last_message_at` en `last_message_preview` in `whatsapp_chats`
-- Retourneert `messageId`
-
-### 2. Custom Hook: `useWhatsAppSendMessage.ts`
-
-**Nieuwe hook voor berichten versturen:**
-
-```typescript
-export function useWhatsAppSendMessage(chatId: string, chatJid: string, orgId: string) {
-  const queryClient = useQueryClient();
-  
-  const mutation = useMutation({
-    mutationFn: async (text: string) => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      const response = await supabase.functions.invoke('whatsapp-bridge', {
-        body: {
-          event: 'message.send',
-          sessionId: '9a8c604c-4237-4e00-a50e-0a37cedbfbef',
-          orgId,
-          data: { chatJid, body: text, chatId }
-        }
-      });
-      
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries(['whatsapp-messages', chatId]);
-      queryClient.invalidateQueries(['whatsapp-chats']);
-    }
-  });
-  
-  return mutation;
+if (!apiKey || apiKey !== expectedKey) {
+  console.error(`[${requestId}] ❌ Invalid API key`);
+  return new Response(
+    JSON.stringify({ success: false, error: "Invalid API key" }),
+    { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
 }
 ```
 
-### 3. UI Component: `WhatsAppChatDetail.tsx`
-
-**Wijzigingen:**
-- Verwijder disabled state van Input en Button
-- Voeg `useState` toe voor `inputText`
-- Voeg `useWhatsAppSendMessage` hook toe
-- Implementeer `handleSend` functie:
-  - Valideer input (niet leeg)
-  - Roep mutation aan
-  - Clear input na success
-  - Toon toast bij error
-
-**Optimistic UI:**
-- Bericht direct tonen met `status: 'pending'`
-- Update naar `status: 'sent'` na server response
-- Rollback bij error
-
-### 4. Types Update: `whatsapp.ts`
-
-Update `sender_type` om 'user' te ondersteunen (alias voor 'self'):
-
+**Nieuwe code:**
 ```typescript
-sender_type: 'contact' | 'self' | 'user';
+// 1. Validate authentication (API Key OR Supabase Auth)
+const apiKey = req.headers.get("x-api-key");
+const expectedKey = Deno.env.get("WHATSAPP_BRIDGE_API_KEY");
+const authHeader = req.headers.get("Authorization");
+
+const isValidApiKey = apiKey && apiKey === expectedKey;
+const isValidAuth = authHeader && authHeader.startsWith("Bearer ");
+
+if (!isValidApiKey && !isValidAuth) {
+  console.error(`[${requestId}] ❌ No valid authentication provided`);
+  return new Response(
+    JSON.stringify({ success: false, error: "Unauthorized" }),
+    { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}
+
+// If using Supabase Auth, verify the user
+if (isValidAuth && !isValidApiKey) {
+  const supabaseAuth = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader } } }
+  );
+  
+  const { data: { user }, error: authError } = await supabaseAuth.auth.getUser();
+  
+  if (authError || !user) {
+    console.error(`[${requestId}] ❌ Invalid token`);
+    return new Response(
+      JSON.stringify({ success: false, error: "Invalid token" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+  
+  console.log(`[${requestId}] ✅ Authenticated user: ${user.email}`);
+}
+
+console.log(`[${requestId}] ✅ Auth method: ${isValidApiKey ? 'API Key' : 'Supabase Auth'}`);
 ```
 
-## Dataflow
+## Flow na wijziging
 
-1. **Gebruiker typt bericht** → Input component
-2. **Klik verstuur** → `handleSend()` 
-3. **Optimistic update** → Toon bericht met 'pending' status
-4. **Edge Function call** → `supabase.functions.invoke('whatsapp-bridge', {...})`
-5. **Edge Function** → POST naar VPS endpoint
-6. **VPS Response** → messageId terug
-7. **DB Insert** → Bericht opgeslagen in `whatsapp_messages`
-8. **Realtime update** → UI krijgt bevestiging via subscription
-9. **Chat update** → `last_message_at` en preview bijgewerkt
+```text
+Request ontvangen
+       │
+       ▼
+┌──────────────────────┐
+│ Check x-api-key      │
+│ header aanwezig?     │
+└──────────────────────┘
+       │
+   ┌───┴───┐
+   ▼       ▼
+  Ja      Nee
+   │       │
+   ▼       ▼
+┌─────┐  ┌──────────────────┐
+│Match│  │Check Authorization│
+│key? │  │header aanwezig?   │
+└─────┘  └──────────────────┘
+   │           │
+  ┌┴┐       ┌──┴──┐
+  ▼ ▼       ▼     ▼
+ Ja Nee    Ja    Nee
+  │  │     │      │
+  │  │     ▼      ▼
+  │  │  ┌──────┐  ▼
+  │  │  │Verify│ 401
+  │  │  │JWT   │ Error
+  │  │  └──────┘
+  │  │     │
+  │  │  ┌──┴──┐
+  │  │  ▼     ▼
+  │  │ Valid Invalid
+  │  │  │      │
+  ▼  ▼  ▼      ▼
+ ✅ 401 ✅    401
+```
 
 ## Veiligheidsoverwegingen
 
-- VPS API key wordt alleen server-side gebruikt (Edge Function)
-- Session ID wordt server-side opgeslagen als secret
-- Gebruiker moet ingelogd zijn (auth check in hook)
-- Org validatie gebeurt in Edge Function
+- VPS calls blijven werken met bestaande API key
+- UI calls worden geverifieerd via Supabase JWT
+- Geen enkele call komt door zonder geldige authenticatie
+- Logging toont welke auth methode werd gebruikt
 
-## Bestanden
+## Deploy
 
-| # | Bestand | Actie |
-|---|---------|-------|
-| 1 | `supabase/functions/whatsapp-bridge/index.ts` | Aanpassen - nieuwe `message.send` handler |
-| 2 | `src/hooks/whatsapp/useWhatsAppSendMessage.ts` | **Nieuw** - mutation hook |
-| 3 | `src/components/whatsapp/WhatsAppChatDetail.tsx` | Aanpassen - input activeren, send functie |
-| 4 | `src/types/whatsapp.ts` | Aanpassen - sender_type uitbreiden |
+Na goedkeuring wordt de Edge Function automatisch gedeployed en kun je direct berichten versturen vanuit de UI.
 
-## Test Scenario's
-
-1. Verstuur tekst bericht → Verschijnt in UI + database
-2. Verstuur leeg bericht → Validatie error
-3. VPS timeout → Error toast + geen database entry
-4. Realtime update → Nieuwe inkomende berichten verschijnen nog steeds
-
-## Technische Details
-
-**VPS Endpoint:**
-```
-POST http://72.61.155.82:3001/chats/{chatJid}/messages
-Headers:
-  Content-Type: application/json
-  x-api-key: [WHATSAPP_VPS_API_KEY]
-Body:
-  {
-    "sessionId": "[WHATSAPP_VPS_SESSION_ID]",
-    "text": "Berichttekst"
-  }
-Response:
-  {
-    "messageId": "uuid-van-verzonden-bericht"
-  }
-```
-
-**Database Insert:**
-```sql
-INSERT INTO whatsapp_messages (
-  org_id, chat_id, message_id, message_type, 
-  message_body, sender_type, sent_at, status
-) VALUES (
-  $orgId, $chatId, $vpsMessageId, 'text',
-  $body, 'self', NOW(), 'sent'
-);
-```
