@@ -36,7 +36,7 @@ export interface WhatsAppMessage {
   message_id: string;
   message_type: 'text' | 'image' | 'video' | 'audio' | 'document';
   message_body: string | null;
-  sender_type: 'contact' | 'self';
+  sender_type: 'contact' | 'self' | 'user';
   sender_phone: string | null;
   sent_at: string;
   status: 'pending' | 'sent' | 'delivered' | 'read' | 'received';

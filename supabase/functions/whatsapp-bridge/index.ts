@@ -99,6 +99,10 @@ Deno.serve(async (req) => {
         result = await handleSessionQR(supabase, sessionId, orgId, data, requestId);
         break;
 
+      case "message.send":
+        result = await handleSendMessage(supabase, orgId, data, requestId);
+        break;
+
       default:
         return new Response(
           JSON.stringify({ success: false, error: `Unknown event type: ${event}` }),
@@ -350,6 +354,96 @@ async function handleSessionQR(
   if (error) throw error;
 
   return { sessionId: session.id, status: "waiting_qr" };
+}
+
+async function handleSendMessage(
+  supabase: SupabaseClientAny,
+  orgId: string,
+  data: Record<string, unknown>,
+  requestId: string
+): Promise<Record<string, unknown>> {
+  const { chatJid, body, chatId } = data as {
+    chatJid: string;
+    body: string;
+    chatId: string;
+  };
+
+  if (!chatJid || !body || !chatId) {
+    throw new Error("Missing required data: chatJid, body, chatId");
+  }
+
+  console.log(`[${requestId}] Sending message to ${chatJid}`);
+
+  // Get VPS credentials from secrets
+  const vpsApiKey = Deno.env.get("WHATSAPP_VPS_API_KEY");
+  const vpsSessionId = Deno.env.get("WHATSAPP_VPS_SESSION_ID");
+
+  if (!vpsApiKey || !vpsSessionId) {
+    throw new Error("VPS credentials not configured");
+  }
+
+  // Send to VPS
+  const vpsUrl = `http://72.61.155.82:3001/chats/${encodeURIComponent(chatJid)}/messages`;
+  
+  console.log(`[${requestId}] Calling VPS: ${vpsUrl}`);
+  
+  const vpsResponse = await fetch(vpsUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": vpsApiKey,
+    },
+    body: JSON.stringify({
+      sessionId: vpsSessionId,
+      text: body,
+    }),
+  });
+
+  if (!vpsResponse.ok) {
+    const errorText = await vpsResponse.text();
+    console.error(`[${requestId}] VPS error: ${vpsResponse.status} - ${errorText}`);
+    throw new Error(`VPS error: ${vpsResponse.status}`);
+  }
+
+  const vpsResult = await vpsResponse.json();
+  console.log(`[${requestId}] VPS response:`, vpsResult);
+
+  const messageId = vpsResult.messageId || vpsResult.id || crypto.randomUUID();
+
+  // Store sent message in database
+  const { data: message, error: messageError } = await supabase
+    .from("whatsapp_messages")
+    .insert({
+      org_id: orgId,
+      chat_id: chatId,
+      message_id: messageId,
+      message_type: "text",
+      message_body: body,
+      sender_type: "self",
+      sender_phone: null,
+      sent_at: new Date().toISOString(),
+      status: "sent",
+    })
+    .select("id")
+    .single();
+
+  if (messageError) {
+    console.error(`[${requestId}] DB insert error:`, messageError);
+    throw messageError;
+  }
+
+  // Update chat with last message info
+  await supabase
+    .from("whatsapp_chats")
+    .update({
+      last_message_at: new Date().toISOString(),
+      last_message_preview: body.substring(0, 100),
+    })
+    .eq("id", chatId);
+
+  console.log(`[${requestId}] ✅ Message sent and stored: ${message.id}`);
+
+  return { messageId: message.id, vpsMessageId: messageId };
 }
 
 // ============================================================================

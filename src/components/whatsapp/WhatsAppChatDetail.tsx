@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from "react";
-import { ArrowLeft, MoreVertical, Copy, Archive } from "lucide-react";
+import { ArrowLeft, MoreVertical, Copy, Archive, Send, MessageSquare, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
@@ -15,8 +15,8 @@ import { WhatsAppLinkedBanner } from "./WhatsAppLinkedBanner";
 import { WhatsAppMessageBubble, DateDivider } from "./WhatsAppMessageBubble";
 import { MessageSkeleton } from "./WhatsAppSkeletonLoader";
 import { useWhatsAppMessages } from "@/hooks/whatsapp/useWhatsAppMessages";
+import { useWhatsAppSendMessage } from "@/hooks/whatsapp/useWhatsAppSendMessage";
 import type { WhatsAppChat } from "@/types/whatsapp";
-import { Send, MessageSquare } from "lucide-react";
 
 interface WhatsAppChatDetailProps {
   chat: WhatsAppChat;
@@ -42,9 +42,41 @@ export function WhatsAppChatDetail({ chat, onBack, showBackButton = false }: Wha
   const { messages, groupedByDate, isLoading } = useWhatsAppMessages(chat.id);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [newMessageAnnouncement, setNewMessageAnnouncement] = useState('');
+  const [inputText, setInputText] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const displayName = chat.contact?.display_name || formatPhone(chat.contact?.phone_number);
   const phoneNumber = chat.contact?.phone_number;
+  const chatJid = chat.chat_jid;
+
+  // Send message mutation
+  const sendMessage = useWhatsAppSendMessage({
+    chatId: chat.id,
+    chatJid,
+    orgId: chat.org_id
+  });
+
+  const handleSend = async () => {
+    const text = inputText.trim();
+    if (!text || sendMessage.isPending) return;
+
+    try {
+      await sendMessage.mutateAsync(text);
+      setInputText('');
+      // Focus back on input after sending
+      inputRef.current?.focus();
+    } catch (error) {
+      // Error is handled in the mutation's onError
+      console.error('[WhatsAppChatDetail] Send failed:', error);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -171,21 +203,32 @@ export function WhatsAppChatDetail({ chat, onBack, showBackButton = false }: Wha
         )}
       </div>
 
-      {/* Message input (disabled for Phase 1) */}
+      {/* Message input */}
       <div className="p-4 bg-background border-t">
         <div className="flex items-center gap-2">
           <Input
-            placeholder="Berichten versturen komt binnenkort..."
-            disabled
+            ref={inputRef}
+            placeholder="Typ een bericht..."
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={sendMessage.isPending}
             className="flex-1"
+            aria-label="Typ een bericht"
           />
-          <Button size="icon" disabled aria-label="Verstuur bericht">
-            <Send className="h-5 w-5" />
+          <Button 
+            size="icon" 
+            onClick={handleSend}
+            disabled={!inputText.trim() || sendMessage.isPending}
+            aria-label="Verstuur bericht"
+          >
+            {sendMessage.isPending ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Send className="h-5 w-5" />
+            )}
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground text-center mt-2">
-          Berichten versturen wordt binnenkort beschikbaar
-        </p>
       </div>
     </div>
   );
