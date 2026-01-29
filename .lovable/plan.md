@@ -1,86 +1,77 @@
 
+# Debug Resultaat: Profielfoto's Update Faalt
 
-# Fix: Phone Number Formaat Mismatch in Profile Picture Handler
+## Root Cause Analyse
 
-## Probleem Analyse
+### Situatie
+De Edge Function werkt **correct**, maar vindt geen matching contacts vanwege data inconsistenties.
 
-| Bron | Voorbeeld | Format |
-|------|-----------|--------|
-| VPS stuurt `phone` | `31612345678` | Alleen nummer |
-| Database contact (oud) | `31687654321@s.whatsapp.net` | Met JID suffix |
-| Database contact (nieuw) | `31615366083` | Alleen nummer |
+### Bewijs uit Database
 
-De database bevat **gemengde formaten** omdat `getOrCreateContact` het `from` veld opslaat zoals het binnenkomt (soms met JID suffix, soms zonder).
+| Contact Phone | Contact org_id | VPS stuurt org_id | Match? |
+|---------------|----------------|-------------------|--------|
+| `31687654321@s.whatsapp.net` | `650e8400-...` (CitoZorg) | `550e8400-...` (ABCzorg) | ❌ |
+| `31618710360` | **Bestaat niet** in ABCzorg | `550e8400-...` (ABCzorg) | ❌ |
 
-## Oplossing
+### Logs Bevestigen Dit
 
-Pas `handleContactProfilePicture` aan om te zoeken met **meerdere formaat-varianten**:
+```
+[58327580] Searching contacts with phone variants: 31687654321, 31687654321@s.whatsapp.net, +31687654321
+[58327580] ⚠️ No contact found for phone 31687654321 in org 550e8400-... - photo stored but contact not updated
+```
 
-1. Exact zoals ontvangen: `phone`
-2. Met JID suffix: `phone@s.whatsapp.net`
-3. Met `+` prefix: `+phone`
+## Oorzaken
+
+1. **Contact in verkeerde org**: `31687654321` staat in CitoZorg maar foto sync draait via ABCzorg sessie
+2. **Contact bestaat niet**: `31618710360` is niet aangemaakt als contact voordat foto sync draaide
+
+## Opties
+
+### Optie A: Data Cleanup (Handmatig)
+Verplaats/kopieer contacts naar de juiste org.
+
+### Optie B: Cross-Org Phone Lookup (Code Fix)
+Pas Edge Function aan om óók te zoeken zonder org_id filter (minder veilig).
+
+### Optie C: Ensure Contact Exists First (Robuustheid)
+Pas Edge Function aan om automatisch een contact aan te maken als deze niet bestaat.
+
+## Aanbevolen Oplossing: Optie C
+
+Voeg "create-if-not-exists" logica toe aan `handleContactProfilePicture`:
+
+```typescript
+// Als geen bestaand contact gevonden, maak er een aan
+if (!updatedContacts || updatedContacts.length === 0) {
+  // Probeer contact aan te maken met minimale data
+  const { data: newContact, error: insertError } = await supabase
+    .from('whatsapp_contacts')
+    .insert({
+      org_id: orgId,
+      session_id: sessionId,
+      phone_number: phone,
+      profile_picture_url: publicUrl,
+    })
+    .select('id')
+    .single();
+    
+  if (insertError) {
+    console.warn(`[${requestId}] Could not create contact: ${formatError(insertError)}`);
+    return { success: true, url: publicUrl, contactCreated: false };
+  }
+  
+  return { success: true, url: publicUrl, contactCreated: true };
+}
+```
 
 ## Implementatie
 
-**Bestand:** `supabase/functions/whatsapp-bridge/index.ts`
+| Actie | Bestand | Beschrijving |
+|-------|---------|--------------|
+| EDIT | `supabase/functions/whatsapp-bridge/index.ts` | Voeg auto-create contact logica toe |
 
-**Regels 715-721** - Vervang de huidige query:
+## Overwegingen
 
-```typescript
-// 3. Update contact in database - try multiple phone formats
-const phoneVariants = [
-  phone,
-  `${phone}@s.whatsapp.net`,
-  `+${phone}`,
-  phone.replace('@s.whatsapp.net', ''),
-];
-
-// Remove duplicates
-const uniquePhones = [...new Set(phoneVariants)];
-console.log(`[${requestId}] Searching contacts with phone variants: ${uniquePhones.join(', ')}`);
-
-const { data: updatedContacts, error: updateError } = await supabase
-  .from('whatsapp_contacts')
-  .update({ profile_picture_url: publicUrl })
-  .in('phone_number', uniquePhones)
-  .eq('org_id', orgId)
-  .select('id');
-```
-
-## Bestanden Overzicht
-
-| Actie | Bestand | Regel | Beschrijving |
-|-------|---------|-------|--------------|
-| EDIT | `supabase/functions/whatsapp-bridge/index.ts` | 715-721 | Multi-format phone lookup |
-
-## Logica Diagram
-
-```text
-VPS stuurt: phone = "31612345678"
-                ↓
-Edge Function genereert varianten:
-  ├─ "31612345678"
-  ├─ "31612345678@s.whatsapp.net"
-  ├─ "+31612345678"
-  └─ "31612345678" (na strip suffix - duplicate verwijderd)
-                ↓
-SQL: UPDATE ... WHERE phone_number IN (...variants...)
-                ↓
-Vindt match ongeacht opgeslagen formaat ✓
-```
-
-## Test Na Implementatie
-
-```bash
-ssh root@72.61.155.82
-curl -X POST http://localhost:3001/contacts/sync-profile-pictures \
-  -H "Content-Type: application/json" \
-  -d '{"sessionId": "61f4b1fb-5bcf-46c3-9cd5-5758d5b5c9f6"}'
-```
-
-Verwachte log output:
-```
-[REQ-xxx] Searching contacts with phone variants: 31612345678, 31612345678@s.whatsapp.net, +31612345678
-[REQ-xxx] ✅ Profile picture updated for 1 contact(s)
-```
-
+- **Veiligheid**: org_id filter blijft behouden (multi-tenant veilig)
+- **Data integriteit**: Nieuwe contacts krijgen alleen phone + profile_picture_url (minimaal)
+- **Backwards compatible**: Bestaande contacts worden gewoon geüpdatet
