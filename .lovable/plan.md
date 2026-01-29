@@ -1,210 +1,245 @@
 
 
-# WhatsApp Media/Image Support - Plan
+# WhatsAppContactAvatar Component - Implementatie Plan
 
-## Huidige Situatie Analyse
+## Overzicht
 
-De infrastructuur is BIJNA compleet. Dit is wat al bestaat:
+Maak een herbruikbare avatar component voor WhatsApp contacten met profielfoto's, initialen fallback, en color hashing.
 
-| Component | Status | Bevinding |
-|-----------|--------|-----------|
-| Edge Function | ✅ Werkt | Media wordt geüpload naar Storage en opgeslagen in `whatsapp_media` tabel |
-| Storage Bucket | ⚠️ Private | Bucket `whatsapp-media` is `public: false` → URLs zijn niet toegankelijk |
-| Database | ✅ Werkt | 4 afbeeldingen reeds opgeslagen met `storage_url` |
-| Hook | ❌ Incompleet | Query haalt `whatsapp_media` relatie NIET op |
-| UI | ❌ Incompleet | `WhatsAppMessageBubble` toont geen afbeeldingen |
-| Types | ✅ Correct | `WhatsAppMessage.media?: WhatsAppMedia[]` bestaat al |
+## Huidige Situatie
 
-## Wat Nodig Is
+| Component | Locatie | Huidige Avatar Implementatie |
+|-----------|---------|------------------------------|
+| WhatsAppChatItem | Regel 64-68 | Eenvoudige AvatarFallback met groene styling |
+| WhatsAppChatDetail | Regel 132-136 | Zelfde als ChatItem |
 
-### 1. Database Migration - Maak bucket public
+**Database velden (whatsapp_contacts):**
+- `display_name` - Gebruiker-aanpasbare naam
+- Geen `push_name` (WhatsApp's originele naam)
+- Geen `profile_picture_url`
+
+## Implementatie Stappen
+
+### 1. Database Migratie
+
+Voeg ontbrekende kolommen toe aan `whatsapp_contacts`:
 
 ```sql
-UPDATE storage.buckets 
-SET public = true 
-WHERE name = 'whatsapp-media';
+ALTER TABLE whatsapp_contacts 
+ADD COLUMN push_name TEXT,
+ADD COLUMN profile_picture_url TEXT;
 ```
 
-Dit zorgt dat de bestaande `storage_url` waarden direct werken.
+### 2. Nieuw Component: WhatsAppContactAvatar
 
-### 2. Hook Update - Fetch media relatie
+**Bestand:** `src/components/whatsapp/WhatsAppContactAvatar.tsx`
 
-**Bestand:** `src/hooks/whatsapp/useWhatsAppMessages.ts`
-
-Huidige query:
+**Props Interface:**
 ```typescript
-.select('*')
+interface WhatsAppContactAvatarProps {
+  contactId?: string;
+  profilePictureUrl?: string | null;
+  displayName?: string | null;
+  pushName?: string | null;
+  phoneNumber: string;
+  size?: 'sm' | 'md' | 'lg' | 'xl';
+  showOnlineStatus?: boolean;
+  className?: string;
+}
 ```
 
-Nieuwe query:
+**Size Mapping:**
+| Size | Pixels | Tailwind Class |
+|------|--------|----------------|
+| sm   | 32px   | h-8 w-8        |
+| md   | 48px   | h-12 w-12      |
+| lg   | 64px   | h-16 w-16      |
+| xl   | 96px   | h-24 w-24      |
+
+**Initialen Logica:**
 ```typescript
-.select(`
-  *,
-  media:whatsapp_media(*)
-`)
+function getInitials(displayName, pushName, phoneNumber): string {
+  const name = displayName || pushName;
+  if (name) {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  }
+  // Fallback: laatste 2 cijfers telefoonnummer
+  const digits = phoneNumber.replace(/\D/g, '');
+  return digits.slice(-2) || '?';
+}
 ```
 
-Dit haalt de gekoppelde media op via de foreign key `message_id`.
+**Kleur Hashing Algoritme:**
+```typescript
+// Consistent kleuren per contact op basis van naam hash
+const AVATAR_COLORS = [
+  { bg: 'bg-red-100', text: 'text-red-700' },
+  { bg: 'bg-orange-100', text: 'text-orange-700' },
+  { bg: 'bg-amber-100', text: 'text-amber-700' },
+  { bg: 'bg-green-100', text: 'text-green-700' },
+  { bg: 'bg-teal-100', text: 'text-teal-700' },
+  { bg: 'bg-blue-100', text: 'text-blue-700' },
+  { bg: 'bg-indigo-100', text: 'text-indigo-700' },
+  { bg: 'bg-purple-100', text: 'text-purple-700' },
+  { bg: 'bg-pink-100', text: 'text-pink-700' },
+];
 
-### 3. UI Update - Toon afbeeldingen
+function hashToColor(str: string): typeof AVATAR_COLORS[0] {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+```
 
-**Bestand:** `src/components/whatsapp/WhatsAppMessageBubble.tsx`
-
-Wijzigingen:
-- Check of `message.media` bestaat en items bevat
-- Toon afbeeldingen met correcte styling
-- Ondersteun image types (jpg, png, webp)
-- Document/video/audio krijgen download link of placeholder
-
+**Component States:**
 ```text
-┌─────────────────────────────────┐
-│         ┌─────────────┐         │
-│         │   📷 Image  │         │
-│         │             │         │
-│         └─────────────┘         │
-│                                 │
-│  [optionele caption tekst]      │
-│                                 │
-│                    14:30 ✓✓     │
-└─────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  Loading State     →  Skeleton pulse animatie               │
+│  Image Loading     →  Skeleton, dan fade-in naar foto      │
+│  Image Error       →  Fallback naar initialen              │
+│  No Image          →  Initialen met kleur hash             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### 4. Lightbox Component (nieuw)
-
-**Nieuw bestand:** `src/components/whatsapp/WhatsAppImageLightbox.tsx`
-
-- Klik op afbeelding opent fullscreen overlay
-- Escape of klik buiten sluit
-- Zoom mogelijkheid
-
-## Implementatie Details
-
-### Hook Wijziging (useWhatsAppMessages.ts)
-
-```typescript
-const { data, error } = await supabase
-  .from('whatsapp_messages')
-  .select(`
-    *,
-    media:whatsapp_media(
-      id,
-      file_name,
-      file_type,
-      mime_type,
-      storage_url
-    )
-  `)
-  .eq('chat_id', chatId)
-  .order('sent_at', { ascending: true });
-```
-
-### UI Componenten (WhatsAppMessageBubble.tsx)
-
-```typescript
-// Nieuwe helper functie
-function isImageMimeType(mimeType: string): boolean {
-  return mimeType.startsWith('image/');
-}
-
-// In de component
-const hasMedia = message.media && message.media.length > 0;
-const imageMedia = hasMedia 
-  ? message.media.filter(m => isImageMimeType(m.mime_type))
-  : [];
-```
-
-**Afbeelding rendering:**
-
+**Component Structuur:**
 ```tsx
-{imageMedia.length > 0 && (
-  <div className="mb-2">
-    {imageMedia.map(media => (
-      <img
-        key={media.id}
-        src={media.storage_url}
-        alt={media.file_name}
-        className="max-w-full rounded-lg cursor-pointer"
-        loading="lazy"
-        onClick={() => openLightbox(media.storage_url)}
-      />
-    ))}
-  </div>
-)}
-```
-
-### Lightbox Component
-
-Eenvoudige fullscreen overlay:
-
-```typescript
-interface WhatsAppImageLightboxProps {
-  imageUrl: string;
-  onClose: () => void;
-}
-
-export function WhatsAppImageLightbox({ imageUrl, onClose }: Props) {
+export function WhatsAppContactAvatar({
+  profilePictureUrl,
+  displayName,
+  pushName,
+  phoneNumber,
+  size = 'md',
+  className,
+}: WhatsAppContactAvatarProps) {
+  const [imageError, setImageError] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
+  
+  const initials = getInitials(displayName, pushName, phoneNumber);
+  const colorScheme = hashToColor(displayName || pushName || phoneNumber);
+  const sizeClasses = SIZE_MAP[size];
+  
+  const showImage = profilePictureUrl && !imageError;
+  
   return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl p-0 bg-black/90">
-        <img src={imageUrl} className="max-h-[90vh] mx-auto" />
-      </DialogContent>
-    </Dialog>
+    <Avatar className={cn(sizeClasses, "border-2 border-border", className)}>
+      {showImage ? (
+        <>
+          {imageLoading && <Skeleton className="absolute inset-0 rounded-full" />}
+          <AvatarImage 
+            src={profilePictureUrl}
+            onLoad={() => setImageLoading(false)}
+            onError={() => setImageError(true)}
+            className={cn(imageLoading && "opacity-0")}
+          />
+        </>
+      ) : (
+        <AvatarFallback className={cn(colorScheme.bg, colorScheme.text, "font-medium")}>
+          {initials}
+        </AvatarFallback>
+      )}
+    </Avatar>
   );
 }
 ```
 
-## Te Wijzigen Bestanden
+### 3. Type Updates
 
-| Bestand | Wijziging |
-|---------|-----------|
-| `src/hooks/whatsapp/useWhatsAppMessages.ts` | Query uitbreiden met media join |
-| `src/components/whatsapp/WhatsAppMessageBubble.tsx` | Afbeeldingen renderen |
+**Bestand:** `src/types/whatsapp.ts`
 
-## Nieuwe Bestanden
-
-| Bestand | Beschrijving |
-|---------|--------------|
-| `src/components/whatsapp/WhatsAppImageLightbox.tsx` | Fullscreen afbeelding viewer |
-
-## Database Migratie
-
-```sql
--- Maak whatsapp-media bucket public
-UPDATE storage.buckets 
-SET public = true 
-WHERE name = 'whatsapp-media';
+Uitbreiden `WhatsAppContact` interface:
+```typescript
+export interface WhatsAppContact {
+  id: string;
+  org_id: string;
+  session_id: string;
+  phone_number: string;
+  display_name: string | null;
+  push_name: string | null;           // NIEUW
+  profile_picture_url: string | null; // NIEUW
+  professional_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
 ```
 
-## Ondersteunde Media Types
+### 4. Component Integratie
 
-| Type | Actie |
-|------|-------|
-| `image/jpeg`, `image/png`, `image/webp`, `image/gif` | Toon afbeelding met lightbox |
-| `video/mp4` | Video player (stretch goal) |
-| `audio/*` | Audio player (stretch goal) |
-| `application/pdf` | Download link met PDF icoon |
-| Overig | Download link met bestandsnaam |
+**WhatsAppChatItem.tsx (Regel 64-68):**
+```tsx
+// Oud:
+<Avatar className="h-12 w-12 flex-shrink-0">
+  <AvatarFallback className="bg-[#25D366]/20 text-[#25D366] font-medium">
+    {getInitials(chat.contact?.display_name)}
+  </AvatarFallback>
+</Avatar>
 
-## Bestaande Edge Function - Geen Wijzigingen Nodig
+// Nieuw:
+<WhatsAppContactAvatar
+  contactId={chat.contact?.id}
+  profilePictureUrl={chat.contact?.profile_picture_url}
+  displayName={chat.contact?.display_name}
+  pushName={chat.contact?.push_name}
+  phoneNumber={chat.contact?.phone_number || 'Onbekend'}
+  size="md"
+/>
+```
 
-De `handleMessageReceived` functie (regels 254-298) werkt al correct:
-1. Decodeert base64 media
-2. Uploadt naar `whatsapp-media` bucket
-3. Slaat metadata op in `whatsapp_media` tabel
-4. Bewaart `storage_url` met public URL
+**WhatsAppChatDetail.tsx (Regel 132-136):**
+```tsx
+// Oud:
+<Avatar className="h-10 w-10">
+  <AvatarFallback className="bg-[#25D366]/20 text-[#25D366] font-medium">
+    {getInitials(chat.contact?.display_name)}
+  </AvatarFallback>
+</Avatar>
+
+// Nieuw:
+<WhatsAppContactAvatar
+  contactId={chat.contact?.id}
+  profilePictureUrl={chat.contact?.profile_picture_url}
+  displayName={chat.contact?.display_name}
+  pushName={chat.contact?.push_name}
+  phoneNumber={chat.contact?.phone_number || 'Onbekend'}
+  size="md"
+/>
+```
+
+### 5. Verwijder Gedupliceerde Code
+
+Verwijder lokale `getInitials` functies uit:
+- `WhatsAppChatItem.tsx` (regel 15-23)
+- `WhatsAppChatDetail.tsx` (regel 27-35)
+
+## Bestanden Overzicht
+
+| Actie | Bestand |
+|-------|---------|
+| CREATE | `src/components/whatsapp/WhatsAppContactAvatar.tsx` |
+| EDIT | `src/types/whatsapp.ts` - Voeg push_name en profile_picture_url toe |
+| EDIT | `src/components/whatsapp/WhatsAppChatItem.tsx` - Gebruik nieuwe component |
+| EDIT | `src/components/whatsapp/WhatsAppChatDetail.tsx` - Gebruik nieuwe component |
+| MIGRATE | Voeg push_name en profile_picture_url kolommen toe |
+
+## Technische Details
+
+### Edge Function Update (Later - Buiten Scope 6.1)
+De Edge Function zou later moeten worden bijgewerkt om `push_name` apart op te slaan van `display_name`:
+- `display_name` = Gebruiker-aanpasbare naam (handmatig gewijzigd)
+- `push_name` = WhatsApp's originele naam (automatisch van API)
+
+Voor nu werkt de component met de bestaande data (initialen fallback).
 
 ## Test Na Implementatie
 
-1. Stuur een afbeelding naar `+31618710360` via WhatsApp
-2. Open de chat in `/whatsapp`
-3. Afbeelding moet zichtbaar zijn in de message bubble
-4. Klik op afbeelding → lightbox opent
-5. Escape of klik erbuiten → lightbox sluit
-
-## Geen Wijzigingen Aan
-
-- Edge function `whatsapp-bridge` (werkt al)
-- Database schema (tabellen bestaan al)
-- Types (interface is al correct)
-- Andere WhatsApp componenten
+1. Open `/whatsapp` pagina
+2. Controleer dat alle avatars correct renderen met initialen
+3. Controleer dat kleuren consistent zijn per contact
+4. Controleer responsiviteit (size prop werkt)
+5. Als er een `profile_picture_url` zou zijn, test image loading + error fallback
 
