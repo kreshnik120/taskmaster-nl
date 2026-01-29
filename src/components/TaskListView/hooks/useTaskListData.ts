@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useTasksQuery } from '@/hooks/useTasksQuery';
-import type { TaskListTask, TaskListDataOptions, TaskListDataResult, TaskListFilters } from '../types';
+import { startOfDay, endOfDay, isWithinInterval } from 'date-fns';
+import type { TaskListTask, TaskListDataOptions, TaskListDataResult, TaskListFilters, QuickFilter } from '../types';
 
 // Priority order for sorting
 const PRIORITY_ORDER: Record<string, number> = {
@@ -9,6 +10,40 @@ const PRIORITY_ORDER: Record<string, number> = {
   MEDIUM: 2,
   LOW: 3
 };
+
+/**
+ * Check if a task matches a quick filter
+ * Note: Task interface doesn't have a 'status' field, so we use:
+ * - 'open' = no completed_at
+ * - 'in_progress' = has start_at but no completed_at (active work)
+ * - 'review' = priority HIGH (as proxy for review tasks)
+ * - 'critical' = priority CRITICAL
+ * - 'due_today' = due_at is today
+ */
+function matchesQuickFilter(task: TaskListTask, filter: QuickFilter): boolean {
+  const today = new Date();
+  const todayStart = startOfDay(today);
+  const todayEnd = endOfDay(today);
+
+  switch (filter) {
+    case 'open':
+      return !task.completed_at;
+    case 'in_progress':
+      // Active tasks = have a start date but not completed
+      return !task.completed_at && !!task.start_at;
+    case 'review':
+      // Use HIGH priority as proxy for review tasks
+      return task.priority === 'HIGH';
+    case 'critical':
+      return task.priority === 'CRITICAL';
+    case 'due_today':
+      if (!task.due_at) return false;
+      const dueDate = new Date(task.due_at);
+      return isWithinInterval(dueDate, { start: todayStart, end: todayEnd });
+    default:
+      return true;
+  }
+}
 
 /**
  * Sort tasks based on filter settings
@@ -60,6 +95,13 @@ export function useTaskListData(options: TaskListDataOptions): TaskListDataResul
     // Filter by userId if provided
     if (options.userId) {
       tasks = tasks.filter(t => t.assignee_id === options.userId);
+    }
+
+    // Apply quick filters (AND logic - task must match ALL active filters)
+    if (options.filters.quickFilters.length > 0) {
+      tasks = tasks.filter(task =>
+        options.filters.quickFilters.every(filter => matchesQuickFilter(task, filter))
+      );
     }
 
     // Search filter

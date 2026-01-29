@@ -8,7 +8,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, forwardRef } from 'react';
 import type { TaskListFilters } from './types';
 
 interface TaskListToolbarProps {
@@ -16,6 +16,7 @@ interface TaskListToolbarProps {
   onChange: (filters: TaskListFilters) => void;
   taskCount: number;
   totalCount: number;
+  searchInputRef?: React.RefObject<HTMLInputElement>;
 }
 
 const SORT_OPTIONS = [
@@ -31,7 +32,8 @@ export function TaskListToolbar({
   filters,
   onChange,
   taskCount,
-  totalCount
+  totalCount,
+  searchInputRef,
 }: TaskListToolbarProps) {
   const [searchInput, setSearchInput] = useState(filters.searchQuery);
   const debouncedSearch = useDebouncedValue(searchInput, 300);
@@ -62,8 +64,9 @@ export function TaskListToolbar({
       <div className="relative flex-1">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
+          ref={searchInputRef}
           type="text"
-          placeholder="Zoek taken..."
+          placeholder="Zoek taken... (druk / om te zoeken)"
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           className="pl-9"

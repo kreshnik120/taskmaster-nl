@@ -10,11 +10,20 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { cn } from '@/lib/utils';
 import type { TaskListTask } from './types';
 
 interface TaskListTableProps {
   tasks: TaskListTask[];
+  selectedIds: Set<string>;
+  selectedIndex: number;
   onTaskSelect?: (task: TaskListTask) => void;
+  onToggleSelection: (id: string) => void;
+  onToggleAll: () => void;
+  isAllSelected: boolean;
+  isPartiallySelected: boolean;
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -31,6 +40,16 @@ const PRIORITY_LABELS: Record<string, string> = {
   LOW: 'Laag',
 };
 
+function getInitials(name: string | null | undefined): string {
+  if (!name) return '?';
+  return name
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+}
+
 function formatDueDate(dateString: string | null): string {
   if (!dateString) return '-';
   try {
@@ -46,34 +65,70 @@ function isOverdue(dateString: string | null): boolean {
 }
 
 /**
- * Desktop table view for task list
+ * Desktop table view for task list with checkboxes
+ * 5-column layout: Checkbox, Task, Owner, Priority, Deadline
  */
-export function TaskListTable({ tasks, onTaskSelect }: TaskListTableProps) {
+export function TaskListTable({
+  tasks,
+  selectedIds,
+  selectedIndex,
+  onTaskSelect,
+  onToggleSelection,
+  onToggleAll,
+  isAllSelected,
+  isPartiallySelected,
+}: TaskListTableProps) {
   return (
     <div className="rounded-md border">
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-[40px]">
+              <Checkbox
+                checked={isAllSelected}
+                ref={(el) => {
+                  if (el) {
+                    (el as unknown as HTMLInputElement).indeterminate = isPartiallySelected;
+                  }
+                }}
+                onCheckedChange={onToggleAll}
+                aria-label="Selecteer alle taken"
+              />
+            </TableHead>
             <TableHead className="w-[40%]">Taak</TableHead>
             <TableHead>Eigenaar</TableHead>
-            <TableHead>Prioriteit</TableHead>
-            <TableHead>Deadline</TableHead>
+            <TableHead className="w-[80px]">Prioriteit</TableHead>
+            <TableHead className="w-[100px]">Deadline</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {tasks.map((task) => {
+          {tasks.map((task, index) => {
             const overdue = isOverdue(task.due_at);
-            
+            const isSelected = selectedIds.has(task.id);
+            const isFocused = index === selectedIndex;
+
             return (
               <TableRow
                 key={task.id}
-                className={`cursor-pointer hover:bg-muted/50 ${
-                  onTaskSelect ? 'cursor-pointer' : ''
-                }`}
+                data-index={index}
+                className={cn(
+                  'cursor-pointer transition-colors',
+                  isSelected && 'bg-accent/50',
+                  isFocused && 'ring-2 ring-primary ring-inset',
+                  !isSelected && !isFocused && 'hover:bg-muted/50'
+                )}
+                aria-selected={isSelected}
                 onClick={() => onTaskSelect?.(task)}
               >
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    checked={isSelected}
+                    onCheckedChange={() => onToggleSelection(task.id)}
+                    aria-label={`Selecteer ${task.title}`}
+                  />
+                </TableCell>
                 <TableCell>
-                  <div className="flex flex-col gap-1">
+                  <div className="flex flex-col gap-0.5">
                     <span className="font-medium line-clamp-1">{task.title}</span>
                     {task.description && (
                       <span className="text-sm text-muted-foreground line-clamp-1">
@@ -89,24 +144,36 @@ export function TaskListTable({ tasks, onTaskSelect }: TaskListTableProps) {
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">
+                    <Avatar className="h-6 w-6">
+                      <AvatarFallback className="text-xs">
+                        {getInitials(task.profiles?.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm truncate max-w-[120px]">
                       {task.profiles?.name || 'Niet toegewezen'}
                     </span>
                   </div>
                 </TableCell>
                 <TableCell>
                   <Badge
-                    className={PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.MEDIUM}
+                    className={cn(
+                      'text-xs whitespace-nowrap',
+                      PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.MEDIUM
+                    )}
                   >
                     {PRIORITY_LABELS[task.priority] || task.priority}
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  <div className={`flex items-center gap-2 ${overdue ? 'text-destructive' : ''}`}>
-                    {overdue && <AlertTriangle className="h-4 w-4" />}
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">{formatDueDate(task.due_at)}</span>
+                  <div
+                    className={cn(
+                      'flex items-center gap-1.5 text-sm',
+                      overdue && 'text-destructive font-medium'
+                    )}
+                  >
+                    {overdue && <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
+                    <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="truncate">{formatDueDate(task.due_at)}</span>
                   </div>
                 </TableCell>
               </TableRow>

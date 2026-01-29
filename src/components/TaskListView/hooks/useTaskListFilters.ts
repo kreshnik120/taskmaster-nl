@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { TaskListFilters } from '../types';
+import type { TaskListFilters, QuickFilter } from '../types';
 
 const STORAGE_KEY_SORT_BY = 'tasklist-sort-by';
 const STORAGE_KEY_SORT_DIR = 'tasklist-sort-dir';
@@ -16,7 +16,8 @@ export function useTaskListFilters() {
     return {
       searchQuery: '',
       sortBy: (savedSortBy as TaskListFilters['sortBy']) || 'due_at',
-      sortDirection: (savedSortDir as TaskListFilters['sortDirection']) || 'asc'
+      sortDirection: (savedSortDir as TaskListFilters['sortDirection']) || 'asc',
+      quickFilters: [],
     };
   });
 
@@ -47,11 +48,32 @@ export function useTaskListFilters() {
     }));
   }, []);
 
+  const toggleQuickFilter = useCallback((filter: QuickFilter) => {
+    setFiltersState(prev => {
+      const hasFilter = prev.quickFilters.includes(filter);
+      return {
+        ...prev,
+        quickFilters: hasFilter
+          ? prev.quickFilters.filter(f => f !== filter)
+          : [...prev.quickFilters, filter],
+      };
+    });
+  }, []);
+
+  const clearQuickFilters = useCallback(() => {
+    setFiltersState(prev => ({ ...prev, quickFilters: [] }));
+  }, []);
+
+  const hasActiveQuickFilters = filters.quickFilters.length > 0;
+
   return {
     filters,
     setFilters,
     setSearchQuery,
     setSortBy,
-    toggleSortDirection
+    toggleSortDirection,
+    toggleQuickFilter,
+    clearQuickFilters,
+    hasActiveQuickFilters,
   };
 }
