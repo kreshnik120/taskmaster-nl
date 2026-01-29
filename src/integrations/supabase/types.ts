@@ -6502,6 +6502,7 @@ export type Database = {
           chat_type: string | null
           contact_id: string | null
           created_at: string | null
+          deleted_at: string | null
           id: string
           is_archived: boolean | null
           is_muted: boolean | null
@@ -6519,6 +6520,7 @@ export type Database = {
           chat_type?: string | null
           contact_id?: string | null
           created_at?: string | null
+          deleted_at?: string | null
           id?: string
           is_archived?: boolean | null
           is_muted?: boolean | null
@@ -6536,6 +6538,7 @@ export type Database = {
           chat_type?: string | null
           contact_id?: string | null
           created_at?: string | null
+          deleted_at?: string | null
           id?: string
           is_archived?: boolean | null
           is_muted?: boolean | null
