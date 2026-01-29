@@ -33,6 +33,9 @@ export default function WhatsApp() {
     setSearchQuery,
     filter,
     setFilter,
+    tagFilter,
+    setTagFilter,
+    availableTags,
     stats,
   } = useWhatsAppChats();
 
@@ -151,6 +154,9 @@ export default function WhatsApp() {
           filter={filter}
           onFilterChange={setFilter}
           unreadCount={stats.unreadChats}
+          tagFilter={tagFilter}
+          onTagFilterChange={setTagFilter}
+          availableTags={availableTags}
         />
       </div>
 

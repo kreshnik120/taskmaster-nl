@@ -1,6 +1,7 @@
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { WhatsAppFilterTabs } from "./WhatsAppFilterTabs";
+import { WhatsAppTagFilter } from "./WhatsAppTagFilter";
 import { WhatsAppChatItem } from "./WhatsAppChatItem";
 import { ChatListSkeleton } from "./WhatsAppSkeletonLoader";
 import { ChatListEmptyState } from "./WhatsAppEmptyState";
@@ -16,6 +17,9 @@ interface WhatsAppChatListProps {
   filter: WhatsAppFilter;
   onFilterChange: (filter: WhatsAppFilter) => void;
   unreadCount: number;
+  tagFilter: string | null;
+  onTagFilterChange: (tag: string | null) => void;
+  availableTags: string[];
 }
 
 export function WhatsAppChatList({
@@ -28,6 +32,9 @@ export function WhatsAppChatList({
   filter,
   onFilterChange,
   unreadCount,
+  tagFilter,
+  onTagFilterChange,
+  availableTags,
 }: WhatsAppChatListProps) {
   return (
     <div className="flex flex-col h-full">
@@ -51,6 +58,15 @@ export function WhatsAppChatList({
           onFilterChange={onFilterChange}
           unreadCount={unreadCount}
         />
+
+        {/* Tag filter - only show if tags exist */}
+        {availableTags.length > 0 && (
+          <WhatsAppTagFilter
+            selectedTag={tagFilter}
+            onSelectTag={onTagFilterChange}
+            availableTags={availableTags}
+          />
+        )}
       </div>
 
       {/* Chat list */}

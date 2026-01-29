@@ -1,10 +1,11 @@
-import { X, Copy, Pin, BellOff, Archive, Bot, Ban, Info } from "lucide-react";
+import { X, Copy, Pin, BellOff, Archive, Bot, Ban, Info, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { WhatsAppContactAvatar } from "./WhatsAppContactAvatar";
 import { WhatsAppContactName } from "./WhatsAppContactName";
+import { WhatsAppContactTags } from "./WhatsAppContactTags";
 import { useWhatsAppContact } from "@/hooks/whatsapp/useWhatsAppContact";
 import type { WhatsAppChat } from "@/types/whatsapp";
 import { formatDistanceToNow } from "date-fns";
@@ -130,14 +131,17 @@ export function WhatsAppContactProfile({ chat, onClose }: WhatsAppContactProfile
 
         <Separator />
 
-        {/* Labels section - placeholder for 6.4 */}
+        {/* Labels section */}
         <div className="px-4 py-4 space-y-2">
-          <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+            <Tag className="h-3.5 w-3.5" />
             Labels
           </h4>
-          <p className="text-sm text-muted-foreground italic">
-            Labels worden toegevoegd in een volgende update
-          </p>
+          <WhatsAppContactTags
+            contactId={displayContact?.id || ''}
+            tags={displayContact?.tags || []}
+            editable={!!displayContact?.id}
+          />
         </div>
 
         <Separator />
