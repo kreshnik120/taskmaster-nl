@@ -664,7 +664,7 @@ async function getOrCreateSession(
   orgId: string,
   requestId: string
 ) {
-  // 1. Try to find existing session by ID (exact match)
+  // 1. Try exact sessionId match
   const { data: existingById } = await supabase
     .from("whatsapp_sessions")
     .select("id, phone_number")
@@ -676,60 +676,53 @@ async function getOrCreateSession(
     return existingById;
   }
 
-  // 2. Find any session for this org (fallback - use existing session)
-  const { data: existingByOrg } = await supabase
+  // 2. Find ANY existing session for this org (prefer connected, then by updated_at)
+  const { data: existingForOrg } = await supabase
     .from("whatsapp_sessions")
     .select("id, phone_number")
     .eq("org_id", orgId)
+    .order("session_status", { ascending: false }) // 'connected' before 'disconnected'
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  if (existingByOrg) {
-    console.log(`[${requestId}] Using existing org session: ${existingByOrg.id} (requested: ${sessionId})`);
-    // Update the session to mark it as recently used
+  if (existingForOrg) {
+    console.log(`[${requestId}] Reusing org session: ${existingForOrg.id} (phone: ${existingForOrg.phone_number})`);
+    // Touch session to mark as active
     await supabase
       .from("whatsapp_sessions")
       .update({ updated_at: new Date().toISOString() })
-      .eq("id", existingByOrg.id);
-    return existingByOrg;
+      .eq("id", existingForOrg.id);
+    return existingForOrg;
   }
 
-  // 3. No session exists - create with UPSERT to handle race conditions
-  console.log(`[${requestId}] Creating new session for org: ${orgId}`);
+  // 3. No session exists at all - safe to create new one
+  console.log(`[${requestId}] Creating first session for org: ${orgId}`);
   
   const { data: newSession, error } = await supabase
     .from("whatsapp_sessions")
-    .upsert(
-      {
-        id: sessionId,
-        org_id: orgId,
-        phone_number: "pending",
-        session_status: "connected",
-        updated_at: new Date().toISOString(),
-      },
-      { 
-        onConflict: "org_id,phone_number",
-        ignoreDuplicates: false 
-      }
-    )
+    .insert({
+      id: sessionId,
+      org_id: orgId,
+      phone_number: "unknown",
+      session_status: "connected",
+    })
     .select("id, phone_number")
     .single();
 
   if (error) {
-    // If upsert fails, try one more time to find existing session
-    console.log(`[${requestId}] Upsert failed, retrying lookup: ${error.message}`);
+    // Race condition: another request created a session, try to find it
+    console.log(`[${requestId}] Insert failed (likely race condition), retrying lookup`);
     
-    const { data: retrySession } = await supabase
+    const { data: raceSession } = await supabase
       .from("whatsapp_sessions")
       .select("id, phone_number")
       .eq("org_id", orgId)
-      .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     
-    if (retrySession) {
-      return retrySession;
+    if (raceSession) {
+      return raceSession;
     }
     
     throw new Error(`Session creation failed: ${formatError(error)}`);
