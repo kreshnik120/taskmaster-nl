@@ -12,6 +12,9 @@ interface UseWhatsAppChatsReturn {
   setSearchQuery: (q: string) => void;
   filter: WhatsAppFilter;
   setFilter: (f: WhatsAppFilter) => void;
+  tagFilter: string | null;
+  setTagFilter: (tag: string | null) => void;
+  availableTags: string[];
   stats: {
     totalChats: number;
     unreadChats: number;
@@ -23,6 +26,7 @@ export function useWhatsAppChats(): UseWhatsAppChatsReturn {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<WhatsAppFilter>('all');
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
 
   const { data: chats = [], isLoading, error } = useQuery({
     queryKey: ['whatsapp-chats'],
@@ -65,6 +69,13 @@ export function useWhatsAppChats(): UseWhatsAppChatsReturn {
       result = result.filter(chat => chat.linked_professional_id !== null);
     }
 
+    // Apply tag filter
+    if (tagFilter) {
+      result = result.filter(chat => 
+        chat.contact?.tags?.includes(tagFilter)
+      );
+    }
+
     // Apply search
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
@@ -77,7 +88,16 @@ export function useWhatsAppChats(): UseWhatsAppChatsReturn {
     }
 
     return result;
-  }, [chats, filter, searchQuery]);
+  }, [chats, filter, tagFilter, searchQuery]);
+
+  // Get all unique tags used across contacts
+  const availableTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    chats.forEach(chat => {
+      chat.contact?.tags?.forEach(tag => tagSet.add(tag));
+    });
+    return Array.from(tagSet);
+  }, [chats]);
 
   // Calculate stats
   const stats = useMemo(() => ({
@@ -113,6 +133,9 @@ export function useWhatsAppChats(): UseWhatsAppChatsReturn {
     setSearchQuery,
     filter,
     setFilter,
+    tagFilter,
+    setTagFilter,
+    availableTags,
     stats,
   };
 }

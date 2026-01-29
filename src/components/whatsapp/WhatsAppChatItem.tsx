@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WhatsAppContactAvatar } from "./WhatsAppContactAvatar";
+import { getTagConfig } from "@/lib/whatsapp-tags";
 import type { WhatsAppChat } from "@/types/whatsapp";
 
 interface WhatsAppChatItemProps {
@@ -106,6 +107,31 @@ export function WhatsAppChatItem({ chat, isSelected, onClick }: WhatsAppChatItem
             </Badge>
           )}
         </div>
+
+        {/* Tag indicators */}
+        {chat.contact?.tags && chat.contact.tags.length > 0 && (
+          <div className="flex gap-1 mt-1">
+            {chat.contact.tags.slice(0, 3).map(tagId => {
+              const config = getTagConfig(tagId);
+              if (!config) return null;
+              return (
+                <div 
+                  key={tagId}
+                  className={cn(
+                    "w-2 h-2 rounded-full", 
+                    config.color.bg,
+                    config.color.border,
+                    "border"
+                  )}
+                  title={config.label}
+                />
+              );
+            })}
+            {chat.contact.tags.length > 3 && (
+              <span className="text-xs text-muted-foreground">+{chat.contact.tags.length - 3}</span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
