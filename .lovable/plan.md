@@ -1,132 +1,74 @@
 
-# Filter- en Sorteerfunctionaliteit voor MyTasksFlowSection
+# Hernoem Team Tab Header van "Dashboard" naar "Overzicht"
 
-## Overzicht
+## Probleem
 
-Toevoegen van zoek- en sorteerfunctionaliteit aan de "Mijn Taken" sectie in het Dashboard, consistent met de bestaande Kanban.tsx implementatie. Dit zorgt voor een uniforme gebruikerservaring.
+Wanneer gebruikers op de **"Team Overzicht" tab** klikken in het Dashboard, zien ze binnen die tab een header component die opnieuw **"Dashboard"** als titel toont. Dit veroorzaakt verwarring omdat:
 
-## Nieuwe Functionaliteit
+| Locatie | Huidige tekst | Verwarring |
+|---------|---------------|------------|
+| Sidebar menu | Dashboard | Correcte naam voor hoofdnavigatie |
+| Pagina header | Dashboard | Dubbel, maar acceptabel |
+| Team tab header | **Dashboard** | Verwarrend - we zijn in Team Overzicht |
 
-| Feature | Beschrijving |
-|---------|--------------|
-| Sorteer dropdown | Keuze uit Deadline, Prioriteit, Aangemaakt |
-| Sorteerrichting | Toggle knop met pijl omhoog/omlaag |
-| Zoekbalk | Filter taken op titel/beschrijving |
-| Keyboard shortcut | Druk `/` om direct naar zoekbalk te gaan |
-| Persistentie | Voorkeuren worden opgeslagen in localStorage |
+## Oplossing
 
-## Technische Wijzigingen
+Wijzig de titel in de `DashboardHeader` component van "Dashboard" naar "Overzicht".
 
-### Bestand: `src/components/dashboard/MyTasksFlowSection.tsx`
+## Technische Wijziging
 
-**1. Update imports (regel 1 en voeg nieuwe toe)**
+| Bestand | Regel | Van | Naar |
+|---------|-------|-----|------|
+| `src/components/dashboard-stats/DashboardHeader.tsx` | 25 | `Dashboard` | `Overzicht` |
+| `src/components/dashboard-stats/DashboardHeader.tsx` | 26-27 | `Overzicht van alle taken en voortgang` | `Team statistieken en voortgang` |
+| `src/components/dashboard-stats/DashboardHeader.tsx` | 15 | `"Dashboard vernieuwd"` | `"Statistieken vernieuwd"` |
 
-Voeg `useRef` toe aan React imports en voeg nieuwe component/icon imports toe:
-- Input component
-- Select componenten (Select, SelectContent, SelectItem, SelectTrigger, SelectValue)
-- Tooltip componenten
-- Lucide icons: Search, ArrowUp, ArrowDown, ArrowUpDown, Calendar, AlertCircle, Clock
-
-**2. Voeg priorityRank constante toe (na COLUMNS_TO_SHOW)**
+### Code wijziging:
 
 ```typescript
-const priorityRank: Record<string, number> = {
-  'CRITICAL': 4,
-  'HIGH': 3,
-  'MEDIUM': 2,
-  'LOW': 1,
-};
+// Huidige code (regel 24-29):
+<div>
+  <h1 className="text-2xl font-bold">Dashboard</h1>
+  <p className="text-sm text-muted-foreground">
+    Overzicht van alle taken en voortgang
+  </p>
+</div>
+
+// Nieuwe code:
+<div>
+  <h1 className="text-2xl font-bold">Overzicht</h1>
+  <p className="text-sm text-muted-foreground">
+    Team statistieken en voortgang
+  </p>
+</div>
 ```
 
-**3. Nieuwe state variabelen (in component)**
+## Visueel Resultaat
 
-```typescript
-const searchInputRef = useRef<HTMLInputElement>(null);
-
-// Sorteer-voorkeur met localStorage persistentie
-const [sortBy, setSortBy] = useState<'due_at' | 'priority' | 'created_at'>(() => {
-  const stored = localStorage.getItem('mytasks-sort-by');
-  return (stored as 'due_at' | 'priority' | 'created_at') || 'due_at';
-});
-const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(() => {
-  const stored = localStorage.getItem('mytasks-sort-direction');
-  return (stored as 'asc' | 'desc') || 'asc';
-});
-const [searchQuery, setSearchQuery] = useState("");
+**Voor:**
+```
+Dashboard (pagina)
+├── Tab: Mijn Werk
+├── Tab: Team Overzicht
+│   └── Header: "Dashboard"  ← VERWARREND
+└── Tab: Recruitment
 ```
 
-**4. Nieuwe useEffect hooks**
-
-- localStorage persistentie voor sorteervoorkeuren
-- Keyboard shortcut handler (`/` om zoekbalk te focussen)
-
-**5. Update getTasksForColumn functie**
-
-Uitbreiden met:
-- Zoekfilter op title en description
-- Sortering op basis van sortBy en sortDirection
-
-**6. Nieuwe Section Header UI**
-
-Vervang de huidige header met:
-- Responsieve layout (flex-col op mobile, flex-row op desktop)
-- Sorteer dropdown met iconen per optie
-- Sorteerrichting toggle met tooltip
-- Zoekbalk met keyboard hint en Search icoon
-- Team overzicht link
-
-## Layout Structuur
-
-```text
-+--------------------------------------------------------+
-| Mijn Taken [badge]                                      |
-+--------------------------------------------------------+
-| [Sorteer: Deadline ▼] [↑] | [🔍 Zoek taken... (/)] | [Team →] |
-+--------------------------------------------------------+
+**Na:**
+```
+Dashboard (pagina)
+├── Tab: Mijn Werk
+├── Tab: Team Overzicht
+│   └── Header: "Overzicht"  ← DUIDELIJK
+└── Tab: Recruitment
 ```
 
-Op mobile worden de controls gestapeld:
+## Impact
 
-```text
-+------------------------+
-| Mijn Taken [badge]     |
-+------------------------+
-| [Sorteer ▼] [↑]        |
-| [🔍 Zoek taken... (/)] |
-| [Team overzicht →]     |
-+------------------------+
-```
-
-## Accessibility
-
-| Feature | Implementatie |
-|---------|---------------|
-| Keyboard navigatie | `/` shortcut voor zoekbalk |
-| ARIA labels | `aria-label` op Input en Buttons |
-| Screen readers | Tooltips voor sorteerrichting |
-| Focus management | Ref voor programmatische focus |
-
-## localStorage Keys
-
-| Key | Type | Default |
-|-----|------|---------|
-| `mytasks-sort-by` | 'due_at' | 'priority' | 'created_at' | 'due_at' |
-| `mytasks-sort-direction` | 'asc' | 'desc' | 'asc' |
-
-## Geen Wijzigingen Aan
-
-- Kanban.tsx (bestaande implementatie)
-- Sidebar
-- Routes
-- Andere componenten/bestanden
-
-## Samenvatting
-
-| Stap | Actie |
-|------|-------|
-| 1 | Imports uitbreiden met Input, Select, Tooltip, extra icons |
-| 2 | priorityRank constant toevoegen |
-| 3 | State en ref voor sortBy, sortDirection, searchQuery |
-| 4 | useEffect hooks voor localStorage en keyboard shortcut |
-| 5 | getTasksForColumn functie uitbreiden met filter en sort |
-| 6 | Header UI vervangen met controls |
+| Onderdeel | Status |
+|-----------|--------|
+| Sidebar "Dashboard" menu item | Ongewijzigd |
+| Pagina header "Dashboard" | Ongewijzigd |
+| Team tab header | Gewijzigd naar "Overzicht" |
+| Routes/navigatie | Ongewijzigd |
+| Toast melding | Aangepast naar "Statistieken vernieuwd" |
