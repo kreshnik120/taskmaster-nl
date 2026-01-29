@@ -6503,6 +6503,9 @@ export type Database = {
           contact_id: string | null
           created_at: string | null
           id: string
+          is_archived: boolean | null
+          is_muted: boolean | null
+          is_pinned: boolean | null
           last_message_at: string | null
           last_message_preview: string | null
           linked_professional_id: string | null
@@ -6517,6 +6520,9 @@ export type Database = {
           contact_id?: string | null
           created_at?: string | null
           id?: string
+          is_archived?: boolean | null
+          is_muted?: boolean | null
+          is_pinned?: boolean | null
           last_message_at?: string | null
           last_message_preview?: string | null
           linked_professional_id?: string | null
@@ -6531,6 +6537,9 @@ export type Database = {
           contact_id?: string | null
           created_at?: string | null
           id?: string
+          is_archived?: boolean | null
+          is_muted?: boolean | null
+          is_pinned?: boolean | null
           last_message_at?: string | null
           last_message_preview?: string | null
           linked_professional_id?: string | null
@@ -6586,39 +6595,48 @@ export type Database = {
       }
       whatsapp_contacts: {
         Row: {
+          contact_notes: string | null
           created_at: string | null
           display_name: string | null
           id: string
+          is_business_account: boolean | null
           org_id: string
           phone_number: string
           professional_id: string | null
           profile_picture_url: string | null
           push_name: string | null
           session_id: string
+          tags: string[] | null
           updated_at: string | null
         }
         Insert: {
+          contact_notes?: string | null
           created_at?: string | null
           display_name?: string | null
           id?: string
+          is_business_account?: boolean | null
           org_id: string
           phone_number: string
           professional_id?: string | null
           profile_picture_url?: string | null
           push_name?: string | null
           session_id: string
+          tags?: string[] | null
           updated_at?: string | null
         }
         Update: {
+          contact_notes?: string | null
           created_at?: string | null
           display_name?: string | null
           id?: string
+          is_business_account?: boolean | null
           org_id?: string
           phone_number?: string
           professional_id?: string | null
           profile_picture_url?: string | null
           push_name?: string | null
           session_id?: string
+          tags?: string[] | null
           updated_at?: string | null
         }
         Relationships: [
