@@ -1,245 +1,297 @@
 
 
-# WhatsAppContactAvatar Component - Implementatie Plan
+# WhatsAppContactName Component - Implementatie Plan
 
 ## Overzicht
 
-Maak een herbruikbare avatar component voor WhatsApp contacten met profielfoto's, initialen fallback, en color hashing.
+Maak een herbruikbare naam component met inline editing voor WhatsApp contacten. Gebruikers kunnen contactnamen aanpassen en resetten naar de originele WhatsApp naam.
 
-## Huidige Situatie
+## Componenten Te Maken
 
-| Component | Locatie | Huidige Avatar Implementatie |
-|-----------|---------|------------------------------|
-| WhatsAppChatItem | Regel 64-68 | Eenvoudige AvatarFallback met groene styling |
-| WhatsAppChatDetail | Regel 132-136 | Zelfde als ChatItem |
+### 1. WhatsAppContactName Component
 
-**Database velden (whatsapp_contacts):**
-- `display_name` - Gebruiker-aanpasbare naam
-- Geen `push_name` (WhatsApp's originele naam)
-- Geen `profile_picture_url`
-
-## Implementatie Stappen
-
-### 1. Database Migratie
-
-Voeg ontbrekende kolommen toe aan `whatsapp_contacts`:
-
-```sql
-ALTER TABLE whatsapp_contacts 
-ADD COLUMN push_name TEXT,
-ADD COLUMN profile_picture_url TEXT;
-```
-
-### 2. Nieuw Component: WhatsAppContactAvatar
-
-**Bestand:** `src/components/whatsapp/WhatsAppContactAvatar.tsx`
+**Bestand:** `src/components/whatsapp/WhatsAppContactName.tsx`
 
 **Props Interface:**
 ```typescript
-interface WhatsAppContactAvatarProps {
-  contactId?: string;
-  profilePictureUrl?: string | null;
-  displayName?: string | null;
-  pushName?: string | null;
+interface WhatsAppContactNameProps {
+  contactId: string;
+  displayName: string | null;
+  pushName: string | null;
   phoneNumber: string;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
-  showOnlineStatus?: boolean;
-  className?: string;
+  editable?: boolean;
+  size?: 'sm' | 'md' | 'lg';
 }
 ```
 
 **Size Mapping:**
-| Size | Pixels | Tailwind Class |
-|------|--------|----------------|
-| sm   | 32px   | h-8 w-8        |
-| md   | 48px   | h-12 w-12      |
-| lg   | 64px   | h-16 w-16      |
-| xl   | 96px   | h-24 w-24      |
+| Size | Text Class | Line Height |
+|------|------------|-------------|
+| sm   | text-sm    | leading-tight |
+| md   | text-base  | leading-normal |
+| lg   | text-lg    | leading-relaxed |
 
-**Initialen Logica:**
-```typescript
-function getInitials(displayName, pushName, phoneNumber): string {
-  const name = displayName || pushName;
-  if (name) {
-    const parts = name.trim().split(/\s+/);
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    }
-    return name.substring(0, 2).toUpperCase();
-  }
-  // Fallback: laatste 2 cijfers telefoonnummer
-  const digits = phoneNumber.replace(/\D/g, '');
-  return digits.slice(-2) || '?';
-}
-```
-
-**Kleur Hashing Algoritme:**
-```typescript
-// Consistent kleuren per contact op basis van naam hash
-const AVATAR_COLORS = [
-  { bg: 'bg-red-100', text: 'text-red-700' },
-  { bg: 'bg-orange-100', text: 'text-orange-700' },
-  { bg: 'bg-amber-100', text: 'text-amber-700' },
-  { bg: 'bg-green-100', text: 'text-green-700' },
-  { bg: 'bg-teal-100', text: 'text-teal-700' },
-  { bg: 'bg-blue-100', text: 'text-blue-700' },
-  { bg: 'bg-indigo-100', text: 'text-indigo-700' },
-  { bg: 'bg-purple-100', text: 'text-purple-700' },
-  { bg: 'bg-pink-100', text: 'text-pink-700' },
-];
-
-function hashToColor(str: string): typeof AVATAR_COLORS[0] {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-}
+**Weergave Logica:**
+```text
+┌────────────────────────────────────────────────────────┐
+│  Jan de Vries  ✏️                                      │
+│  (WhatsApp: Jan)         ← alleen als verschilt        │
+└────────────────────────────────────────────────────────┘
 ```
 
 **Component States:**
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│  Loading State     →  Skeleton pulse animatie               │
-│  Image Loading     →  Skeleton, dan fade-in naar foto      │
-│  Image Error       →  Fallback naar initialen              │
-│  No Image          →  Initialen met kleur hash             │
-└─────────────────────────────────────────────────────────────┘
+Normale State:
+┌──────────────────────────────────────┐
+│  [Naam tekst] [Edit icoon]           │
+│  (WhatsApp: {pushName})              │
+└──────────────────────────────────────┘
+
+Edit State:
+┌──────────────────────────────────────┐
+│  [Input field met huidige naam]      │
+│  [Reset naar WhatsApp naam] (link)   │
+└──────────────────────────────────────┘
 ```
 
-**Component Structuur:**
+**Gedrag:**
+- **Klik op naam of edit icoon:** Input field verschijnt
+- **Input field:** Focus automatisch, tekst is geselecteerd
+- **Enter:** Opslaan
+- **Escape:** Annuleren
+- **Blur:** Opslaan
+- **"Reset naar WhatsApp naam":** Zet display_name naar null
+
+### 2. useUpdateContactName Hook
+
+**Bestand:** `src/hooks/whatsapp/useUpdateContactName.ts`
+
+**Interface:**
+```typescript
+interface UpdateContactNameParams {
+  contactId: string;
+  displayName: string | null;
+}
+```
+
+**Implementatie:**
+```typescript
+export function useUpdateContactName() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ contactId, displayName }: UpdateContactNameParams) => {
+      const { error } = await supabase
+        .from('whatsapp_contacts')
+        .update({ display_name: displayName })
+        .eq('id', contactId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      // Invalidate relevante queries
+      queryClient.invalidateQueries({ queryKey: ['whatsapp-chats'] });
+      queryClient.invalidateQueries({ queryKey: ['whatsapp-contact'] });
+      toast.success('Naam bijgewerkt');
+    },
+    onError: (error) => {
+      console.error('Failed to update contact name:', error);
+      toast.error('Kon naam niet bijwerken');
+    },
+  });
+}
+```
+
+### 3. Component Integratie
+
+**WhatsAppChatDetail.tsx (Regel 131-134):**
+
+Vervang:
 ```tsx
-export function WhatsAppContactAvatar({
-  profilePictureUrl,
+<div className="flex-1 min-w-0">
+  <h2 className="font-medium text-foreground truncate">{displayName}</h2>
+  <p className="text-sm text-muted-foreground truncate">{formatPhone(phoneNumber)}</p>
+</div>
+```
+
+Met:
+```tsx
+<div className="flex-1 min-w-0">
+  <WhatsAppContactName
+    contactId={chat.contact?.id || ''}
+    displayName={chat.contact?.display_name}
+    pushName={chat.contact?.push_name}
+    phoneNumber={chat.contact?.phone_number || 'Onbekend'}
+    editable={!!chat.contact?.id}
+    size="md"
+  />
+  <p className="text-sm text-muted-foreground truncate">{formatPhone(phoneNumber)}</p>
+</div>
+```
+
+**WhatsAppChatItem.tsx:** Geen wijziging nodig - naam blijft read-only in de lijst.
+
+## Technische Details
+
+### WhatsAppContactName Component Structuur
+
+```tsx
+export function WhatsAppContactName({
+  contactId,
   displayName,
   pushName,
   phoneNumber,
+  editable = false,
   size = 'md',
-  className,
-}: WhatsAppContactAvatarProps) {
-  const [imageError, setImageError] = useState(false);
-  const [imageLoading, setImageLoading] = useState(true);
+}: WhatsAppContactNameProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
   
-  const initials = getInitials(displayName, pushName, phoneNumber);
-  const colorScheme = hashToColor(displayName || pushName || phoneNumber);
-  const sizeClasses = SIZE_MAP[size];
+  const updateName = useUpdateContactName();
   
-  const showImage = profilePictureUrl && !imageError;
+  // Displayed name: displayName || pushName || phoneNumber
+  const currentName = displayName || pushName || phoneNumber;
+  
+  // Show WhatsApp name hint if displayName differs from pushName
+  const showPushNameHint = displayName && pushName && displayName !== pushName;
+  
+  // Show reset option if displayName is set (user changed it)
+  const canReset = displayName !== null;
+  
+  const startEditing = () => {
+    if (!editable) return;
+    setEditValue(currentName);
+    setIsEditing(true);
+  };
+  
+  const saveEdit = () => {
+    const trimmedValue = editValue.trim();
+    if (trimmedValue && trimmedValue !== currentName) {
+      updateName.mutate({ contactId, displayName: trimmedValue });
+    }
+    setIsEditing(false);
+  };
+  
+  const cancelEdit = () => {
+    setIsEditing(false);
+  };
+  
+  const resetToWhatsAppName = () => {
+    updateName.mutate({ contactId, displayName: null });
+    setIsEditing(false);
+  };
+  
+  // Focus and select text when editing starts
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+  
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveEdit();
+    } else if (e.key === 'Escape') {
+      cancelEdit();
+    }
+  };
+  
+  // Size classes
+  const sizeClasses = {
+    sm: 'text-sm',
+    md: 'text-base font-medium',
+    lg: 'text-lg font-medium',
+  };
+  
+  if (isEditing) {
+    return (
+      <div className="space-y-1">
+        <Input
+          ref={inputRef}
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={saveEdit}
+          onKeyDown={handleKeyDown}
+          className="h-8 text-sm"
+          disabled={updateName.isPending}
+        />
+        {canReset && (
+          <button
+            type="button"
+            onClick={resetToWhatsAppName}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Reset naar WhatsApp naam
+          </button>
+        )}
+      </div>
+    );
+  }
   
   return (
-    <Avatar className={cn(sizeClasses, "border-2 border-border", className)}>
-      {showImage ? (
-        <>
-          {imageLoading && <Skeleton className="absolute inset-0 rounded-full" />}
-          <AvatarImage 
-            src={profilePictureUrl}
-            onLoad={() => setImageLoading(false)}
-            onError={() => setImageError(true)}
-            className={cn(imageLoading && "opacity-0")}
-          />
-        </>
-      ) : (
-        <AvatarFallback className={cn(colorScheme.bg, colorScheme.text, "font-medium")}>
-          {initials}
-        </AvatarFallback>
+    <div className="space-y-0.5">
+      <div className="flex items-center gap-1.5 group">
+        <span className={cn(sizeClasses[size], "truncate")}>
+          {currentName}
+        </span>
+        {editable && (
+          <button
+            onClick={startEditing}
+            className="opacity-0 group-hover:opacity-100 transition-opacity"
+            aria-label="Naam bewerken"
+          >
+            <Pencil className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+          </button>
+        )}
+      </div>
+      {showPushNameHint && (
+        <p className="text-xs text-muted-foreground">
+          (WhatsApp: {pushName})
+        </p>
       )}
-    </Avatar>
+    </div>
   );
 }
 ```
 
-### 3. Type Updates
-
-**Bestand:** `src/types/whatsapp.ts`
-
-Uitbreiden `WhatsAppContact` interface:
-```typescript
-export interface WhatsAppContact {
-  id: string;
-  org_id: string;
-  session_id: string;
-  phone_number: string;
-  display_name: string | null;
-  push_name: string | null;           // NIEUW
-  profile_picture_url: string | null; // NIEUW
-  professional_id: string | null;
-  created_at: string;
-  updated_at: string;
-}
-```
-
-### 4. Component Integratie
-
-**WhatsAppChatItem.tsx (Regel 64-68):**
-```tsx
-// Oud:
-<Avatar className="h-12 w-12 flex-shrink-0">
-  <AvatarFallback className="bg-[#25D366]/20 text-[#25D366] font-medium">
-    {getInitials(chat.contact?.display_name)}
-  </AvatarFallback>
-</Avatar>
-
-// Nieuw:
-<WhatsAppContactAvatar
-  contactId={chat.contact?.id}
-  profilePictureUrl={chat.contact?.profile_picture_url}
-  displayName={chat.contact?.display_name}
-  pushName={chat.contact?.push_name}
-  phoneNumber={chat.contact?.phone_number || 'Onbekend'}
-  size="md"
-/>
-```
-
-**WhatsAppChatDetail.tsx (Regel 132-136):**
-```tsx
-// Oud:
-<Avatar className="h-10 w-10">
-  <AvatarFallback className="bg-[#25D366]/20 text-[#25D366] font-medium">
-    {getInitials(chat.contact?.display_name)}
-  </AvatarFallback>
-</Avatar>
-
-// Nieuw:
-<WhatsAppContactAvatar
-  contactId={chat.contact?.id}
-  profilePictureUrl={chat.contact?.profile_picture_url}
-  displayName={chat.contact?.display_name}
-  pushName={chat.contact?.push_name}
-  phoneNumber={chat.contact?.phone_number || 'Onbekend'}
-  size="md"
-/>
-```
-
-### 5. Verwijder Gedupliceerde Code
-
-Verwijder lokale `getInitials` functies uit:
-- `WhatsAppChatItem.tsx` (regel 15-23)
-- `WhatsAppChatDetail.tsx` (regel 27-35)
-
 ## Bestanden Overzicht
 
-| Actie | Bestand |
-|-------|---------|
-| CREATE | `src/components/whatsapp/WhatsAppContactAvatar.tsx` |
-| EDIT | `src/types/whatsapp.ts` - Voeg push_name en profile_picture_url toe |
-| EDIT | `src/components/whatsapp/WhatsAppChatItem.tsx` - Gebruik nieuwe component |
-| EDIT | `src/components/whatsapp/WhatsAppChatDetail.tsx` - Gebruik nieuwe component |
-| MIGRATE | Voeg push_name en profile_picture_url kolommen toe |
+| Actie | Bestand | Beschrijving |
+|-------|---------|--------------|
+| CREATE | `src/components/whatsapp/WhatsAppContactName.tsx` | Naam component met inline editing |
+| CREATE | `src/hooks/whatsapp/useUpdateContactName.ts` | Mutation hook voor naam updates |
+| EDIT | `src/components/whatsapp/WhatsAppChatDetail.tsx` | Integreer WhatsAppContactName |
 
-## Technische Details
+## Belangrijke Features
 
-### Edge Function Update (Later - Buiten Scope 6.1)
-De Edge Function zou later moeten worden bijgewerkt om `push_name` apart op te slaan van `display_name`:
-- `display_name` = Gebruiker-aanpasbare naam (handmatig gewijzigd)
-- `push_name` = WhatsApp's originele naam (automatisch van API)
+1. **Inline Editing:**
+   - Klik op naam of pencil icoon om te bewerken
+   - Enter = opslaan, Escape = annuleren
+   - Blur = opslaan
 
-Voor nu werkt de component met de bestaande data (initialen fallback).
+2. **WhatsApp Naam Hint:**
+   - Toont "(WhatsApp: {pushName})" als displayName anders is
+   - Helpt gebruiker te zien wat de originele naam was
+
+3. **Reset Functie:**
+   - "Reset naar WhatsApp naam" link in edit mode
+   - Zet display_name naar null
+   - Alleen zichtbaar als displayName is ingesteld
+
+4. **Loading State:**
+   - Input is disabled tijdens mutatie
+   - Optimistic updates via react-query
 
 ## Test Na Implementatie
 
-1. Open `/whatsapp` pagina
-2. Controleer dat alle avatars correct renderen met initialen
-3. Controleer dat kleuren consistent zijn per contact
-4. Controleer responsiviteit (size prop werkt)
-5. Als er een `profile_picture_url` zou zijn, test image loading + error fallback
+1. Open een chat in `/whatsapp`
+2. Hover over contactnaam → pencil icoon verschijnt
+3. Klik op naam → input field opent
+4. Typ nieuwe naam → Enter → toast "Naam bijgewerkt"
+5. Controleer dat "(WhatsApp: ...)" hint verschijnt
+6. Klik "Reset naar WhatsApp naam" → naam reset
+7. Test Escape om te annuleren
 
