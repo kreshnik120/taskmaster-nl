@@ -14,6 +14,7 @@ export interface WhatsAppChat {
   is_pinned: boolean;
   is_muted: boolean;
   is_archived: boolean;
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
   // Relations
