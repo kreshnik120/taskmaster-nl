@@ -1,119 +1,132 @@
 
-# Fix WhatsApp Bridge Session Duplicate Key Error
+# Filter- en Sorteerfunctionaliteit voor MyTasksFlowSection
 
-## Probleem
+## Overzicht
 
-De `getOrCreateSession` helper functie faalt met:
-```
-duplicate key value violates unique constraint "whatsapp_sessions_org_id_phone_number_key"
-```
+Toevoegen van zoek- en sorteerfunctionaliteit aan de "Mijn Taken" sectie in het Dashboard, consistent met de bestaande Kanban.tsx implementatie. Dit zorgt voor een uniforme gebruikerservaring.
 
-**Root cause**: De functie zoekt alleen op `sessionId`, maar de UNIQUE constraint is op `(org_id, phone_number)`. Wanneer een nieuwe sessie binnenkomt met `phone_number: "unknown"`, maar er al een sessie bestaat voor dezelfde org met `phone_number: "unknown"`, faalt de INSERT.
+## Nieuwe Functionaliteit
 
-**Database staat nu:**
-| id | org_id | phone_number | status |
-|----|--------|--------------|--------|
-| 9a8c604c-... | 550e8400-... | unknown | disconnected |
-| 63ffeb3c-... | 550e8400-... | 31618710360 | disconnected |
+| Feature | Beschrijving |
+|---------|--------------|
+| Sorteer dropdown | Keuze uit Deadline, Prioriteit, Aangemaakt |
+| Sorteerrichting | Toggle knop met pijl omhoog/omlaag |
+| Zoekbalk | Filter taken op titel/beschrijving |
+| Keyboard shortcut | Druk `/` om direct naar zoekbalk te gaan |
+| Persistentie | Voorkeuren worden opgeslagen in localStorage |
 
-## Oplossing
+## Technische Wijzigingen
 
-Update `getOrCreateSession` om:
-1. Eerst te zoeken op `sessionId` (bestaande logica)
-2. Als niet gevonden: zoek op `org_id + phone_number = "unknown"`
-3. Als gevonden: update die bestaande sessie met de nieuwe `sessionId`
-4. Als niet gevonden: maak een nieuwe sessie aan
+### Bestand: `src/components/dashboard/MyTasksFlowSection.tsx`
 
-## Technische wijziging
+**1. Update imports (regel 1 en voeg nieuwe toe)**
 
-| Bestand | Wijziging |
-|---------|-----------|
-| `supabase/functions/whatsapp-bridge/index.ts` | Update `getOrCreateSession` helper (regels 661-693) |
+Voeg `useRef` toe aan React imports en voeg nieuwe component/icon imports toe:
+- Input component
+- Select componenten (Select, SelectContent, SelectItem, SelectTrigger, SelectValue)
+- Tooltip componenten
+- Lucide icons: Search, ArrowUp, ArrowDown, ArrowUpDown, Calendar, AlertCircle, Clock
 
-**Nieuwe implementatie:**
+**2. Voeg priorityRank constante toe (na COLUMNS_TO_SHOW)**
 
 ```typescript
-async function getOrCreateSession(
-  supabase: SupabaseClientAny,
-  sessionId: string,
-  orgId: string,
-  requestId: string
-) {
-  // 1. Try to find existing session by ID
-  const { data: existing } = await supabase
-    .from("whatsapp_sessions")
-    .select("id, phone_number")
-    .eq("id", sessionId)
-    .single();
-
-  if (existing) return existing;
-
-  // 2. Check if there's an existing session with same org_id and phone_number="unknown"
-  const { data: existingUnknown } = await supabase
-    .from("whatsapp_sessions")
-    .select("id, phone_number")
-    .eq("org_id", orgId)
-    .eq("phone_number", "unknown")
-    .single();
-
-  if (existingUnknown) {
-    // Update the existing session with new ID
-    console.log(`[${requestId}] Updating existing unknown session: ${existingUnknown.id} -> ${sessionId}`);
-    
-    // Delete old session first, then create new one (can't update primary key)
-    await supabase
-      .from("whatsapp_sessions")
-      .delete()
-      .eq("id", existingUnknown.id);
-    
-    const { data: newSession, error } = await supabase
-      .from("whatsapp_sessions")
-      .insert({
-        id: sessionId,
-        org_id: orgId,
-        phone_number: "unknown",
-        session_status: "connected",
-      })
-      .select("id, phone_number")
-      .single();
-
-    if (error) {
-      throw new Error(`Session creation failed: ${formatError(error)}`);
-    }
-    return newSession;
-  }
-
-  // 3. Create new session
-  console.log(`[${requestId}] Creating new session: ${sessionId}`);
-  const { data: newSession, error } = await supabase
-    .from("whatsapp_sessions")
-    .insert({
-      id: sessionId,
-      org_id: orgId,
-      phone_number: "unknown",
-      session_status: "connected",
-    })
-    .select("id, phone_number")
-    .single();
-
-  if (error) {
-    throw new Error(`Session creation failed: ${formatError(error)}`);
-  }
-  return newSession;
-}
+const priorityRank: Record<string, number> = {
+  'CRITICAL': 4,
+  'HIGH': 3,
+  'MEDIUM': 2,
+  'LOW': 1,
+};
 ```
+
+**3. Nieuwe state variabelen (in component)**
+
+```typescript
+const searchInputRef = useRef<HTMLInputElement>(null);
+
+// Sorteer-voorkeur met localStorage persistentie
+const [sortBy, setSortBy] = useState<'due_at' | 'priority' | 'created_at'>(() => {
+  const stored = localStorage.getItem('mytasks-sort-by');
+  return (stored as 'due_at' | 'priority' | 'created_at') || 'due_at';
+});
+const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(() => {
+  const stored = localStorage.getItem('mytasks-sort-direction');
+  return (stored as 'asc' | 'desc') || 'asc';
+});
+const [searchQuery, setSearchQuery] = useState("");
+```
+
+**4. Nieuwe useEffect hooks**
+
+- localStorage persistentie voor sorteervoorkeuren
+- Keyboard shortcut handler (`/` om zoekbalk te focussen)
+
+**5. Update getTasksForColumn functie**
+
+Uitbreiden met:
+- Zoekfilter op title en description
+- Sortering op basis van sortBy en sortDirection
+
+**6. Nieuwe Section Header UI**
+
+Vervang de huidige header met:
+- Responsieve layout (flex-col op mobile, flex-row op desktop)
+- Sorteer dropdown met iconen per optie
+- Sorteerrichting toggle met tooltip
+- Zoekbalk met keyboard hint en Search icoon
+- Team overzicht link
+
+## Layout Structuur
+
+```text
++--------------------------------------------------------+
+| Mijn Taken [badge]                                      |
++--------------------------------------------------------+
+| [Sorteer: Deadline ▼] [↑] | [🔍 Zoek taken... (/)] | [Team →] |
++--------------------------------------------------------+
+```
+
+Op mobile worden de controls gestapeld:
+
+```text
++------------------------+
+| Mijn Taken [badge]     |
++------------------------+
+| [Sorteer ▼] [↑]        |
+| [🔍 Zoek taken... (/)] |
+| [Team overzicht →]     |
++------------------------+
+```
+
+## Accessibility
+
+| Feature | Implementatie |
+|---------|---------------|
+| Keyboard navigatie | `/` shortcut voor zoekbalk |
+| ARIA labels | `aria-label` op Input en Buttons |
+| Screen readers | Tooltips voor sorteerrichting |
+| Focus management | Ref voor programmatische focus |
+
+## localStorage Keys
+
+| Key | Type | Default |
+|-----|------|---------|
+| `mytasks-sort-by` | 'due_at' | 'priority' | 'created_at' | 'due_at' |
+| `mytasks-sort-direction` | 'asc' | 'desc' | 'asc' |
+
+## Geen Wijzigingen Aan
+
+- Kanban.tsx (bestaande implementatie)
+- Sidebar
+- Routes
+- Andere componenten/bestanden
 
 ## Samenvatting
 
 | Stap | Actie |
 |------|-------|
-| 1 | Check of sessie bestaat met `sessionId` |
-| 2 | Check of sessie bestaat met `org_id` + `phone_number="unknown"` |
-| 3 | Als ja: vervang die sessie met nieuwe `sessionId` |
-| 4 | Als nee: maak nieuwe sessie |
-
-## Verwacht resultaat
-
-- Geen duplicate key errors meer bij `message.received` events
-- Bestaande "unknown" sessies worden hergebruikt/vervangen
-- Sessies met echte phone numbers blijven intact
+| 1 | Imports uitbreiden met Input, Select, Tooltip, extra icons |
+| 2 | priorityRank constant toevoegen |
+| 3 | State en ref voor sortBy, sortDirection, searchQuery |
+| 4 | useEffect hooks voor localStorage en keyboard shortcut |
+| 5 | getTasksForColumn functie uitbreiden met filter en sort |
+| 6 | Header UI vervangen met controls |
