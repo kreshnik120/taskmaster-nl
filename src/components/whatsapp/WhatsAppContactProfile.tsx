@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { WhatsAppContactAvatar } from "./WhatsAppContactAvatar";
 import { WhatsAppContactName } from "./WhatsAppContactName";
 import { WhatsAppContactTags } from "./WhatsAppContactTags";
+import { WhatsAppContactNotes } from "./WhatsAppContactNotes";
 import { useWhatsAppContact } from "@/hooks/whatsapp/useWhatsAppContact";
 import type { WhatsAppChat } from "@/types/whatsapp";
 import { formatDistanceToNow } from "date-fns";
@@ -146,15 +147,12 @@ export function WhatsAppContactProfile({ chat, onClose }: WhatsAppContactProfile
 
         <Separator />
 
-        {/* Notes section - placeholder for 6.5 */}
-        <div className="px-4 py-4 space-y-2">
-          <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Notities
-          </h4>
-          <Textarea
-            placeholder="Voeg notities toe..."
-            className="min-h-[100px] resize-none"
-            disabled
+        {/* Notes section */}
+        <div className="px-4 py-4">
+          <WhatsAppContactNotes
+            contactId={displayContact?.id || ''}
+            notes={displayContact?.contact_notes || null}
+            editable={!!displayContact?.id}
           />
         </div>
 
