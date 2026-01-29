@@ -712,11 +712,22 @@ async function handleContactProfilePicture(
   const publicUrl = urlData.publicUrl;
   console.log(`[${requestId}] Profile picture URL: ${publicUrl}`);
 
-  // 3. Update contact in database
+  // 3. Update contact in database - try multiple phone formats
+  const phoneVariants = [
+    phone,
+    `${phone}@s.whatsapp.net`,
+    `+${phone}`,
+    phone.replace('@s.whatsapp.net', ''),
+  ];
+
+  // Remove duplicates
+  const uniquePhones = [...new Set(phoneVariants)];
+  console.log(`[${requestId}] Searching contacts with phone variants: ${uniquePhones.join(', ')}`);
+
   const { data: updatedContacts, error: updateError } = await supabase
     .from('whatsapp_contacts')
     .update({ profile_picture_url: publicUrl })
-    .eq('phone_number', phone)
+    .in('phone_number', uniquePhones)
     .eq('org_id', orgId)
     .select('id');
 
