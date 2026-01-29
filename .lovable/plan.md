@@ -1,186 +1,193 @@
 
 
-# Soft Delete met Undo voor WhatsApp Chats
+# WhatsApp Profile Picture Handler - Implementatie Plan
 
 ## Overzicht
 
-Wijzig de "verwijder chat" functionaliteit naar een soft delete met undo-mogelijkheid via een toast notificatie. Dit voorkomt per ongeluk permanent verwijderen van chats.
+Voeg een nieuwe event handler `contact.profilePicture` toe aan de whatsapp-bridge Edge Function voor het synchroniseren van contact profielfoto's.
 
 ## Huidige Situatie
 
 | Component | Status |
 |-----------|--------|
-| `useDeleteChat` hook | Hard delete (permanent) |
-| Context menu | "Chat verwijderen" + confirm dialog |
-| `whatsapp_chats.deleted_at` kolom | Bestaat NIET |
+| `whatsapp_contacts.profile_picture_url` kolom | Bestaat |
+| `whatsapp-media` storage bucket | Bestaat |
+| Event handler `contact.profilePicture` | Niet geimplementeerd |
 
 ## Implementatie Stappen
 
-### 1. Database Migratie
+### 1. Update whatsapp-bridge Edge Function
 
-Voeg `deleted_at` kolom toe aan `whatsapp_chats`:
+**Bestand:** `supabase/functions/whatsapp-bridge/index.ts`
 
-```sql
-ALTER TABLE whatsapp_chats 
-ADD COLUMN deleted_at TIMESTAMPTZ DEFAULT NULL;
-```
-
-### 2. Update WhatsAppChat Type
-
-**Bestand:** `src/types/whatsapp.ts`
-
-Voeg `deleted_at` veld toe:
+#### A. Voeg nieuw case toe aan switch statement (regel 164-165):
 
 ```typescript
-export interface WhatsAppChat {
-  // ... bestaande velden
-  is_archived: boolean;
-  deleted_at: string | null;  // NIEUW
-  created_at: string;
-  // ...
+case "contact.profilePicture":
+  result = await handleContactProfilePicture(supabase, sessionId, orgId, data, media, requestId);
+  break;
+```
+
+#### B. Implementeer nieuwe handler functie (na handleSendMessage, voor HELPER FUNCTIONS sectie):
+
+```typescript
+async function handleContactProfilePicture(
+  supabase: SupabaseClientAny,
+  sessionId: string,
+  orgId: string,
+  data: Record<string, unknown>,
+  media: MediaData | undefined,
+  requestId: string
+): Promise<Record<string, unknown>> {
+  const { contactJid, phone } = data as {
+    contactJid?: string;
+    phone: string;
+  };
+
+  if (!phone) {
+    throw new Error("Missing required data: phone");
+  }
+
+  if (!media || !media.base64) {
+    throw new Error("Missing required media data");
+  }
+
+  console.log(`[${requestId}] Processing profile picture for ${phone}`);
+
+  // 1. Upload image to storage
+  const storagePath = `profile-pictures/${orgId}/${phone}.jpg`;
+  const fileBuffer = base64Decode(media.base64);
+
+  console.log(`[${requestId}] Uploading profile picture: ${storagePath} (${media.filesize || 'unknown'} bytes)`);
+
+  // Upsert: delete existing file first, then upload new one
+  await supabase.storage
+    .from('whatsapp-media')
+    .remove([storagePath]);
+
+  const { error: uploadError } = await supabase.storage
+    .from('whatsapp-media')
+    .upload(storagePath, fileBuffer, {
+      contentType: media.mimetype || 'image/jpeg',
+      upsert: true,
+    });
+
+  if (uploadError) {
+    console.error(`[${requestId}] Profile picture upload error:`, uploadError);
+    throw new Error(`Upload failed: ${formatError(uploadError)}`);
+  }
+
+  // 2. Generate public URL
+  const { data: urlData } = supabase.storage
+    .from('whatsapp-media')
+    .getPublicUrl(storagePath);
+
+  const publicUrl = urlData.publicUrl;
+  console.log(`[${requestId}] Profile picture URL: ${publicUrl}`);
+
+  // 3. Update contact in database
+  const { data: updatedContacts, error: updateError } = await supabase
+    .from('whatsapp_contacts')
+    .update({ profile_picture_url: publicUrl })
+    .eq('phone_number', phone)
+    .eq('org_id', orgId)
+    .select('id');
+
+  if (updateError) {
+    console.error(`[${requestId}] Contact update error:`, updateError);
+    throw new Error(`Contact update failed: ${formatError(updateError)}`);
+  }
+
+  if (!updatedContacts || updatedContacts.length === 0) {
+    console.warn(`[${requestId}] ⚠️ No contact found for phone ${phone} in org ${orgId} - photo stored but contact not updated`);
+    return { success: true, url: publicUrl, contactUpdated: false };
+  }
+
+  console.log(`[${requestId}] ✅ Profile picture updated for ${updatedContacts.length} contact(s)`);
+
+  return { success: true, url: publicUrl, contactUpdated: true, contactCount: updatedContacts.length };
 }
 ```
 
-### 3. Herschrijf useDeleteChat Hook
+## Handler Logica Diagram
 
-**Bestand:** `src/hooks/whatsapp/useDeleteChat.ts`
-
-Wijzig van hard delete naar soft delete met undo toast:
-
-```typescript
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
-
-export function useDeleteChat() {
-  const queryClient = useQueryClient();
-
-  const undoMutation = useMutation({
-    mutationFn: async (chatId: string) => {
-      const { error } = await supabase
-        .from('whatsapp_chats')
-        .update({ 
-          is_archived: false, 
-          deleted_at: null 
-        })
-        .eq('id', chatId);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['whatsapp-chats'] });
-      toast.success('Chat hersteld');
-    },
-    onError: (error) => {
-      console.error('Failed to restore chat:', error);
-      toast.error('Kon chat niet herstellen');
-    },
-  });
-
-  return useMutation({
-    mutationFn: async (chatId: string) => {
-      // Soft delete: set is_archived = true, deleted_at = now()
-      const { error } = await supabase
-        .from('whatsapp_chats')
-        .update({ 
-          is_archived: true, 
-          deleted_at: new Date().toISOString() 
-        })
-        .eq('id', chatId);
-
-      if (error) throw error;
-      return chatId;
-    },
-    onSuccess: (chatId) => {
-      queryClient.invalidateQueries({ queryKey: ['whatsapp-chats'] });
-      
-      // Toast met undo actie (5 seconden)
-      toast.success('Chat gearchiveerd', {
-        duration: 5000,
-        action: {
-          label: 'Ongedaan maken',
-          onClick: () => undoMutation.mutate(chatId),
-        },
-      });
-    },
-    onError: (error) => {
-      console.error('Failed to archive chat:', error);
-      toast.error('Kon chat niet archiveren');
-    },
-  });
-}
-```
-
-### 4. Vereenvoudig WhatsAppChatContextMenu
-
-**Bestand:** `src/components/whatsapp/WhatsAppChatContextMenu.tsx`
-
-Verwijderingslogica:
-- Wijzig tekst "Chat verwijderen" → "Chat archiveren"
-- Verwijder confirm dialog (niet meer nodig met undo)
-- Roep direct `deleteChat.mutate()` aan
-
-```tsx
-// Verwijder useState voor deleteDialogOpen
-// Verwijder AlertDialog component
-
-// Wijzig menu item:
-<ContextMenuItem 
-  onClick={() => deleteChat.mutate(chat.id)}
-  className="text-destructive focus:text-destructive"
->
-  <Trash2 className="h-4 w-4 mr-2" />
-  Chat archiveren
-</ContextMenuItem>
-```
-
-### 5. Filter Logic (al correct)
-
-De huidige `useWhatsAppChats` filtert al op `is_archived`:
-
-```typescript
-// Regel 66 - dit werkt al correct
-result = result.filter(chat => !chat.is_archived);
+```text
+VPS POST /contacts/:jid/profile-picture
+         ↓
+whatsapp-bridge Edge Function
+         ↓
+event: "contact.profilePicture"
+data: { contactJid, phone }
+media: { base64, mimetype, filename, filesize }
+         ↓
+┌─────────────────────────────────────────────────────┐
+│ 1. Upload naar Storage                              │
+│    bucket: whatsapp-media                           │
+│    pad: profile-pictures/{orgId}/{phone}.jpg        │
+└─────────────────────────────────────────────────────┘
+         ↓
+┌─────────────────────────────────────────────────────┐
+│ 2. Genereer Public URL                              │
+└─────────────────────────────────────────────────────┘
+         ↓
+┌─────────────────────────────────────────────────────┐
+│ 3. Update whatsapp_contacts                         │
+│    SET profile_picture_url = {url}                  │
+│    WHERE phone_number = {phone}                     │
+│          AND org_id = {orgId}                       │
+└─────────────────────────────────────────────────────┘
+         ↓
+Response: { success: true, url: publicUrl }
 ```
 
 ## Bestanden Overzicht
 
 | Actie | Bestand | Beschrijving |
 |-------|---------|--------------|
-| MIGRATE | Database | Voeg deleted_at kolom toe |
-| EDIT | `src/types/whatsapp.ts` | Voeg deleted_at veld toe |
-| EDIT | `src/hooks/whatsapp/useDeleteChat.ts` | Soft delete + undo toast |
-| EDIT | `src/components/whatsapp/WhatsAppChatContextMenu.tsx` | Vereenvoudig, verwijder dialog |
+| EDIT | `supabase/functions/whatsapp-bridge/index.ts` | Voeg `contact.profilePicture` handler toe |
 
-## Flow Diagram
+## Belangrijke Features
 
-```text
-Gebruiker klikt "Chat archiveren"
-         ↓
-useDeleteChat.mutate(chatId)
-         ↓
-UPDATE whatsapp_chats SET is_archived=true, deleted_at=now()
-         ↓
-Toast verschijnt: "Chat gearchiveerd" [Ongedaan maken]
-         ↓
-         ├── (5 sec wachten) → Toast verdwijnt, klaar
-         │
-         └── Gebruiker klikt "Ongedaan maken"
-                    ↓
-              undoMutation.mutate(chatId)
-                    ↓
-              UPDATE SET is_archived=false, deleted_at=null
-                    ↓
-              Toast: "Chat hersteld"
-```
+1. **Upsert Strategie:**
+   - Verwijder bestaand bestand eerst om overschrijven te garanderen
+   - Upload nieuwe foto met `upsert: true` als fallback
+
+2. **Consistent Pad:**
+   - `profile-pictures/{orgId}/{phone}.jpg`
+   - Altijd .jpg extensie (afbeelding wordt geconverteerd indien nodig)
+
+3. **Graceful Error Handling:**
+   - Contact niet gevonden = warning log, maar geen error
+   - Upload failure = throw error met details
+
+4. **Multi-Contact Support:**
+   - Dezelfde phone kan in meerdere sessions voorkomen
+   - Alle contacts met zelfde phone+org krijgen update
 
 ## Test Na Implementatie
 
-1. Rechtermuisklik op een chat → menu toont "Chat archiveren"
-2. Klik "Chat archiveren" → chat verdwijnt direct uit lijst
-3. Toast verschijnt met "Chat gearchiveerd" en "Ongedaan maken" knop
-4. Klik "Ongedaan maken" binnen 5 seconden → chat komt terug
-5. Wacht 5 seconden zonder actie → toast verdwijnt
-6. Ververs pagina → gearchiveerde chat blijft verborgen
-7. Controleer database: is_archived=true, deleted_at is gevuld
+Via SSH naar VPS:
+```bash
+ssh root@72.61.155.82
+curl -X POST http://localhost:3001/contacts/sync-profile-pictures \
+  -H "Content-Type: application/json" \
+  -d '{"sessionId": "61f4b1fb-5bcf-46c3-9cd5-5758d5b5c9f6"}'
+```
+
+Of voor enkele foto:
+```bash
+curl -X POST http://localhost:3001/contacts/31612345678@s.whatsapp.net/profile-picture \
+  -H "Content-Type: application/json" \
+  -d '{"sessionId": "61f4b1fb-5bcf-46c3-9cd5-5758d5b5c9f6"}'
+```
+
+Verwachte response:
+```json
+{
+  "success": true,
+  "url": "https://oelmsmcgryeoryhonexw.supabase.co/storage/v1/object/public/whatsapp-media/profile-pictures/550e8400.../31612345678.jpg",
+  "contactUpdated": true,
+  "contactCount": 1
+}
+```
 
