@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { 
   DndContext, 
@@ -16,6 +16,19 @@ import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
+import { 
+  Tooltip, 
+  TooltipContent, 
+  TooltipTrigger 
+} from "@/components/ui/tooltip";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -30,7 +43,13 @@ import {
   Loader2, 
   MoreHorizontal, 
   CheckCircle2,
-  Inbox 
+  Inbox,
+  Search,
+  ArrowUp,
+  ArrowDown,
+  Calendar,
+  AlertCircle,
+  Clock
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -41,6 +60,13 @@ const MAX_VISIBLE_TASKS = 5;
 const COLUMNS_TO_SHOW: ("BACKLOG" | "READY" | "DOING" | "BLOCKED" | "REVIEW")[] = [
   "BACKLOG", "READY", "DOING", "BLOCKED", "REVIEW"
 ];
+
+const priorityRank: Record<string, number> = {
+  'CRITICAL': 4,
+  'HIGH': 3,
+  'MEDIUM': 2,
+  'LOW': 1,
+};
 
 interface Task {
   id: string;
@@ -107,6 +133,18 @@ export function MyTasksFlowSection() {
   // Accessibility: status message for screen readers
   const [statusMessage, setStatusMessage] = useState("");
 
+  // Search and sort
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [sortBy, setSortBy] = useState<'due_at' | 'priority' | 'created_at'>(() => {
+    const stored = localStorage.getItem('mytasks-sort-by');
+    return (stored as 'due_at' | 'priority' | 'created_at') || 'due_at';
+  });
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(() => {
+    const stored = localStorage.getItem('mytasks-sort-direction');
+    return (stored as 'asc' | 'desc') || 'asc';
+  });
+  const [searchQuery, setSearchQuery] = useState("");
+
   // Drag sensors with distance threshold
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -127,6 +165,25 @@ export function MyTasksFlowSection() {
   useEffect(() => {
     if (user) loadData();
   }, [user]);
+
+  // Persist sort preferences
+  useEffect(() => {
+    localStorage.setItem('mytasks-sort-by', sortBy);
+    localStorage.setItem('mytasks-sort-direction', sortDirection);
+  }, [sortBy, sortDirection]);
+
+  // Keyboard shortcut for search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === '/' && !detailModalOpen) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [detailModalOpen]);
 
   const loadData = async () => {
     if (!user) return;
@@ -167,13 +224,44 @@ export function MyTasksFlowSection() {
     }
   };
 
-  // Get tasks for column
+  // Get tasks for column with filtering and sorting
   const getTasksForColumn = (columnId: string): Task[] => {
     const column = columns.find(c => c.id === columnId);
-    return tasks.filter(t =>
+    let filteredTasks = tasks.filter(t =>
       t.column_id === columnId ||
       (column?.status === "BACKLOG" && !t.column_id)
     );
+
+    // Search filter
+    if (searchQuery) {
+      filteredTasks = filteredTasks.filter(t =>
+        t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.description?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    // Sort
+    return [...filteredTasks].sort((a, b) => {
+      if (sortBy === 'due_at') {
+        if (!a.due_at && !b.due_at) return 0;
+        if (!a.due_at) return 1;
+        if (!b.due_at) return -1;
+        const dateA = new Date(a.due_at).getTime();
+        const dateB = new Date(b.due_at).getTime();
+        return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+      }
+      if (sortBy === 'priority') {
+        const rankA = priorityRank[a.priority] || 0;
+        const rankB = priorityRank[b.priority] || 0;
+        return sortDirection === 'asc' ? rankA - rankB : rankB - rankA;
+      }
+      if (sortBy === 'created_at') {
+        const dateA = new Date(a.created_at).getTime();
+        const dateB = new Date(b.created_at).getTime();
+        return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+      }
+      return 0;
+    });
   };
 
   // Visible tasks (max 5) and overflow count
@@ -321,7 +409,8 @@ export function MyTasksFlowSection() {
 
       <div className="border-t border-border pt-6 mt-6">
         {/* SECTION HEADER */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col gap-3 mb-4">
+          {/* Title row */}
           <div className="flex items-center gap-2">
             <Kanban className="h-5 w-5 text-primary" />
             <h2 className="text-lg font-semibold">Mijn Taken</h2>
@@ -330,12 +419,86 @@ export function MyTasksFlowSection() {
             </Badge>
           </div>
 
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/kanban" className="gap-2">
-              Bekijk alle team taken
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </Button>
+          {/* Controls row */}
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+            {/* Sort controls */}
+            <div className="flex items-center gap-2">
+              <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+                <SelectTrigger className="h-8 w-[140px] text-xs bg-background">
+                  <div className="flex items-center gap-1.5">
+                    {sortBy === 'due_at' && <Calendar className="h-3 w-3" />}
+                    {sortBy === 'priority' && <AlertCircle className="h-3 w-3" />}
+                    {sortBy === 'created_at' && <Clock className="h-3 w-3" />}
+                    <SelectValue />
+                  </div>
+                </SelectTrigger>
+                <SelectContent className="bg-popover">
+                  <SelectItem value="due_at">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-3 w-3" />
+                      Deadline
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="priority">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="h-3 w-3" />
+                      Prioriteit
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="created_at">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-3 w-3" />
+                      Aangemaakt
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
+                    className="h-8 w-8 p-0 hover:bg-muted/80"
+                    aria-label={sortDirection === 'asc' ? 'Sorteer aflopend' : 'Sorteer oplopend'}
+                  >
+                    {sortDirection === 'asc' ? (
+                      <ArrowUp className="h-4 w-4" />
+                    ) : (
+                      <ArrowDown className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {sortBy === 'priority'
+                    ? (sortDirection === 'asc' ? 'Laagste eerst' : 'Hoogste eerst')
+                    : (sortDirection === 'asc' ? 'Vroegste eerst' : 'Laatste eerst')
+                  }
+                </TooltipContent>
+              </Tooltip>
+            </div>
+
+            {/* Search */}
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                ref={searchInputRef}
+                placeholder="Zoek taken... (/)"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-8 pl-8 text-sm"
+                aria-label="Zoek in mijn taken"
+              />
+            </div>
+
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/kanban" className="gap-2">
+                Team overzicht
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
         </div>
 
         {/* EMPTY STATE */}
