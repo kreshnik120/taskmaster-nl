@@ -737,8 +737,27 @@ async function handleContactProfilePicture(
   }
 
   if (!updatedContacts || updatedContacts.length === 0) {
-    console.warn(`[${requestId}] ⚠️ No contact found for phone ${phone} in org ${orgId} - photo stored but contact not updated`);
-    return { success: true, url: publicUrl, contactUpdated: false };
+    console.log(`[${requestId}] No existing contact found, creating new contact for phone ${phone}`);
+    
+    // Auto-create contact with minimal data
+    const { data: newContact, error: insertError } = await supabase
+      .from('whatsapp_contacts')
+      .insert({
+        org_id: orgId,
+        session_id: sessionId,
+        phone_number: phone,
+        profile_picture_url: publicUrl,
+      })
+      .select('id')
+      .single();
+    
+    if (insertError) {
+      console.warn(`[${requestId}] ⚠️ Could not create contact: ${formatError(insertError)} - photo stored but contact not created`);
+      return { success: true, url: publicUrl, contactUpdated: false, contactCreated: false };
+    }
+    
+    console.log(`[${requestId}] ✅ New contact created with profile picture: ${newContact.id}`);
+    return { success: true, url: publicUrl, contactUpdated: false, contactCreated: true, contactId: newContact.id };
   }
 
   console.log(`[${requestId}] ✅ Profile picture updated for ${updatedContacts.length} contact(s)`);
