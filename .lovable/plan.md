@@ -1,178 +1,84 @@
 
+# Diagnose: Afbeeldingen niet zichtbaar van andere contacten
 
-# Plan: Sync All Profile Pictures Endpoint
+## Root Cause Analyse
 
-## Overzicht
+### Bevindingen uit Database
 
-Voeg een nieuw event `contact.syncAllProfilePictures` toe aan de WhatsApp Bridge Edge Function die:
-1. Alle contacts zonder profielfoto ophaalt uit de database
-2. Voor elk contact de VPS API aanroept om de profielfoto op te halen
-3. Rate limiting toepast (max 5 requests per seconde)
+| Contact | Message ID Pattern | Message Type | Media Record | Status |
+|---------|-------------------|--------------|--------------|--------|
+| **Kreshnik** | `2A...` | `image` | ✅ Aanwezig | Werkt |
+| Noortje | `3A...` | `unknown` | ❌ Ontbreekt | Kapot |
+| Simon de Jong | `3A...`, `3EB...` | `unknown` | ❌ Ontbreekt | Kapot |
+| Anass Bouloum | `3A...` | `unknown` | ❌ Ontbreekt | Kapot |
 
-## Technische Implementatie
+### Technische Analyse
 
-### Bestand: `supabase/functions/whatsapp-bridge/index.ts`
-
-**Wijziging 1: Nieuwe event case toevoegen** (rond regel 167-169)
-
-```typescript
-case "contact.syncAllProfilePictures":
-  result = await handleSyncAllProfilePictures(supabase, sessionId, orgId, requestId);
-  break;
-```
-
-**Wijziging 2: Nieuwe handler functie toevoegen** (na handleContactProfilePicture, rond regel 766)
+De Edge Function code (regel 263-306) verwerkt media correct:
 
 ```typescript
-async function handleSyncAllProfilePictures(
-  supabase: SupabaseClientAny,
-  sessionId: string,
-  orgId: string,
-  requestId: string
-): Promise<Record<string, unknown>> {
-  console.log(`[${requestId}] Starting profile picture sync for org ${orgId}`);
-  
-  // 1. Get VPS credentials
-  const vpsApiKey = Deno.env.get("WHATSAPP_VPS_API_KEY");
-  const vpsSessionId = Deno.env.get("WHATSAPP_VPS_SESSION_ID");
-  
-  if (!vpsApiKey || !vpsSessionId) {
-    throw new Error("VPS credentials not configured");
-  }
-  
-  // 2. Get all contacts without profile pictures
-  const { data: contacts, error } = await supabase
-    .from('whatsapp_contacts')
-    .select('id, phone_number')
-    .eq('org_id', orgId)
-    .is('profile_picture_url', null)
-    .limit(50); // Batch limit
-  
-  if (error) throw error;
-  
-  if (!contacts || contacts.length === 0) {
-    return { synced: 0, message: "No contacts without profile pictures" };
-  }
-  
-  console.log(`[${requestId}] Found ${contacts.length} contacts without profile pictures`);
-  
-  // 3. Process contacts with rate limiting (5 per second)
-  const results = { success: 0, failed: 0, skipped: 0 };
-  const BATCH_SIZE = 5;
-  const DELAY_MS = 1000;
-  
-  for (let i = 0; i < contacts.length; i += BATCH_SIZE) {
-    const batch = contacts.slice(i, i + BATCH_SIZE);
-    
-    // Process batch in parallel
-    const promises = batch.map(async (contact) => {
-      // Normalize phone number for VPS
-      let phone = contact.phone_number;
-      if (!phone.includes('@')) {
-        phone = `${phone}@s.whatsapp.net`;
-      }
-      
-      try {
-        const vpsUrl = `http://72.61.155.82:3001/contacts/${encodeURIComponent(phone)}/profile-picture`;
-        
-        const response = await fetch(vpsUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': vpsApiKey,
-          },
-          body: JSON.stringify({ sessionId: vpsSessionId }),
-        });
-        
-        if (response.ok) {
-          results.success++;
-          console.log(`[${requestId}] ✅ Triggered sync for ${contact.phone_number}`);
-        } else if (response.status === 404) {
-          results.skipped++;
-          console.log(`[${requestId}] ⏭️ No profile picture for ${contact.phone_number}`);
-        } else {
-          results.failed++;
-          console.warn(`[${requestId}] ❌ Failed for ${contact.phone_number}: ${response.status}`);
-        }
-      } catch (err) {
-        results.failed++;
-        console.error(`[${requestId}] ❌ Error for ${contact.phone_number}:`, err);
-      }
-    });
-    
-    await Promise.all(promises);
-    
-    // Rate limit delay between batches
-    if (i + BATCH_SIZE < contacts.length) {
-      await new Promise(resolve => setTimeout(resolve, DELAY_MS));
-    }
-  }
-  
-  console.log(`[${requestId}] ✅ Profile picture sync completed: ${results.success} success, ${results.failed} failed, ${results.skipped} skipped`);
-  
-  return { 
-    synced: results.success, 
-    failed: results.failed, 
-    skipped: results.skipped,
-    total: contacts.length 
-  };
+if (media && media.base64) {
+  // Upload naar storage
+  // Opslaan in whatsapp_media tabel
 }
 ```
 
-## Bestanden Overzicht
+**Probleem**: De VPS stuurt voor de meeste berichten:
+- `type: undefined` → wordt opgeslagen als `unknown`
+- `media: undefined` → geen base64 data om te verwerken
 
-| Actie | Bestand | Beschrijving |
-|-------|---------|--------------|
-| EDIT | `supabase/functions/whatsapp-bridge/index.ts` | Voeg nieuw event en handler toe |
+**Waarom werkt Kreshnik wel?**
+- Kreshnik's berichten komen binnen met `type: 'image'` en een volledig `media` object
+- Dit wijst op een VPS-side bug waarbij media alleen voor bepaalde berichten correct wordt verwerkt
 
-## Gebruik
+## Mogelijke Oorzaken (VPS-side)
+
+1. **WhatsApp Web.js Media Download Failure**
+   - De VPS downloadt de media niet succesvol voor sommige berichten
+   - Mogelijk een timing issue of rate limiting
+
+2. **Message Type Detection Bug**
+   - De VPS detecteert niet correct dat het een media bericht is
+   - Resultaat: `type` wordt `undefined`
+
+3. **Session-specifiek Issue**
+   - Mogelijk een probleem met de WhatsApp sessie connectie
+
+## Aanbevolen Oplossing
+
+### Optie A: VPS Debug (Aanbevolen)
+
+Check de VPS logs voor de berichten met `message_id` die beginnen met `3A...`:
 
 ```bash
-# Via Edge Function (aanbevolen)
-curl -X POST https://oelmsmcgryeoryhonexw.supabase.co/functions/v1/whatsapp-bridge \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: YOUR_BRIDGE_API_KEY" \
-  -d '{
-    "event": "contact.syncAllProfilePictures",
-    "sessionId": "61f4b1fb-5bcf-46c3-9cd5-5758d5b5c9f6",
-    "orgId": "550e8400-e29b-41d4-a716-446655440000",
-    "data": {}
-  }'
+# Op de VPS
+grep "3ACA7EF8B20EBEB8DA53" /var/log/whatsapp-bridge.log
 ```
 
-## Flow Diagram
+Verwachte output zou moeten tonen waarom media download faalt.
 
-```text
-UI/Admin roept Edge Function aan
-           ↓
-contact.syncAllProfilePictures event
-           ↓
-┌──────────────────────────────────────┐
-│ 1. Haal contacts zonder foto op     │
-│    WHERE profile_picture_url IS NULL │
-└──────────────────────────────────────┘
-           ↓
-┌──────────────────────────────────────┐
-│ 2. Loop door contacts (batch van 5) │
-│    ├─ Call VPS: /contacts/{jid}/profile-picture
-│    ├─ VPS haalt foto op van WhatsApp
-│    └─ VPS stuurt foto naar Edge Function
-│        via contact.profilePicture event
-└──────────────────────────────────────┘
-           ↓
-┌──────────────────────────────────────┐
-│ 3. Rate limit: 1 seconde wachten    │
-│    tussen batches van 5             │
-└──────────────────────────────────────┘
-           ↓
-Return: { synced: 35, failed: 1, skipped: 4, total: 40 }
-```
+### Optie B: VPS Code Fix
 
-## Belangrijke Features
+Pas de VPS message handler aan om:
+1. Altijd te proberen media te downloaden als `message.hasMedia === true`
+2. Betere error logging toe te voegen
 
-- **Rate Limiting**: Max 5 parallelle requests per seconde (WhatsApp beperking)
-- **Batch Processing**: Limit van 50 contacts per aanroep (voorkomt timeouts)
-- **Error Handling**: Individuele failures stoppen niet de hele sync
-- **Skip Logic**: 404 responses (geen profielfoto) worden als "skipped" geteld
-- **Logging**: Uitgebreide logging voor debugging
+### Optie C: Retry Mechanism (Edge Function)
 
+Voeg een "retry media download" endpoint toe die de VPS vraagt om media opnieuw te downloaden voor berichten die type `unknown` hebben maar eigenlijk media zouden moeten bevatten.
+
+---
+
+## Actieplan
+
+| # | Actie | Waar | Prioriteit |
+|---|-------|------|------------|
+| 1 | Check VPS logs voor media download errors | VPS Server | Hoog |
+| 2 | Voeg media download retry endpoint toe | Edge Function | Medium |
+| 3 | Fix VPS media handling voor alle berichten | VPS Code | Hoog |
+
+## Conclusie
+
+Dit is een **VPS-side probleem**, niet een Edge Function of database probleem. De Edge Function is correct geconfigureerd om media te verwerken, maar ontvangt simpelweg geen media data van de VPS voor de meeste berichten.
+
+**Volgende stap**: Check de VPS server logs om te begrijpen waarom media download faalt voor berichten anders dan die van Kreshnik.
