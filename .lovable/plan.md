@@ -1,274 +1,270 @@
 
-# Modulaire TaskListView Component
+# Enterprise TaskListView Upgrade - Plan
 
 ## Overzicht
 
-We bouwen een herbruikbare TaskListView component die op meerdere plekken in de applicatie kan worden gebruikt. De component maakt optimaal gebruik van de bestaande `useTasksQuery` hook en biedt een responsieve weergave (tabel op desktop, cards op mobiel).
+Upgrade de modulaire TaskListView component naar enterprise niveau met filter pills, checkbox selectie, side panel voor taakdetails, keyboard shortcuts, en bulk acties.
 
-## Folder Structuur
+## Nieuwe Bestanden
+
+| Bestand | Beschrijving | Regels |
+|---------|--------------|--------|
+| `TaskListFilterPills.tsx` | Toggle filter pills boven toolbar | ~100 |
+| `TaskListSidePanel.tsx` | Notion-style slide-in detail panel | ~250 |
+| `TaskListBulkActions.tsx` | Floating bulk actie bar onderaan | ~120 |
+| `hooks/useTaskListKeyboard.ts` | Keyboard navigation hook | ~80 |
+| `hooks/useTaskListSelection.ts` | Selection state management | ~50 |
+
+## Bestaande Bestanden te Wijzigen
+
+| Bestand | Wijzigingen |
+|---------|-------------|
+| `types/index.ts` | Filter types, selection state interface |
+| `hooks/useTaskListFilters.ts` | Quick filter state toevoegen |
+| `hooks/useTaskListData.ts` | Quick filter logica integreren |
+| `TaskListTable.tsx` | Checkbox kolom, row selection highlighting, 5-kolom layout |
+| `TaskListView.tsx` | Alle nieuwe componenten integreren |
+
+## Technische Details
+
+### 1. Filter Pills Component
 
 ```text
-src/components/TaskListView/
-├── index.ts                    # Barrel export
-├── TaskListView.tsx            # Hoofd component
-├── TaskListTable.tsx           # Desktop tabel weergave
-├── TaskListCards.tsx           # Mobiele card weergave
-├── TaskListToolbar.tsx         # Filter/zoek toolbar
-├── TaskListEmptyState.tsx      # Lege staat component
-├── types/
-│   └── index.ts                # Task type definities
-└── hooks/
-    ├── useTaskListData.ts      # Data hook (wraps useTasksQuery)
-    └── useTaskListFilters.ts   # Filter/sorteer state hook
+[Alle] [Open] [In uitvoering] [Review] [Kritiek] [Vandaag due]
 ```
 
-## Props Interface
+**Gedrag:**
+- Toggle buttons met accent kleur wanneer actief
+- Meerdere filters kunnen tegelijk actief zijn (AND logica)
+- "Alle" reset alle quick filters
+- Horizontaal scrollbaar op mobiel
 
-| Prop | Type | Default | Beschrijving |
-|------|------|---------|--------------|
-| `userId` | `string \| undefined` | - | Filter op specifieke gebruiker |
-| `showToolbar` | `boolean` | `true` | Toon/verberg toolbar |
-| `limit` | `number \| undefined` | - | Max aantal taken (voor dashboard preview) |
-| `onTaskSelect` | `(task: Task) => void` | - | Callback bij taak selectie |
-| `className` | `string` | - | Extra CSS classes |
-
-## Types (types/index.ts)
-
+**Type definitie:**
 ```typescript
-export interface TaskListTask {
-  id: string;
-  title: string;
-  description: string | null;
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-  start_at: string | null;
-  due_at: string | null;
-  completed_at: string | null;
-  next_action: string | null;
-  assignee_id: string | null;
-  org_id: string;
-  created_at: string;
-  profiles: {
-    name: string | null;
-    email: string | null;
-  } | null;
-  organizations: { name: string } | null;
-  subtask_count?: number;
-  completed_subtask_count?: number;
-}
+type QuickFilter = 'open' | 'in_progress' | 'review' | 'critical' | 'due_today';
 
-export interface TaskListFilters {
+interface TaskListFilters {
   searchQuery: string;
   sortBy: 'due_at' | 'priority' | 'created_at';
   sortDirection: 'asc' | 'desc';
-}
-
-export interface TaskListViewProps {
-  userId?: string;
-  showToolbar?: boolean;
-  limit?: number;
-  onTaskSelect?: (task: TaskListTask) => void;
-  className?: string;
+  quickFilters: QuickFilter[]; // Nieuw
 }
 ```
 
-## Hooks
+**Filter logica (in useTaskListData):**
+```typescript
+// Open = geen completed_at
+// In uitvoering = status DOING
+// Review = status REVIEW
+// Kritiek = priority CRITICAL
+// Vandaag due = due_at is vandaag
+```
 
-### useTaskListData.ts
+### 2. Tabel Upgrade - 5 Kolommen
 
-Hergebruikt de bestaande `useTasksQuery` hook en voegt client-side filtering toe:
+| Kolom | Breedte | Inhoud |
+|-------|---------|--------|
+| Checkbox | 40px | Selectie checkbox + header select-all |
+| Taak | 40% | Titel, beschrijving (1 regel), subtask count |
+| Eigenaar | auto | Avatar (initials fallback) + naam |
+| Prioriteit | 80px | Gekleurde badge |
+| Deadline | 100px | Datum + overdue AlertTriangle icoon |
+
+**Row selection:**
+- Geselecteerde rijen krijgen `bg-accent/50`
+- Keyboard focus krijgt `ring-2 ring-primary`
+- Hover state blijft `bg-muted/50`
+
+### 3. Side Panel (Notion-style)
+
+**Trigger:** `onTaskSelect` callback vanuit tabel
+**Positie:** Fixed right, 400px breed
+**Animatie:** slide-in-right met framer-motion
+
+**Structuur:**
+```text
+┌─────────────────────────────────────┐
+│ [X]                          Sluiten│
+├─────────────────────────────────────┤
+│ Taak Titel (text-xl font-bold)      │
+├─────────────────────────────────────┤
+│ Status     [Dropdown ▼]             │
+│ Prioriteit [Dropdown ▼]             │
+│ Deadline   [Datepicker]             │
+│ Eigenaar   Avatar + naam            │
+├─────────────────────────────────────┤
+│ Beschrijving                        │
+│ Tekst...                            │
+├─────────────────────────────────────┤
+│ Subtaken (3/5)                      │
+│ ☐ Subtaak 1                         │
+│ ☑ Subtaak 2                         │
+├─────────────────────────────────────┤
+│ [Bewerken]  [Verwijderen]           │
+└─────────────────────────────────────┘
+```
+
+**Sluiten:**
+- X button rechtsboven
+- Escape toets
+- Klik buiten panel (overlay met opacity-0)
+
+**Implementatie:** Geen Sheet component gebruiken (die is modal). Custom panel met fixed positioning zodat tabel zichtbaar blijft.
+
+### 4. Keyboard Shortcuts Hook
 
 ```typescript
-export function useTaskListData(options: {
-  userId?: string;
-  filters: TaskListFilters;
-  limit?: number;
-}) {
-  const query = useTasksQuery(); // Hergebruik shared cache
-  
-  const filteredData = useMemo(() => {
-    let tasks = query.data || [];
-    
-    // Filter op userId indien aanwezig
-    if (options.userId) {
-      tasks = tasks.filter(t => t.assignee_id === options.userId);
-    }
-    
-    // Zoek filter
-    if (options.filters.searchQuery) {
-      const q = options.filters.searchQuery.toLowerCase();
-      tasks = tasks.filter(t => 
-        t.title.toLowerCase().includes(q) ||
-        t.description?.toLowerCase().includes(q)
-      );
-    }
-    
-    // Sorteer
-    tasks = sortTasks(tasks, options.filters);
-    
-    // Limit
-    if (options.limit) {
-      tasks = tasks.slice(0, options.limit);
-    }
-    
-    return tasks;
-  }, [query.data, options]);
-  
-  return {
-    tasks: filteredData,
-    totalCount: query.data?.length || 0,
-    isLoading: query.isLoading,
-    error: query.error,
-    refetch: query.refetch
-  };
+interface UseTaskListKeyboardOptions {
+  tasks: TaskListTask[];
+  selectedIndex: number;
+  onSelectedIndexChange: (index: number) => void;
+  onOpenPanel: (task: TaskListTask) => void;
+  onClosePanel: () => void;
+  searchInputRef: React.RefObject<HTMLInputElement>;
+  onOpenNewTask: () => void;
+  isPanelOpen: boolean;
 }
 ```
 
-### useTaskListFilters.ts
+| Toets | Actie | Guard |
+|-------|-------|-------|
+| `j` | selectedIndex++ (max tasks.length-1) | niet in input |
+| `k` | selectedIndex-- (min 0) | niet in input |
+| `Enter` | onOpenPanel(tasks[selectedIndex]) | selectedIndex >= 0 |
+| `Escape` | onClosePanel() of clear selection | - |
+| `/` | searchInputRef.current?.focus() | niet in input |
+| `n` | onOpenNewTask() | niet in input |
 
-Beheert filter/sorteer state met localStorage persistentie:
+### 5. Selection State Hook
 
 ```typescript
-export function useTaskListFilters() {
-  const [filters, setFilters] = useState<TaskListFilters>(() => ({
-    searchQuery: "",
-    sortBy: localStorage.getItem('tasklist-sort-by') as any || 'due_at',
-    sortDirection: localStorage.getItem('tasklist-sort-dir') as any || 'asc'
-  }));
-  
-  // Persist to localStorage
-  useEffect(() => {
-    localStorage.setItem('tasklist-sort-by', filters.sortBy);
-    localStorage.setItem('tasklist-sort-dir', filters.sortDirection);
-  }, [filters.sortBy, filters.sortDirection]);
-  
-  return { filters, setFilters };
+interface UseTaskListSelectionReturn {
+  selectedIds: Set<string>;
+  toggleSelection: (id: string) => void;
+  toggleAll: (allIds: string[]) => void;
+  clearSelection: () => void;
+  isSelected: (id: string) => boolean;
+  isAllSelected: (allIds: string[]) => boolean;
+  isPartiallySelected: (allIds: string[]) => boolean;
 }
 ```
 
-## Component Architectuur
+### 6. Bulk Actions Bar
 
-### TaskListView.tsx (Hoofd Component)
+**Trigger:** `selectedIds.size > 0`
+**Positie:** Fixed bottom center (zoals bestaande BulkActionBar)
+**Animatie:** framer-motion slide up
+
+**Inhoud:**
+```text
+┌─────────────────────────────────────────────────────────────┐
+│ [3] geselecteerd | [Status wijzigen ▼] [Prioriteit ▼] [🗑️] [X]│
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Acties:**
+- Status wijzigen: Dropdown met BACKLOG, READY, DOING, BLOCKED, REVIEW
+- Prioriteit wijzigen: Dropdown met LOW, MEDIUM, HIGH, CRITICAL
+- Verwijderen: Confirmation dialog eerst
+
+## Component Hiërarchie
+
+```text
+TaskListView
+├── TaskListFilterPills
+├── TaskListToolbar (bestaand)
+├── TaskListTable / TaskListCards
+│   └── Checkbox per row
+├── TaskListSidePanel (conditional)
+└── TaskListBulkActions (conditional)
+```
+
+## State Management
 
 ```typescript
-export function TaskListView({
-  userId,
-  showToolbar = true,
-  limit,
-  onTaskSelect,
-  className
-}: TaskListViewProps) {
-  const isMobile = useIsMobile();
-  const { filters, setFilters } = useTaskListFilters();
-  const { tasks, totalCount, isLoading, error } = useTaskListData({
-    userId,
-    filters,
-    limit
-  });
-  
-  // Loading state
-  if (isLoading) {
-    return <LoadingSkeleton />;
-  }
-  
-  // Error state
-  if (error) {
-    return <ErrorState message="Fout bij laden van taken" />;
-  }
-  
-  // Empty state
-  if (tasks.length === 0) {
-    return <TaskListEmptyState filtered={!!filters.searchQuery} />;
-  }
-  
-  return (
-    <div className={className}>
-      {showToolbar && (
-        <TaskListToolbar 
-          filters={filters} 
-          onChange={setFilters}
-          taskCount={tasks.length}
-          totalCount={totalCount}
-        />
-      )}
-      
-      {isMobile ? (
-        <TaskListCards tasks={tasks} onTaskSelect={onTaskSelect} />
-      ) : (
-        <TaskListTable tasks={tasks} onTaskSelect={onTaskSelect} />
-      )}
-    </div>
-  );
-}
+// In TaskListView.tsx
+const { filters, setFilters } = useTaskListFilters(); // Extended met quickFilters
+const { tasks, ... } = useTaskListData({ userId, filters, limit });
+const { selectedIds, toggleSelection, ... } = useTaskListSelection();
+const [panelTask, setPanelTask] = useState<TaskListTask | null>(null);
+const [selectedIndex, setSelectedIndex] = useState(-1);
+const searchInputRef = useRef<HTMLInputElement>(null);
+
+useTaskListKeyboard({
+  tasks,
+  selectedIndex,
+  onSelectedIndexChange: setSelectedIndex,
+  onOpenPanel: setPanelTask,
+  onClosePanel: () => setPanelTask(null),
+  searchInputRef,
+  onOpenNewTask: () => setDialogOpen(true),
+  isPanelOpen: !!panelTask
+});
 ```
-
-### Responsieve Weergave
-
-| Viewport | Component | Weergave |
-|----------|-----------|----------|
-| Desktop (≥768px) | `TaskListTable` | Tabel met kolommen: Taak, Eigenaar, Prioriteit, Deadline |
-| Mobile (<768px) | `TaskListCards` | Cards gestapeld, compact design |
 
 ## UI Teksten (Nederlands)
 
-| Context | Tekst |
-|---------|-------|
-| Laden | "Taken laden..." |
-| Fout | "Fout bij laden van taken" |
-| Leeg (geen filter) | "Geen taken gevonden" |
-| Leeg (met filter) | "Geen taken gevonden voor deze zoekopdracht" |
-| Gefilterd | "{X} van {Y} taken" |
-| Zoek placeholder | "Zoek taken..." |
-| Sorteer: Deadline | "Deadline" |
-| Sorteer: Prioriteit | "Prioriteit" |
-| Sorteer: Aangemaakt | "Aangemaakt" |
-
-## Bestanden Overzicht
-
-| Bestand | Regels | Beschrijving |
-|---------|--------|--------------|
-| `index.ts` | ~5 | Barrel export |
-| `types/index.ts` | ~35 | Type definities |
-| `hooks/useTaskListFilters.ts` | ~40 | Filter state hook |
-| `hooks/useTaskListData.ts` | ~70 | Data hook met filtering |
-| `TaskListView.tsx` | ~80 | Hoofd component |
-| `TaskListToolbar.tsx` | ~60 | Zoek en sorteer toolbar |
-| `TaskListTable.tsx` | ~100 | Desktop tabel weergave |
-| `TaskListCards.tsx` | ~80 | Mobiele cards weergave |
-| `TaskListEmptyState.tsx` | ~30 | Lege staat UI |
-
-## Technische Overwegingen
-
-### Cache Hergebruik
-- Gebruikt dezelfde `['active-tasks']` cache als Dashboard en Opvolging
-- Geen extra database calls
-- Realtime updates automatisch gesynchroniseerd
-
-### Performance
-- `useMemo` voor client-side filtering
-- Geen onnodige re-renders bij filter wijzigingen
-- Tabel virtualisatie kan later worden toegevoegd
-
-### Accessibility
-- Keyboard navigatie voor toolbar
-- ARIA labels op interactieve elementen
-- Focus management bij taak selectie
-
-## Geen Wijzigingen Aan
-
-- `src/pages/Lijst.tsx` (bestaande implementatie)
-- `src/hooks/useTasksQuery.ts` (shared hook)
-- Andere bestaande componenten
+| Key | Tekst |
+|-----|-------|
+| filter.all | "Alle" |
+| filter.open | "Open" |
+| filter.in_progress | "In uitvoering" |
+| filter.review | "Review" |
+| filter.critical | "Kritiek" |
+| filter.due_today | "Vandaag due" |
+| bulk.selected | "{n} taken geselecteerd" |
+| bulk.status | "Status wijzigen" |
+| bulk.priority | "Prioriteit wijzigen" |
+| bulk.delete | "Verwijderen" |
+| panel.edit | "Bewerken" |
+| panel.delete | "Verwijderen" |
+| panel.close | "Sluiten" |
+| panel.subtasks | "Subtaken" |
+| panel.description | "Beschrijving" |
 
 ## Implementatie Volgorde
 
 | Stap | Bestand | Actie |
 |------|---------|-------|
-| 1 | `types/index.ts` | Type definities |
-| 2 | `hooks/useTaskListFilters.ts` | Filter hook |
-| 3 | `hooks/useTaskListData.ts` | Data hook |
-| 4 | `TaskListEmptyState.tsx` | Lege staat |
-| 5 | `TaskListToolbar.tsx` | Toolbar |
-| 6 | `TaskListTable.tsx` | Desktop tabel |
-| 7 | `TaskListCards.tsx` | Mobiele cards |
-| 8 | `TaskListView.tsx` | Hoofd component |
-| 9 | `index.ts` | Barrel export |
+| 1 | `types/index.ts` | QuickFilter type, selection interfaces |
+| 2 | `hooks/useTaskListSelection.ts` | Selection state hook |
+| 3 | `hooks/useTaskListFilters.ts` | quickFilters state toevoegen |
+| 4 | `hooks/useTaskListData.ts` | Quick filter logica |
+| 5 | `hooks/useTaskListKeyboard.ts` | Keyboard shortcuts |
+| 6 | `TaskListFilterPills.tsx` | Filter pills UI |
+| 7 | `TaskListTable.tsx` | Checkbox kolom, selection highlighting |
+| 8 | `TaskListSidePanel.tsx` | Detail panel |
+| 9 | `TaskListBulkActions.tsx` | Bulk actie bar |
+| 10 | `TaskListView.tsx` | Alle componenten integreren |
+
+## Accessibility
+
+| Feature | Implementatie |
+|---------|---------------|
+| Keyboard navigatie | j/k/Enter/Escape/n// shortcuts |
+| Focus visible | ring-2 ring-primary op geselecteerde row |
+| ARIA | aria-selected op rows, aria-label op buttons |
+| Screen reader | Checkbox labels, role="row" met aria-selected |
+| Focus trap | Side panel krijgt focus bij open |
+
+## Responsiviteit
+
+| Viewport | Aanpassingen |
+|----------|--------------|
+| Desktop | Volledige tabel, side panel 400px |
+| Mobile | Cards view (geen checkboxes), panel full-width sheet |
+
+## Dependencies
+
+Bestaande packages (geen nieuwe nodig):
+- `framer-motion` - animaties
+- `@radix-ui/react-checkbox` - checkboxes
+- `date-fns` + `nl` locale - datumformattering
+- `lucide-react` - iconen
+
+## Geen Wijzigingen Aan
+
+- Bestaande `Lijst.tsx` pagina
+- `useTasksQuery.ts` hook
+- Routing configuratie
+- Sidebar navigatie
