@@ -1,65 +1,42 @@
 
-# Fix WhatsApp Bridge Unique Constraint Error
+# Fix WhatsApp Bridge Unique Constraint Error (Revisie)
 
 ## Probleem Analyse
 
-De edge function `whatsapp-bridge` geeft een foutmelding:
-```
-duplicate key violates unique constraint whatsapp_sessions_org_id_phone_number_key
-```
+De vorige fix introduceerde `phone_number: "pending"` maar dit lost het probleem niet op. De database heeft al 2 sessies voor org `550e8400-...`:
 
-### Root Cause
-De `getOrCreateSession` functie (regels 661-727) heeft een race condition/logica probleem:
-
-```text
-Huidige Flow:
-1. Zoek sessie op sessionId → niet gevonden
-2. Zoek sessie met org_id + phone_number="unknown" → gevonden
-3. Delete oude sessie
-4. Insert nieuwe sessie met phone_number="unknown"
-   ↳ PROBLEEM: Tussen delete en insert kan andere request ook inserten
-   ↳ PROBLEEM: Insert kan falen als phone_number al gebruikt wordt
-```
-
-### Database Constraint
-| Index | Kolommen |
-|-------|----------|
-| `whatsapp_sessions_org_id_phone_number_key` | `(org_id, phone_number)` |
-
-### Huidige Sessies in DB
 | ID | phone_number | status |
 |----|--------------|--------|
-| `9a8c604c-...` | `unknown` | disconnected |
 | `61f4b1fb-...` | `31618710360` | connected |
+| `9a8c604c-...` | `unknown` | disconnected |
+
+De constraint `(org_id, phone_number)` wordt geschonden wanneer we een NIEUWE sessie proberen in te voegen met een `phone_number` die al bestaat voor die org.
+
+## Root Cause
+
+De `getOrCreateSession` functie probeert een nieuwe sessie te maken wanneer het geen exacte `sessionId` match vindt, terwijl er al een werkende sessie bestaat voor de organisatie.
 
 ## Oplossing
 
-Vervang de huidige `getOrCreateSession` logica met een **UPSERT pattern** die:
-1. Eerst probeert te vinden op `session_id` (primaire lookup)
-2. Dan probeert te vinden op `org_id` (fallback - pak meest recente actieve sessie)
-3. Als geen sessie bestaat, maak nieuwe met UPSERT op `(org_id, phone_number)`
+Vereenvoudig de logica: **hergebruik ALTIJD een bestaande sessie voor de org, maak NOOIT een nieuwe aan tenzij er echt geen sessie bestaat.**
 
-### Nieuwe Flow
+### Nieuwe `getOrCreateSession` Logica
 
 ```text
-Nieuwe Flow (fail-safe):
-1. SELECT * FROM whatsapp_sessions WHERE id = $sessionId
-   → Als gevonden: return sessie
+1. Zoek sessie op exacte sessionId
+   → Gevonden: return sessie
    
-2. SELECT * FROM whatsapp_sessions WHERE org_id = $orgId 
-   ORDER BY updated_at DESC LIMIT 1
-   → Als gevonden: return meest recente sessie (hergebruik bestaande)
+2. Zoek ELKE bestaande sessie voor deze org (meest recente eerst)
+   → Gevonden: update updated_at en return deze sessie
    
-3. INSERT INTO whatsapp_sessions (...) 
-   ON CONFLICT (org_id, phone_number) DO UPDATE SET updated_at = NOW()
-   → Atomaire operatie, geen race condition
+3. Geen sessie bestaat: INSERT nieuwe sessie (zal slagen want geen conflict)
 ```
 
-### Code Wijziging
+### Code Wijzigingen
 
 **Bestand:** `supabase/functions/whatsapp-bridge/index.ts`
 
-**Wijzig functie `getOrCreateSession` (regels 661-727):**
+**Wijzig `getOrCreateSession` (regels 661-738):**
 
 ```typescript
 async function getOrCreateSession(
@@ -68,72 +45,65 @@ async function getOrCreateSession(
   orgId: string,
   requestId: string
 ) {
-  // 1. Try to find existing session by ID (exact match)
+  // 1. Try exact sessionId match
   const { data: existingById } = await supabase
     .from("whatsapp_sessions")
     .select("id, phone_number")
     .eq("id", sessionId)
-    .single();
+    .maybeSingle();
 
   if (existingById) {
     console.log(`[${requestId}] Found session by ID: ${sessionId}`);
     return existingById;
   }
 
-  // 2. Find any session for this org (fallback - use existing session)
-  const { data: existingByOrg } = await supabase
+  // 2. Find ANY existing session for this org (prefer connected, then by updated_at)
+  const { data: existingForOrg } = await supabase
     .from("whatsapp_sessions")
     .select("id, phone_number")
     .eq("org_id", orgId)
+    .order("session_status", { ascending: false }) // 'connected' before 'disconnected'
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  if (existingByOrg) {
-    console.log(`[${requestId}] Using existing org session: ${existingByOrg.id} (requested: ${sessionId})`);
-    // Update the session to mark it as recently used
+  if (existingForOrg) {
+    console.log(`[${requestId}] Reusing org session: ${existingForOrg.id} (phone: ${existingForOrg.phone_number})`);
+    // Touch session to mark as active
     await supabase
       .from("whatsapp_sessions")
       .update({ updated_at: new Date().toISOString() })
-      .eq("id", existingByOrg.id);
-    return existingByOrg;
+      .eq("id", existingForOrg.id);
+    return existingForOrg;
   }
 
-  // 3. No session exists - create with UPSERT to handle race conditions
-  console.log(`[${requestId}] Creating new session for org: ${orgId}`);
+  // 3. No session exists at all - safe to create new one
+  console.log(`[${requestId}] Creating first session for org: ${orgId}`);
   
   const { data: newSession, error } = await supabase
     .from("whatsapp_sessions")
-    .upsert(
-      {
-        id: sessionId,
-        org_id: orgId,
-        phone_number: "pending", // Use "pending" instead of "unknown" for new sessions
-        session_status: "connected",
-        updated_at: new Date().toISOString(),
-      },
-      { 
-        onConflict: "org_id,phone_number",
-        ignoreDuplicates: false 
-      }
-    )
+    .insert({
+      id: sessionId,
+      org_id: orgId,
+      phone_number: "unknown",
+      session_status: "connected",
+    })
     .select("id, phone_number")
     .single();
 
   if (error) {
-    // If upsert fails, try one more time to find existing session
-    console.log(`[${requestId}] Upsert failed, retrying lookup: ${error.message}`);
+    // Race condition: another request created a session, try to find it
+    console.log(`[${requestId}] Insert failed (likely race condition), retrying lookup`);
     
-    const { data: retrySession } = await supabase
+    const { data: raceSession } = await supabase
       .from("whatsapp_sessions")
       .select("id, phone_number")
       .eq("org_id", orgId)
-      .order("updated_at", { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
     
-    if (retrySession) {
-      return retrySession;
+    if (raceSession) {
+      return raceSession;
     }
     
     throw new Error(`Session creation failed: ${formatError(error)}`);
@@ -143,31 +113,37 @@ async function getOrCreateSession(
 }
 ```
 
-## Samenvatting Wijzigingen
+## Belangrijke Wijzigingen t.o.v. Vorige Poging
 
-| Aspect | Oud | Nieuw |
-|--------|-----|-------|
-| **Lookup 1** | Alleen op `session_id` | Op `session_id` |
-| **Lookup 2** | Alleen `phone_number="unknown"` | Alle sessies van org (meest recente) |
-| **Create** | Gewone INSERT | UPSERT met ON CONFLICT |
-| **phone_number default** | `"unknown"` | `"pending"` |
-| **Race condition** | ❌ Mogelijk | ✅ Afgehandeld |
+| Aspect | Vorige Poging | Deze Fix |
+|--------|---------------|----------|
+| Fallback strategie | UPSERT met "pending" | Hergebruik bestaande sessie |
+| Session prioriteit | Meest recente | Prefer "connected" status |
+| phone_number default | "pending" | "unknown" (origineel) |
+| UPSERT logica | Ja | Nee (gewone INSERT) |
+
+## Waarom Dit Werkt
+
+1. **Stap 1**: Exacte `sessionId` match (snelle path)
+2. **Stap 2**: Als de VPS een andere sessionId stuurt, hergebruiken we de bestaande org sessie
+3. **Stap 3**: INSERT alleen als er echt geen sessie is (eerste keer, geen conflict mogelijk)
+4. **Race condition**: Als INSERT faalt, zoeken we opnieuw (andere request was sneller)
 
 ## Te Wijzigen Bestand
 
 | Bestand | Regels | Actie |
 |---------|--------|-------|
-| `supabase/functions/whatsapp-bridge/index.ts` | 661-727 | Vervang `getOrCreateSession` functie |
+| `supabase/functions/whatsapp-bridge/index.ts` | 661-738 | Vervang `getOrCreateSession` functie |
 
-## Test Na Implementatie
+## Test Na Fix
 
-1. Stuur een WhatsApp bericht naar `+31618710360`
-2. Check Edge Function logs voor errors
-3. Controleer of bericht verschijnt in `/whatsapp` UI
+1. Stuur WhatsApp bericht naar `+31618710360`
+2. Check Edge Function logs - geen constraint errors
+3. Bericht verschijnt in `/whatsapp` UI
 
 ## Geen Wijzigingen Aan
 
-- Database schema (constraint blijft)
-- Andere event handlers
-- Frontend WhatsApp componenten
-- Andere Edge Functions
+- Database schema
+- `handleSessionConnected` (heeft eigen robuuste logica)
+- Frontend componenten
+- Andere handlers
