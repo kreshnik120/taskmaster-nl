@@ -1,6 +1,6 @@
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
-import { AlertTriangle, Calendar, User } from 'lucide-react';
+import { AlertTriangle, Calendar } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -13,7 +13,11 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
+import { generateTaskAriaLabel } from './utils/accessibility';
+import { TaskListVirtualized } from './TaskListVirtualized';
 import type { TaskListTask } from './types';
+
+const VIRTUALIZATION_THRESHOLD = 50;
 
 interface TaskListTableProps {
   tasks: TaskListTask[];
@@ -67,6 +71,7 @@ function isOverdue(dateString: string | null): boolean {
 /**
  * Desktop table view for task list with checkboxes
  * 5-column layout: Checkbox, Task, Owner, Priority, Deadline
+ * Automatically switches to virtualized mode for >50 tasks
  */
 export function TaskListTable({
   tasks,
@@ -78,12 +83,28 @@ export function TaskListTable({
   isAllSelected,
   isPartiallySelected,
 }: TaskListTableProps) {
+  // Use virtualized table for large lists
+  if (tasks.length > VIRTUALIZATION_THRESHOLD) {
+    return (
+      <TaskListVirtualized
+        tasks={tasks}
+        selectedIds={selectedIds}
+        selectedIndex={selectedIndex}
+        onTaskSelect={onTaskSelect}
+        onToggleSelection={onToggleSelection}
+        onToggleAll={onToggleAll}
+        isAllSelected={isAllSelected}
+        isPartiallySelected={isPartiallySelected}
+      />
+    );
+  }
+
   return (
     <div className="rounded-md border">
-      <Table>
+      <Table role="grid" aria-rowcount={tasks.length + 1} aria-colcount={5}>
         <TableHeader>
-          <TableRow>
-            <TableHead className="w-[40px]">
+          <TableRow role="row">
+            <TableHead className="w-[40px]" role="columnheader">
               <Checkbox
                 checked={isAllSelected}
                 ref={(el) => {
@@ -95,10 +116,10 @@ export function TaskListTable({
                 aria-label="Selecteer alle taken"
               />
             </TableHead>
-            <TableHead className="w-[40%]">Taak</TableHead>
-            <TableHead>Eigenaar</TableHead>
-            <TableHead className="w-[80px]">Prioriteit</TableHead>
-            <TableHead className="w-[100px]">Deadline</TableHead>
+            <TableHead className="w-[40%]" role="columnheader">Taak</TableHead>
+            <TableHead role="columnheader">Eigenaar</TableHead>
+            <TableHead className="w-[80px]" role="columnheader">Prioriteit</TableHead>
+            <TableHead className="w-[100px]" role="columnheader">Deadline</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -111,23 +132,26 @@ export function TaskListTable({
               <TableRow
                 key={task.id}
                 data-index={index}
+                role="row"
+                aria-rowindex={index + 2}
+                aria-selected={isSelected}
+                aria-label={generateTaskAriaLabel(task)}
                 className={cn(
                   'cursor-pointer transition-colors',
                   isSelected && 'bg-accent/50',
                   isFocused && 'ring-2 ring-primary ring-inset',
                   !isSelected && !isFocused && 'hover:bg-muted/50'
                 )}
-                aria-selected={isSelected}
                 onClick={() => onTaskSelect?.(task)}
               >
-                <TableCell onClick={(e) => e.stopPropagation()}>
+                <TableCell role="gridcell" onClick={(e) => e.stopPropagation()}>
                   <Checkbox
                     checked={isSelected}
                     onCheckedChange={() => onToggleSelection(task.id)}
                     aria-label={`Selecteer ${task.title}`}
                   />
                 </TableCell>
-                <TableCell>
+                <TableCell role="gridcell">
                   <div className="flex flex-col gap-0.5">
                     <span className="font-medium line-clamp-1">{task.title}</span>
                     {task.description && (
@@ -142,7 +166,7 @@ export function TaskListTable({
                     )}
                   </div>
                 </TableCell>
-                <TableCell>
+                <TableCell role="gridcell">
                   <div className="flex items-center gap-2">
                     <Avatar className="h-6 w-6">
                       <AvatarFallback className="text-xs">
@@ -154,7 +178,7 @@ export function TaskListTable({
                     </span>
                   </div>
                 </TableCell>
-                <TableCell>
+                <TableCell role="gridcell">
                   <Badge
                     className={cn(
                       'text-xs whitespace-nowrap',
@@ -164,7 +188,7 @@ export function TaskListTable({
                     {PRIORITY_LABELS[task.priority] || task.priority}
                   </Badge>
                 </TableCell>
-                <TableCell>
+                <TableCell role="gridcell">
                   <div
                     className={cn(
                       'flex items-center gap-1.5 text-sm',

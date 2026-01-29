@@ -119,12 +119,15 @@ export function TaskListSidePanel({
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
           className="fixed right-0 top-0 z-50 h-full w-full max-w-md bg-background border-l shadow-xl outline-none"
           tabIndex={-1}
+          role="complementary"
+          aria-label="Taak details"
+          aria-describedby="task-panel-title"
         >
           <ScrollArea className="h-full">
             <div className="p-6">
               {/* Header */}
               <div className="flex items-start justify-between mb-6">
-                <h2 className="text-xl font-bold text-foreground pr-8 leading-tight">
+                <h2 id="task-panel-title" className="text-xl font-bold text-foreground pr-8 leading-tight">
                   {task.title}
                 </h2>
                 <Button

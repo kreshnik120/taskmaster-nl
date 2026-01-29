@@ -21,6 +21,7 @@ const FILTER_OPTIONS: QuickFilter[] = [
 /**
  * Filter pills for quick task filtering
  * Horizontally scrollable on mobile
+ * Uses role="group" for accessibility
  */
 export function TaskListFilterPills({
   filters,
@@ -31,7 +32,11 @@ export function TaskListFilterPills({
   const hasActiveFilters = filters.quickFilters.length > 0;
 
   return (
-    <div className={cn('flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide', className)}>
+    <div 
+      role="group" 
+      aria-label="Filters"
+      className={cn('flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide', className)}
+    >
       {/* "Alle" button - resets filters */}
       <Button
         variant={hasActiveFilters ? 'outline' : 'default'}

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertCircle } from 'lucide-react';
@@ -13,21 +13,55 @@ import { TaskListCards } from './TaskListCards';
 import { TaskListEmptyState } from './TaskListEmptyState';
 import { TaskListSidePanel } from './TaskListSidePanel';
 import { TaskListBulkActions } from './TaskListBulkActions';
+import { TaskListErrorBoundary } from './TaskListErrorBoundary';
+import { announceToScreenReader, TASK_LIST_ID } from './utils/accessibility';
 import type { TaskListViewProps, TaskListTask } from './types';
 
 /**
- * Loading skeleton for task list
+ * Loading skeleton with 5-column layout matching table
  */
 function LoadingSkeleton() {
   return (
-    <div className="space-y-3">
+    <div 
+      className="space-y-3"
+      aria-busy="true"
+      aria-label="Taken worden geladen"
+      role="status"
+    >
+      {/* Toolbar skeleton */}
       <div className="flex gap-3">
         <Skeleton className="h-10 flex-1" />
         <Skeleton className="h-10 w-24" />
       </div>
-      {[1, 2, 3, 4, 5].map((i) => (
-        <Skeleton key={i} className="h-16 w-full" />
-      ))}
+      
+      {/* Table skeleton with 5 columns */}
+      <div className="rounded-md border">
+        {/* Header row */}
+        <div className="flex items-center gap-4 p-4 border-b bg-muted/30">
+          <Skeleton className="h-4 w-4 rounded" /> {/* Checkbox */}
+          <Skeleton className="h-4 flex-[2]" /> {/* Task */}
+          <Skeleton className="h-4 flex-1" /> {/* Owner */}
+          <Skeleton className="h-4 w-16" /> {/* Priority */}
+          <Skeleton className="h-4 w-20" /> {/* Deadline */}
+        </div>
+        
+        {/* Data rows */}
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="flex items-center gap-4 p-4 border-b last:border-b-0">
+            <Skeleton className="h-4 w-4 rounded" />
+            <div className="flex-[2] space-y-1">
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-3 w-1/2" />
+            </div>
+            <div className="flex-1 flex items-center gap-2">
+              <Skeleton className="h-6 w-6 rounded-full" />
+              <Skeleton className="h-4 w-20" />
+            </div>
+            <Skeleton className="h-5 w-16 rounded-full" />
+            <Skeleton className="h-4 w-20" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -37,7 +71,11 @@ function LoadingSkeleton() {
  */
 function ErrorState({ message }: { message: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+    <div 
+      className="flex flex-col items-center justify-center py-12 px-4 text-center"
+      role="alert"
+      aria-live="assertive"
+    >
       <AlertCircle className="h-12 w-12 text-destructive mb-4" />
       <h3 className="text-lg font-medium text-foreground mb-1">{message}</h3>
       <p className="text-sm text-muted-foreground">
@@ -48,11 +86,23 @@ function ErrorState({ message }: { message: string }) {
 }
 
 /**
- * Main TaskListView component
- * Displays tasks in a responsive format (table on desktop, cards on mobile)
- * With filter pills, side panel, keyboard navigation, and bulk actions
+ * Skip link for keyboard navigation
  */
-export function TaskListView({
+function SkipLink() {
+  return (
+    <a
+      href={`#${TASK_LIST_ID}`}
+      className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-background focus:p-2 focus:border focus:rounded-md focus:shadow-lg"
+    >
+      Spring naar takenlijst
+    </a>
+  );
+}
+
+/**
+ * Inner content component wrapped by error boundary
+ */
+function TaskListViewContent({
   userId,
   showToolbar = true,
   limit,
@@ -83,7 +133,6 @@ export function TaskListView({
     toggleSelection,
     toggleAll,
     clearSelection,
-    isSelected,
     isAllSelected,
     isPartiallySelected,
   } = useTaskListSelection();
@@ -94,6 +143,16 @@ export function TaskListView({
 
   // Task IDs for bulk selection
   const taskIds = tasks.map(t => t.id);
+
+  // Announce filter results to screen readers
+  useEffect(() => {
+    if (!isLoading && tasks.length >= 0) {
+      const message = tasks.length === 1 
+        ? '1 taak gevonden' 
+        : `${tasks.length} taken gevonden`;
+      announceToScreenReader(message);
+    }
+  }, [tasks.length, isLoading]);
 
   // Keyboard navigation
   useTaskListKeyboard({
@@ -119,19 +178,19 @@ export function TaskListView({
   // Handle bulk actions (placeholder implementations)
   const handleBulkStatusChange = (status: string) => {
     console.log('Bulk status change:', status, Array.from(selectedIds));
-    // TODO: Implement actual status change
+    announceToScreenReader(`${selectedIds.size} taken bijgewerkt`);
     clearSelection();
   };
 
   const handleBulkPriorityChange = (priority: string) => {
     console.log('Bulk priority change:', priority, Array.from(selectedIds));
-    // TODO: Implement actual priority change
+    announceToScreenReader(`${selectedIds.size} taken bijgewerkt`);
     clearSelection();
   };
 
   const handleBulkDelete = () => {
     console.log('Bulk delete:', Array.from(selectedIds));
-    // TODO: Implement actual delete with confirmation
+    // TODO: Show delete confirmation
     clearSelection();
   };
 
@@ -139,7 +198,7 @@ export function TaskListView({
   if (isLoading) {
     return (
       <div className={className}>
-        <div className="text-sm text-muted-foreground mb-4">Taken laden...</div>
+        <div className="text-sm text-muted-foreground mb-4">Taken worden geladen...</div>
         <LoadingSkeleton />
       </div>
     );
@@ -159,6 +218,17 @@ export function TaskListView({
 
   return (
     <div className={className}>
+      {/* Skip link for accessibility */}
+      <SkipLink />
+
+      {/* Screen reader live region for announcements */}
+      <div 
+        className="sr-only" 
+        aria-live="polite" 
+        aria-atomic="true"
+        id="task-list-announcements"
+      />
+
       {/* Filter Pills */}
       {showToolbar && (
         <TaskListFilterPills
@@ -181,22 +251,24 @@ export function TaskListView({
       )}
 
       {/* Task list */}
-      {tasks.length === 0 ? (
-        <TaskListEmptyState filtered={hasFilters} />
-      ) : isMobile ? (
-        <TaskListCards tasks={tasks} onTaskSelect={handleTaskSelect} />
-      ) : (
-        <TaskListTable
-          tasks={tasks}
-          selectedIds={selectedIds}
-          selectedIndex={selectedIndex}
-          onTaskSelect={handleTaskSelect}
-          onToggleSelection={toggleSelection}
-          onToggleAll={() => toggleAll(taskIds)}
-          isAllSelected={isAllSelected(taskIds)}
-          isPartiallySelected={isPartiallySelected(taskIds)}
-        />
-      )}
+      <div id={TASK_LIST_ID}>
+        {tasks.length === 0 ? (
+          <TaskListEmptyState filtered={hasFilters} />
+        ) : isMobile ? (
+          <TaskListCards tasks={tasks} onTaskSelect={handleTaskSelect} />
+        ) : (
+          <TaskListTable
+            tasks={tasks}
+            selectedIds={selectedIds}
+            selectedIndex={selectedIndex}
+            onTaskSelect={handleTaskSelect}
+            onToggleSelection={toggleSelection}
+            onToggleAll={() => toggleAll(taskIds)}
+            isAllSelected={isAllSelected(taskIds)}
+            isPartiallySelected={isPartiallySelected(taskIds)}
+          />
+        )}
+      </div>
 
       {/* Side Panel */}
       <TaskListSidePanel
@@ -223,5 +295,19 @@ export function TaskListView({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Main TaskListView component
+ * Displays tasks in a responsive format (table on desktop, cards on mobile)
+ * With filter pills, side panel, keyboard navigation, and bulk actions
+ * Wrapped in error boundary for crash protection
+ */
+export function TaskListView(props: TaskListViewProps) {
+  return (
+    <TaskListErrorBoundary>
+      <TaskListViewContent {...props} />
+    </TaskListErrorBoundary>
   );
 }
