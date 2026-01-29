@@ -29,6 +29,10 @@ export interface WhatsAppContact {
   professional_id: string | null;
   created_at: string;
   updated_at: string;
+  // New fields for profile panel
+  tags: string[];
+  contact_notes: string | null;
+  is_business_account: boolean;
 }
 
 export interface WhatsAppMedia {

@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from "react";
-import { ArrowLeft, MoreVertical, Copy, Archive, Send, MessageSquare, Loader2 } from "lucide-react";
+import { ArrowLeft, MoreVertical, Copy, Archive, Send, MessageSquare, Loader2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -23,13 +23,15 @@ interface WhatsAppChatDetailProps {
   chat: WhatsAppChat;
   onBack: () => void;
   showBackButton?: boolean;
+  onToggleProfile?: () => void;
+  showProfileButton?: boolean;
 }
 
 function formatPhone(phone: string | null | undefined): string {
   return phone || 'Onbekend nummer';
 }
 
-export function WhatsAppChatDetail({ chat, onBack, showBackButton = false }: WhatsAppChatDetailProps) {
+export function WhatsAppChatDetail({ chat, onBack, showBackButton = false, onToggleProfile, showProfileButton = false }: WhatsAppChatDetailProps) {
   const { messages, groupedByDate, isLoading } = useWhatsAppMessages(chat.id);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [newMessageAnnouncement, setNewMessageAnnouncement] = useState('');
@@ -142,7 +144,18 @@ export function WhatsAppChatDetail({ chat, onBack, showBackButton = false }: Wha
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          {showProfileButton && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onToggleProfile}
+              aria-label="Toggle contactprofiel"
+            >
+              <Info className="h-5 w-5" />
+            </Button>
+          )}
+          
           <WhatsAppProfessionalDropdown
             chatId={chat.id}
             currentProfessionalId={chat.linked_professional_id}

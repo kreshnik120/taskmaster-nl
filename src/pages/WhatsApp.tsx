@@ -4,12 +4,27 @@ import { cn } from "@/lib/utils";
 import { WhatsAppChatList } from "@/components/whatsapp/WhatsAppChatList";
 import { WhatsAppChatDetail } from "@/components/whatsapp/WhatsAppChatDetail";
 import { WhatsAppEmptyState } from "@/components/whatsapp/WhatsAppEmptyState";
+import { WhatsAppContactProfile } from "@/components/whatsapp/WhatsAppContactProfile";
 import { useWhatsAppChats } from "@/hooks/whatsapp/useWhatsAppChats";
+import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  Sheet,
+  SheetContent,
+} from "@/components/ui/sheet";
 
 export default function WhatsApp() {
   const { chatId: urlChatId } = useParams();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [selectedChatId, setSelectedChatId] = useState<string | null>(urlChatId || null);
+  
+  // Profile panel state with localStorage persistence
+  const [showProfile, setShowProfile] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('whatsapp-profile-open') === 'true';
+    }
+    return false;
+  });
 
   const {
     filteredChats,
@@ -20,6 +35,11 @@ export default function WhatsApp() {
     setFilter,
     stats,
   } = useWhatsAppChats();
+
+  // Persist profile state
+  useEffect(() => {
+    localStorage.setItem('whatsapp-profile-open', String(showProfile));
+  }, [showProfile]);
 
   // Sync URL with selected chat
   useEffect(() => {
@@ -47,15 +67,30 @@ export default function WhatsApp() {
     navigate('/whatsapp', { replace: true });
   }, [navigate]);
 
+  // Toggle profile panel
+  const toggleProfile = useCallback(() => {
+    setShowProfile(prev => !prev);
+  }, []);
+
+  // Close profile when no chat is selected
+  useEffect(() => {
+    if (!selectedChatId) {
+      setShowProfile(false);
+    }
+  }, [selectedChatId]);
+
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Only handle if no input is focused
-      if (document.activeElement?.tagName === 'INPUT') return;
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
 
       switch (e.key) {
         case 'Escape':
-          if (selectedChatId) {
+          if (showProfile) {
+            e.preventDefault();
+            setShowProfile(false);
+          } else if (selectedChatId) {
             e.preventDefault();
             handleBack();
           }
@@ -80,12 +115,22 @@ export default function WhatsApp() {
             handleSelectChat(filteredChats[prevIndex].id);
           }
           break;
+        case 'i':
+          // Toggle profile with 'i' key when a chat is selected
+          if (selectedChatId && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            toggleProfile();
+          }
+          break;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [filteredChats, selectedChatId, handleSelectChat, handleBack]);
+  }, [filteredChats, selectedChatId, handleSelectChat, handleBack, showProfile, toggleProfile]);
+
+  // Check if we're on a larger screen for 3-column layout
+  const isLargeScreen = !isMobile;
 
   return (
     <div className="flex h-[calc(100vh-4rem)]">
@@ -93,7 +138,7 @@ export default function WhatsApp() {
       <div className={cn(
         "border-r bg-background flex-shrink-0",
         // Mobile: full width when no chat selected, hidden when chat is selected
-        "w-full md:w-[380px]",
+        "w-full md:w-[320px] lg:w-[280px]",
         selectedChatId && "hidden md:block"
       )}>
         <WhatsAppChatList
@@ -120,11 +165,35 @@ export default function WhatsApp() {
             chat={selectedChat} 
             onBack={handleBack}
             showBackButton={true}
+            onToggleProfile={toggleProfile}
+            showProfileButton={true}
           />
         ) : (
           <WhatsAppEmptyState stats={stats} />
         )}
       </div>
+
+      {/* Contact Profile - Desktop: inline panel */}
+      {isLargeScreen && showProfile && selectedChat && (
+        <div className="hidden lg:block w-[320px] border-l flex-shrink-0">
+          <WhatsAppContactProfile
+            chat={selectedChat}
+            onClose={() => setShowProfile(false)}
+          />
+        </div>
+      )}
+
+      {/* Contact Profile - Mobile/Tablet: Sheet overlay */}
+      <Sheet open={showProfile && !!selectedChat && isMobile} onOpenChange={setShowProfile}>
+        <SheetContent side="right" className="w-[320px] p-0">
+          {selectedChat && (
+            <WhatsAppContactProfile
+              chat={selectedChat}
+              onClose={() => setShowProfile(false)}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
