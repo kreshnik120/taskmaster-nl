@@ -52,7 +52,16 @@ export function useWhatsAppMessages(chatId: string | null): UseWhatsAppMessagesR
 
       const { data, error } = await supabase
         .from('whatsapp_messages')
-        .select('*')
+        .select(`
+          *,
+          media:whatsapp_media(
+            id,
+            file_name,
+            file_type,
+            mime_type,
+            storage_url
+          )
+        `)
         .eq('chat_id', chatId)
         .order('sent_at', { ascending: true });
 
