@@ -1,259 +1,288 @@
 
 
-# WhatsAppContactName Component - Implementatie Plan
+# WhatsApp Contact Profile Panel - Implementatie Plan
 
 ## Overzicht
 
-Maak een herbruikbare naam component met inline editing voor WhatsApp contacten. Gebruikers kunnen contactnamen aanpassen en resetten naar de originele WhatsApp naam.
+Implementeer een 3-kolom layout met een collapsible Contact Profile sidebar aan de rechterkant. Dit paneel toont contactinformatie, labels, notities en acties.
 
-## Componenten Te Maken
+## Huidige Layout Analyse
 
-### 1. WhatsAppContactName Component
+```text
+HUIDIGE STRUCTUUR (2-kolom):
+┌──────────────────────┬────────────────────────────────────┐
+│   ChatList (380px)   │         ChatDetail (flex-1)        │
+│                      │                                    │
+└──────────────────────┴────────────────────────────────────┘
 
-**Bestand:** `src/components/whatsapp/WhatsAppContactName.tsx`
+NIEUWE STRUCTUUR (3-kolom):
+┌──────────────────────┬────────────────────────────┬─────────────────────┐
+│   ChatList (280px)   │     ChatDetail (flex-1)    │ ContactProfile      │
+│                      │        min-w-[400px]       │ (320px, collapsible)│
+└──────────────────────┴────────────────────────────┴─────────────────────┘
+```
 
-**Props Interface:**
+## Database Migratie
+
+De `whatsapp_contacts` tabel mist velden voor tags en notities:
+
+```sql
+ALTER TABLE whatsapp_contacts 
+ADD COLUMN tags TEXT[] DEFAULT '{}',
+ADD COLUMN contact_notes TEXT,
+ADD COLUMN is_business_account BOOLEAN DEFAULT false;
+
+ALTER TABLE whatsapp_chats
+ADD COLUMN is_pinned BOOLEAN DEFAULT false,
+ADD COLUMN is_muted BOOLEAN DEFAULT false,
+ADD COLUMN is_archived BOOLEAN DEFAULT false;
+```
+
+## Nieuwe Componenten
+
+### 1. WhatsAppContactProfile (Hoofd Component)
+
+**Bestand:** `src/components/whatsapp/WhatsAppContactProfile.tsx`
+
+**Props:**
 ```typescript
-interface WhatsAppContactNameProps {
-  contactId: string;
-  displayName: string | null;
-  pushName: string | null;
-  phoneNumber: string;
-  editable?: boolean;
-  size?: 'sm' | 'md' | 'lg';
+interface WhatsAppContactProfileProps {
+  chat: WhatsAppChat;
+  onClose: () => void;
 }
 ```
 
-**Size Mapping:**
-| Size | Text Class | Line Height |
-|------|------------|-------------|
-| sm   | text-sm    | leading-tight |
-| md   | text-base  | leading-normal |
-| lg   | text-lg    | leading-relaxed |
-
-**Weergave Logica:**
+**Structuur:**
 ```text
-┌────────────────────────────────────────────────────────┐
-│  Jan de Vries  ✏️                                      │
-│  (WhatsApp: Jan)         ← alleen als verschilt        │
-└────────────────────────────────────────────────────────┘
+┌─────────────────────────────────┐
+│  [X] Contactprofiel             │  ← Sticky header
+├─────────────────────────────────┤
+│                                 │
+│       [  Avatar XL  ]           │
+│       Jan de Vries  ✏️          │
+│       +31 6 1234 5678 [📋]      │
+│                                 │
+├─────────────────────────────────┤
+│  📋 INFO                        │
+│  WhatsApp: Jan                  │
+│  Type: Persoonlijk              │
+│  Laatst actief: 14:30           │
+├─────────────────────────────────┤
+│  🏷️ LABELS                      │
+│  [Cliënt] [VIP] [+ Label]       │
+├─────────────────────────────────┤
+│  📝 NOTITIES                    │
+│  ┌───────────────────────────┐  │
+│  │ Voeg notities toe...      │  │
+│  └───────────────────────────┘  │
+├─────────────────────────────────┤
+│  ⚙️ ACTIES                      │
+│  [Toggle] AI antwoorden (disabled)│
+│  [📌] Pin chat                  │
+│  [🔇] Mute chat                 │
+│  [📁] Archiveer                 │
+│  ─────────────────────────────  │
+│  [🚫] Niet meer contacteren     │
+└─────────────────────────────────┘
 ```
 
-**Component States:**
-```text
-Normale State:
-┌──────────────────────────────────────┐
-│  [Naam tekst] [Edit icoon]           │
-│  (WhatsApp: {pushName})              │
-└──────────────────────────────────────┘
+### 2. useWhatsAppContact Hook
 
-Edit State:
-┌──────────────────────────────────────┐
-│  [Input field met huidige naam]      │
-│  [Reset naar WhatsApp naam] (link)   │
-└──────────────────────────────────────┘
-```
+**Bestand:** `src/hooks/whatsapp/useWhatsAppContact.ts`
 
-**Gedrag:**
-- **Klik op naam of edit icoon:** Input field verschijnt
-- **Input field:** Focus automatisch, tekst is geselecteerd
-- **Enter:** Opslaan
-- **Escape:** Annuleren
-- **Blur:** Opslaan
-- **"Reset naar WhatsApp naam":** Zet display_name naar null
-
-### 2. useUpdateContactName Hook
-
-**Bestand:** `src/hooks/whatsapp/useUpdateContactName.ts`
-
-**Interface:**
 ```typescript
-interface UpdateContactNameParams {
-  contactId: string;
-  displayName: string | null;
-}
-```
-
-**Implementatie:**
-```typescript
-export function useUpdateContactName() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ contactId, displayName }: UpdateContactNameParams) => {
-      const { error } = await supabase
+export function useWhatsAppContact(contactId: string | undefined) {
+  return useQuery({
+    queryKey: ['whatsapp-contact', contactId],
+    queryFn: async () => {
+      const { data, error } = await supabase
         .from('whatsapp_contacts')
-        .update({ display_name: displayName })
-        .eq('id', contactId);
-
+        .select('*')
+        .eq('id', contactId)
+        .single();
+      
       if (error) throw error;
+      return data;
     },
-    onSuccess: () => {
-      // Invalidate relevante queries
-      queryClient.invalidateQueries({ queryKey: ['whatsapp-chats'] });
-      queryClient.invalidateQueries({ queryKey: ['whatsapp-contact'] });
-      toast.success('Naam bijgewerkt');
-    },
-    onError: (error) => {
-      console.error('Failed to update contact name:', error);
-      toast.error('Kon naam niet bijwerken');
-    },
+    enabled: !!contactId,
   });
 }
 ```
 
-### 3. Component Integratie
+### 3. Layout Wijzigingen
 
-**WhatsAppChatDetail.tsx (Regel 131-134):**
+**WhatsApp.tsx:**
+- Voeg `showProfile` state toe
+- Voeg toggle functie toe
+- Responsive 3-kolom layout
+- localStorage persistence voor profile state
 
-Vervang:
-```tsx
-<div className="flex-1 min-w-0">
-  <h2 className="font-medium text-foreground truncate">{displayName}</h2>
-  <p className="text-sm text-muted-foreground truncate">{formatPhone(phoneNumber)}</p>
-</div>
+```typescript
+// State
+const [showProfile, setShowProfile] = useState(() => {
+  return localStorage.getItem('whatsapp-profile-open') === 'true';
+});
+
+// Persist
+useEffect(() => {
+  localStorage.setItem('whatsapp-profile-open', String(showProfile));
+}, [showProfile]);
+
+// Toggle
+const toggleProfile = () => setShowProfile(prev => !prev);
 ```
 
-Met:
+**Nieuwe layout structuur:**
 ```tsx
-<div className="flex-1 min-w-0">
-  <WhatsAppContactName
-    contactId={chat.contact?.id || ''}
-    displayName={chat.contact?.display_name}
-    pushName={chat.contact?.push_name}
-    phoneNumber={chat.contact?.phone_number || 'Onbekend'}
-    editable={!!chat.contact?.id}
-    size="md"
-  />
-  <p className="text-sm text-muted-foreground truncate">{formatPhone(phoneNumber)}</p>
-</div>
-```
+<div className="flex h-[calc(100vh-4rem)]">
+  {/* Chat List - 280px */}
+  <div className="w-[280px] border-r">
+    <WhatsAppChatList ... />
+  </div>
 
-**WhatsAppChatItem.tsx:** Geen wijziging nodig - naam blijft read-only in de lijst.
+  {/* Chat Detail - flex-1 min-w-[400px] */}
+  <div className="flex-1 min-w-[400px]">
+    <WhatsAppChatDetail 
+      chat={selectedChat}
+      onToggleProfile={toggleProfile}
+      showProfileButton={true}
+    />
+  </div>
 
-## Technische Details
-
-### WhatsAppContactName Component Structuur
-
-```tsx
-export function WhatsAppContactName({
-  contactId,
-  displayName,
-  pushName,
-  phoneNumber,
-  editable = false,
-  size = 'md',
-}: WhatsAppContactNameProps) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
-  
-  const updateName = useUpdateContactName();
-  
-  // Displayed name: displayName || pushName || phoneNumber
-  const currentName = displayName || pushName || phoneNumber;
-  
-  // Show WhatsApp name hint if displayName differs from pushName
-  const showPushNameHint = displayName && pushName && displayName !== pushName;
-  
-  // Show reset option if displayName is set (user changed it)
-  const canReset = displayName !== null;
-  
-  const startEditing = () => {
-    if (!editable) return;
-    setEditValue(currentName);
-    setIsEditing(true);
-  };
-  
-  const saveEdit = () => {
-    const trimmedValue = editValue.trim();
-    if (trimmedValue && trimmedValue !== currentName) {
-      updateName.mutate({ contactId, displayName: trimmedValue });
-    }
-    setIsEditing(false);
-  };
-  
-  const cancelEdit = () => {
-    setIsEditing(false);
-  };
-  
-  const resetToWhatsAppName = () => {
-    updateName.mutate({ contactId, displayName: null });
-    setIsEditing(false);
-  };
-  
-  // Focus and select text when editing starts
-  useEffect(() => {
-    if (isEditing && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
-  }, [isEditing]);
-  
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      saveEdit();
-    } else if (e.key === 'Escape') {
-      cancelEdit();
-    }
-  };
-  
-  // Size classes
-  const sizeClasses = {
-    sm: 'text-sm',
-    md: 'text-base font-medium',
-    lg: 'text-lg font-medium',
-  };
-  
-  if (isEditing) {
-    return (
-      <div className="space-y-1">
-        <Input
-          ref={inputRef}
-          value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
-          onBlur={saveEdit}
-          onKeyDown={handleKeyDown}
-          className="h-8 text-sm"
-          disabled={updateName.isPending}
-        />
-        {canReset && (
-          <button
-            type="button"
-            onClick={resetToWhatsAppName}
-            className="text-xs text-muted-foreground hover:text-foreground"
-          >
-            Reset naar WhatsApp naam
-          </button>
-        )}
-      </div>
-    );
-  }
-  
-  return (
-    <div className="space-y-0.5">
-      <div className="flex items-center gap-1.5 group">
-        <span className={cn(sizeClasses[size], "truncate")}>
-          {currentName}
-        </span>
-        {editable && (
-          <button
-            onClick={startEditing}
-            className="opacity-0 group-hover:opacity-100 transition-opacity"
-            aria-label="Naam bewerken"
-          >
-            <Pencil className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
-          </button>
-        )}
-      </div>
-      {showPushNameHint && (
-        <p className="text-xs text-muted-foreground">
-          (WhatsApp: {pushName})
-        </p>
-      )}
+  {/* Contact Profile - 320px collapsible */}
+  {showProfile && selectedChat && (
+    <div className="w-[320px] border-l">
+      <WhatsAppContactProfile 
+        chat={selectedChat}
+        onClose={() => setShowProfile(false)}
+      />
     </div>
-  );
+  )}
+</div>
+```
+
+### 4. WhatsAppChatDetail Update
+
+Voeg Info toggle knop toe aan header:
+
+```tsx
+// Nieuwe prop
+interface WhatsAppChatDetailProps {
+  chat: WhatsAppChat;
+  onBack: () => void;
+  showBackButton?: boolean;
+  onToggleProfile?: () => void;  // NIEUW
+  showProfileButton?: boolean;   // NIEUW
+}
+
+// In header actions
+{showProfileButton && (
+  <Button 
+    variant="ghost" 
+    size="icon" 
+    onClick={onToggleProfile}
+    aria-label="Toggle contactprofiel"
+  >
+    <Info className="h-5 w-5" />
+  </Button>
+)}
+```
+
+### 5. Responsive Gedrag
+
+**Desktop (>1024px):** 3 kolommen side-by-side
+**Tablet/Mobile (<1024px):** Sheet/Drawer van rechts
+
+```tsx
+// Desktop: inline panel
+{showProfile && selectedChat && (
+  <div className="hidden lg:block w-[320px] border-l">
+    <WhatsAppContactProfile ... />
+  </div>
+)}
+
+// Mobile: Sheet overlay
+<Sheet open={showProfile && !!selectedChat && isMobile} onOpenChange={setShowProfile}>
+  <SheetContent side="right" className="w-[320px] p-0">
+    <WhatsAppContactProfile ... />
+  </SheetContent>
+</Sheet>
+```
+
+## Profile Secties (Placeholders voor 6.4 en 6.5)
+
+De volgende secties worden als placeholder toegevoegd:
+
+### A. Info Sectie
+```tsx
+<div className="space-y-2">
+  <h4 className="text-sm font-medium text-muted-foreground">Info</h4>
+  <div className="space-y-1 text-sm">
+    {contact.push_name && (
+      <p>WhatsApp: {contact.push_name}</p>
+    )}
+    <p>Type: {contact.is_business_account ? 'Zakelijk' : 'Persoonlijk'}</p>
+    <p>Laatst actief: {formatRelativeTime(chat.last_message_at)}</p>
+  </div>
+</div>
+```
+
+### B. Labels Sectie (Placeholder)
+```tsx
+<div className="space-y-2">
+  <h4 className="text-sm font-medium text-muted-foreground">Labels</h4>
+  <p className="text-sm text-muted-foreground italic">
+    Labels worden toegevoegd in een volgende update
+  </p>
+</div>
+```
+
+### C. Notities Sectie (Placeholder)
+```tsx
+<div className="space-y-2">
+  <h4 className="text-sm font-medium text-muted-foreground">Notities</h4>
+  <Textarea 
+    placeholder="Voeg notities toe..."
+    className="min-h-[100px]"
+    disabled
+  />
+</div>
+```
+
+### D. Acties Sectie
+```tsx
+<div className="space-y-2">
+  <h4 className="text-sm font-medium text-muted-foreground">Acties</h4>
+  <div className="space-y-2">
+    <Button variant="outline" className="w-full justify-start" disabled>
+      <Bot className="h-4 w-4 mr-2" />
+      AI antwoorden
+    </Button>
+    <Button variant="outline" className="w-full justify-start">
+      <Pin className="h-4 w-4 mr-2" />
+      Pin chat
+    </Button>
+    <Button variant="outline" className="w-full justify-start">
+      <BellOff className="h-4 w-4 mr-2" />
+      Mute chat
+    </Button>
+    <Button variant="outline" className="w-full justify-start">
+      <Archive className="h-4 w-4 mr-2" />
+      Archiveer
+    </Button>
+  </div>
+</div>
+```
+
+## Type Updates
+
+**src/types/whatsapp.ts:**
+```typescript
+export interface WhatsAppContact {
+  // ... bestaande velden
+  tags: string[];           // NIEUW
+  contact_notes: string | null;  // NIEUW
+  is_business_account: boolean;  // NIEUW
 }
 ```
 
@@ -261,37 +290,29 @@ export function WhatsAppContactName({
 
 | Actie | Bestand | Beschrijving |
 |-------|---------|--------------|
-| CREATE | `src/components/whatsapp/WhatsAppContactName.tsx` | Naam component met inline editing |
-| CREATE | `src/hooks/whatsapp/useUpdateContactName.ts` | Mutation hook voor naam updates |
-| EDIT | `src/components/whatsapp/WhatsAppChatDetail.tsx` | Integreer WhatsAppContactName |
+| MIGRATE | SQL | Voeg tags, contact_notes, is_business_account, is_pinned, is_muted, is_archived toe |
+| CREATE | `src/components/whatsapp/WhatsAppContactProfile.tsx` | Contact profiel sidebar |
+| CREATE | `src/hooks/whatsapp/useWhatsAppContact.ts` | Fetch contact data |
+| EDIT | `src/pages/WhatsApp.tsx` | 3-kolom layout + profile state |
+| EDIT | `src/components/whatsapp/WhatsAppChatDetail.tsx` | Info toggle knop |
+| EDIT | `src/types/whatsapp.ts` | Uitbreiden WhatsAppContact interface |
 
-## Belangrijke Features
+## Implementatie Volgorde
 
-1. **Inline Editing:**
-   - Klik op naam of pencil icoon om te bewerken
-   - Enter = opslaan, Escape = annuleren
-   - Blur = opslaan
-
-2. **WhatsApp Naam Hint:**
-   - Toont "(WhatsApp: {pushName})" als displayName anders is
-   - Helpt gebruiker te zien wat de originele naam was
-
-3. **Reset Functie:**
-   - "Reset naar WhatsApp naam" link in edit mode
-   - Zet display_name naar null
-   - Alleen zichtbaar als displayName is ingesteld
-
-4. **Loading State:**
-   - Input is disabled tijdens mutatie
-   - Optimistic updates via react-query
+1. **Database migratie** - Nieuwe kolommen toevoegen
+2. **Type updates** - WhatsAppContact interface uitbreiden
+3. **useWhatsAppContact hook** - Data fetching
+4. **WhatsAppContactProfile component** - Profiel sidebar
+5. **WhatsAppChatDetail update** - Info knop toevoegen
+6. **WhatsApp.tsx update** - 3-kolom layout + responsive Sheet
 
 ## Test Na Implementatie
 
-1. Open een chat in `/whatsapp`
-2. Hover over contactnaam → pencil icoon verschijnt
-3. Klik op naam → input field opent
-4. Typ nieuwe naam → Enter → toast "Naam bijgewerkt"
-5. Controleer dat "(WhatsApp: ...)" hint verschijnt
-6. Klik "Reset naar WhatsApp naam" → naam reset
-7. Test Escape om te annuleren
+1. Open `/whatsapp` en selecteer een chat
+2. Klik op Info icoon in header → profile panel verschijnt
+3. Klik nogmaals → panel sluit
+4. Ververs pagina → panel state is behouden (localStorage)
+5. Resize naar mobile → panel is Sheet/Drawer
+6. Avatar en naam zijn groot en bewerkbaar in panel
+7. Telefoonnummer heeft copy functionaliteit
 
