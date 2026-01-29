@@ -53,6 +53,8 @@ export function TaskListBulkActions({
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 100, opacity: 0 }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+          role="toolbar"
+          aria-label="Bulk acties"
           className={cn(
             'fixed bottom-6 left-1/2 -translate-x-1/2 z-50',
             'bg-background border rounded-lg shadow-lg',

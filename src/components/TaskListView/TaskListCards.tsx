@@ -3,6 +3,7 @@ import { nl } from 'date-fns/locale';
 import { AlertTriangle, Calendar, User } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { generateTaskAriaLabel } from './utils/accessibility';
 import type { TaskListTask } from './types';
 
 interface TaskListCardsProps {
@@ -40,16 +41,19 @@ function isOverdue(dateString: string | null): boolean {
 
 /**
  * Mobile card view for task list
+ * Uses role="list" for accessibility
  */
 export function TaskListCards({ tasks, onTaskSelect }: TaskListCardsProps) {
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3" role="list" aria-label="Takenlijst">
       {tasks.map((task) => {
         const overdue = isOverdue(task.due_at);
 
         return (
           <Card
             key={task.id}
+            role="listitem"
+            aria-label={generateTaskAriaLabel(task)}
             className={`cursor-pointer hover:bg-muted/50 transition-colors ${
               overdue ? 'border-destructive/50' : ''
             }`}
