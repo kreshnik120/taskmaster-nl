@@ -1,318 +1,416 @@
 
 
-# WhatsApp Contact Profile Panel - Implementatie Plan
+# WhatsApp Contact Tags - Implementatie Plan
 
 ## Overzicht
 
-Implementeer een 3-kolom layout met een collapsible Contact Profile sidebar aan de rechterkant. Dit paneel toont contactinformatie, labels, notities en acties.
+Implementeer een tags/labels systeem voor WhatsApp contacten met gekleurde badges, add/remove functionaliteit en filtering in de chat list.
 
-## Huidige Layout Analyse
+## Huidige Situatie
 
-```text
-HUIDIGE STRUCTUUR (2-kolom):
-┌──────────────────────┬────────────────────────────────────┐
-│   ChatList (380px)   │         ChatDetail (flex-1)        │
-│                      │                                    │
-└──────────────────────┴────────────────────────────────────┘
+| Component | Status |
+|-----------|--------|
+| `whatsapp_contacts.tags` kolom | Bestaat (TEXT[] DEFAULT '{}') |
+| WhatsAppContactProfile Labels sectie | Placeholder tekst |
+| ChatList filter | Alleen: all, unread, linked |
 
-NIEUWE STRUCTUUR (3-kolom):
-┌──────────────────────┬────────────────────────────┬─────────────────────┐
-│   ChatList (280px)   │     ChatDetail (flex-1)    │ ContactProfile      │
-│                      │        min-w-[400px]       │ (320px, collapsible)│
-└──────────────────────┴────────────────────────────┴─────────────────────┘
+## Implementatie Stappen
+
+### 1. Tag Configuratie (Constants)
+
+**Bestand:** `src/lib/whatsapp-tags.ts`
+
+```typescript
+export interface TagConfig {
+  id: string;
+  label: string;
+  color: {
+    bg: string;
+    text: string;
+    border: string;
+  };
+}
+
+export const WHATSAPP_TAGS: TagConfig[] = [
+  { id: 'client', label: 'Cliënt', color: { bg: 'bg-green-100', text: 'text-green-700', border: 'border-green-200' } },
+  { id: 'family', label: 'Familie', color: { bg: 'bg-blue-100', text: 'text-blue-700', border: 'border-blue-200' } },
+  { id: 'colleague', label: 'Collega', color: { bg: 'bg-purple-100', text: 'text-purple-700', border: 'border-purple-200' } },
+  { id: 'urgent', label: 'Urgent', color: { bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-200' } },
+  { id: 'vip', label: 'VIP', color: { bg: 'bg-amber-100', text: 'text-amber-700', border: 'border-amber-200' } },
+  { id: 'new', label: 'Nieuw', color: { bg: 'bg-gray-100', text: 'text-gray-700', border: 'border-gray-200' } },
+];
+
+export function getTagConfig(tagId: string): TagConfig | undefined {
+  return WHATSAPP_TAGS.find(t => t.id === tagId);
+}
 ```
 
-## Database Migratie
+### 2. WhatsAppContactTags Component
 
-De `whatsapp_contacts` tabel mist velden voor tags en notities:
-
-```sql
-ALTER TABLE whatsapp_contacts 
-ADD COLUMN tags TEXT[] DEFAULT '{}',
-ADD COLUMN contact_notes TEXT,
-ADD COLUMN is_business_account BOOLEAN DEFAULT false;
-
-ALTER TABLE whatsapp_chats
-ADD COLUMN is_pinned BOOLEAN DEFAULT false,
-ADD COLUMN is_muted BOOLEAN DEFAULT false,
-ADD COLUMN is_archived BOOLEAN DEFAULT false;
-```
-
-## Nieuwe Componenten
-
-### 1. WhatsAppContactProfile (Hoofd Component)
-
-**Bestand:** `src/components/whatsapp/WhatsAppContactProfile.tsx`
+**Bestand:** `src/components/whatsapp/WhatsAppContactTags.tsx`
 
 **Props:**
 ```typescript
-interface WhatsAppContactProfileProps {
-  chat: WhatsAppChat;
-  onClose: () => void;
+interface WhatsAppContactTagsProps {
+  contactId: string;
+  tags: string[];
+  editable?: boolean;
 }
 ```
 
 **Structuur:**
 ```text
-┌─────────────────────────────────┐
-│  [X] Contactprofiel             │  ← Sticky header
-├─────────────────────────────────┤
-│                                 │
-│       [  Avatar XL  ]           │
-│       Jan de Vries  ✏️          │
-│       +31 6 1234 5678 [📋]      │
-│                                 │
-├─────────────────────────────────┤
-│  📋 INFO                        │
-│  WhatsApp: Jan                  │
-│  Type: Persoonlijk              │
-│  Laatst actief: 14:30           │
-├─────────────────────────────────┤
-│  🏷️ LABELS                      │
-│  [Cliënt] [VIP] [+ Label]       │
-├─────────────────────────────────┤
-│  📝 NOTITIES                    │
-│  ┌───────────────────────────┐  │
-│  │ Voeg notities toe...      │  │
-│  └───────────────────────────┘  │
-├─────────────────────────────────┤
-│  ⚙️ ACTIES                      │
-│  [Toggle] AI antwoorden (disabled)│
-│  [📌] Pin chat                  │
-│  [🔇] Mute chat                 │
-│  [📁] Archiveer                 │
-│  ─────────────────────────────  │
-│  [🚫] Niet meer contacteren     │
-└─────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│  [Cliënt ✕] [VIP ✕]  [+ Label]                         │
+└─────────────────────────────────────────────────────────┘
+
+Popover (bij klik "+ Label"):
+┌─────────────────────────────────────────────────────────┐
+│  Voeg label toe                                         │
+│  ───────────────                                        │
+│  ○ Cliënt      (groen)                                  │
+│  ○ Familie     (blauw)                                  │
+│  ○ Collega     (paars)                                  │
+│  ○ Urgent      (rood)                                   │
+│  ○ VIP         (goud)                                   │
+│  ○ Nieuw       (grijs)                                  │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### 2. useWhatsAppContact Hook
+**Component Implementatie:**
+```tsx
+export function WhatsAppContactTags({ contactId, tags, editable = false }: WhatsAppContactTagsProps) {
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [tagToDelete, setTagToDelete] = useState<string | null>(null);
+  
+  const updateTags = useUpdateContactTags();
+  
+  const availableTags = WHATSAPP_TAGS.filter(t => !tags.includes(t.id));
+  
+  const handleAddTag = (tagId: string) => {
+    updateTags.mutate({ 
+      contactId, 
+      tags: [...tags, tagId] 
+    });
+    setPopoverOpen(false);
+  };
+  
+  const handleRemoveTag = (tagId: string) => {
+    setTagToDelete(tagId);
+    setDeleteDialogOpen(true);
+  };
+  
+  const confirmRemoveTag = () => {
+    if (tagToDelete) {
+      updateTags.mutate({ 
+        contactId, 
+        tags: tags.filter(t => t !== tagToDelete) 
+      });
+    }
+    setDeleteDialogOpen(false);
+    setTagToDelete(null);
+  };
+  
+  return (
+    <div className="flex flex-wrap gap-1.5 items-center">
+      {tags.map(tagId => {
+        const config = getTagConfig(tagId);
+        if (!config) return null;
+        return (
+          <Badge
+            key={tagId}
+            className={cn(config.color.bg, config.color.text, config.color.border, "border")}
+          >
+            {config.label}
+            {editable && (
+              <button onClick={() => handleRemoveTag(tagId)} className="ml-1">
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </Badge>
+        );
+      })}
+      
+      {editable && availableTags.length > 0 && (
+        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-6 text-xs">
+              <Plus className="h-3 w-3 mr-1" />
+              Label
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-48 p-2">
+            <p className="text-xs font-medium text-muted-foreground mb-2">
+              Voeg label toe
+            </p>
+            <div className="space-y-1">
+              {availableTags.map(tag => (
+                <button
+                  key={tag.id}
+                  onClick={() => handleAddTag(tag.id)}
+                  className="w-full flex items-center gap-2 p-1.5 rounded hover:bg-muted text-sm"
+                >
+                  <div className={cn("w-3 h-3 rounded-full", tag.color.bg)} />
+                  {tag.label}
+                </button>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
+      
+      {/* Confirm delete dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Label verwijderen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Weet je zeker dat je dit label wilt verwijderen van dit contact?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuleren</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRemoveTag}>
+              Verwijderen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+```
 
-**Bestand:** `src/hooks/whatsapp/useWhatsAppContact.ts`
+### 3. useUpdateContactTags Hook
+
+**Bestand:** `src/hooks/whatsapp/useUpdateContactTags.ts`
 
 ```typescript
-export function useWhatsAppContact(contactId: string | undefined) {
-  return useQuery({
-    queryKey: ['whatsapp-contact', contactId],
-    queryFn: async () => {
-      const { data, error } = await supabase
+interface UpdateContactTagsParams {
+  contactId: string;
+  tags: string[];
+}
+
+export function useUpdateContactTags() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ contactId, tags }: UpdateContactTagsParams) => {
+      const { error } = await supabase
         .from('whatsapp_contacts')
-        .select('*')
-        .eq('id', contactId)
-        .single();
-      
+        .update({ tags })
+        .eq('id', contactId);
+
       if (error) throw error;
-      return data;
     },
-    enabled: !!contactId,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['whatsapp-chats'] });
+      queryClient.invalidateQueries({ queryKey: ['whatsapp-contact'] });
+      toast.success('Labels bijgewerkt');
+    },
+    onError: (error) => {
+      console.error('Failed to update tags:', error);
+      toast.error('Kon labels niet bijwerken');
+    },
   });
 }
 ```
 
-### 3. Layout Wijzigingen
+### 4. Update WhatsAppContactProfile
 
-**WhatsApp.tsx:**
-- Voeg `showProfile` state toe
-- Voeg toggle functie toe
-- Responsive 3-kolom layout
-- localStorage persistence voor profile state
-
-```typescript
-// State
-const [showProfile, setShowProfile] = useState(() => {
-  return localStorage.getItem('whatsapp-profile-open') === 'true';
-});
-
-// Persist
-useEffect(() => {
-  localStorage.setItem('whatsapp-profile-open', String(showProfile));
-}, [showProfile]);
-
-// Toggle
-const toggleProfile = () => setShowProfile(prev => !prev);
-```
-
-**Nieuwe layout structuur:**
-```tsx
-<div className="flex h-[calc(100vh-4rem)]">
-  {/* Chat List - 280px */}
-  <div className="w-[280px] border-r">
-    <WhatsAppChatList ... />
-  </div>
-
-  {/* Chat Detail - flex-1 min-w-[400px] */}
-  <div className="flex-1 min-w-[400px]">
-    <WhatsAppChatDetail 
-      chat={selectedChat}
-      onToggleProfile={toggleProfile}
-      showProfileButton={true}
-    />
-  </div>
-
-  {/* Contact Profile - 320px collapsible */}
-  {showProfile && selectedChat && (
-    <div className="w-[320px] border-l">
-      <WhatsAppContactProfile 
-        chat={selectedChat}
-        onClose={() => setShowProfile(false)}
-      />
-    </div>
-  )}
-</div>
-```
-
-### 4. WhatsAppChatDetail Update
-
-Voeg Info toggle knop toe aan header:
+Vervang de placeholder Labels sectie (regels 133-141):
 
 ```tsx
-// Nieuwe prop
-interface WhatsAppChatDetailProps {
-  chat: WhatsAppChat;
-  onBack: () => void;
-  showBackButton?: boolean;
-  onToggleProfile?: () => void;  // NIEUW
-  showProfileButton?: boolean;   // NIEUW
-}
-
-// In header actions
-{showProfileButton && (
-  <Button 
-    variant="ghost" 
-    size="icon" 
-    onClick={onToggleProfile}
-    aria-label="Toggle contactprofiel"
-  >
-    <Info className="h-5 w-5" />
-  </Button>
-)}
-```
-
-### 5. Responsive Gedrag
-
-**Desktop (>1024px):** 3 kolommen side-by-side
-**Tablet/Mobile (<1024px):** Sheet/Drawer van rechts
-
-```tsx
-// Desktop: inline panel
-{showProfile && selectedChat && (
-  <div className="hidden lg:block w-[320px] border-l">
-    <WhatsAppContactProfile ... />
-  </div>
-)}
-
-// Mobile: Sheet overlay
-<Sheet open={showProfile && !!selectedChat && isMobile} onOpenChange={setShowProfile}>
-  <SheetContent side="right" className="w-[320px] p-0">
-    <WhatsAppContactProfile ... />
-  </SheetContent>
-</Sheet>
-```
-
-## Profile Secties (Placeholders voor 6.4 en 6.5)
-
-De volgende secties worden als placeholder toegevoegd:
-
-### A. Info Sectie
-```tsx
-<div className="space-y-2">
-  <h4 className="text-sm font-medium text-muted-foreground">Info</h4>
-  <div className="space-y-1 text-sm">
-    {contact.push_name && (
-      <p>WhatsApp: {contact.push_name}</p>
-    )}
-    <p>Type: {contact.is_business_account ? 'Zakelijk' : 'Persoonlijk'}</p>
-    <p>Laatst actief: {formatRelativeTime(chat.last_message_at)}</p>
-  </div>
-</div>
-```
-
-### B. Labels Sectie (Placeholder)
-```tsx
-<div className="space-y-2">
-  <h4 className="text-sm font-medium text-muted-foreground">Labels</h4>
-  <p className="text-sm text-muted-foreground italic">
-    Labels worden toegevoegd in een volgende update
-  </p>
-</div>
-```
-
-### C. Notities Sectie (Placeholder)
-```tsx
-<div className="space-y-2">
-  <h4 className="text-sm font-medium text-muted-foreground">Notities</h4>
-  <Textarea 
-    placeholder="Voeg notities toe..."
-    className="min-h-[100px]"
-    disabled
+{/* Labels section */}
+<div className="px-4 py-4 space-y-2">
+  <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+    <Tag className="h-3.5 w-3.5" />
+    Labels
+  </h4>
+  <WhatsAppContactTags
+    contactId={displayContact?.id || ''}
+    tags={displayContact?.tags || []}
+    editable={!!displayContact?.id}
   />
 </div>
 ```
 
-### D. Acties Sectie
-```tsx
-<div className="space-y-2">
-  <h4 className="text-sm font-medium text-muted-foreground">Acties</h4>
-  <div className="space-y-2">
-    <Button variant="outline" className="w-full justify-start" disabled>
-      <Bot className="h-4 w-4 mr-2" />
-      AI antwoorden
-    </Button>
-    <Button variant="outline" className="w-full justify-start">
-      <Pin className="h-4 w-4 mr-2" />
-      Pin chat
-    </Button>
-    <Button variant="outline" className="w-full justify-start">
-      <BellOff className="h-4 w-4 mr-2" />
-      Mute chat
-    </Button>
-    <Button variant="outline" className="w-full justify-start">
-      <Archive className="h-4 w-4 mr-2" />
-      Archiveer
-    </Button>
-  </div>
-</div>
-```
+### 5. Tag Filter in ChatList
 
-## Type Updates
+#### 5a. Uitbreiden WhatsAppFilter type
 
 **src/types/whatsapp.ts:**
 ```typescript
-export interface WhatsAppContact {
-  // ... bestaande velden
-  tags: string[];           // NIEUW
-  contact_notes: string | null;  // NIEUW
-  is_business_account: boolean;  // NIEUW
+export type WhatsAppFilter = 'all' | 'unread' | 'linked' | `tag:${string}`;
+```
+
+#### 5b. Nieuwe WhatsAppTagFilter Component
+
+**Bestand:** `src/components/whatsapp/WhatsAppTagFilter.tsx`
+
+```tsx
+interface WhatsAppTagFilterProps {
+  selectedTag: string | null;
+  onSelectTag: (tagId: string | null) => void;
+  availableTags: string[]; // Tags that exist on contacts
 }
+
+export function WhatsAppTagFilter({ selectedTag, onSelectTag, availableTags }: WhatsAppTagFilterProps) {
+  if (availableTags.length === 0) return null;
+  
+  return (
+    <Select 
+      value={selectedTag || 'all'} 
+      onValueChange={(v) => onSelectTag(v === 'all' ? null : v)}
+    >
+      <SelectTrigger className="h-8 text-xs">
+        <SelectValue placeholder="Filter op label" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">Alle labels</SelectItem>
+        {availableTags.map(tagId => {
+          const config = getTagConfig(tagId);
+          if (!config) return null;
+          return (
+            <SelectItem key={tagId} value={tagId}>
+              <div className="flex items-center gap-2">
+                <div className={cn("w-2 h-2 rounded-full", config.color.bg)} />
+                {config.label}
+              </div>
+            </SelectItem>
+          );
+        })}
+      </SelectContent>
+    </Select>
+  );
+}
+```
+
+#### 5c. Update useWhatsAppChats Hook
+
+Voeg tag filtering toe:
+
+```typescript
+// Nieuwe state
+const [tagFilter, setTagFilter] = useState<string | null>(null);
+
+// In filteredChats useMemo
+if (tagFilter) {
+  result = result.filter(chat => 
+    chat.contact?.tags?.includes(tagFilter)
+  );
+}
+
+// Stats uitbreiden
+const availableTags = useMemo(() => {
+  const tagSet = new Set<string>();
+  chats.forEach(chat => {
+    chat.contact?.tags?.forEach(tag => tagSet.add(tag));
+  });
+  return Array.from(tagSet);
+}, [chats]);
+
+// Return uitbreiden
+return {
+  ...existing,
+  tagFilter,
+  setTagFilter,
+  availableTags,
+};
+```
+
+#### 5d. Update WhatsAppChatList
+
+Voeg tag filter dropdown toe onder de tabs:
+
+```tsx
+{/* Tag filter - alleen tonen als er tags zijn */}
+{availableTags.length > 0 && (
+  <WhatsAppTagFilter
+    selectedTag={tagFilter}
+    onSelectTag={onTagFilterChange}
+    availableTags={availableTags}
+  />
+)}
+```
+
+### 6. Show Tags in WhatsAppChatItem
+
+Voeg kleine tag indicators toe aan chat items:
+
+```tsx
+{/* Na de preview text */}
+{chat.contact?.tags && chat.contact.tags.length > 0 && (
+  <div className="flex gap-1 mt-1">
+    {chat.contact.tags.slice(0, 2).map(tagId => {
+      const config = getTagConfig(tagId);
+      if (!config) return null;
+      return (
+        <div 
+          key={tagId}
+          className={cn("w-2 h-2 rounded-full", config.color.bg)}
+          title={config.label}
+        />
+      );
+    })}
+    {chat.contact.tags.length > 2 && (
+      <span className="text-xs text-muted-foreground">+{chat.contact.tags.length - 2}</span>
+    )}
+  </div>
+)}
 ```
 
 ## Bestanden Overzicht
 
 | Actie | Bestand | Beschrijving |
 |-------|---------|--------------|
-| MIGRATE | SQL | Voeg tags, contact_notes, is_business_account, is_pinned, is_muted, is_archived toe |
-| CREATE | `src/components/whatsapp/WhatsAppContactProfile.tsx` | Contact profiel sidebar |
-| CREATE | `src/hooks/whatsapp/useWhatsAppContact.ts` | Fetch contact data |
-| EDIT | `src/pages/WhatsApp.tsx` | 3-kolom layout + profile state |
-| EDIT | `src/components/whatsapp/WhatsAppChatDetail.tsx` | Info toggle knop |
-| EDIT | `src/types/whatsapp.ts` | Uitbreiden WhatsAppContact interface |
+| CREATE | `src/lib/whatsapp-tags.ts` | Tag configuratie en kleuren |
+| CREATE | `src/components/whatsapp/WhatsAppContactTags.tsx` | Tags component met add/remove |
+| CREATE | `src/components/whatsapp/WhatsAppTagFilter.tsx` | Tag filter dropdown |
+| CREATE | `src/hooks/whatsapp/useUpdateContactTags.ts` | Mutation voor tags update |
+| EDIT | `src/components/whatsapp/WhatsAppContactProfile.tsx` | Integreer tags component |
+| EDIT | `src/components/whatsapp/WhatsAppChatItem.tsx` | Toon tag indicators |
+| EDIT | `src/components/whatsapp/WhatsAppChatList.tsx` | Voeg tag filter toe |
+| EDIT | `src/hooks/whatsapp/useWhatsAppChats.ts` | Tag filter logica |
+| EDIT | `src/types/whatsapp.ts` | Uitbreid filter type |
+| EDIT | `src/pages/WhatsApp.tsx` | Prop doorgeving tag filter |
 
-## Implementatie Volgorde
+## Visueel Overzicht
 
-1. **Database migratie** - Nieuwe kolommen toevoegen
-2. **Type updates** - WhatsAppContact interface uitbreiden
-3. **useWhatsAppContact hook** - Data fetching
-4. **WhatsAppContactProfile component** - Profiel sidebar
-5. **WhatsAppChatDetail update** - Info knop toevoegen
-6. **WhatsApp.tsx update** - 3-kolom layout + responsive Sheet
+```text
+ChatList:
+┌─────────────────────────────────────┐
+│ 🔍 Zoek in gesprekken...            │
+│ ─────────────────────────────────── │
+│ [Alle] [Ongelezen 3] [Gekoppeld]    │
+│ ─────────────────────────────────── │
+│ [▼ Filter op label: Alle labels]   │  ← NIEUW
+│ ═══════════════════════════════════ │
+│ 👤 Jan de Vries                     │
+│    Bedankt voor het bericht!        │
+│    🟢🟡                             │  ← Tag indicators
+│ ─────────────────────────────────── │
+│ 👤 Marie                            │
+│    Ik bel je zo terug               │
+│    🔴                               │
+└─────────────────────────────────────┘
+
+ContactProfile Labels sectie:
+┌─────────────────────────────────────┐
+│  🏷️ LABELS                          │
+│  [Cliënt ✕] [VIP ✕] [+ Label]       │
+└─────────────────────────────────────┘
+```
 
 ## Test Na Implementatie
 
-1. Open `/whatsapp` en selecteer een chat
-2. Klik op Info icoon in header → profile panel verschijnt
-3. Klik nogmaals → panel sluit
-4. Ververs pagina → panel state is behouden (localStorage)
-5. Resize naar mobile → panel is Sheet/Drawer
-6. Avatar en naam zijn groot en bewerkbaar in panel
-7. Telefoonnummer heeft copy functionaliteit
+1. Open een chat en open het profiel paneel
+2. Klik "+ Label" → popover met beschikbare labels verschijnt
+3. Klik op een label → label wordt toegevoegd, toast "Labels bijgewerkt"
+4. Klik op X bij een label → confirm dialog verschijnt
+5. Bevestig verwijderen → label wordt verwijderd
+6. Controleer dat tag indicators zichtbaar zijn in chat list
+7. Gebruik tag filter dropdown → alleen chats met dat label worden getoond
+8. Ververs pagina → labels zijn persistent
 
