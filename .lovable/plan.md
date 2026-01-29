@@ -1,149 +1,210 @@
 
-# Fix WhatsApp Bridge Unique Constraint Error (Revisie)
 
-## Probleem Analyse
+# WhatsApp Media/Image Support - Plan
 
-De vorige fix introduceerde `phone_number: "pending"` maar dit lost het probleem niet op. De database heeft al 2 sessies voor org `550e8400-...`:
+## Huidige Situatie Analyse
 
-| ID | phone_number | status |
-|----|--------------|--------|
-| `61f4b1fb-...` | `31618710360` | connected |
-| `9a8c604c-...` | `unknown` | disconnected |
+De infrastructuur is BIJNA compleet. Dit is wat al bestaat:
 
-De constraint `(org_id, phone_number)` wordt geschonden wanneer we een NIEUWE sessie proberen in te voegen met een `phone_number` die al bestaat voor die org.
+| Component | Status | Bevinding |
+|-----------|--------|-----------|
+| Edge Function | ✅ Werkt | Media wordt geüpload naar Storage en opgeslagen in `whatsapp_media` tabel |
+| Storage Bucket | ⚠️ Private | Bucket `whatsapp-media` is `public: false` → URLs zijn niet toegankelijk |
+| Database | ✅ Werkt | 4 afbeeldingen reeds opgeslagen met `storage_url` |
+| Hook | ❌ Incompleet | Query haalt `whatsapp_media` relatie NIET op |
+| UI | ❌ Incompleet | `WhatsAppMessageBubble` toont geen afbeeldingen |
+| Types | ✅ Correct | `WhatsAppMessage.media?: WhatsAppMedia[]` bestaat al |
 
-## Root Cause
+## Wat Nodig Is
 
-De `getOrCreateSession` functie probeert een nieuwe sessie te maken wanneer het geen exacte `sessionId` match vindt, terwijl er al een werkende sessie bestaat voor de organisatie.
+### 1. Database Migration - Maak bucket public
 
-## Oplossing
-
-Vereenvoudig de logica: **hergebruik ALTIJD een bestaande sessie voor de org, maak NOOIT een nieuwe aan tenzij er echt geen sessie bestaat.**
-
-### Nieuwe `getOrCreateSession` Logica
-
-```text
-1. Zoek sessie op exacte sessionId
-   → Gevonden: return sessie
-   
-2. Zoek ELKE bestaande sessie voor deze org (meest recente eerst)
-   → Gevonden: update updated_at en return deze sessie
-   
-3. Geen sessie bestaat: INSERT nieuwe sessie (zal slagen want geen conflict)
+```sql
+UPDATE storage.buckets 
+SET public = true 
+WHERE name = 'whatsapp-media';
 ```
 
-### Code Wijzigingen
+Dit zorgt dat de bestaande `storage_url` waarden direct werken.
 
-**Bestand:** `supabase/functions/whatsapp-bridge/index.ts`
+### 2. Hook Update - Fetch media relatie
 
-**Wijzig `getOrCreateSession` (regels 661-738):**
+**Bestand:** `src/hooks/whatsapp/useWhatsAppMessages.ts`
+
+Huidige query:
+```typescript
+.select('*')
+```
+
+Nieuwe query:
+```typescript
+.select(`
+  *,
+  media:whatsapp_media(*)
+`)
+```
+
+Dit haalt de gekoppelde media op via de foreign key `message_id`.
+
+### 3. UI Update - Toon afbeeldingen
+
+**Bestand:** `src/components/whatsapp/WhatsAppMessageBubble.tsx`
+
+Wijzigingen:
+- Check of `message.media` bestaat en items bevat
+- Toon afbeeldingen met correcte styling
+- Ondersteun image types (jpg, png, webp)
+- Document/video/audio krijgen download link of placeholder
+
+```text
+┌─────────────────────────────────┐
+│         ┌─────────────┐         │
+│         │   📷 Image  │         │
+│         │             │         │
+│         └─────────────┘         │
+│                                 │
+│  [optionele caption tekst]      │
+│                                 │
+│                    14:30 ✓✓     │
+└─────────────────────────────────┘
+```
+
+### 4. Lightbox Component (nieuw)
+
+**Nieuw bestand:** `src/components/whatsapp/WhatsAppImageLightbox.tsx`
+
+- Klik op afbeelding opent fullscreen overlay
+- Escape of klik buiten sluit
+- Zoom mogelijkheid
+
+## Implementatie Details
+
+### Hook Wijziging (useWhatsAppMessages.ts)
 
 ```typescript
-async function getOrCreateSession(
-  supabase: SupabaseClientAny,
-  sessionId: string,
-  orgId: string,
-  requestId: string
-) {
-  // 1. Try exact sessionId match
-  const { data: existingById } = await supabase
-    .from("whatsapp_sessions")
-    .select("id, phone_number")
-    .eq("id", sessionId)
-    .maybeSingle();
+const { data, error } = await supabase
+  .from('whatsapp_messages')
+  .select(`
+    *,
+    media:whatsapp_media(
+      id,
+      file_name,
+      file_type,
+      mime_type,
+      storage_url
+    )
+  `)
+  .eq('chat_id', chatId)
+  .order('sent_at', { ascending: true });
+```
 
-  if (existingById) {
-    console.log(`[${requestId}] Found session by ID: ${sessionId}`);
-    return existingById;
-  }
+### UI Componenten (WhatsAppMessageBubble.tsx)
 
-  // 2. Find ANY existing session for this org (prefer connected, then by updated_at)
-  const { data: existingForOrg } = await supabase
-    .from("whatsapp_sessions")
-    .select("id, phone_number")
-    .eq("org_id", orgId)
-    .order("session_status", { ascending: false }) // 'connected' before 'disconnected'
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+```typescript
+// Nieuwe helper functie
+function isImageMimeType(mimeType: string): boolean {
+  return mimeType.startsWith('image/');
+}
 
-  if (existingForOrg) {
-    console.log(`[${requestId}] Reusing org session: ${existingForOrg.id} (phone: ${existingForOrg.phone_number})`);
-    // Touch session to mark as active
-    await supabase
-      .from("whatsapp_sessions")
-      .update({ updated_at: new Date().toISOString() })
-      .eq("id", existingForOrg.id);
-    return existingForOrg;
-  }
+// In de component
+const hasMedia = message.media && message.media.length > 0;
+const imageMedia = hasMedia 
+  ? message.media.filter(m => isImageMimeType(m.mime_type))
+  : [];
+```
 
-  // 3. No session exists at all - safe to create new one
-  console.log(`[${requestId}] Creating first session for org: ${orgId}`);
-  
-  const { data: newSession, error } = await supabase
-    .from("whatsapp_sessions")
-    .insert({
-      id: sessionId,
-      org_id: orgId,
-      phone_number: "unknown",
-      session_status: "connected",
-    })
-    .select("id, phone_number")
-    .single();
+**Afbeelding rendering:**
 
-  if (error) {
-    // Race condition: another request created a session, try to find it
-    console.log(`[${requestId}] Insert failed (likely race condition), retrying lookup`);
-    
-    const { data: raceSession } = await supabase
-      .from("whatsapp_sessions")
-      .select("id, phone_number")
-      .eq("org_id", orgId)
-      .limit(1)
-      .maybeSingle();
-    
-    if (raceSession) {
-      return raceSession;
-    }
-    
-    throw new Error(`Session creation failed: ${formatError(error)}`);
-  }
+```tsx
+{imageMedia.length > 0 && (
+  <div className="mb-2">
+    {imageMedia.map(media => (
+      <img
+        key={media.id}
+        src={media.storage_url}
+        alt={media.file_name}
+        className="max-w-full rounded-lg cursor-pointer"
+        loading="lazy"
+        onClick={() => openLightbox(media.storage_url)}
+      />
+    ))}
+  </div>
+)}
+```
 
-  return newSession;
+### Lightbox Component
+
+Eenvoudige fullscreen overlay:
+
+```typescript
+interface WhatsAppImageLightboxProps {
+  imageUrl: string;
+  onClose: () => void;
+}
+
+export function WhatsAppImageLightbox({ imageUrl, onClose }: Props) {
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl p-0 bg-black/90">
+        <img src={imageUrl} className="max-h-[90vh] mx-auto" />
+      </DialogContent>
+    </Dialog>
+  );
 }
 ```
 
-## Belangrijke Wijzigingen t.o.v. Vorige Poging
+## Te Wijzigen Bestanden
 
-| Aspect | Vorige Poging | Deze Fix |
-|--------|---------------|----------|
-| Fallback strategie | UPSERT met "pending" | Hergebruik bestaande sessie |
-| Session prioriteit | Meest recente | Prefer "connected" status |
-| phone_number default | "pending" | "unknown" (origineel) |
-| UPSERT logica | Ja | Nee (gewone INSERT) |
+| Bestand | Wijziging |
+|---------|-----------|
+| `src/hooks/whatsapp/useWhatsAppMessages.ts` | Query uitbreiden met media join |
+| `src/components/whatsapp/WhatsAppMessageBubble.tsx` | Afbeeldingen renderen |
 
-## Waarom Dit Werkt
+## Nieuwe Bestanden
 
-1. **Stap 1**: Exacte `sessionId` match (snelle path)
-2. **Stap 2**: Als de VPS een andere sessionId stuurt, hergebruiken we de bestaande org sessie
-3. **Stap 3**: INSERT alleen als er echt geen sessie is (eerste keer, geen conflict mogelijk)
-4. **Race condition**: Als INSERT faalt, zoeken we opnieuw (andere request was sneller)
+| Bestand | Beschrijving |
+|---------|--------------|
+| `src/components/whatsapp/WhatsAppImageLightbox.tsx` | Fullscreen afbeelding viewer |
 
-## Te Wijzigen Bestand
+## Database Migratie
 
-| Bestand | Regels | Actie |
-|---------|--------|-------|
-| `supabase/functions/whatsapp-bridge/index.ts` | 661-738 | Vervang `getOrCreateSession` functie |
+```sql
+-- Maak whatsapp-media bucket public
+UPDATE storage.buckets 
+SET public = true 
+WHERE name = 'whatsapp-media';
+```
 
-## Test Na Fix
+## Ondersteunde Media Types
 
-1. Stuur WhatsApp bericht naar `+31618710360`
-2. Check Edge Function logs - geen constraint errors
-3. Bericht verschijnt in `/whatsapp` UI
+| Type | Actie |
+|------|-------|
+| `image/jpeg`, `image/png`, `image/webp`, `image/gif` | Toon afbeelding met lightbox |
+| `video/mp4` | Video player (stretch goal) |
+| `audio/*` | Audio player (stretch goal) |
+| `application/pdf` | Download link met PDF icoon |
+| Overig | Download link met bestandsnaam |
+
+## Bestaande Edge Function - Geen Wijzigingen Nodig
+
+De `handleMessageReceived` functie (regels 254-298) werkt al correct:
+1. Decodeert base64 media
+2. Uploadt naar `whatsapp-media` bucket
+3. Slaat metadata op in `whatsapp_media` tabel
+4. Bewaart `storage_url` met public URL
+
+## Test Na Implementatie
+
+1. Stuur een afbeelding naar `+31618710360` via WhatsApp
+2. Open de chat in `/whatsapp`
+3. Afbeelding moet zichtbaar zijn in de message bubble
+4. Klik op afbeelding → lightbox opent
+5. Escape of klik erbuiten → lightbox sluit
 
 ## Geen Wijzigingen Aan
 
-- Database schema
-- `handleSessionConnected` (heeft eigen robuuste logica)
-- Frontend componenten
-- Andere handlers
+- Edge function `whatsapp-bridge` (werkt al)
+- Database schema (tabellen bestaan al)
+- Types (interface is al correct)
+- Andere WhatsApp componenten
+
