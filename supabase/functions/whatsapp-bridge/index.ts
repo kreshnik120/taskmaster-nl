@@ -167,6 +167,10 @@ Deno.serve(async (req) => {
         result = await handleContactProfilePicture(supabase, sessionId, orgId, data, media, requestId);
         break;
 
+      case "contact.syncAllProfilePictures":
+        result = await handleSyncAllProfilePictures(supabase, sessionId, orgId, requestId);
+        break;
+
       default:
         return new Response(
           JSON.stringify({ success: false, error: `Unknown event type: ${event}` }),
@@ -763,6 +767,102 @@ async function handleContactProfilePicture(
   console.log(`[${requestId}] ✅ Profile picture updated for ${updatedContacts.length} contact(s)`);
 
   return { success: true, url: publicUrl, contactUpdated: true, contactCount: updatedContacts.length };
+}
+
+async function handleSyncAllProfilePictures(
+  supabase: SupabaseClientAny,
+  sessionId: string,
+  orgId: string,
+  requestId: string
+): Promise<Record<string, unknown>> {
+  console.log(`[${requestId}] Starting profile picture sync for org ${orgId}`);
+  
+  // 1. Get VPS credentials
+  const vpsApiKey = Deno.env.get("WHATSAPP_VPS_API_KEY");
+  const vpsSessionId = Deno.env.get("WHATSAPP_VPS_SESSION_ID");
+  
+  if (!vpsApiKey || !vpsSessionId) {
+    throw new Error("VPS credentials not configured");
+  }
+  
+  // 2. Get all contacts without profile pictures
+  const { data: contacts, error } = await supabase
+    .from('whatsapp_contacts')
+    .select('id, phone_number')
+    .eq('org_id', orgId)
+    .is('profile_picture_url', null)
+    .limit(50); // Batch limit to prevent timeouts
+  
+  if (error) throw error;
+  
+  if (!contacts || contacts.length === 0) {
+    console.log(`[${requestId}] No contacts without profile pictures found`);
+    return { synced: 0, message: "No contacts without profile pictures" };
+  }
+  
+  console.log(`[${requestId}] Found ${contacts.length} contacts without profile pictures`);
+  
+  // 3. Process contacts with rate limiting (5 per second)
+  const results = { success: 0, failed: 0, skipped: 0 };
+  const BATCH_SIZE = 5;
+  const DELAY_MS = 1000;
+  
+  for (let i = 0; i < contacts.length; i += BATCH_SIZE) {
+    const batch = contacts.slice(i, i + BATCH_SIZE);
+    
+    // Process batch in parallel
+    const promises = batch.map(async (contact: { id: string; phone_number: string }) => {
+      // Normalize phone number for VPS (ensure JID format)
+      let phone = contact.phone_number;
+      if (!phone.includes('@')) {
+        phone = `${phone}@s.whatsapp.net`;
+      }
+      
+      try {
+        const vpsUrl = `http://72.61.155.82:3001/contacts/${encodeURIComponent(phone)}/profile-picture`;
+        
+        const response = await fetch(vpsUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': vpsApiKey,
+          },
+          body: JSON.stringify({ sessionId: vpsSessionId }),
+        });
+        
+        if (response.ok) {
+          results.success++;
+          console.log(`[${requestId}] ✅ Triggered sync for ${contact.phone_number}`);
+        } else if (response.status === 404) {
+          results.skipped++;
+          console.log(`[${requestId}] ⏭️ No profile picture available for ${contact.phone_number}`);
+        } else {
+          results.failed++;
+          console.warn(`[${requestId}] ❌ Failed for ${contact.phone_number}: ${response.status}`);
+        }
+      } catch (err) {
+        results.failed++;
+        console.error(`[${requestId}] ❌ Error for ${contact.phone_number}:`, err);
+      }
+    });
+    
+    await Promise.all(promises);
+    
+    // Rate limit delay between batches
+    if (i + BATCH_SIZE < contacts.length) {
+      console.log(`[${requestId}] Rate limiting: waiting ${DELAY_MS}ms before next batch...`);
+      await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+    }
+  }
+  
+  console.log(`[${requestId}] ✅ Profile picture sync completed: ${results.success} success, ${results.failed} failed, ${results.skipped} skipped`);
+  
+  return { 
+    synced: results.success, 
+    failed: results.failed, 
+    skipped: results.skipped,
+    total: contacts.length 
+  };
 }
 
 // ============================================================================
