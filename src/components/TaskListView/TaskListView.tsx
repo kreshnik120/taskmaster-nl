@@ -1,13 +1,19 @@
+import { useState, useRef } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertCircle } from 'lucide-react';
 import { useTaskListFilters } from './hooks/useTaskListFilters';
 import { useTaskListData } from './hooks/useTaskListData';
+import { useTaskListSelection } from './hooks/useTaskListSelection';
+import { useTaskListKeyboard } from './hooks/useTaskListKeyboard';
 import { TaskListToolbar } from './TaskListToolbar';
+import { TaskListFilterPills } from './TaskListFilterPills';
 import { TaskListTable } from './TaskListTable';
 import { TaskListCards } from './TaskListCards';
 import { TaskListEmptyState } from './TaskListEmptyState';
-import type { TaskListViewProps } from './types';
+import { TaskListSidePanel } from './TaskListSidePanel';
+import { TaskListBulkActions } from './TaskListBulkActions';
+import type { TaskListViewProps, TaskListTask } from './types';
 
 /**
  * Loading skeleton for task list
@@ -44,21 +50,90 @@ function ErrorState({ message }: { message: string }) {
 /**
  * Main TaskListView component
  * Displays tasks in a responsive format (table on desktop, cards on mobile)
+ * With filter pills, side panel, keyboard navigation, and bulk actions
  */
 export function TaskListView({
   userId,
   showToolbar = true,
   limit,
-  onTaskSelect,
+  onTaskSelect: externalOnTaskSelect,
   className
 }: TaskListViewProps) {
   const isMobile = useIsMobile();
-  const { filters, setFilters } = useTaskListFilters();
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  
+  // Filters and data
+  const { 
+    filters, 
+    setFilters, 
+    toggleQuickFilter, 
+    clearQuickFilters,
+    hasActiveQuickFilters 
+  } = useTaskListFilters();
+  
   const { tasks, totalCount, isLoading, error } = useTaskListData({
     userId,
     filters,
     limit
   });
+
+  // Selection state
+  const {
+    selectedIds,
+    toggleSelection,
+    toggleAll,
+    clearSelection,
+    isSelected,
+    isAllSelected,
+    isPartiallySelected,
+  } = useTaskListSelection();
+
+  // Panel and navigation state
+  const [panelTask, setPanelTask] = useState<TaskListTask | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
+
+  // Task IDs for bulk selection
+  const taskIds = tasks.map(t => t.id);
+
+  // Keyboard navigation
+  useTaskListKeyboard({
+    tasks,
+    selectedIndex,
+    onSelectedIndexChange: setSelectedIndex,
+    onOpenPanel: (task) => {
+      setPanelTask(task);
+      externalOnTaskSelect?.(task);
+    },
+    onClosePanel: () => setPanelTask(null),
+    searchInputRef,
+    isPanelOpen: !!panelTask,
+    enabled: !isMobile, // Disable keyboard nav on mobile
+  });
+
+  // Handle task selection (opens side panel)
+  const handleTaskSelect = (task: TaskListTask) => {
+    setPanelTask(task);
+    externalOnTaskSelect?.(task);
+  };
+
+  // Handle bulk actions (placeholder implementations)
+  const handleBulkStatusChange = (status: string) => {
+    console.log('Bulk status change:', status, Array.from(selectedIds));
+    // TODO: Implement actual status change
+    clearSelection();
+  };
+
+  const handleBulkPriorityChange = (priority: string) => {
+    console.log('Bulk priority change:', priority, Array.from(selectedIds));
+    // TODO: Implement actual priority change
+    clearSelection();
+  };
+
+  const handleBulkDelete = () => {
+    console.log('Bulk delete:', Array.from(selectedIds));
+    // TODO: Implement actual delete with confirmation
+    clearSelection();
+  };
 
   // Loading state
   if (isLoading) {
@@ -79,32 +154,73 @@ export function TaskListView({
     );
   }
 
-  // Empty state (only show if no tasks and toolbar is hidden or no search active)
-  if (tasks.length === 0 && !showToolbar) {
-    return (
-      <div className={className}>
-        <TaskListEmptyState filtered={!!filters.searchQuery} />
-      </div>
-    );
-  }
+  // Determine if filters are active for empty state
+  const hasFilters = !!filters.searchQuery || hasActiveQuickFilters;
 
   return (
     <div className={className}>
+      {/* Filter Pills */}
+      {showToolbar && (
+        <TaskListFilterPills
+          filters={filters}
+          onToggleFilter={toggleQuickFilter}
+          onClearAll={clearQuickFilters}
+          className="mb-3"
+        />
+      )}
+
+      {/* Toolbar with search and sort */}
       {showToolbar && (
         <TaskListToolbar
           filters={filters}
           onChange={setFilters}
           taskCount={tasks.length}
           totalCount={totalCount}
+          searchInputRef={searchInputRef}
         />
       )}
 
+      {/* Task list */}
       {tasks.length === 0 ? (
-        <TaskListEmptyState filtered={!!filters.searchQuery} />
+        <TaskListEmptyState filtered={hasFilters} />
       ) : isMobile ? (
-        <TaskListCards tasks={tasks} onTaskSelect={onTaskSelect} />
+        <TaskListCards tasks={tasks} onTaskSelect={handleTaskSelect} />
       ) : (
-        <TaskListTable tasks={tasks} onTaskSelect={onTaskSelect} />
+        <TaskListTable
+          tasks={tasks}
+          selectedIds={selectedIds}
+          selectedIndex={selectedIndex}
+          onTaskSelect={handleTaskSelect}
+          onToggleSelection={toggleSelection}
+          onToggleAll={() => toggleAll(taskIds)}
+          isAllSelected={isAllSelected(taskIds)}
+          isPartiallySelected={isPartiallySelected(taskIds)}
+        />
+      )}
+
+      {/* Side Panel */}
+      <TaskListSidePanel
+        task={panelTask}
+        onClose={() => setPanelTask(null)}
+        onEdit={(task) => {
+          console.log('Edit task:', task.id);
+          // TODO: Open edit modal
+        }}
+        onDelete={(task) => {
+          console.log('Delete task:', task.id);
+          // TODO: Show delete confirmation
+        }}
+      />
+
+      {/* Bulk Actions Bar */}
+      {!isMobile && (
+        <TaskListBulkActions
+          selectedCount={selectedIds.size}
+          onStatusChange={handleBulkStatusChange}
+          onPriorityChange={handleBulkPriorityChange}
+          onDelete={handleBulkDelete}
+          onClear={clearSelection}
+        />
       )}
     </div>
   );
