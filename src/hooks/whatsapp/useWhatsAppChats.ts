@@ -62,6 +62,9 @@ export function useWhatsAppChats(): UseWhatsAppChatsReturn {
   const filteredChats = useMemo(() => {
     let result = [...chats];
 
+    // Filter archived chats (unless specifically viewing archived)
+    result = result.filter(chat => !chat.is_archived);
+
     // Apply filter
     if (filter === 'unread') {
       result = result.filter(chat => chat.unread_count > 0);
@@ -86,6 +89,13 @@ export function useWhatsAppChats(): UseWhatsAppChatsReturn {
         return contactName.includes(query) || phoneNumber.includes(query) || preview.includes(query);
       });
     }
+
+    // Sort: pinned chats first, then by last_message_at
+    result.sort((a, b) => {
+      if (a.is_pinned && !b.is_pinned) return -1;
+      if (!a.is_pinned && b.is_pinned) return 1;
+      return 0; // Maintain DB order (last_message_at) for same pin status
+    });
 
     return result;
   }, [chats, filter, tagFilter, searchQuery]);
