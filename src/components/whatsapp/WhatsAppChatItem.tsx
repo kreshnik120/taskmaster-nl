@@ -1,7 +1,7 @@
 import { format, isToday, isYesterday, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
-import { Check } from "lucide-react";
+import { Check, Pin, BellOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WhatsAppContactAvatar } from "./WhatsAppContactAvatar";
 import { getTagConfig } from "@/lib/whatsapp-tags";
@@ -41,6 +41,8 @@ export function WhatsAppChatItem({ chat, isSelected, onClick }: WhatsAppChatItem
   const displayName = chat.contact?.display_name || formatPhone(chat.contact?.phone_number || 'Onbekend');
   const hasUnread = chat.unread_count > 0;
   const isLinked = !!chat.linked_professional_id;
+  const isPinned = chat.is_pinned;
+  const isMuted = chat.is_muted;
 
   return (
     <div
@@ -48,7 +50,8 @@ export function WhatsAppChatItem({ chat, isSelected, onClick }: WhatsAppChatItem
       className={cn(
         "flex items-center gap-3 p-3 cursor-pointer transition-colors border-b border-border/50",
         "hover:bg-accent/50",
-        isSelected && "bg-accent border-l-2 border-l-primary"
+        isSelected && "bg-accent border-l-2 border-l-primary",
+        isMuted && "opacity-60"
       )}
     >
       {/* Avatar */}
@@ -65,19 +68,31 @@ export function WhatsAppChatItem({ chat, isSelected, onClick }: WhatsAppChatItem
       <div className="flex-1 min-w-0">
         {/* Top row: Name + Timestamp */}
         <div className="flex items-center justify-between gap-2">
-          <span className={cn(
-            "font-medium text-sm truncate",
-            hasUnread && "text-foreground",
-            !hasUnread && "text-foreground/80"
-          )}>
-            {displayName}
-          </span>
-          <span className={cn(
-            "text-xs flex-shrink-0",
-            hasUnread ? "text-[#25D366] font-medium" : "text-muted-foreground"
-          )}>
-            {formatTimestamp(chat.last_message_at)}
-          </span>
+          <div className="flex items-center gap-1.5 min-w-0">
+            {/* Pin indicator */}
+            {isPinned && (
+              <Pin className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+            )}
+            <span className={cn(
+              "font-medium text-sm truncate",
+              hasUnread && "text-foreground",
+              !hasUnread && "text-foreground/80"
+            )}>
+              {displayName}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {/* Mute indicator */}
+            {isMuted && (
+              <BellOff className="h-3 w-3 text-muted-foreground" />
+            )}
+            <span className={cn(
+              "text-xs",
+              hasUnread ? "text-[#25D366] font-medium" : "text-muted-foreground"
+            )}>
+              {formatTimestamp(chat.last_message_at)}
+            </span>
+          </div>
         </div>
 
         {/* Bottom row: Preview + Badge */}

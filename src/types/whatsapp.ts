@@ -11,6 +11,9 @@ export interface WhatsAppChat {
   last_message_at: string | null;
   last_message_preview: string | null;
   linked_professional_id: string | null;
+  is_pinned: boolean;
+  is_muted: boolean;
+  is_archived: boolean;
   created_at: string;
   updated_at: string;
   // Relations
