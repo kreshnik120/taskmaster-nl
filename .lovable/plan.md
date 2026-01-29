@@ -1,77 +1,178 @@
 
-# Debug Resultaat: Profielfoto's Update Faalt
 
-## Root Cause Analyse
+# Plan: Sync All Profile Pictures Endpoint
 
-### Situatie
-De Edge Function werkt **correct**, maar vindt geen matching contacts vanwege data inconsistenties.
+## Overzicht
 
-### Bewijs uit Database
+Voeg een nieuw event `contact.syncAllProfilePictures` toe aan de WhatsApp Bridge Edge Function die:
+1. Alle contacts zonder profielfoto ophaalt uit de database
+2. Voor elk contact de VPS API aanroept om de profielfoto op te halen
+3. Rate limiting toepast (max 5 requests per seconde)
 
-| Contact Phone | Contact org_id | VPS stuurt org_id | Match? |
-|---------------|----------------|-------------------|--------|
-| `31687654321@s.whatsapp.net` | `650e8400-...` (CitoZorg) | `550e8400-...` (ABCzorg) | ❌ |
-| `31618710360` | **Bestaat niet** in ABCzorg | `550e8400-...` (ABCzorg) | ❌ |
+## Technische Implementatie
 
-### Logs Bevestigen Dit
+### Bestand: `supabase/functions/whatsapp-bridge/index.ts`
 
-```
-[58327580] Searching contacts with phone variants: 31687654321, 31687654321@s.whatsapp.net, +31687654321
-[58327580] ⚠️ No contact found for phone 31687654321 in org 550e8400-... - photo stored but contact not updated
-```
-
-## Oorzaken
-
-1. **Contact in verkeerde org**: `31687654321` staat in CitoZorg maar foto sync draait via ABCzorg sessie
-2. **Contact bestaat niet**: `31618710360` is niet aangemaakt als contact voordat foto sync draaide
-
-## Opties
-
-### Optie A: Data Cleanup (Handmatig)
-Verplaats/kopieer contacts naar de juiste org.
-
-### Optie B: Cross-Org Phone Lookup (Code Fix)
-Pas Edge Function aan om óók te zoeken zonder org_id filter (minder veilig).
-
-### Optie C: Ensure Contact Exists First (Robuustheid)
-Pas Edge Function aan om automatisch een contact aan te maken als deze niet bestaat.
-
-## Aanbevolen Oplossing: Optie C
-
-Voeg "create-if-not-exists" logica toe aan `handleContactProfilePicture`:
+**Wijziging 1: Nieuwe event case toevoegen** (rond regel 167-169)
 
 ```typescript
-// Als geen bestaand contact gevonden, maak er een aan
-if (!updatedContacts || updatedContacts.length === 0) {
-  // Probeer contact aan te maken met minimale data
-  const { data: newContact, error: insertError } = await supabase
-    .from('whatsapp_contacts')
-    .insert({
-      org_id: orgId,
-      session_id: sessionId,
-      phone_number: phone,
-      profile_picture_url: publicUrl,
-    })
-    .select('id')
-    .single();
-    
-  if (insertError) {
-    console.warn(`[${requestId}] Could not create contact: ${formatError(insertError)}`);
-    return { success: true, url: publicUrl, contactCreated: false };
+case "contact.syncAllProfilePictures":
+  result = await handleSyncAllProfilePictures(supabase, sessionId, orgId, requestId);
+  break;
+```
+
+**Wijziging 2: Nieuwe handler functie toevoegen** (na handleContactProfilePicture, rond regel 766)
+
+```typescript
+async function handleSyncAllProfilePictures(
+  supabase: SupabaseClientAny,
+  sessionId: string,
+  orgId: string,
+  requestId: string
+): Promise<Record<string, unknown>> {
+  console.log(`[${requestId}] Starting profile picture sync for org ${orgId}`);
+  
+  // 1. Get VPS credentials
+  const vpsApiKey = Deno.env.get("WHATSAPP_VPS_API_KEY");
+  const vpsSessionId = Deno.env.get("WHATSAPP_VPS_SESSION_ID");
+  
+  if (!vpsApiKey || !vpsSessionId) {
+    throw new Error("VPS credentials not configured");
   }
   
-  return { success: true, url: publicUrl, contactCreated: true };
+  // 2. Get all contacts without profile pictures
+  const { data: contacts, error } = await supabase
+    .from('whatsapp_contacts')
+    .select('id, phone_number')
+    .eq('org_id', orgId)
+    .is('profile_picture_url', null)
+    .limit(50); // Batch limit
+  
+  if (error) throw error;
+  
+  if (!contacts || contacts.length === 0) {
+    return { synced: 0, message: "No contacts without profile pictures" };
+  }
+  
+  console.log(`[${requestId}] Found ${contacts.length} contacts without profile pictures`);
+  
+  // 3. Process contacts with rate limiting (5 per second)
+  const results = { success: 0, failed: 0, skipped: 0 };
+  const BATCH_SIZE = 5;
+  const DELAY_MS = 1000;
+  
+  for (let i = 0; i < contacts.length; i += BATCH_SIZE) {
+    const batch = contacts.slice(i, i + BATCH_SIZE);
+    
+    // Process batch in parallel
+    const promises = batch.map(async (contact) => {
+      // Normalize phone number for VPS
+      let phone = contact.phone_number;
+      if (!phone.includes('@')) {
+        phone = `${phone}@s.whatsapp.net`;
+      }
+      
+      try {
+        const vpsUrl = `http://72.61.155.82:3001/contacts/${encodeURIComponent(phone)}/profile-picture`;
+        
+        const response = await fetch(vpsUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': vpsApiKey,
+          },
+          body: JSON.stringify({ sessionId: vpsSessionId }),
+        });
+        
+        if (response.ok) {
+          results.success++;
+          console.log(`[${requestId}] ✅ Triggered sync for ${contact.phone_number}`);
+        } else if (response.status === 404) {
+          results.skipped++;
+          console.log(`[${requestId}] ⏭️ No profile picture for ${contact.phone_number}`);
+        } else {
+          results.failed++;
+          console.warn(`[${requestId}] ❌ Failed for ${contact.phone_number}: ${response.status}`);
+        }
+      } catch (err) {
+        results.failed++;
+        console.error(`[${requestId}] ❌ Error for ${contact.phone_number}:`, err);
+      }
+    });
+    
+    await Promise.all(promises);
+    
+    // Rate limit delay between batches
+    if (i + BATCH_SIZE < contacts.length) {
+      await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+    }
+  }
+  
+  console.log(`[${requestId}] ✅ Profile picture sync completed: ${results.success} success, ${results.failed} failed, ${results.skipped} skipped`);
+  
+  return { 
+    synced: results.success, 
+    failed: results.failed, 
+    skipped: results.skipped,
+    total: contacts.length 
+  };
 }
 ```
 
-## Implementatie
+## Bestanden Overzicht
 
 | Actie | Bestand | Beschrijving |
 |-------|---------|--------------|
-| EDIT | `supabase/functions/whatsapp-bridge/index.ts` | Voeg auto-create contact logica toe |
+| EDIT | `supabase/functions/whatsapp-bridge/index.ts` | Voeg nieuw event en handler toe |
 
-## Overwegingen
+## Gebruik
 
-- **Veiligheid**: org_id filter blijft behouden (multi-tenant veilig)
-- **Data integriteit**: Nieuwe contacts krijgen alleen phone + profile_picture_url (minimaal)
-- **Backwards compatible**: Bestaande contacts worden gewoon geüpdatet
+```bash
+# Via Edge Function (aanbevolen)
+curl -X POST https://oelmsmcgryeoryhonexw.supabase.co/functions/v1/whatsapp-bridge \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: YOUR_BRIDGE_API_KEY" \
+  -d '{
+    "event": "contact.syncAllProfilePictures",
+    "sessionId": "61f4b1fb-5bcf-46c3-9cd5-5758d5b5c9f6",
+    "orgId": "550e8400-e29b-41d4-a716-446655440000",
+    "data": {}
+  }'
+```
+
+## Flow Diagram
+
+```text
+UI/Admin roept Edge Function aan
+           ↓
+contact.syncAllProfilePictures event
+           ↓
+┌──────────────────────────────────────┐
+│ 1. Haal contacts zonder foto op     │
+│    WHERE profile_picture_url IS NULL │
+└──────────────────────────────────────┘
+           ↓
+┌──────────────────────────────────────┐
+│ 2. Loop door contacts (batch van 5) │
+│    ├─ Call VPS: /contacts/{jid}/profile-picture
+│    ├─ VPS haalt foto op van WhatsApp
+│    └─ VPS stuurt foto naar Edge Function
+│        via contact.profilePicture event
+└──────────────────────────────────────┘
+           ↓
+┌──────────────────────────────────────┐
+│ 3. Rate limit: 1 seconde wachten    │
+│    tussen batches van 5             │
+└──────────────────────────────────────┘
+           ↓
+Return: { synced: 35, failed: 1, skipped: 4, total: 40 }
+```
+
+## Belangrijke Features
+
+- **Rate Limiting**: Max 5 parallelle requests per seconde (WhatsApp beperking)
+- **Batch Processing**: Limit van 50 contacts per aanroep (voorkomt timeouts)
+- **Error Handling**: Individuele failures stoppen niet de hele sync
+- **Skip Logic**: 404 responses (geen profielfoto) worden als "skipped" geteld
+- **Logging**: Uitgebreide logging voor debugging
+
