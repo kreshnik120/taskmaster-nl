@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { WhatsAppContactAvatar } from "./WhatsAppContactAvatar";
+import { WhatsAppContactName } from "./WhatsAppContactName";
 import { WhatsAppProfessionalDropdown } from "./WhatsAppProfessionalDropdown";
 import { WhatsAppLinkedBanner } from "./WhatsAppLinkedBanner";
 import { WhatsAppMessageBubble, DateDivider } from "./WhatsAppMessageBubble";
@@ -129,7 +130,14 @@ export function WhatsAppChatDetail({ chat, onBack, showBackButton = false }: Wha
         />
         
         <div className="flex-1 min-w-0">
-          <h2 className="font-medium text-foreground truncate">{displayName}</h2>
+          <WhatsAppContactName
+            contactId={chat.contact?.id || ''}
+            displayName={chat.contact?.display_name}
+            pushName={chat.contact?.push_name}
+            phoneNumber={chat.contact?.phone_number || 'Onbekend'}
+            editable={!!chat.contact?.id}
+            size="md"
+          />
           <p className="text-sm text-muted-foreground truncate">{formatPhone(phoneNumber)}</p>
         </div>
 
