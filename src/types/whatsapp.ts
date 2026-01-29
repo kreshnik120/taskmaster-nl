@@ -24,6 +24,8 @@ export interface WhatsAppContact {
   session_id: string;
   phone_number: string;
   display_name: string | null;
+  push_name: string | null;
+  profile_picture_url: string | null;
   professional_id: string | null;
   created_at: string;
   updated_at: string;

@@ -1,25 +1,15 @@
 import { format, isToday, isYesterday, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { WhatsAppContactAvatar } from "./WhatsAppContactAvatar";
 import type { WhatsAppChat } from "@/types/whatsapp";
 
 interface WhatsAppChatItemProps {
   chat: WhatsAppChat;
   isSelected: boolean;
   onClick: () => void;
-}
-
-function getInitials(name: string | null | undefined): string {
-  if (!name) return '?';
-  return name
-    .split(' ')
-    .map(part => part[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
 }
 
 function formatPhone(phone: string): string {
@@ -61,11 +51,14 @@ export function WhatsAppChatItem({ chat, isSelected, onClick }: WhatsAppChatItem
       )}
     >
       {/* Avatar */}
-      <Avatar className="h-12 w-12 flex-shrink-0">
-        <AvatarFallback className="bg-[#25D366]/20 text-[#25D366] font-medium">
-          {getInitials(chat.contact?.display_name)}
-        </AvatarFallback>
-      </Avatar>
+      <WhatsAppContactAvatar
+        contactId={chat.contact?.id}
+        profilePictureUrl={chat.contact?.profile_picture_url}
+        displayName={chat.contact?.display_name}
+        pushName={chat.contact?.push_name}
+        phoneNumber={chat.contact?.phone_number || 'Onbekend'}
+        size="md"
+      />
 
       {/* Content */}
       <div className="flex-1 min-w-0">
