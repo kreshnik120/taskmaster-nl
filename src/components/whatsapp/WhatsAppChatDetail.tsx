@@ -1,7 +1,6 @@
 import { useRef, useEffect, useState } from "react";
 import { ArrowLeft, MoreVertical, Copy, Archive, Send, MessageSquare, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
@@ -10,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { WhatsAppContactAvatar } from "./WhatsAppContactAvatar";
 import { WhatsAppProfessionalDropdown } from "./WhatsAppProfessionalDropdown";
 import { WhatsAppLinkedBanner } from "./WhatsAppLinkedBanner";
 import { WhatsAppMessageBubble, DateDivider } from "./WhatsAppMessageBubble";
@@ -22,16 +22,6 @@ interface WhatsAppChatDetailProps {
   chat: WhatsAppChat;
   onBack: () => void;
   showBackButton?: boolean;
-}
-
-function getInitials(name: string | null | undefined): string {
-  if (!name) return '?';
-  return name
-    .split(' ')
-    .map(part => part[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
 }
 
 function formatPhone(phone: string | null | undefined): string {
@@ -129,11 +119,14 @@ export function WhatsAppChatDetail({ chat, onBack, showBackButton = false }: Wha
         )}
 
         {/* Contact info */}
-        <Avatar className="h-10 w-10">
-          <AvatarFallback className="bg-[#25D366]/20 text-[#25D366] font-medium">
-            {getInitials(chat.contact?.display_name)}
-          </AvatarFallback>
-        </Avatar>
+        <WhatsAppContactAvatar
+          contactId={chat.contact?.id}
+          profilePictureUrl={chat.contact?.profile_picture_url}
+          displayName={chat.contact?.display_name}
+          pushName={chat.contact?.push_name}
+          phoneNumber={chat.contact?.phone_number || 'Onbekend'}
+          size="md"
+        />
         
         <div className="flex-1 min-w-0">
           <h2 className="font-medium text-foreground truncate">{displayName}</h2>

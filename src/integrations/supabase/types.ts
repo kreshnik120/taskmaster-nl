@@ -6592,6 +6592,8 @@ export type Database = {
           org_id: string
           phone_number: string
           professional_id: string | null
+          profile_picture_url: string | null
+          push_name: string | null
           session_id: string
           updated_at: string | null
         }
@@ -6602,6 +6604,8 @@ export type Database = {
           org_id: string
           phone_number: string
           professional_id?: string | null
+          profile_picture_url?: string | null
+          push_name?: string | null
           session_id: string
           updated_at?: string | null
         }
@@ -6612,6 +6616,8 @@ export type Database = {
           org_id?: string
           phone_number?: string
           professional_id?: string | null
+          profile_picture_url?: string | null
+          push_name?: string | null
           session_id?: string
           updated_at?: string | null
         }
