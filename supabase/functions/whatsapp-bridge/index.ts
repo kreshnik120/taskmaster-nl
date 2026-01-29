@@ -163,6 +163,10 @@ Deno.serve(async (req) => {
         result = await handleSendMessage(supabase, orgId, data, requestId);
         break;
 
+      case "contact.profilePicture":
+        result = await handleContactProfilePicture(supabase, sessionId, orgId, data, media, requestId);
+        break;
+
       default:
         return new Response(
           JSON.stringify({ success: false, error: `Unknown event type: ${event}` }),
@@ -652,6 +656,83 @@ async function handleSendMessage(
   console.log(`[${requestId}] ✅ Message sent and stored: ${message.id}`);
 
   return { messageId: message.id, vpsMessageId: messageId };
+}
+
+async function handleContactProfilePicture(
+  supabase: SupabaseClientAny,
+  sessionId: string,
+  orgId: string,
+  data: Record<string, unknown>,
+  media: MediaData | undefined,
+  requestId: string
+): Promise<Record<string, unknown>> {
+  const { contactJid, phone } = data as {
+    contactJid?: string;
+    phone: string;
+  };
+
+  if (!phone) {
+    throw new Error("Missing required data: phone");
+  }
+
+  if (!media || !media.base64) {
+    throw new Error("Missing required media data");
+  }
+
+  console.log(`[${requestId}] Processing profile picture for ${phone}`);
+
+  // 1. Upload image to storage
+  const storagePath = `profile-pictures/${orgId}/${phone}.jpg`;
+  const fileBuffer = base64Decode(media.base64);
+
+  console.log(`[${requestId}] Uploading profile picture: ${storagePath} (${media.filesize || 'unknown'} bytes)`);
+
+  // Upsert: delete existing file first, then upload new one
+  await supabase.storage
+    .from('whatsapp-media')
+    .remove([storagePath]);
+
+  const { error: uploadError } = await supabase.storage
+    .from('whatsapp-media')
+    .upload(storagePath, fileBuffer, {
+      contentType: media.mimetype || 'image/jpeg',
+      upsert: true,
+    });
+
+  if (uploadError) {
+    console.error(`[${requestId}] Profile picture upload error:`, uploadError);
+    throw new Error(`Upload failed: ${formatError(uploadError)}`);
+  }
+
+  // 2. Generate public URL
+  const { data: urlData } = supabase.storage
+    .from('whatsapp-media')
+    .getPublicUrl(storagePath);
+
+  const publicUrl = urlData.publicUrl;
+  console.log(`[${requestId}] Profile picture URL: ${publicUrl}`);
+
+  // 3. Update contact in database
+  const { data: updatedContacts, error: updateError } = await supabase
+    .from('whatsapp_contacts')
+    .update({ profile_picture_url: publicUrl })
+    .eq('phone_number', phone)
+    .eq('org_id', orgId)
+    .select('id');
+
+  if (updateError) {
+    console.error(`[${requestId}] Contact update error:`, updateError);
+    throw new Error(`Contact update failed: ${formatError(updateError)}`);
+  }
+
+  if (!updatedContacts || updatedContacts.length === 0) {
+    console.warn(`[${requestId}] ⚠️ No contact found for phone ${phone} in org ${orgId} - photo stored but contact not updated`);
+    return { success: true, url: publicUrl, contactUpdated: false };
+  }
+
+  console.log(`[${requestId}] ✅ Profile picture updated for ${updatedContacts.length} contact(s)`);
+
+  return { success: true, url: publicUrl, contactUpdated: true, contactCount: updatedContacts.length };
 }
 
 // ============================================================================
