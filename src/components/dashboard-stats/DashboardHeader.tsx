@@ -12,7 +12,7 @@ export function DashboardHeader({ isLoading }: DashboardHeaderProps) {
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-    toast.success("Dashboard vernieuwd");
+    toast.success("Statistieken vernieuwd");
   };
 
   return (
@@ -22,9 +22,9 @@ export function DashboardHeader({ isLoading }: DashboardHeaderProps) {
           <LayoutDashboard className="h-6 w-6 text-primary" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <h1 className="text-2xl font-bold">Overzicht</h1>
           <p className="text-sm text-muted-foreground">
-            Overzicht van alle taken en voortgang
+            Team statistieken en voortgang
           </p>
         </div>
       </div>
