@@ -1,84 +1,96 @@
 
-# Diagnose: Afbeeldingen niet zichtbaar van andere contacten
 
-## Root Cause Analyse
+# Plan: Fix WhatsApp Media Display Bug
 
-### Bevindingen uit Database
+## Probleem Identificatie
 
-| Contact | Message ID Pattern | Message Type | Media Record | Status |
-|---------|-------------------|--------------|--------------|--------|
-| **Kreshnik** | `2A...` | `image` | ✅ Aanwezig | Werkt |
-| Noortje | `3A...` | `unknown` | ❌ Ontbreekt | Kapot |
-| Simon de Jong | `3A...`, `3EB...` | `unknown` | ❌ Ontbreekt | Kapot |
-| Anass Bouloum | `3A...` | `unknown` | ❌ Ontbreekt | Kapot |
+Na uitgebreide analyse heb ik bevestigd dat:
+- De database data is correct
+- De API response bevat de media array met storage URLs
+- De join query in de hook werkt correct
 
-### Technische Analyse
+Het probleem zit in de UI rendering: de `message_body` met "[Media]" wordt getoond **onder** de afbeelding, wat visueel verwarrend is.
 
-De Edge Function code (regel 263-306) verwerkt media correct:
+## Root Cause
+
+In `WhatsAppMessageBubble.tsx` (regel 110-113) wordt `message.message_body` altijd getoond wanneer die bestaat:
+
+```tsx
+{message.message_body && (
+  <p>{message.message_body}</p>
+)}
+```
+
+Dit betekent dat bij een afbeelding:
+1. De afbeelding wordt gerenderd
+2. "[Media]" tekst wordt ook gerenderd eronder
+
+## Oplossing
+
+Wijzig de logica om "[Media]" niet te tonen wanneer er media aanwezig is.
+
+### Bestand: `src/components/whatsapp/WhatsAppMessageBubble.tsx`
+
+**Wijziging (regel 109-114):**
 
 ```typescript
-if (media && media.base64) {
-  // Upload naar storage
-  // Opslaan in whatsapp_media tabel
-}
+// Van:
+{message.message_body && (
+  <p className="text-sm text-foreground whitespace-pre-wrap break-words">
+    {message.message_body}
+  </p>
+)}
+
+// Naar:
+{message.message_body && message.message_body !== '[Media]' && (
+  <p className="text-sm text-foreground whitespace-pre-wrap break-words">
+    {message.message_body}
+  </p>
+)}
 ```
 
-**Probleem**: De VPS stuurt voor de meeste berichten:
-- `type: undefined` → wordt opgeslagen als `unknown`
-- `media: undefined` → geen base64 data om te verwerken
+### Extra verbetering: Loading state voor media
 
-**Waarom werkt Kreshnik wel?**
-- Kreshnik's berichten komen binnen met `type: 'image'` en een volledig `media` object
-- Dit wijst op een VPS-side bug waarbij media alleen voor bepaalde berichten correct wordt verwerkt
+Voeg ook een loading indicator toe voor berichten die media moeten hebben maar nog niet geladen zijn:
 
-## Mogelijke Oorzaken (VPS-side)
-
-1. **WhatsApp Web.js Media Download Failure**
-   - De VPS downloadt de media niet succesvol voor sommige berichten
-   - Mogelijk een timing issue of rate limiting
-
-2. **Message Type Detection Bug**
-   - De VPS detecteert niet correct dat het een media bericht is
-   - Resultaat: `type` wordt `undefined`
-
-3. **Session-specifiek Issue**
-   - Mogelijk een probleem met de WhatsApp sessie connectie
-
-## Aanbevolen Oplossing
-
-### Optie A: VPS Debug (Aanbevolen)
-
-Check de VPS logs voor de berichten met `message_id` die beginnen met `3A...`:
-
-```bash
-# Op de VPS
-grep "3ACA7EF8B20EBEB8DA53" /var/log/whatsapp-bridge.log
+```typescript
+// Na de media rendering blokken, voor message_body:
+{!hasMedia && ['image', 'video', 'audio', 'document'].includes(message.message_type) && (
+  <div className="flex items-center gap-2 p-2 text-muted-foreground">
+    <Loader2 className="h-4 w-4 animate-spin" />
+    <span className="text-sm italic">Media wordt geladen...</span>
+  </div>
+)}
 ```
 
-Verwachte output zou moeten tonen waarom media download faalt.
+## Bestanden Overzicht
 
-### Optie B: VPS Code Fix
+| Actie | Bestand | Beschrijving |
+|-------|---------|--------------|
+| EDIT | `src/components/whatsapp/WhatsAppMessageBubble.tsx` | Filter "[Media]" uit message_body, voeg loading state toe |
 
-Pas de VPS message handler aan om:
-1. Altijd te proberen media te downloaden als `message.hasMedia === true`
-2. Betere error logging toe te voegen
+## Technische Details
 
-### Optie C: Retry Mechanism (Edge Function)
+### Huidige flow:
+```text
+message.media = [{storage_url: "https://..."}]
+message.message_body = "[Media]"
+             ↓
+Render: <img src="..."/> + <p>[Media]</p>
+```
 
-Voeg een "retry media download" endpoint toe die de VPS vraagt om media opnieuw te downloaden voor berichten die type `unknown` hebben maar eigenlijk media zouden moeten bevatten.
+### Na fix:
+```text
+message.media = [{storage_url: "https://..."}]
+message.message_body = "[Media]"
+             ↓
+Render: <img src="..."/> (geen "[Media]" tekst)
+```
 
----
+## Verificatie
 
-## Actieplan
+Na implementatie:
+1. Open de chat op `/whatsapp/chat/4c9a25f0-f1a2-4957-a09d-b4e03ee2a1da`
+2. Afbeeldingen moeten nu zichtbaar zijn zonder "[Media]" tekst eronder
+3. Berichten met caption (zoals "[Image caption]") moeten de caption wel tonen
 
-| # | Actie | Waar | Prioriteit |
-|---|-------|------|------------|
-| 1 | Check VPS logs voor media download errors | VPS Server | Hoog |
-| 2 | Voeg media download retry endpoint toe | Edge Function | Medium |
-| 3 | Fix VPS media handling voor alle berichten | VPS Code | Hoog |
-
-## Conclusie
-
-Dit is een **VPS-side probleem**, niet een Edge Function of database probleem. De Edge Function is correct geconfigureerd om media te verwerken, maar ontvangt simpelweg geen media data van de VPS voor de meeste berichten.
-
-**Volgende stap**: Check de VPS server logs om te begrijpen waarom media download faalt voor berichten anders dan die van Kreshnik.
