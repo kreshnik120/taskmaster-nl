@@ -6611,6 +6611,7 @@ export type Database = {
           session_id: string
           tags: string[] | null
           updated_at: string | null
+          whatsapp_jid: string | null
         }
         Insert: {
           contact_notes?: string | null
@@ -6626,6 +6627,7 @@ export type Database = {
           session_id: string
           tags?: string[] | null
           updated_at?: string | null
+          whatsapp_jid?: string | null
         }
         Update: {
           contact_notes?: string | null
@@ -6641,6 +6643,7 @@ export type Database = {
           session_id?: string
           tags?: string[] | null
           updated_at?: string | null
+          whatsapp_jid?: string | null
         }
         Relationships: [
           {
