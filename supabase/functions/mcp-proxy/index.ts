@@ -32,19 +32,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      console.error("[mcp-proxy] Missing or invalid Authorization header");
-      return new Response(
-        JSON.stringify({ success: false, error: "Unauthorized", message: "Missing or invalid Authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-
-    // Parse request body
-    let body: { tool?: string; action?: string; arguments?: Record<string, unknown>; params?: Record<string, unknown> };
+    // Parse request body first
+    let body: { tool?: string; action?: string; arguments?: Record<string, unknown>; params?: Record<string, unknown>; api_key?: string };
     try {
       body = await req.json();
     } catch {
@@ -65,24 +54,39 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Get auth token - for MCP mode, check X-API-Key header OR body.api_key
+    // For UI mode, use standard Authorization header
+    const authHeader = req.headers.get("Authorization");
+    const xApiKey = req.headers.get("X-API-Key");
+    
+    // MCP mode can use X-API-Key header or api_key in body
+    if (isMcpMode) {
+      const mcpApiKey = xApiKey || body.api_key;
+      if (!mcpApiKey) {
+        console.error("[mcp-proxy] MCP Mode - Missing API key (use X-API-Key header or api_key in body)");
+        return new Response(
+          JSON.stringify({ success: false, error: "Unauthorized", message: "Missing API key. Use X-API-Key header or api_key in body." }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      return handleMcpMode(mcpApiKey, body as { action: string; params?: Record<string, unknown> });
+    }
+
+    // UI mode requires Authorization header
+    if (!authHeader?.startsWith("Bearer ")) {
+      console.error("[mcp-proxy] Missing or invalid Authorization header");
+      return new Response(
+        JSON.stringify({ success: false, error: "Unauthorized", message: "Missing or invalid Authorization header" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+
     // ==========================================
     // MODE 1: UI → MCP (existing functionality)
     // ==========================================
-    if (isUiMode) {
-      return handleUiMode(req, token, body as { tool: string; arguments?: Record<string, unknown> });
-    }
-
-    // ==========================================
-    // MODE 2: MCP → Database (new functionality)
-    // ==========================================
-    if (isMcpMode) {
-      return handleMcpMode(token, body as { action: string; params?: Record<string, unknown> });
-    }
-
-    return new Response(
-      JSON.stringify({ success: false, error: "Bad request", message: "Invalid request" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return handleUiMode(req, token, body as { tool: string; arguments?: Record<string, unknown> });
 
   } catch (error) {
     console.error("[mcp-proxy] Unexpected error:", error);
@@ -185,6 +189,7 @@ async function handleMcpMode(
 ): Promise<Response> {
   // Validate MCP_API_KEY
   const expectedApiKey = Deno.env.get("MCP_API_KEY");
+  console.log(`[mcp-proxy] MCP Mode - Comparing keys: received=${apiKey.substring(0,8)}..., expected=${expectedApiKey?.substring(0,8) || 'NOT_SET'}...`);
   if (!expectedApiKey || apiKey !== expectedApiKey) {
     console.error("[mcp-proxy] MCP Mode - Invalid API key");
     return new Response(
