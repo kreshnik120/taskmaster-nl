@@ -52,14 +52,32 @@ Deno.serve(async (req) => {
   try {
     // 1. Validate authentication (API Key OR Supabase Auth)
     const apiKey = req.headers.get("x-api-key");
-    const expectedKey = Deno.env.get("WHATSAPP_BRIDGE_API_KEY");
     const authHeader = req.headers.get("Authorization");
 
-    const isValidApiKey = apiKey && apiKey === expectedKey;
+    // Multi-key support: accept any env var starting with WHATSAPP_BRIDGE_API_KEY
+    // This allows key rotation by adding new secrets (e.g., WHATSAPP_BRIDGE_API_KEY_V2)
+    const envVars = Deno.env.toObject();
+    const allowedKeyEnvNames: string[] = [];
+    const allowedKeys: string[] = [];
+    
+    for (const [name, value] of Object.entries(envVars)) {
+      // Accept: WHATSAPP_BRIDGE_API_KEY, WHATSAPP_BRIDGE_API_KEY_V2, WHATSAPP_BRIDGE_API_KEY_20260130, etc.
+      // Also accept WHATSAPP_VPS_API_KEY as fallback
+      if ((name === "WHATSAPP_BRIDGE_API_KEY" || name.startsWith("WHATSAPP_BRIDGE_API_KEY_") || name === "WHATSAPP_VPS_API_KEY") && value) {
+        allowedKeyEnvNames.push(name);
+        allowedKeys.push(value);
+      }
+    }
+
+    // Safe logging: only show env var names (not values) and first 8 chars of received key
+    const receivedKeyPreview = apiKey ? apiKey.substring(0, 8) + "..." : "(none)";
+    console.log(`[${requestId}] Auth check: received key prefix="${receivedKeyPreview}", valid env vars=[${allowedKeyEnvNames.join(", ")}]`);
+
+    const isValidApiKey = apiKey && allowedKeys.includes(apiKey);
     const isValidAuth = authHeader && authHeader.startsWith("Bearer ");
 
     if (!isValidApiKey && !isValidAuth) {
-      console.error(`[${requestId}] ❌ No valid authentication provided`);
+      console.error(`[${requestId}] ❌ No valid authentication provided. Key prefix="${receivedKeyPreview}", checked ${allowedKeyEnvNames.length} env vars`);
       return new Response(
         JSON.stringify({ success: false, error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
