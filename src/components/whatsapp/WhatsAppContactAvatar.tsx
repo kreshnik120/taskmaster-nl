@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface WhatsAppContactAvatarProps {
@@ -11,6 +12,7 @@ interface WhatsAppContactAvatarProps {
   phoneNumber: string;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   showOnlineStatus?: boolean;
+  isGroup?: boolean;
   className?: string;
 }
 
@@ -65,6 +67,7 @@ export function WhatsAppContactAvatar({
   pushName,
   phoneNumber,
   size = 'md',
+  isGroup = false,
   className,
 }: WhatsAppContactAvatarProps) {
   const [imageError, setImageError] = useState(false);
@@ -94,6 +97,15 @@ export function WhatsAppContactAvatar({
             )}
           />
         </>
+      ) : isGroup ? (
+        <AvatarFallback className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">
+          <Users className={cn(
+            size === 'sm' && "h-4 w-4",
+            size === 'md' && "h-5 w-5",
+            size === 'lg' && "h-7 w-7",
+            size === 'xl' && "h-10 w-10"
+          )} />
+        </AvatarFallback>
       ) : (
         <AvatarFallback className={cn(colorScheme.bg, colorScheme.text, "font-medium")}>
           {initials}
