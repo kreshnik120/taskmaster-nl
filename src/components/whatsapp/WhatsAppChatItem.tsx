@@ -1,7 +1,7 @@
 import { format, isToday, isYesterday, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
-import { Check, Pin, BellOff } from "lucide-react";
+import { Check, Pin, BellOff, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WhatsAppContactAvatar } from "./WhatsAppContactAvatar";
 import { getTagConfig } from "@/lib/whatsapp-tags";
@@ -43,6 +43,7 @@ export function WhatsAppChatItem({ chat, isSelected, onClick }: WhatsAppChatItem
   const isLinked = !!chat.linked_professional_id;
   const isPinned = chat.is_pinned;
   const isMuted = chat.is_muted;
+  const isGroup = chat.chat_type === 'group';
 
   return (
     <div
@@ -62,6 +63,7 @@ export function WhatsAppChatItem({ chat, isSelected, onClick }: WhatsAppChatItem
         pushName={chat.contact?.push_name}
         phoneNumber={chat.contact?.phone_number || 'Onbekend'}
         size="md"
+        isGroup={isGroup}
       />
 
       {/* Content */}
@@ -69,6 +71,10 @@ export function WhatsAppChatItem({ chat, isSelected, onClick }: WhatsAppChatItem
         {/* Top row: Name + Timestamp */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
+            {/* Group indicator */}
+            {isGroup && (
+              <Users className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+            )}
             {/* Pin indicator */}
             {isPinned && (
               <Pin className="h-3 w-3 text-muted-foreground flex-shrink-0" />
