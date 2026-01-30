@@ -1,158 +1,66 @@
 
+Doel
+- Zorgen dat jullie VPS “whatsapp-relay” niet meer vastloopt op “401 Unauthorized”, ook als jullie in Lovable Cloud geen bestaande secret kunnen overschrijven maar alleen nieuwe secrets kunnen toevoegen.
 
-# Plan: MCP Proxy Uitbreiden voor Database Toegang
+Wat er nu gebeurt (oorzaak)
+- De backend functie `whatsapp-bridge` valideert de header `x-api-key` uitsluitend tegen deze ene omgeving-variabele:
+  - `WHATSAPP_BRIDGE_API_KEY`
+- Als jullie de waarde niet kunnen updaten, blijft de oude key actief en blijft `whatsapp-relay` 401 krijgen.
 
-## Situatie Analyse
+Oplossingsrichting (zonder bestaande secrets te hoeven updaten)
+We maken de authenticatie in `whatsapp-bridge` “key-rotatie vriendelijk”:
+- De functie accepteert niet alleen `WHATSAPP_BRIDGE_API_KEY`, maar ook extra keys die jullie als nieuwe secrets kunnen toevoegen, zonder code-wijziging per rotatie.
+- Concreet: accepteer elke env var die begint met `WHATSAPP_BRIDGE_API_KEY` (bijv. `WHATSAPP_BRIDGE_API_KEY_V2`, `WHATSAPP_BRIDGE_API_KEY_20260130`, etc.).
+- Optioneel (als extra fallback): ook `WHATSAPP_VPS_API_KEY` meenemen, omdat die al bestaat in jullie secrets-lijst (maar alleen als dat functioneel klopt in jullie setup).
 
-De huidige `mcp-proxy` doet **één ding**: forward UI requests naar `mcp.abcito.io`. Maar de MCP server heeft ook de **omgekeerde richting** nodig: database queries uitvoeren om WhatsApp data op te halen.
+Plan van aanpak (implementatie)
+1) Codebase check (quick scan)
+   - Controleren of er nog andere endpoints/functies zijn die dezelfde key gebruiken (zodat we overal consistent zijn).
+   - Controleren hoe `whatsapp-relay` exact authenticatie meegeeft (header `x-api-key` lijkt al correct).
 
-## Architectuur Na Wijziging
+2) Aanpassen authenticatie in `supabase/functions/whatsapp-bridge/index.ts`
+   - Vervangen van “single-key check”:
+     - Nu: `apiKey === Deno.env.get("WHATSAPP_BRIDGE_API_KEY")`
+   - Naar “multi-key check”:
+     - Lees alle env vars via `Deno.env.toObject()`
+     - Verzamel alle waarden waarvan de naam:
+       - exact `WHATSAPP_BRIDGE_API_KEY` is, of
+       - start met `WHATSAPP_BRIDGE_API_KEY_` of `WHATSAPP_BRIDGE_API_KEY` (prefix aanpak)
+     - Filter lege waarden weg
+     - `isValidApiKey = apiKey && allowedKeys.includes(apiKey)`
+   - Logging aanpassen (veilig):
+     - Log alleen eerste 6–8 karakters van received key + welke env-var-namen er gevonden zijn (niet de volledige keys).
+     - Hiermee kunnen we snel zien of de nieuwe secret “meegenomen” wordt door de functie, zonder secrets te lekken.
 
-```text
-┌──────────────────────────────────────────────────────────────────────────┐
-│                            LOVABLE APP                                   │
-│                                                                          │
-│   ┌────────────┐    ┌─────────────────────────────────────────────────┐ │
-│   │  WhatsApp  │───▶│              mcp-proxy Edge Function            │ │
-│   │     UI     │    │                                                 │ │
-│   └────────────┘    │  MODE 1: UI → MCP (bestaand)                    │ │
-│                     │  Auth: Supabase JWT                             │ │
-│                     │  Body: { tool: "...", arguments: {...} }        │ │
-│                     │  Action: Forward naar mcp.abcito.io/call        │ │
-│                     │                                                 │ │
-│                     │  MODE 2: MCP → Database (NIEUW)                 │ │
-│                     │  Auth: MCP_API_KEY                              │ │
-│                     │  Body: { action: "get_chats", params: {...} }   │ │
-│                     │  Action: Query whatsapp_* tabellen              │ │
-│                     └─────────────────────────────────────────────────┘ │
-│                                   │                  │                   │
-└───────────────────────────────────┼──────────────────┼───────────────────┘
-                                    ▼                  ▼
-                    ┌───────────────────────┐    ┌─────────────────┐
-                    │   mcp.abcito.io       │    │    Supabase     │
-                    │   (ClawdBot)          │    │    Database     │
-                    └───────────────────────┘    └─────────────────┘
-```
+3) (Optioneel) Tijdelijke “dual accept” periode expliciet maken
+   - Documenteren: jullie kunnen nu key-rotatie doen door simpelweg een nieuwe secret toe te voegen met prefix, zonder downtime.
 
-## Implementatie Details
+4) Jullie actie in Lovable Cloud (geen update nodig, alleen toevoegen)
+   - Voeg een nieuwe secret toe, bijvoorbeeld:
+     - Name: `WHATSAPP_BRIDGE_API_KEY_V2`
+     - Value: (jullie key)
+   - Belangrijk: `whatsapp-relay` moet dezelfde key blijven sturen in `x-api-key`.
 
-### Stap 1: Edge Function Uitbreiden
+5) Verificatie (end-to-end)
+   - Na het toevoegen van de nieuwe secret:
+     - SSH: `ssh abcito@72.61.155.82 "pm2 logs whatsapp-relay --lines 10"`
+     - Verwacht: `Forwarded to Supabase: 200` (i.p.v. 401)
+   - Extra controle:
+     - In de backend functie logs (Lovable Cloud) moet je zien dat er meerdere keys geladen zijn (alleen prefixes zichtbaar), en dat de API key validatie slaagt.
 
-**Bestand**: `supabase/functions/mcp-proxy/index.ts`
+Edge cases / aandachtspunten
+- Als `whatsapp-relay` per ongeluk een andere header gebruikt (bijv. `Authorization` i.p.v. `x-api-key`), blijft het misgaan. In de huidige `whatsapp-bridge` code wordt `x-api-key` verwacht.
+- Als secrets pas “zichtbaar” worden voor de functie na een korte propagatie-delay, wachten we 30–60s en testen opnieuw.
+- We zorgen dat logging geen volledige secrets toont.
 
-**Dubbele Authenticatie Mode**:
+Benodigde input van jullie (alleen als dit nog onduidelijk is)
+- Welke key stuurt `whatsapp-relay` exact mee en in welke header? (ik ga uit van `x-api-key`, zoals de backend functie nu leest)
 
-| Mode | Trigger | Auth | Actie |
-|------|---------|------|-------|
-| **UI Mode** | `body.tool` aanwezig | Supabase JWT | Forward naar mcp.abcito.io |
-| **MCP Mode** | `body.action` aanwezig | MCP_API_KEY | Query lokale database |
+Resultaat
+- Jullie hoeven nooit meer een bestaande secret te updaten.
+- Elke nieuwe key-rotatie: nieuwe secret toevoegen met prefix, klaar.
+- `whatsapp-relay` krijgt 200 zodra de key die hij stuurt overeenkomt met één van de toegestane (prefix) keys.
 
-**Ondersteunde Acties (MCP Mode)**:
-
-| Action | Parameters | Query |
-|--------|------------|-------|
-| `get_chats` | `limit`, `offset`, `unread_only` | `whatsapp_chats` + `whatsapp_contacts` |
-| `get_messages` | `chat_id`, `limit`, `offset` | `whatsapp_messages` |
-| `send_message` | `to`, `message` | Insert + forward naar WhatsApp |
-
-### Stap 2: Database Query Logica
-
-**get_chats Query**:
-```sql
-SELECT 
-  c.*,
-  ct.id as contact_id,
-  ct.phone_number,
-  ct.display_name,
-  ct.push_name,
-  ct.profile_picture_url,
-  ct.tags,
-  ct.is_business_account
-FROM whatsapp_chats c
-LEFT JOIN whatsapp_contacts ct ON c.contact_id = ct.id
-WHERE c.deleted_at IS NULL
-ORDER BY c.last_message_at DESC NULLS LAST
-LIMIT {limit} OFFSET {offset}
-```
-
-**get_messages Query**:
-```sql
-SELECT * FROM whatsapp_messages
-WHERE chat_id = {chat_id}
-ORDER BY sent_at DESC
-LIMIT {limit} OFFSET {offset}
-```
-
-### Stap 3: Response Formaat
-
-Consistent JSON response voor MCP server:
-
-```json
-{
-  "success": true,
-  "data": [...],
-  "meta": {
-    "count": 50,
-    "limit": 50,
-    "offset": 0
-  }
-}
-```
-
-Error response:
-```json
-{
-  "success": false,
-  "error": "Unauthorized",
-  "message": "Invalid API key"
-}
-```
-
-## Bestanden Overzicht
-
-| Bestand | Actie | Beschrijving |
-|---------|-------|--------------|
-| `supabase/functions/mcp-proxy/index.ts` | **EDIT** | Uitbreiden met MCP mode |
-
-## Verificatie
-
-Na deploy kun je testen met:
-
-```bash
-curl -X POST https://oelmsmcgryeoryhonexw.supabase.co/functions/v1/mcp-proxy \
-  -H "Authorization: Bearer {MCP_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{"action": "get_chats", "params": {"limit": 5}}'
-```
-
-Expected response:
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "...",
-      "chat_jid": "31612345678@s.whatsapp.net",
-      "contact": {
-        "display_name": "Jan Jansen",
-        "phone_number": "+31612345678"
-      },
-      ...
-    }
-  ],
-  "meta": { "count": 5, "limit": 5, "offset": 0 }
-}
-```
-
-## Technische Details
-
-### Service Role Key Alternatief
-
-De Edge Function gebruikt `SUPABASE_SERVICE_ROLE_KEY` die automatisch beschikbaar is in alle Edge Functions. Dit omzeilt RLS policies, wat nodig is voor de MCP server om alle data te kunnen lezen.
-
-### Security
-
-- MCP_API_KEY wordt vergeleken met de secret in environment
-- Alleen specifieke acties zijn toegestaan (whitelist)
-- Rate limiting kan later worden toegevoegd
-
+Technische notities (voor review)
+- Bestandslocatie: `supabase/functions/whatsapp-bridge/index.ts`
+- Wijziging: alleen auth-vergelijking refactor + veilige logging; geen database-migraties nodig.
