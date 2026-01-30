@@ -3,7 +3,7 @@ import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { WhatsAppStatusIcon } from "./WhatsAppStatusIcon";
 import { WhatsAppImageLightbox } from "./WhatsAppImageLightbox";
-import { FileText, Download } from "lucide-react";
+import { FileText, Download, Loader2 } from "lucide-react";
 import type { WhatsAppMessage, WhatsAppMedia } from "@/types/whatsapp";
 
 interface WhatsAppMessageBubbleProps {
@@ -106,8 +106,16 @@ export function WhatsAppMessageBubble({ message }: WhatsAppMessageBubbleProps) {
             </div>
           )}
 
-          {/* Message content */}
-          {message.message_body && (
+          {/* Loading state for media messages without loaded media */}
+          {!hasMedia && ['image', 'video', 'audio', 'document'].includes(message.message_type) && (
+            <div className="flex items-center gap-2 p-2 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm italic">Media wordt geladen...</span>
+            </div>
+          )}
+
+          {/* Message content - filter out "[Media]" placeholder */}
+          {message.message_body && message.message_body !== '[Media]' && (
             <p className="text-sm text-foreground whitespace-pre-wrap break-words">
               {message.message_body}
             </p>
