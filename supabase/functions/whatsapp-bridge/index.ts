@@ -208,7 +208,7 @@ async function handleMessageReceived(
   media: MediaData | undefined,
   requestId: string
 ): Promise<Record<string, unknown>> {
-  const { messageId, chatJid, from, fromName, body, timestamp, type } = data as {
+  const { messageId, chatJid, from, fromName, body, timestamp, type, isGroup, groupName } = data as {
     messageId: string;
     chatJid: string;
     from: string;
@@ -216,22 +216,32 @@ async function handleMessageReceived(
     body?: string;
     timestamp: number;
     type?: string;
+    isGroup?: boolean;
+    groupName?: string;
   };
 
   if (!messageId || !chatJid || !from || !timestamp) {
     throw new Error("Missing required message data: messageId, chatJid, from, timestamp");
   }
 
-  console.log(`[${requestId}] Processing message from ${from}`);
+  // Detect group chat - either by VPS flag or by JID pattern
+  const isGroupChat = isGroup === true || chatJid.includes("@g.us");
+  
+  console.log(`[${requestId}] Processing ${isGroupChat ? 'group' : 'direct'} message from ${from} in ${chatJid}`);
 
   // 1. Ensure session exists
   const session = await getOrCreateSession(supabase, sessionId, orgId, requestId);
 
-  // 2. Get or create contact
-  const contact = await getOrCreateContact(supabase, session.id, orgId, from, fromName, requestId);
+  // 2. Get or create contact (different logic for groups vs direct)
+  let contact;
+  if (isGroupChat) {
+    contact = await getOrCreateGroupContact(supabase, session.id, orgId, chatJid, groupName || fromName, requestId);
+  } else {
+    contact = await getOrCreateContact(supabase, session.id, orgId, from, fromName, requestId);
+  }
 
   // 3. Get or create chat
-  const chat = await getOrCreateChat(supabase, session.id, orgId, chatJid, contact.id, requestId);
+  const chat = await getOrCreateChat(supabase, session.id, orgId, chatJid, contact.id, isGroupChat, requestId);
 
   // 4. Insert message
   const { data: message, error: messageError } = await supabase
@@ -959,17 +969,20 @@ async function getOrCreateContact(
     .single();
 
   if (existing) {
-    // Update display name if provided and different
-    if (displayName && displayName !== existing.display_name) {
+    // Update push_name if provided (but don't overwrite user-edited display_name)
+    if (displayName && !existing.display_name) {
       await supabase
         .from("whatsapp_contacts")
-        .update({ display_name: displayName })
+        .update({ 
+          display_name: displayName,
+          push_name: displayName 
+        })
         .eq("id", existing.id);
     }
     return existing;
   }
 
-  // Create new contact
+  // Create new contact with whatsapp_jid
   console.log(`[${requestId}] Creating new contact: ${phoneNumber}`);
   const { data: newContact, error } = await supabase
     .from("whatsapp_contacts")
@@ -977,7 +990,9 @@ async function getOrCreateContact(
       org_id: orgId,
       session_id: sessionId,
       phone_number: phoneNumber,
+      whatsapp_jid: `${phoneNumber}@s.whatsapp.net`,
       display_name: displayName || phoneNumber,
+      push_name: displayName || null,
     })
     .select("id, display_name")
     .single();
@@ -988,12 +1003,69 @@ async function getOrCreateContact(
   return newContact;
 }
 
+// Get or create a GROUP contact (different from regular contacts)
+async function getOrCreateGroupContact(
+  supabase: SupabaseClientAny,
+  sessionId: string,
+  orgId: string,
+  chatJid: string,
+  groupName: string | undefined,
+  requestId: string
+) {
+  // For groups, search by whatsapp_jid (the group JID)
+  const { data: existing } = await supabase
+    .from("whatsapp_contacts")
+    .select("id, display_name")
+    .eq("session_id", sessionId)
+    .eq("whatsapp_jid", chatJid)
+    .maybeSingle();
+
+  if (existing) {
+    // Update group name if provided and different
+    if (groupName && groupName !== existing.display_name) {
+      await supabase
+        .from("whatsapp_contacts")
+        .update({ 
+          display_name: groupName,
+          push_name: groupName 
+        })
+        .eq("id", existing.id);
+    }
+    return existing;
+  }
+
+  // Create new group contact
+  const groupId = chatJid.split("@")[0];
+  const displayName = groupName || `Groep ${groupId.slice(-6)}`;
+  
+  console.log(`[${requestId}] Creating group contact: ${chatJid} -> ${displayName}`);
+  
+  const { data: newContact, error } = await supabase
+    .from("whatsapp_contacts")
+    .insert({
+      org_id: orgId,
+      session_id: sessionId,
+      whatsapp_jid: chatJid,
+      phone_number: `group-${groupId}`,
+      display_name: displayName,
+      push_name: groupName || null,
+    })
+    .select("id, display_name")
+    .single();
+
+  if (error) {
+    throw new Error(`Group contact creation failed: ${formatError(error)}`);
+  }
+  return newContact;
+}
+
 async function getOrCreateChat(
   supabase: SupabaseClientAny,
   sessionId: string,
   orgId: string,
   chatJid: string,
   contactId: string,
+  isGroupChat: boolean,
   requestId: string
 ) {
   // Try to find existing chat
@@ -1006,8 +1078,8 @@ async function getOrCreateChat(
 
   if (existing) return existing;
 
-  // Create new chat
-  console.log(`[${requestId}] Creating new chat: ${chatJid}`);
+  // Create new chat with explicit chat_type
+  console.log(`[${requestId}] Creating new ${isGroupChat ? 'group' : 'direct'} chat: ${chatJid}`);
   const { data: newChat, error } = await supabase
     .from("whatsapp_chats")
     .insert({
@@ -1015,7 +1087,7 @@ async function getOrCreateChat(
       session_id: sessionId,
       contact_id: contactId,
       chat_jid: chatJid,
-      chat_type: chatJid.includes("@g.us") ? "group" : "direct",
+      chat_type: isGroupChat ? "group" : "direct",
       unread_count: 0,
     })
     .select("id, unread_count")

@@ -1,100 +1,36 @@
+# Plan: Edge Function Groepen Fix - ✅ GEÏMPLEMENTEERD
 
-# Plan: Edge Function Groepen Fix - Implementatie
+## Status: Voltooid
 
-## Overzicht
+De edge function `whatsapp-bridge` is aangepast voor volledige groepsondersteuning.
 
-Dit plan implementeert volledige groepsondersteuning in de `whatsapp-bridge` Edge Function.
+## Wijzigingen Uitgevoerd
 
-## Bevestigd: useWhatsAppChats.ts ✅
+### 1. `handleMessageReceived` (L203-246)
+- ✅ `isGroup` en `groupName` toegevoegd aan destructuring
+- ✅ Groepsdetectie: `isGroupChat = isGroup === true || chatJid.includes("@g.us")`
+- ✅ Aparte contact-logica: `getOrCreateGroupContact()` voor groepen
+- ✅ `isGroupChat` parameter doorgegeven aan `getOrCreateChat()`
 
-De hook heeft **geen filter op `chat_type`** - alle chats (direct + groepen) worden al correct opgehaald. Geen wijziging nodig.
+### 2. `getOrCreateContact` (L957-1002)
+- ✅ `whatsapp_jid: ${phoneNumber}@s.whatsapp.net` toegevoegd
+- ✅ `push_name` veld voor originele WhatsApp naam
+- ✅ Verbeterde update-logica (overschrijft geen bestaande naam)
 
-## Wijzigingen in supabase/functions/whatsapp-bridge/index.ts
-
-### 1. handleMessageReceived (regel 203-234)
-
-**Toevoegingen:**
-- `isGroup` en `groupName` in destructuring
-- Groepsdetectie: `isGroupChat = isGroup === true || chatJid.includes("@g.us")`
-- Aparte contact-logica voor groepen vs direct messages
-- Pass `isGroupChat` naar `getOrCreateChat`
-
-```typescript
-const { messageId, chatJid, from, fromName, body, timestamp, type, isGroup, groupName } = data as {
-  // ... bestaande types
-  isGroup?: boolean;
-  groupName?: string;
-};
-
-const isGroupChat = isGroup === true || chatJid.includes("@g.us");
-
-let contact;
-if (isGroupChat) {
-  contact = await getOrCreateGroupContact(supabase, session.id, orgId, chatJid, groupName || fromName, requestId);
-} else {
-  contact = await getOrCreateContact(supabase, session.id, orgId, from, fromName, requestId);
-}
-
-const chat = await getOrCreateChat(supabase, session.id, orgId, chatJid, contact.id, isGroupChat, requestId);
-```
-
-### 2. getOrCreateContact (regel 945-989)
-
-**Toevoegingen:**
-- `whatsapp_jid` bij nieuwe contacten: `${phoneNumber}@s.whatsapp.net`
-- `push_name` veld voor originele WhatsApp naam
-- Verbeterde update-logica (overschrijf geen bestaande naam)
-
-### 3. Nieuwe functie: getOrCreateGroupContact
-
-**Nieuw (na regel 989):**
-- Zoekt op `whatsapp_jid` (niet phone_number)
-- Maakt contact aan met:
+### 3. `getOrCreateGroupContact` (L1004-1050) - NIEUW
+- ✅ Zoekt op `whatsapp_jid` (niet phone_number)
+- ✅ Maakt contact aan met:
   - `phone_number: "group-{groupId}"`
   - `whatsapp_jid: "{chatJid}"`
   - `display_name: groupName || "Groep {laatste 6 cijfers}"`
-- Update groepsnaam indien VPS deze later stuurt
 
-### 4. getOrCreateChat (regel 991-1028)
-
-**Wijziging:**
-- Nieuwe parameter: `isGroupChat: boolean`
-- Expliciete `chat_type` toewijzing
-
-## Data Flow na Fix
-
-```text
-VPS Groepsbericht:
-{
-  chatJid: "120363123456789012@g.us",
-  from: "31612345678",
-  isGroup: true,
-  groupName: "Team ABCZorg"
-}
-        ↓
-Edge Function: isGroupChat = true
-        ↓
-getOrCreateGroupContact():
-  - Zoek op whatsapp_jid = "120363123456789012@g.us"
-  - Maak contact: phone_number = "group-120363123456789012"
-        ↓
-getOrCreateChat():
-  - chat_type = "group"
-        ↓
-UI: Groep met Users icoon ✅
-```
-
-## Bestanden Overzicht
-
-| Bestand | Actie |
-|---------|-------|
-| `src/hooks/whatsapp/useWhatsAppChats.ts` | ✅ Geen wijziging nodig |
-| `supabase/functions/whatsapp-bridge/index.ts` | EDIT - 3 locaties + 1 nieuwe functie |
+### 4. `getOrCreateChat` (L1052-1090)
+- ✅ Nieuwe parameter: `isGroupChat: boolean`
+- ✅ Expliciete `chat_type` toewijzing
 
 ## Verificatie
 
-Na deployment:
-1. Stuur bericht in een WhatsApp groep
-2. Check Edge Function logs: "Creating group contact: ...@g.us"
-3. Check database: `chat_type = "group"`, `phone_number = "group-..."`
-4. Refresh `/whatsapp` - groep moet zichtbaar zijn met Users icoon
+Test door een bericht te sturen in een WhatsApp groep:
+1. Check Edge Function logs: `Creating group contact: ...@g.us`
+2. Check database: `chat_type = "group"`, `phone_number = "group-..."`
+3. Refresh `/whatsapp` - groep moet zichtbaar zijn met Users icoon
