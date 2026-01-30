@@ -1,96 +1,121 @@
 
+# Plan: Groepen Weergeven in Chat Lijst
 
-# Plan: Fix WhatsApp Media Display Bug
+## Probleem Analyse
 
-## Probleem Identificatie
+Na database onderzoek blijkt dat groepen **WEL worden opgeslagen** in de database:
 
-Na uitgebreide analyse heb ik bevestigd dat:
-- De database data is correct
-- De API response bevat de media array met storage URLs
-- De join query in de hook werkt correct
+| Groep JID | Chat Type | Display Name | Phone Number |
+|-----------|-----------|--------------|--------------|
+| `31618710360-1629291774@g.us` | group | abczorg | 98917425365000 |
+| `120363425639424898@g.us` | group | Shkelzen | 27281766486207 |
+| `120363417411848202@g.us` | group | Sarah | 36782133502053 |
+| `120363423224473357@g.us` | group | Simon de Jong | 150079176474722 |
 
-Het probleem zit in de UI rendering: de `message_body` met "[Media]" wordt getoond **onder** de afbeelding, wat visueel verwarrend is.
+De huidige code werkt correct:
+- Edge Function maakt chats aan met juiste `chat_type`
+- UI query haalt alle chats op (geen filter op `chat_type`)
+- Groepen worden dus al getoond in de lijst
 
-## Root Cause
+**Wat ontbreekt:**
+1. Visuele groep-indicator (Users icoon) in de chat lijst
+2. Betere handling voor groep display names (VPS moet groepsnaam sturen)
+3. Optioneel: groep-specifieke avatar stijl
 
-In `WhatsAppMessageBubble.tsx` (regel 110-113) wordt `message.message_body` altijd getoond wanneer die bestaat:
+## Technische Wijzigingen
 
-```tsx
-{message.message_body && (
-  <p>{message.message_body}</p>
-)}
-```
+### 1. UI: Groep-icoon toevoegen aan WhatsAppChatItem
 
-Dit betekent dat bij een afbeelding:
-1. De afbeelding wordt gerenderd
-2. "[Media]" tekst wordt ook gerenderd eronder
-
-## Oplossing
-
-Wijzig de logica om "[Media]" niet te tonen wanneer er media aanwezig is.
-
-### Bestand: `src/components/whatsapp/WhatsAppMessageBubble.tsx`
-
-**Wijziging (regel 109-114):**
+**Bestand:** `src/components/whatsapp/WhatsAppChatItem.tsx`
 
 ```typescript
-// Van:
-{message.message_body && (
-  <p className="text-sm text-foreground whitespace-pre-wrap break-words">
-    {message.message_body}
-  </p>
-)}
+// Import toevoegen
+import { Check, Pin, BellOff, Users } from "lucide-react";
 
-// Naar:
-{message.message_body && message.message_body !== '[Media]' && (
-  <p className="text-sm text-foreground whitespace-pre-wrap break-words">
-    {message.message_body}
-  </p>
-)}
+// Bij const declaraties toevoegen
+const isGroup = chat.chat_type === 'group';
+
+// In de render, bij de naam:
+<div className="flex items-center gap-1.5 min-w-0">
+  {/* Groep indicator */}
+  {isGroup && (
+    <Users className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+  )}
+  {/* Pin indicator */}
+  {isPinned && (
+    <Pin className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+  )}
+  <span className={cn(...)}>
+    {displayName}
+  </span>
+</div>
 ```
 
-### Extra verbetering: Loading state voor media
+### 2. UI: Groep-avatar ondersteuning
 
-Voeg ook een loading indicator toe voor berichten die media moeten hebben maar nog niet geladen zijn:
+**Bestand:** `src/components/whatsapp/WhatsAppContactAvatar.tsx`
+
+Optioneel: Voeg een `isGroup` prop toe voor een andere avatar stijl:
 
 ```typescript
-// Na de media rendering blokken, voor message_body:
-{!hasMedia && ['image', 'video', 'audio', 'document'].includes(message.message_type) && (
-  <div className="flex items-center gap-2 p-2 text-muted-foreground">
-    <Loader2 className="h-4 w-4 animate-spin" />
-    <span className="text-sm italic">Media wordt geladen...</span>
-  </div>
+interface WhatsAppContactAvatarProps {
+  // ... bestaande props
+  isGroup?: boolean;
+}
+
+// Fallback voor groepen
+{isGroup && !showImage && (
+  <AvatarFallback className="bg-emerald-100 text-emerald-700">
+    <Users className="h-5 w-5" />
+  </AvatarFallback>
 )}
 ```
 
-## Bestanden Overzicht
+### 3. Edge Function: Groepsnaam ophalen
 
-| Actie | Bestand | Beschrijving |
-|-------|---------|--------------|
-| EDIT | `src/components/whatsapp/WhatsAppMessageBubble.tsx` | Filter "[Media]" uit message_body, voeg loading state toe |
+**Bestand:** `supabase/functions/whatsapp-bridge/index.ts`
 
-## Technische Details
+De VPS zou de groepsnaam moeten sturen in `fromName` voor groepsberichten. Controleer of de VPS dit correct doet.
 
-### Huidige flow:
-```text
-message.media = [{storage_url: "https://..."}]
-message.message_body = "[Media]"
-             ↓
-Render: <img src="..."/> + <p>[Media]</p>
+Optionele verbetering in `handleMessageReceived`:
+
+```typescript
+// Detecteer groep
+const isGroup = chatJid.includes("@g.us");
+
+let contact;
+if (isGroup) {
+  // Voor groepen: zoek/maak contact op basis van chatJid
+  contact = await getOrCreateGroupContact(
+    supabase, session.id, orgId, chatJid, fromName, requestId
+  );
+} else {
+  contact = await getOrCreateContact(
+    supabase, session.id, orgId, from, fromName, requestId
+  );
+}
 ```
 
-### Na fix:
-```text
-message.media = [{storage_url: "https://..."}]
-message.message_body = "[Media]"
-             ↓
-Render: <img src="..."/> (geen "[Media]" tekst)
-```
+## Wijzigingen Overzicht
+
+| Bestand | Actie | Beschrijving |
+|---------|-------|--------------|
+| `src/components/whatsapp/WhatsAppChatItem.tsx` | EDIT | Voeg Users icoon toe voor groepen |
+| `src/components/whatsapp/WhatsAppContactAvatar.tsx` | EDIT | Optioneel: groep-avatar stijl |
+| `supabase/functions/whatsapp-bridge/index.ts` | EDIT | Optioneel: betere groep contact handling |
+
+## Prioriteit
+
+| # | Wijziging | Impact | Effort |
+|---|-----------|--------|--------|
+| 1 | Users icoon in chat lijst | Hoog | Laag |
+| 2 | Groep avatar stijl | Medium | Laag |
+| 3 | Edge Function groep handling | Medium | Medium |
 
 ## Verificatie
 
 Na implementatie:
-1. Open de chat op `/whatsapp/chat/4c9a25f0-f1a2-4957-a09d-b4e03ee2a1da`
-2. Afbeeldingen moeten nu zichtbaar zijn zonder "[Media]" tekst eronder
-3. Berichten met caption (zoals "[Image caption]") moeten de caption wel tonen
-
+1. Open `/whatsapp` pagina
+2. Groepen moeten zichtbaar zijn met Users icoon
+3. Groepsnaam moet worden getoond (indien VPS dit stuurt)
+4. Klik op groep om chat te openen
