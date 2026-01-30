@@ -226,7 +226,11 @@ async function handleMessageReceived(
   media: MediaData | undefined,
   requestId: string
 ): Promise<Record<string, unknown>> {
-  const { messageId, chatJid, from, fromName, body, timestamp, type, isGroup, groupName } = data as {
+  const { 
+    messageId, chatJid, from, fromName, body, timestamp, type, isGroup, groupName,
+    // New ClawdBot format: media fields in data object
+    media_base64, media_filename, mediaType 
+  } = data as {
     messageId: string;
     chatJid: string;
     from: string;
@@ -236,7 +240,27 @@ async function handleMessageReceived(
     type?: string;
     isGroup?: boolean;
     groupName?: string;
+    // ClawdBot media fields
+    media_base64?: string;
+    media_filename?: string;
+    mediaType?: string;
   };
+
+  // Merge media sources: prefer top-level media object, fallback to inline ClawdBot format
+  let effectiveMedia: MediaData | undefined = media;
+  if (!effectiveMedia && media_base64) {
+    const binaryData = base64Decode(media_base64);
+    effectiveMedia = {
+      base64: media_base64,
+      mimetype: mediaType || 'image/jpeg',
+      filename: media_filename || `image-${Date.now()}.jpg`,
+      filesize: binaryData.length,
+    };
+    console.log(`[${requestId}] ClawdBot inline media detected: ${effectiveMedia.filename} (${effectiveMedia.filesize} bytes)`);
+  }
+
+  // Determine effective body: use original body, or emoji placeholder for media-only messages
+  const effectiveBody = body || (effectiveMedia ? '📷 Afbeelding' : '');
 
   if (!messageId || !chatJid || !from || !timestamp) {
     throw new Error("Missing required message data: messageId, chatJid, from, timestamp");
@@ -269,7 +293,7 @@ async function handleMessageReceived(
       chat_id: chat.id,
       message_id: messageId,
       message_type: type || "text",
-      message_body: body || "",
+      message_body: effectiveBody,
       sender_type: "contact",
       sender_phone: from,
       sent_at: new Date(timestamp).toISOString(),
@@ -287,18 +311,21 @@ async function handleMessageReceived(
     throw messageError;
   }
 
-  // 5. Handle media upload if present
-  if (media && media.base64) {
+  // 5. Handle media upload if present (supports both top-level media object and inline ClawdBot format)
+  if (effectiveMedia && effectiveMedia.base64) {
     try {
-      const storagePath = `${orgId}/${sessionId}/${messageId}/${media.filename}`;
-      const fileBuffer = base64Decode(media.base64);
+      // New path format: inbound/{safeJid}/{timestamp}_{filename}
+      const safeJid = chatJid.replace(/@/g, '-').replace(/\./g, '-');
+      const uploadTimestamp = Date.now();
+      const storagePath = `inbound/${safeJid}/${uploadTimestamp}_${effectiveMedia.filename}`;
+      const fileBuffer = base64Decode(effectiveMedia.base64);
 
-      console.log(`[${requestId}] Uploading media: ${media.filename} (${media.filesize} bytes)`);
+      console.log(`[${requestId}] Uploading media: ${effectiveMedia.filename} (${effectiveMedia.filesize} bytes) to ${storagePath}`);
 
       const { error: uploadError } = await supabase.storage
         .from('whatsapp-media')
         .upload(storagePath, fileBuffer, {
-          contentType: media.mimetype,
+          contentType: effectiveMedia.mimetype,
           upsert: false,
         });
 
@@ -313,10 +340,10 @@ async function handleMessageReceived(
         const { error: mediaDbError } = await supabase.from('whatsapp_media').insert({
           org_id: orgId,
           message_id: message.id,
-          file_name: media.filename,
+          file_name: effectiveMedia.filename,
           file_type: type || 'image',
-          file_size_bytes: media.filesize,
-          mime_type: media.mimetype,
+          file_size_bytes: effectiveMedia.filesize,
+          mime_type: effectiveMedia.mimetype,
           storage_bucket: 'whatsapp-media',
           storage_path: storagePath,
           storage_url: urlData.publicUrl,
@@ -338,7 +365,7 @@ async function handleMessageReceived(
     .from("whatsapp_chats")
     .update({
       last_message_at: new Date(timestamp).toISOString(),
-      last_message_preview: (body || "").substring(0, 100),
+      last_message_preview: effectiveBody.substring(0, 100) || '📷 Afbeelding',
       unread_count: chat.unread_count + 1,
     })
     .eq("id", chat.id);
