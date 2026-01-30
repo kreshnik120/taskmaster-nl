@@ -17,29 +17,33 @@ export function useWhatsAppSendMessage({ chatId, chatJid, orgId }: SendMessagePa
         throw new Error("Bericht mag niet leeg zijn");
       }
 
-      const { data, error } = await supabase.functions.invoke('whatsapp-bridge', {
+      console.log(`[useWhatsAppSendMessage] Sending via MCP: to=${chatJid}`);
+
+      // Use MCP proxy to send message via ClawdBot
+      const { data, error } = await supabase.functions.invoke('mcp-proxy', {
         body: {
-          event: 'message.send',
-          sessionId: 'internal', // Will use server-side secret
-          orgId,
-          data: {
-            chatJid,
-            body: text.trim(),
-            chatId
+          tool: 'whatsapp_send_message',
+          arguments: {
+            to: chatJid,           // MCP expects "to" parameter (phone or JID format)
+            message: text.trim()
           }
         }
       });
 
       if (error) {
-        console.error('[useWhatsAppSendMessage] Error:', error);
+        console.error('[useWhatsAppSendMessage] MCP proxy error:', error);
         throw new Error(error.message || 'Fout bij versturen bericht');
       }
 
-      if (!data?.success) {
-        throw new Error(data?.error || 'Fout bij versturen bericht');
+      // MCP returns { result: { success: boolean, ... } }
+      const result = data?.result;
+      if (!result?.success) {
+        console.error('[useWhatsAppSendMessage] MCP send failed:', result);
+        throw new Error(result?.error || 'Fout bij versturen bericht');
       }
 
-      return data;
+      console.log('[useWhatsAppSendMessage] Message sent successfully via MCP');
+      return result;
     },
     onSuccess: () => {
       // Invalidate queries to refresh message list and chat list

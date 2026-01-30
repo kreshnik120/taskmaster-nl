@@ -520,3 +520,12 @@ verify_jwt = false
 verify_jwt = false
 # Purpose: Extract meeting data from documents using Gemini Flash
 # Note: Used by CreateMeetingMinuteDialog for AI import feature
+
+# -----------------------------------------------------------------------------
+# MCP PROXY
+# -----------------------------------------------------------------------------
+
+[functions.mcp-proxy]
+verify_jwt = false
+# Purpose: Proxy to MCP server (mcp.abcito.io) for WhatsApp integration
+# Auth: JWT validation done in-code for granular control
