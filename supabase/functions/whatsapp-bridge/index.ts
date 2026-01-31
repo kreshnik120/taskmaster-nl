@@ -259,8 +259,11 @@ async function handleMessageReceived(
     console.log(`[${requestId}] ClawdBot inline media detected: ${effectiveMedia.filename} (${effectiveMedia.filesize} bytes)`);
   }
 
-  // Determine effective body: use original body, or emoji placeholder for media-only messages
-  const effectiveBody = body || (effectiveMedia ? '📷 Afbeelding' : '');
+  // Clean body: strip media placeholders like <media:image>, <media:audio>, etc.
+  const cleanBody = body?.startsWith('<media:') ? null : body;
+
+  // Determine effective body: use cleaned body, or emoji placeholder for media-only messages
+  const effectiveBody = cleanBody || (effectiveMedia ? '📷 Afbeelding' : '');
 
   if (!messageId || !chatJid || !from || !timestamp) {
     throw new Error("Missing required message data: messageId, chatJid, from, timestamp");
