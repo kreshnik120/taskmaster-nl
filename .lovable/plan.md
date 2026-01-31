@@ -1,174 +1,242 @@
 
 
-## STAP 2.2: Keyboard Shortcuts
+## STAP 2.3: Acties Integratie
 
 ### Doel
 
-Voeg extra keyboard shortcuts toe aan de WhatsApp pagina voor snelle acties zoals zoeken, pinnen, muten en archiveren.
+Voeg keyboard hints toe aan de Command Palette, implementeer "Koppel aan taak" feedback, en maak een help overlay voor alle keyboard shortcuts.
 
 ---
 
-### Huidige Situatie
+### Bestaande Onderdelen
 
-**WhatsApp.tsx:**
-- Heeft al keyboard handling (regels 97-151)
-- `Cmd+K` opent command palette
-- Pijltjes navigeren door chats
-- `Escape` sluit profile/navigeert terug
-- `i` toont/verbergt profile panel
-- `selectedChat` is al beschikbaar via useMemo (regel 66-69)
-- Mist: `useUpdateChatStatus` hook import
-
-**WhatsAppChatList.tsx:**
-- Search input op regel 48-54
-- Mist: `data-search-input` attribuut
+| Component | Beschikbaar | Gebruik |
+|-----------|-------------|---------|
+| `CommandShortcut` | Ja | shadcn/ui component voor keyboard hints |
+| `Dialog` | Ja | Voor help overlay |
+| Taak koppeling | Nee | Nog niet geimplementeerd - toon toast feedback |
 
 ---
 
-### Nieuwe Shortcuts Overzicht
+### Nieuw Bestand 1: WhatsAppKeyboardHelp.tsx
 
-| Shortcut | Actie | Voorwaarde |
-|----------|-------|------------|
-| `Cmd+F` / `Ctrl+F` | Focus zoekveld | Altijd |
-| `Cmd+P` / `Ctrl+P` | Pin/unpin chat | Chat geselecteerd |
-| `Cmd+M` / `Ctrl+M` | Mute/unmute chat | Chat geselecteerd |
-| `Cmd+Shift+A` / `Ctrl+Shift+A` | Archiveer chat | Chat geselecteerd |
+**Locatie:** `src/components/whatsapp/WhatsAppKeyboardHelp.tsx`
 
----
+**Structuur:**
+```text
+Dialog (open/onOpenChange)
+├── DialogContent
+│   ├── DialogHeader
+│   │   └── DialogTitle: "Keyboard Shortcuts"
+│   │
+│   ├── Sectie: ALGEMEEN
+│   │   ├── ⌘K / Ctrl+K → Open command palette
+│   │   ├── ⌘F / Ctrl+F → Focus zoekveld
+│   │   └── ? → Toon deze help
+│   │
+│   ├── Sectie: NAVIGATIE
+│   │   ├── ↑ ↓ → Navigeer door chats
+│   │   ├── Enter → Open chat
+│   │   ├── Escape → Ga terug / Sluit panel
+│   │   └── i → Toggle profiel panel
+│   │
+│   └── Sectie: ACTIES (chat geselecteerd)
+│       ├── ⌘P / Ctrl+P → Pin / Losmaken
+│       ├── ⌘M / Ctrl+M → Mute / Demping opheffen
+│       └── ⌘⇧A / Ctrl+Shift+A → Archiveren
+```
 
-### Bestand 1: WhatsApp.tsx
-
-**Wijzigingen:**
-
-1. **Importeer useUpdateChatStatus hook:**
-   ```typescript
-   import { useUpdateChatStatus } from "@/hooks/whatsapp/useUpdateChatStatus";
-   ```
-
-2. **Initialiseer hook in component:**
-   ```typescript
-   const updateStatus = useUpdateChatStatus();
-   ```
-
-3. **Voeg shortcuts toe aan handleKeyDown (binnen switch statement):**
-
-   ```typescript
-   // Na case 'k' en voor de input check, voeg toe:
-   case 'f':
-     if (e.metaKey || e.ctrlKey) {
-       e.preventDefault();
-       const searchInput = document.querySelector('[data-search-input]') as HTMLInputElement;
-       searchInput?.focus();
-     }
-     break;
-   
-   case 'p':
-     if ((e.metaKey || e.ctrlKey) && selectedChatId && selectedChat) {
-       e.preventDefault();
-       updateStatus.mutate({
-         chatId: selectedChatId,
-         field: 'is_pinned',
-         value: !selectedChat.is_pinned,
-       });
-     }
-     break;
-   
-   case 'm':
-     if ((e.metaKey || e.ctrlKey) && selectedChatId && selectedChat) {
-       e.preventDefault();
-       updateStatus.mutate({
-         chatId: selectedChatId,
-         field: 'is_muted',
-         value: !selectedChat.is_muted,
-       });
-     }
-     break;
-   
-   case 'a':
-     if ((e.metaKey || e.ctrlKey) && e.shiftKey && selectedChatId) {
-       e.preventDefault();
-       updateStatus.mutate({
-         chatId: selectedChatId,
-         field: 'is_archived',
-         value: true,
-       });
-     }
-     break;
-   ```
-
-4. **Update useEffect dependencies:**
-   ```typescript
-   // Voeg updateStatus toe aan dependency array
-   }, [filteredChats, selectedChatId, selectedChat, handleSelectChat, handleBack, showProfile, toggleProfile, updateStatus]);
-   ```
-
----
-
-### Bestand 2: WhatsAppChatList.tsx
-
-**Wijziging:**
-
-Voeg `data-search-input` attribuut toe aan de Input component (regel 48-54):
-
+**Keyboard hint component:**
 ```tsx
-<Input
-  placeholder="Zoek in gesprekken..."
-  value={searchQuery}
-  onChange={(e) => onSearchChange(e.target.value)}
-  className="pl-10"
-  aria-label="Zoek in gesprekken"
-  data-search-input  // <-- Toevoegen
-/>
+function KeyboardHint({ keys }: { keys: string[] }) {
+  return (
+    <div className="flex items-center gap-1">
+      {keys.map((key, i) => (
+        <kbd 
+          key={i}
+          className="px-2 py-1 text-xs font-mono bg-muted rounded border"
+        >
+          {key}
+        </kbd>
+      ))}
+    </div>
+  );
+}
 ```
 
----
-
-### Toast Feedback
-
-De `useUpdateChatStatus` hook heeft al toast feedback ingebouwd:
-
+**Props:**
 ```typescript
-// In useUpdateChatStatus.ts (regel 26-30)
-const messages: Record<typeof field, string> = {
-  is_pinned: value ? 'Chat gepind' : 'Chat losgemaakt',
-  is_muted: value ? 'Chat gedempt' : 'Demping opgeheven',
-  is_archived: 'Chat gearchiveerd',
-};
-toast.success(messages[field]);
+interface WhatsAppKeyboardHelpProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
 ```
-
-Er zijn geen extra toast implementaties nodig.
 
 ---
 
-### Keyboard Flow Diagram
+### Wijziging Bestand 2: WhatsAppCommandPalette.tsx
+
+**Toevoegingen:**
+
+1. **Importeer CommandShortcut:**
+   ```typescript
+   import {
+     CommandDialog,
+     CommandInput,
+     CommandList,
+     CommandEmpty,
+     CommandGroup,
+     CommandItem,
+     CommandSeparator,
+     CommandShortcut,  // <-- Toevoegen
+   } from "@/components/ui/command";
+   ```
+
+2. **Importeer Link icon en toast:**
+   ```typescript
+   import { Link } from "lucide-react";
+   import { toast } from "sonner";
+   ```
+
+3. **Voeg keyboard hints toe aan actie items:**
+
+   Pin actie (regels 200-210):
+   ```tsx
+   <CommandItem
+     value="pin-chat"
+     onSelect={handlePinChat}
+     disabled={!hasSelectedChat}
+     className={cn(!hasSelectedChat && "opacity-50 cursor-not-allowed")}
+   >
+     <Pin className="mr-2 h-4 w-4" />
+     <span>{selectedChat?.is_pinned ? "Losmaken" : "Pin"} huidige chat</span>
+     <CommandShortcut>⌘P</CommandShortcut>  {/* <-- Toevoegen */}
+   </CommandItem>
+   ```
+
+   Mute actie (regels 211-222):
+   ```tsx
+   <CommandItem
+     value="mute-chat"
+     onSelect={handleMuteChat}
+     disabled={!hasSelectedChat}
+     className={cn(!hasSelectedChat && "opacity-50 cursor-not-allowed")}
+   >
+     <BellOff className="mr-2 h-4 w-4" />
+     <span>{selectedChat?.is_muted ? "Demping opheffen" : "Mute"} huidige chat</span>
+     <CommandShortcut>⌘M</CommandShortcut>  {/* <-- Toevoegen */}
+   </CommandItem>
+   ```
+
+   Archive actie (regels 223-231):
+   ```tsx
+   <CommandItem
+     value="archive-chat"
+     onSelect={handleArchiveChat}
+     disabled={!hasSelectedChat}
+     className={cn(!hasSelectedChat && "opacity-50 cursor-not-allowed")}
+   >
+     <Archive className="mr-2 h-4 w-4" />
+     <span>Archiveer chat</span>
+     <CommandShortcut>⌘⇧A</CommandShortcut>  {/* <-- Toevoegen */}
+   </CommandItem>
+   ```
+
+4. **Voeg "Koppel aan taak" actie toe (na Archive):**
+   ```tsx
+   <CommandItem
+     value="link-task"
+     onSelect={() => {
+       toast.info("Taakkoppeling komt in een latere fase");
+       onOpenChange(false);
+     }}
+     disabled={!hasSelectedChat}
+     className={cn(!hasSelectedChat && "opacity-50 cursor-not-allowed")}
+   >
+     <Link className="mr-2 h-4 w-4" />
+     <span>Koppel aan taak</span>
+   </CommandItem>
+   ```
+
+---
+
+### Wijziging Bestand 3: WhatsApp.tsx
+
+**Toevoegingen:**
+
+1. **Importeer WhatsAppKeyboardHelp:**
+   ```typescript
+   import { WhatsAppKeyboardHelp } from "@/components/whatsapp/WhatsAppKeyboardHelp";
+   ```
+
+2. **Voeg state toe voor keyboard help:**
+   ```typescript
+   const [keyboardHelpOpen, setKeyboardHelpOpen] = useState(false);
+   ```
+
+3. **Voeg "?" shortcut toe aan handleKeyDown (na input check):**
+   ```typescript
+   case '?':
+     // ? requires Shift key (Shift+/ = ?)
+     e.preventDefault();
+     setKeyboardHelpOpen(true);
+     break;
+   ```
+
+4. **Render WhatsAppKeyboardHelp component:**
+   ```tsx
+   <WhatsAppKeyboardHelp
+     open={keyboardHelpOpen}
+     onOpenChange={setKeyboardHelpOpen}
+   />
+   ```
+
+---
+
+### Visueel Ontwerp - Keyboard Help Modal
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│                    handleKeyDown                             │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  ┌────────────────┐                                         │
-│  │ Cmd+K          │ → Open Command Palette                  │
-│  │ Cmd+F          │ → Focus Search Input                    │
-│  └────────────────┘                                         │
-│         ↓ (works even in inputs)                            │
-│                                                              │
-│  ┌────────────────┐                                         │
-│  │ Input focused? │ → STOP (don't hijack typing)            │
-│  └────────────────┘                                         │
-│         ↓ (not in input)                                    │
-│                                                              │
-│  ┌────────────────┐                                         │
-│  │ Cmd+P          │ → Toggle Pin (if chat selected)         │
-│  │ Cmd+M          │ → Toggle Mute (if chat selected)        │
-│  │ Cmd+Shift+A    │ → Archive (if chat selected)            │
-│  │ Arrow keys     │ → Navigate chats                        │
-│  │ Escape         │ → Close profile / Go back               │
-│  │ i              │ → Toggle profile panel                  │
-│  └────────────────┘                                         │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│  ⌨️  Keyboard Shortcuts                    [X]  │
+├─────────────────────────────────────────────────┤
+│                                                 │
+│  ALGEMEEN                                       │
+│  ┌────────┐                                     │
+│  │ ⌘  K  │  Open command palette               │
+│  └────────┘                                     │
+│  ┌────────┐                                     │
+│  │ ⌘  F  │  Focus zoekveld                     │
+│  └────────┘                                     │
+│  ┌────────┐                                     │
+│  │   ?   │  Toon deze help                     │
+│  └────────┘                                     │
+│                                                 │
+│  NAVIGATIE                                      │
+│  ┌────────┐                                     │
+│  │ ↑  ↓  │  Navigeer door chats                │
+│  └────────┘                                     │
+│  ┌────────┐                                     │
+│  │ Enter │  Open geselecteerde chat            │
+│  └────────┘                                     │
+│  ┌────────┐                                     │
+│  │  Esc  │  Ga terug / Sluit panel             │
+│  └────────┘                                     │
+│  ┌────────┐                                     │
+│  │   i   │  Toggle profiel panel               │
+│  └────────┘                                     │
+│                                                 │
+│  ACTIES (chat geselecteerd)                     │
+│  ┌────────┐                                     │
+│  │ ⌘  P  │  Pin / Losmaken                     │
+│  └────────┘                                     │
+│  ┌────────┐                                     │
+│  │ ⌘  M  │  Mute / Demping opheffen            │
+│  └────────┘                                     │
+│  ┌────────┐                                     │
+│  │ ⌘ ⇧ A │  Archiveren                         │
+│  └────────┘                                     │
+│                                                 │
+└─────────────────────────────────────────────────┘
 ```
 
 ---
@@ -177,71 +245,76 @@ Er zijn geen extra toast implementaties nodig.
 
 | Aspect | Implementatie |
 |--------|---------------|
-| Cmd+F positie | Voor input check (werkt altijd) |
-| Cmd+P/M/A positie | Na input check (niet in inputs) |
-| Browser default | `e.preventDefault()` voorkomt Print dialog (Cmd+P) |
-| Toast feedback | Via bestaande useUpdateChatStatus hook |
-| Archiveer | Alleen true (geen toggle, eenrichtingsactie) |
+| `CommandShortcut` | Bestaand shadcn/ui component, auto-positioned rechts |
+| Platform detectie | Toon ⌘ op Mac, Ctrl op Windows/Linux |
+| "?" key | Werkt alleen buiten inputs (na input check) |
+| Koppel aan taak | Toast feedback, niet disabled |
+| Dialog closing | Escape of click buiten |
 
 ---
 
-### Edge Cases
+### Platform-Aware Keyboard Hints
 
-1. **Cmd+P in input veld:** Wordt nu toegestaan omdat het voor de input check staat - maar we willen dit NIET doen. Cmd+P moet na de input check staan zodat je nog gewoon kunt typen.
-
-2. **Cmd+F altijd:** Dit moet WEL voor de input check staan zodat je altijd kunt focussen op zoeken.
-
-3. **Chat niet geladen:** selectedChat kan null zijn bij page refresh - shortcuts negeren dan.
-
----
-
-### Correcte Volgorde in handleKeyDown
+Detecteer platform en toon correcte symbolen:
 
 ```typescript
-const handleKeyDown = (e: KeyboardEvent) => {
-  // STAP 1: Shortcuts die ALTIJD werken (ook in inputs)
-  if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
-    e.preventDefault();
-    setCommandPaletteOpen(true);
-    return;
-  }
-  
-  if (e.key === 'f' && (e.metaKey || e.ctrlKey)) {
-    e.preventDefault();
-    const searchInput = document.querySelector('[data-search-input]') as HTMLInputElement;
-    searchInput?.focus();
-    return;
-  }
+const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
 
-  // STAP 2: Stop als we in een input zitten
-  if (document.activeElement?.tagName === 'INPUT' || 
-      document.activeElement?.tagName === 'TEXTAREA') return;
-
-  // STAP 3: Shortcuts die NIET in inputs werken
-  switch (e.key) {
-    case 'p':
-      if ((e.metaKey || e.ctrlKey) && selectedChatId && selectedChat) { ... }
-      break;
-    case 'm':
-      if ((e.metaKey || e.ctrlKey) && selectedChatId && selectedChat) { ... }
-      break;
-    case 'a':
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && selectedChatId) { ... }
-      break;
-    // ... bestaande cases
-  }
+const shortcuts = {
+  commandPalette: isMac ? '⌘K' : 'Ctrl+K',
+  search: isMac ? '⌘F' : 'Ctrl+F',
+  pin: isMac ? '⌘P' : 'Ctrl+P',
+  mute: isMac ? '⌘M' : 'Ctrl+M',
+  archive: isMac ? '⌘⇧A' : 'Ctrl+Shift+A',
 };
 ```
 
 ---
 
+### Flow Diagram
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                    WhatsApp.tsx                              │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  State:                                                      │
+│  ├── commandPaletteOpen                                     │
+│  └── keyboardHelpOpen     <── NIEUW                         │
+│                                                              │
+│  handleKeyDown:                                              │
+│  ├── Cmd+K → setCommandPaletteOpen(true)                    │
+│  ├── Cmd+F → focus search input                             │
+│  ├── ? → setKeyboardHelpOpen(true)  <── NIEUW               │
+│  └── ... andere shortcuts                                   │
+│                                                              │
+│  Render:                                                     │
+│  ├── WhatsAppCommandPalette (met keyboard hints)            │
+│  └── WhatsAppKeyboardHelp   <── NIEUW                       │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Bestanden Overzicht
+
+| Bestand | Actie | Beschrijving |
+|---------|-------|--------------|
+| `WhatsAppKeyboardHelp.tsx` | Nieuw | Help overlay component |
+| `WhatsAppCommandPalette.tsx` | Wijzig | Keyboard hints + Link aan taak |
+| `WhatsApp.tsx` | Wijzig | "?" shortcut + render help dialog |
+
+---
+
 ### Test Checklist
 
-- [ ] Cmd+F focust zoekveld (ook als andere input focus heeft)
-- [ ] Cmd+P toggled pin status met toast "Chat gepind" / "Chat losgemaakt"
-- [ ] Cmd+M toggled mute status met toast "Chat gedempt" / "Demping opgeheven"
-- [ ] Cmd+Shift+A archiveert chat met toast "Chat gearchiveerd"
-- [ ] Cmd+P werkt NIET als zoekveld focus heeft (voorkomt typen problemen)
-- [ ] Shortcuts Cmd+P/M/A doen niets als geen chat geselecteerd
-- [ ] Cmd+P overschrijft browser print dialog
+- [ ] Keyboard hints zichtbaar naast actie items in Command Palette
+- [ ] CommandShortcut toont ⌘P, ⌘M, ⌘⇧A
+- [ ] "?" opent keyboard help overlay
+- [ ] Help overlay toont alle shortcuts in categorieën
+- [ ] Escape sluit help overlay
+- [ ] Klik buiten modal sluit help overlay
+- [ ] "Koppel aan taak" toont toast "Taakkoppeling komt in een latere fase"
+- [ ] Platform-aware hints (⌘ op Mac, Ctrl op Windows)
 
