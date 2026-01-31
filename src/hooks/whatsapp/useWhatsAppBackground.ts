@@ -1,20 +1,37 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 export type BackgroundOption = 'default' | 'solid-light' | 'solid-dark' | 'gradient' | 'pattern';
 
 const STORAGE_KEY = 'whatsapp-background';
+const SYNC_EVENT = 'whatsapp-background-change';
 
 export function useWhatsAppBackground() {
-  const [background, setBackground] = useState<BackgroundOption>(() => {
+  const [background, setBackgroundState] = useState<BackgroundOption>(() => {
     if (typeof window !== 'undefined') {
       return (localStorage.getItem(STORAGE_KEY) as BackgroundOption) || 'default';
     }
     return 'default';
   });
 
+  // Wrapper function that updates localStorage AND dispatches sync event
+  const setBackground = useCallback((newBackground: BackgroundOption) => {
+    setBackgroundState(newBackground);
+    localStorage.setItem(STORAGE_KEY, newBackground);
+    // Dispatch custom event for same-tab synchronization
+    window.dispatchEvent(new CustomEvent(SYNC_EVENT, { detail: newBackground }));
+  }, []);
+
+  // Listen for changes from other hook instances
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, background);
-  }, [background]);
+    const handleSync = (event: CustomEvent<BackgroundOption>) => {
+      setBackgroundState(event.detail);
+    };
+
+    window.addEventListener(SYNC_EVENT, handleSync as EventListener);
+    return () => {
+      window.removeEventListener(SYNC_EVENT, handleSync as EventListener);
+    };
+  }, []);
 
   return { background, setBackground };
 }
