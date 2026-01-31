@@ -13,7 +13,10 @@ export function WhatsAppStatusIcon({ status, className }: WhatsAppStatusIconProp
     return null;
   }
 
-  const iconClass = cn("h-3.5 w-3.5", className);
+  const iconClass = cn(
+    "h-3.5 w-3.5 transition-colors duration-300",
+    className
+  );
 
   switch (status) {
     case 'pending':
@@ -23,7 +26,7 @@ export function WhatsAppStatusIcon({ status, className }: WhatsAppStatusIconProp
     case 'delivered':
       return <CheckCheck className={cn(iconClass, "text-muted-foreground")} />;
     case 'read':
-      return <CheckCheck className={cn(iconClass, "text-[#53bdeb]")} />;
+      return <CheckCheck className={cn(iconClass, "text-[#53bdeb] animate-pulse-once")} />;
     default:
       return null;
   }

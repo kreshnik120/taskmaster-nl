@@ -49,7 +49,8 @@ export function WhatsAppChatItem({ chat, isSelected, onClick }: WhatsAppChatItem
     <div
       onClick={onClick}
       className={cn(
-        "flex items-center gap-3 p-3 cursor-pointer transition-colors border-b border-border/50",
+        "flex items-center gap-3 p-3 cursor-pointer border-b border-border/50",
+        "transition-all duration-150 ease-in-out",
         "hover:bg-gray-50 dark:hover:bg-slate-800",
         isSelected && "bg-blue-50 dark:bg-blue-900/30 border-l-2 border-l-primary",
         isMuted && "opacity-60"
@@ -77,7 +78,7 @@ export function WhatsAppChatItem({ chat, isSelected, onClick }: WhatsAppChatItem
             )}
             {/* Pin indicator */}
             {isPinned && (
-              <Pin className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+              <Pin className="h-3 w-3 text-muted-foreground flex-shrink-0 transition-transform duration-200" />
             )}
             <span className={cn(
               "font-medium text-sm truncate",
@@ -127,7 +128,10 @@ export function WhatsAppChatItem({ chat, isSelected, onClick }: WhatsAppChatItem
           {/* Unread badge */}
           {hasUnread && (
             <Badge 
-              className="h-5 min-w-5 px-1.5 text-xs bg-[#25D366] text-white hover:bg-[#25D366] flex-shrink-0"
+              className={cn(
+                "h-5 min-w-5 px-1.5 text-xs bg-[#25D366] text-white hover:bg-[#25D366] flex-shrink-0",
+                "animate-badge-pop"
+              )}
             >
               {chat.unread_count > 99 ? '99+' : chat.unread_count}
             </Badge>

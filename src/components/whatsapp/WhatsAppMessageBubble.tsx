@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { format, parseISO } from "date-fns";
+import { useState, useEffect } from "react";
+import { format, parseISO, differenceInSeconds } from "date-fns";
 import { cn } from "@/lib/utils";
 import { WhatsAppStatusIcon } from "./WhatsAppStatusIcon";
 import { WhatsAppImageLightbox } from "./WhatsAppImageLightbox";
@@ -24,6 +24,20 @@ export function WhatsAppMessageBubble({ message }: WhatsAppMessageBubbleProps) {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const isOutgoing = message.sender_type === 'self' || message.sender_type === 'user';
   const timestamp = format(parseISO(message.sent_at), 'HH:mm');
+
+  // Check if message is recently sent/received (within 2 seconds)
+  const [isNew, setIsNew] = useState(() => {
+    const sentAt = parseISO(message.sent_at);
+    return differenceInSeconds(new Date(), sentAt) < 2;
+  });
+
+  // Remove "new" state after animation completes
+  useEffect(() => {
+    if (isNew) {
+      const timer = setTimeout(() => setIsNew(false), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isNew]);
 
   // Filter media by type
   const hasMedia = message.media && message.media.length > 0;
@@ -50,7 +64,10 @@ export function WhatsAppMessageBubble({ message }: WhatsAppMessageBubbleProps) {
             "max-w-[75%] px-3 py-2 rounded-2xl shadow-sm",
             isOutgoing 
               ? "bg-[#dcf8c6] dark:bg-emerald-900 rounded-br-none text-foreground" 
-              : "bg-white dark:bg-slate-800 rounded-bl-none border border-border text-foreground"
+              : "bg-white dark:bg-slate-800 rounded-bl-none border border-border text-foreground",
+            // Animation classes for new messages
+            isNew && isOutgoing && "animate-message-send",
+            isNew && !isOutgoing && "animate-message-receive"
           )}
         >
           {/* Image media */}
