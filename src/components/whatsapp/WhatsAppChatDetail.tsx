@@ -229,7 +229,7 @@ export function WhatsAppChatDetail({ chat, onBack, showBackButton = false, onTog
                 return <DateDivider label={item.label} />;
               }
               return (
-                <div className="py-1">
+                <div className="py-1 w-full">
                   <WhatsAppMessageBubble message={item.message} />
                 </div>
               );
