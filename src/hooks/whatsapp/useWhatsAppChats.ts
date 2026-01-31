@@ -8,6 +8,7 @@ interface UseWhatsAppChatsReturn {
   filteredChats: WhatsAppChat[];
   isLoading: boolean;
   error: Error | null;
+  refetch: () => void;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   filter: WhatsAppFilter;
@@ -68,7 +69,7 @@ export function useWhatsAppChats(): UseWhatsAppChatsReturn {
   const [filter, setFilter] = useState<WhatsAppFilter>('all');
   const [tagFilter, setTagFilter] = useState<string | null>(null);
 
-  const { data: chats = [], isLoading, error } = useQuery({
+  const { data: chats = [], isLoading, error, refetch } = useQuery({
     queryKey: ['whatsapp-chats'],
     queryFn: async () => {
       // Call MCP proxy to get chats from ClawdBot
@@ -97,6 +98,13 @@ export function useWhatsAppChats(): UseWhatsAppChatsReturn {
       
       return chatsArray.map(mapMCPChatToWhatsAppChat) as WhatsAppChat[];
     },
+    // Improved retry and stale-while-revalidate config
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
+    staleTime: 30000, // Consider data fresh for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes (formerly cacheTime)
+    refetchOnWindowFocus: true, // Refetch when user returns to tab
+    refetchOnReconnect: true, // Refetch on network reconnect
   });
 
   // Apply filters and search
@@ -180,6 +188,7 @@ export function useWhatsAppChats(): UseWhatsAppChatsReturn {
     filteredChats,
     isLoading,
     error: error as Error | null,
+    refetch,
     searchQuery,
     setSearchQuery,
     filter,
