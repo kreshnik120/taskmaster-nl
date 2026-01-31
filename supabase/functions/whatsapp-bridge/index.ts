@@ -638,16 +638,16 @@ async function handleSendMessage(
 ): Promise<Record<string, unknown>> {
   // Support both formats: mcp-proxy sends 'to' + 'message', legacy uses 'chatJid' + 'body'
   const to = (data.to as string) || (data.chatJid as string);
-  const body = (data.message as string) || (data.body as string);
-  const chatId = data.chatId as string | undefined;
+  const body = (data.body as string) || (data.message as string);
+  let chatId = data.chatId as string | undefined;
 
   if (!to || !body) {
     throw new Error("Missing required fields: to/chatJid, message/body");
   }
 
-  console.log(`[${requestId}] Sending message via Relay to: ${to}`);
+  console.log(`[${requestId}] Sending message via Relay to: ${to}, chatId: ${chatId || 'will lookup'}`);
 
-  // Get new Relay credentials
+  // Get Relay credentials
   const vpsUrl = Deno.env.get("CLAWDBOT_VPS_URL");
   const token = Deno.env.get("CLAWDBOT_TOKEN");
 
@@ -655,65 +655,157 @@ async function handleSendMessage(
     throw new Error("Configuration missing: CLAWDBOT_VPS_URL or CLAWDBOT_TOKEN");
   }
 
-  // Call the Relay Service
-  const relayResponse = await fetch(`${vpsUrl}/send`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`,
-    },
-    body: JSON.stringify({ to, message: body }),
-  });
-
-  if (!relayResponse.ok) {
-    const errorText = await relayResponse.text();
-    console.error(`[${requestId}] Relay error: ${relayResponse.status} - ${errorText}`);
-    throw new Error(`Relay error: ${relayResponse.status} - ${errorText}`);
-  }
-
-  const relayResult = await relayResponse.json();
-  console.log(`[${requestId}] Relay response:`, relayResult);
-
-  const messageId = relayResult.messageId || relayResult.id || crypto.randomUUID();
-
-  // If chatId provided, store in database
-  if (chatId) {
-    const { data: message, error: messageError } = await supabase
-      .from("whatsapp_messages")
-      .insert({
-        org_id: orgId,
-        chat_id: chatId,
-        message_id: messageId,
-        message_type: "text",
-        message_body: body,
-        sender_type: "self",
-        sender_phone: null,
-        sent_at: new Date().toISOString(),
-        status: "sent",
-      })
-      .select("id")
+  // If no chatId provided, try to find or create the chat
+  if (!chatId) {
+    console.log(`[${requestId}] No chatId provided, looking up chat for JID: ${to}`);
+    
+    // Try to find existing chat by JID
+    const { data: existingChat } = await supabase
+      .from("whatsapp_chats")
+      .select("id, session_id")
+      .eq("org_id", orgId)
+      .eq("chat_jid", to)
+      .is("deleted_at", null)
       .single();
 
-    if (messageError) {
-      console.error(`[${requestId}] DB insert error:`, messageError);
-      // Don't throw - message was sent successfully
+    if (existingChat) {
+      chatId = existingChat.id;
+      console.log(`[${requestId}] Found existing chat: ${chatId}`);
     } else {
-      // Update chat with last message info
-      await supabase
-        .from("whatsapp_chats")
-        .update({
-          last_message_at: new Date().toISOString(),
-          last_message_preview: body.substring(0, 100),
-        })
-        .eq("id", chatId);
-
-      console.log(`[${requestId}] ✅ Message sent and stored: ${message.id}`);
-      return { sent: true, messageId: message.id, providerId: messageId };
+      // Need to create chat - first get or create session
+      const session = await getOrCreateSession(supabase, "clawdbot-default", orgId, requestId);
+      
+      // Extract phone from JID (remove @s.whatsapp.net)
+      const phone = to.replace("@s.whatsapp.net", "").replace("@g.us", "");
+      
+      // Get or create contact
+      const contact = await getOrCreateContact(supabase, session.id, orgId, phone, undefined, requestId);
+      
+      // Get or create chat
+      const isGroup = to.includes("@g.us");
+      const chat = await getOrCreateChat(supabase, session.id, orgId, to, contact.id, isGroup, requestId);
+      chatId = chat.id;
+      console.log(`[${requestId}] Created new chat: ${chatId}`);
     }
   }
 
-  console.log(`[${requestId}] ✅ Message sent via Relay (no DB storage)`);
-  return { sent: true, providerId: messageId };
+  // Generate a unique message ID for tracking
+  const localMessageId = `sent_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
+
+  // Insert message into database BEFORE sending (status: pending)
+  const { data: pendingMessage, error: insertError } = await supabase
+    .from("whatsapp_messages")
+    .insert({
+      org_id: orgId,
+      chat_id: chatId,
+      message_id: localMessageId,
+      message_type: "text",
+      message_body: body,
+      sender_type: "user",
+      sender_phone: null,
+      sent_at: new Date().toISOString(),
+      status: "pending",
+    })
+    .select("id")
+    .single();
+
+  if (insertError) {
+    console.error(`[${requestId}] DB insert error (pending):`, insertError);
+    // Continue anyway - message send is more important
+  } else {
+    console.log(`[${requestId}] Pending message stored: ${pendingMessage.id}`);
+  }
+
+  // Update chat with last message info immediately
+  await supabase
+    .from("whatsapp_chats")
+    .update({
+      last_message_at: new Date().toISOString(),
+      last_message_preview: body.substring(0, 100),
+    })
+    .eq("id", chatId);
+
+  // Call the Relay Service with timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+  let relayResult: { messageId?: string; id?: string; success?: boolean };
+  let relaySent = false;
+
+  try {
+    const relayResponse = await fetch(`${vpsUrl}/send`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({ to, message: body }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!relayResponse.ok) {
+      const errorText = await relayResponse.text();
+      console.error(`[${requestId}] Relay error: ${relayResponse.status} - ${errorText}`);
+      
+      // Update message status to failed
+      if (pendingMessage) {
+        await supabase
+          .from("whatsapp_messages")
+          .update({ status: "failed" })
+          .eq("id", pendingMessage.id);
+      }
+      
+      throw new Error(`Relay error: ${relayResponse.status} - ${errorText}`);
+    }
+
+    relayResult = await relayResponse.json();
+    relaySent = true;
+    console.log(`[${requestId}] Relay response:`, relayResult);
+  } catch (err) {
+    clearTimeout(timeoutId);
+    
+    if (err instanceof Error && err.name === 'AbortError') {
+      console.error(`[${requestId}] Relay timeout after 10s`);
+      
+      // Update message status to failed
+      if (pendingMessage) {
+        await supabase
+          .from("whatsapp_messages")
+          .update({ status: "failed" })
+          .eq("id", pendingMessage.id);
+      }
+      
+      throw new Error("Relay timeout - bericht mogelijk niet verzonden");
+    }
+    throw err;
+  }
+
+  // Update message status to sent
+  if (pendingMessage) {
+    const { error: updateError } = await supabase
+      .from("whatsapp_messages")
+      .update({ 
+        status: "sent",
+        message_id: relayResult.messageId || relayResult.id || localMessageId,
+      })
+      .eq("id", pendingMessage.id);
+
+    if (updateError) {
+      console.error(`[${requestId}] DB update error (sent status):`, updateError);
+    }
+  }
+
+  console.log(`[${requestId}] ✅ Message sent and stored: ${pendingMessage?.id || localMessageId}`);
+  return { 
+    success: true, 
+    sent: relaySent, 
+    messageId: pendingMessage?.id,
+    localMessageId,
+    providerId: relayResult.messageId || relayResult.id || localMessageId,
+    chatId,
+  };
 }
 
 async function handleContactProfilePicture(
