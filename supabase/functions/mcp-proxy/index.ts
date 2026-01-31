@@ -173,6 +173,9 @@ async function handleUiMode(
         "x-api-key": bridgeApiKey,
       },
       body: JSON.stringify({
+        event: "system.outgoing_message",
+        sessionId: "clawdbot-default",
+        orgId: "550e8400-e29b-41d4-a716-446655440000",
         action: "send_message",
         to: toolArgs.to,
         message: toolArgs.message,
@@ -422,6 +425,9 @@ async function handleSendMessage(
       "x-api-key": bridgeApiKey,
     },
     body: JSON.stringify({
+      event: "system.outgoing_message",
+      sessionId: "clawdbot-default",
+      orgId: "550e8400-e29b-41d4-a716-446655440000",
       action: "send_message",
       to,
       message,
