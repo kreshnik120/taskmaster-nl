@@ -50,8 +50,8 @@ export function WhatsAppChatItem({ chat, isSelected, onClick }: WhatsAppChatItem
       onClick={onClick}
       className={cn(
         "flex items-center gap-3 p-3 cursor-pointer transition-colors border-b border-border/50",
-        "hover:bg-accent/50",
-        isSelected && "bg-accent border-l-2 border-l-primary",
+        "hover:bg-gray-50 dark:hover:bg-slate-800",
+        isSelected && "bg-blue-50 dark:bg-blue-900/30 border-l-2 border-l-primary",
         isMuted && "opacity-60"
       )}
     >
