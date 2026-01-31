@@ -277,6 +277,21 @@ async function handleMessageReceived(
   // 1. Ensure session exists
   const session = await getOrCreateSession(supabase, sessionId, orgId, requestId);
 
+  // Helper function to normalize phone numbers for comparison
+  function normalizePhone(phone: string | null | undefined): string {
+    if (!phone) return '';
+    // Remove + prefix and leading zeros for comparison
+    return phone.replace(/^\+/, '').replace(/^0+/, '');
+  }
+
+  // Determine if this message is from the session owner (self)
+  const normalizedFrom = normalizePhone(from);
+  const normalizedSessionPhone = normalizePhone(session.phone_number);
+  const isFromSelf = !isGroupChat && normalizedFrom && normalizedSessionPhone && 
+                     normalizedFrom === normalizedSessionPhone;
+
+  console.log(`[${requestId}] Message from ${from}, session phone: ${session.phone_number}, isFromSelf: ${isFromSelf}`);
+
   // 2. Get or create contact (different logic for groups vs direct)
   let contact;
   if (isGroupChat) {
@@ -288,7 +303,7 @@ async function handleMessageReceived(
   // 3. Get or create chat
   const chat = await getOrCreateChat(supabase, session.id, orgId, chatJid, contact.id, isGroupChat, requestId);
 
-  // 4. Insert message
+  // 4. Insert message with correct sender_type based on isFromSelf check
   const { data: message, error: messageError } = await supabase
     .from("whatsapp_messages")
     .insert({
@@ -297,10 +312,10 @@ async function handleMessageReceived(
       message_id: messageId,
       message_type: type || "text",
       message_body: effectiveBody,
-      sender_type: "contact",
+      sender_type: isFromSelf ? "self" : "contact",
       sender_phone: from,
       sent_at: new Date(timestamp).toISOString(),
-      status: "received",
+      status: isFromSelf ? "sent" : "received",
     })
     .select("id")
     .single();
@@ -363,17 +378,29 @@ async function handleMessageReceived(
     }
   }
 
-  // 6. Update chat with last message info
-  await supabase
-    .from("whatsapp_chats")
-    .update({
-      last_message_at: new Date(timestamp).toISOString(),
-      last_message_preview: effectiveBody.substring(0, 100) || '📷 Afbeelding',
-      unread_count: chat.unread_count + 1,
-    })
-    .eq("id", chat.id);
+  // 6. Update chat with last message info (only increment unread for messages from others)
+  if (isFromSelf) {
+    // Self-messages: update timestamp and preview only, don't increment unread
+    await supabase
+      .from("whatsapp_chats")
+      .update({
+        last_message_at: new Date(timestamp).toISOString(),
+        last_message_preview: effectiveBody.substring(0, 100) || '📷 Afbeelding',
+      })
+      .eq("id", chat.id);
+  } else {
+    // Contact messages: increment unread count
+    await supabase
+      .from("whatsapp_chats")
+      .update({
+        last_message_at: new Date(timestamp).toISOString(),
+        last_message_preview: effectiveBody.substring(0, 100) || '📷 Afbeelding',
+        unread_count: chat.unread_count + 1,
+      })
+      .eq("id", chat.id);
+  }
 
-  console.log(`[${requestId}] ✅ Message stored: ${message.id}`);
+  console.log(`[${requestId}] ✅ Message stored: ${message.id}, sender_type: ${isFromSelf ? 'self' : 'contact'}`);
 
   return { messageId: message.id, chatId: chat.id, contactId: contact.id };
 }
