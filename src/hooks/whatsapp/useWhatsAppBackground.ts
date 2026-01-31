@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 
-export type BackgroundOption = 'default' | 'solid-light' | 'solid-dark' | 'gradient' | 'pattern';
+export type BackgroundOption = 'default' | 'solid-light' | 'solid-dark' | 'gradient' | 'pattern' | 'mint' | 'blue' | 'peach';
 
 const STORAGE_KEY = 'whatsapp-background';
 const SYNC_EVENT = 'whatsapp-background-change';
@@ -38,9 +38,12 @@ export function useWhatsAppBackground() {
 
 // Background class mappings for use in components
 export const backgroundClasses: Record<BackgroundOption, string> = {
-  'default': 'bg-[#e5ddd5] dark:bg-slate-900',
-  'solid-light': 'bg-gray-100 dark:bg-slate-900',
-  'solid-dark': 'bg-gray-300 dark:bg-slate-800',
-  'gradient': 'bg-gradient-to-b from-gray-100 to-gray-200 dark:from-slate-900 dark:to-slate-800',
-  'pattern': 'bg-[#e5ddd5] dark:bg-slate-900 bg-chat-pattern',
+  'default': 'bg-[#e5ddd5] dark:bg-slate-900 transition-colors duration-300',
+  'solid-light': 'bg-gray-100 dark:bg-slate-900 transition-colors duration-300',
+  'solid-dark': 'bg-gray-300 dark:bg-slate-800 transition-colors duration-300',
+  'gradient': 'bg-gradient-to-b from-gray-100 to-gray-200 dark:from-slate-900 dark:to-slate-800 transition-all duration-300',
+  'pattern': 'bg-[#e5ddd5] dark:bg-slate-900 bg-chat-pattern transition-colors duration-300',
+  'mint': 'bg-emerald-100 dark:bg-emerald-950 transition-colors duration-300',
+  'blue': 'bg-sky-100 dark:bg-sky-950 transition-colors duration-300',
+  'peach': 'bg-orange-100 dark:bg-orange-950 transition-colors duration-300',
 };

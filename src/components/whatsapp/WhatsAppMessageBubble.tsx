@@ -180,7 +180,7 @@ interface DateDividerProps {
 export function DateDivider({ label }: DateDividerProps) {
   return (
     <div className="flex items-center justify-center my-4">
-      <div className="bg-muted/80 text-muted-foreground text-xs px-3 py-1 rounded-full shadow-sm">
+      <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm text-muted-foreground text-xs px-3 py-1 rounded-full shadow-sm">
         {label}
       </div>
     </div>

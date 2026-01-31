@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Check } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -43,14 +44,38 @@ const backgroundOptions: BackgroundOptionConfig[] = [
     lightPreview: '#e5ddd5',
     darkPreview: '#0f172a'
   },
+  { 
+    id: 'mint', 
+    name: 'Mint', 
+    lightPreview: '#d1fae5',
+    darkPreview: '#022c22'
+  },
+  { 
+    id: 'blue', 
+    name: 'Hemelsblauw', 
+    lightPreview: '#e0f2fe',
+    darkPreview: '#082f49'
+  },
+  { 
+    id: 'peach', 
+    name: 'Perzik', 
+    lightPreview: '#ffedd5',
+    darkPreview: '#431407'
+  },
 ];
 
 export function WhatsAppBackgroundPicker() {
   const { background, setBackground } = useWhatsAppBackground();
+  const [open, setOpen] = useState(false);
   const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
 
+  const handleSelect = (option: BackgroundOption) => {
+    setBackground(option);
+    setOpen(false);
+  };
+
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button 
           variant="ghost" 
@@ -61,13 +86,13 @@ export function WhatsAppBackgroundPicker() {
           <Palette className="h-4 w-4" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-52">
+      <PopoverContent align="end" className="w-64">
         <p className="text-sm font-medium mb-3">Achtergrond</p>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           {backgroundOptions.map((option) => (
             <button
               key={option.id}
-              onClick={() => setBackground(option.id)}
+              onClick={() => handleSelect(option.id)}
               className={cn(
                 "w-14 h-14 rounded-lg border-2 transition-all relative overflow-hidden",
                 "hover:scale-105",
