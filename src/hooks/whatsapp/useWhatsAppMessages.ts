@@ -67,7 +67,7 @@ export function useWhatsAppMessages(chatId: string | null): UseWhatsAppMessagesR
     queryFn: async ({ pageParam }) => {
       if (!chatId) return { messages: [], nextCursor: null };
 
-      const offset = pageParam as number;
+const offset = pageParam as number;
       const { data, error } = await supabase
         .from('whatsapp_messages')
         .select(`
@@ -86,7 +86,39 @@ export function useWhatsAppMessages(chatId: string | null): UseWhatsAppMessagesR
 
       if (error) throw error;
 
-      const messages = (data ?? []) as WhatsAppMessage[];
+      // Map database records to WhatsAppMessage type
+      const messages: WhatsAppMessage[] = (data ?? []).map((msg) => ({
+        id: msg.id,
+        org_id: msg.org_id,
+        chat_id: msg.chat_id,
+        message_id: msg.message_id,
+        message_type: msg.message_type as WhatsAppMessage['message_type'],
+        message_body: msg.message_body,
+        sender_type: msg.sender_type as WhatsAppMessage['sender_type'],
+        sender_phone: msg.sender_phone,
+        sent_at: msg.sent_at,
+        status: msg.status as WhatsAppMessage['status'],
+        created_at: msg.created_at,
+        // Nieuwe velden voor groepsberichten en quotes
+        sender_jid: msg.sender_jid,
+        sender_name: msg.sender_name,
+        quoted_message_id: msg.quoted_message_id,
+        quoted_message_preview: msg.quoted_message_preview,
+        // Map media with required fields
+        media: msg.media?.map((m: { id: string; file_name: string; file_type: string; mime_type: string; storage_url: string }) => ({
+          id: m.id,
+          org_id: msg.org_id,
+          message_id: msg.id,
+          file_name: m.file_name,
+          file_type: m.file_type,
+          file_size_bytes: null,
+          mime_type: m.mime_type,
+          storage_bucket: 'whatsapp-media',
+          storage_path: '',
+          storage_url: m.storage_url,
+          created_at: msg.created_at,
+        })),
+      }));
       
       return {
         // Reverse to get chronological order within the page

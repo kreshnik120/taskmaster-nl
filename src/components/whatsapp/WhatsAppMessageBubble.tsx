@@ -3,11 +3,13 @@ import { format, parseISO, differenceInSeconds } from "date-fns";
 import { cn } from "@/lib/utils";
 import { WhatsAppStatusIcon } from "./WhatsAppStatusIcon";
 import { WhatsAppImageLightbox } from "./WhatsAppImageLightbox";
+import { WhatsAppQuoteBox } from "./WhatsAppQuoteBox";
 import { FileText, Download, Loader2 } from "lucide-react";
 import type { WhatsAppMessage, WhatsAppMedia } from "@/types/whatsapp";
 
 interface WhatsAppMessageBubbleProps {
   message: WhatsAppMessage;
+  isGroupChat?: boolean;
 }
 
 function isImageMimeType(mimeType: string): boolean {
@@ -20,7 +22,7 @@ function isDocumentMimeType(mimeType: string): boolean {
          mimeType.startsWith('text/');
 }
 
-export function WhatsAppMessageBubble({ message }: WhatsAppMessageBubbleProps) {
+export function WhatsAppMessageBubble({ message, isGroupChat = false }: WhatsAppMessageBubbleProps) {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const isOutgoing = message.sender_type === 'self' || message.sender_type === 'user';
   const timestamp = format(parseISO(message.sent_at), 'HH:mm');
@@ -38,6 +40,12 @@ export function WhatsAppMessageBubble({ message }: WhatsAppMessageBubbleProps) {
       return () => clearTimeout(timer);
     }
   }, [isNew]);
+
+  // Show sender name for group chats (incoming messages only)
+  const showSenderName = isGroupChat && !isOutgoing && message.sender_name;
+  
+  // Check for quoted message
+  const hasQuote = message.quoted_message_preview;
 
   // Filter media by type
   const hasMedia = message.media && message.media.length > 0;
@@ -70,6 +78,17 @@ export function WhatsAppMessageBubble({ message }: WhatsAppMessageBubbleProps) {
             isNew && !isOutgoing && "animate-message-receive"
           )}
         >
+          {/* Sender name for group chats */}
+          {showSenderName && (
+            <p className="text-xs font-medium text-primary mb-1 truncate">
+              {message.sender_name}
+            </p>
+          )}
+
+          {/* Quote box for replies */}
+          {hasQuote && (
+            <WhatsAppQuoteBox preview={message.quoted_message_preview!} />
+          )}
           {/* Image media */}
           {imageMedia.length > 0 && (
             <div className="mb-2 space-y-2">

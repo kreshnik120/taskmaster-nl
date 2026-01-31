@@ -234,10 +234,12 @@ async function handleMessageReceived(
   media: MediaData | undefined,
   requestId: string
 ): Promise<Record<string, unknown>> {
-  const { 
+const { 
     messageId, chatJid, from, fromName, body, timestamp, type, isGroup, groupName,
     // New ClawdBot format: media fields in data object
-    media_base64, media_filename, mediaType 
+    media_base64, media_filename, mediaType,
+    // Quote/Reply data
+    quotedMessage
   } = data as {
     messageId: string;
     chatJid: string;
@@ -252,7 +254,19 @@ async function handleMessageReceived(
     media_base64?: string;
     media_filename?: string;
     mediaType?: string;
+    // Quote/Reply
+    quotedMessage?: {
+      id?: string;
+      body?: string;
+      from?: string;
+    };
   };
+
+  // Extract quote data for replies
+  const quotedMessageId = quotedMessage?.id || null;
+  const quotedMessagePreview = quotedMessage?.body 
+    ? quotedMessage.body.substring(0, 100) 
+    : null;
 
   // Merge media sources: prefer top-level media object, fallback to inline ClawdBot format
   let effectiveMedia: MediaData | undefined = media;
@@ -333,7 +347,7 @@ async function handleMessageReceived(
   // 5. Insert message with correct sender_type based on isFromSelf check
   const { data: message, error: messageError } = await supabase
     .from("whatsapp_messages")
-    .insert({
+.insert({
       org_id: orgId,
       chat_id: chat.id,
       message_id: messageId,
@@ -343,6 +357,12 @@ async function handleMessageReceived(
       sender_phone: from,
       sent_at: new Date(timestamp).toISOString(),
       status: isFromSelf ? "sent" : "received",
+      // Groepsberichten: sla afzender info op
+      sender_jid: isGroupChat ? from : null,
+      sender_name: isGroupChat ? (fromName || null) : null,
+      // Quote/Reply: sla referentie en preview op
+      quoted_message_id: quotedMessageId,
+      quoted_message_preview: quotedMessagePreview,
     })
     .select("id")
     .single();

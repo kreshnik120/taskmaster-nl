@@ -6749,6 +6749,10 @@ export type Database = {
           message_id: string
           message_type: string | null
           org_id: string
+          quoted_message_id: string | null
+          quoted_message_preview: string | null
+          sender_jid: string | null
+          sender_name: string | null
           sender_phone: string | null
           sender_type: string | null
           sent_at: string
@@ -6762,6 +6766,10 @@ export type Database = {
           message_id: string
           message_type?: string | null
           org_id: string
+          quoted_message_id?: string | null
+          quoted_message_preview?: string | null
+          sender_jid?: string | null
+          sender_name?: string | null
           sender_phone?: string | null
           sender_type?: string | null
           sent_at: string
@@ -6775,6 +6783,10 @@ export type Database = {
           message_id?: string
           message_type?: string | null
           org_id?: string
+          quoted_message_id?: string | null
+          quoted_message_preview?: string | null
+          sender_jid?: string | null
+          sender_name?: string | null
           sender_phone?: string | null
           sender_type?: string | null
           sent_at?: string
