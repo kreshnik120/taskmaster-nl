@@ -66,6 +66,12 @@ export interface WhatsAppMessage {
   status: 'pending' | 'sent' | 'delivered' | 'read' | 'received';
   created_at: string;
   media?: WhatsAppMedia[];
+  // Fase 1: Groepsberichten afzender
+  sender_jid?: string | null;
+  sender_name?: string | null;
+  // Fase 2: Reply/Quote
+  quoted_message_id?: string | null;
+  quoted_message_preview?: string | null;
 }
 
 export interface MessageGroup {

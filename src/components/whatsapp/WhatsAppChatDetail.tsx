@@ -280,7 +280,10 @@ export function WhatsAppChatDetail({ chat, onBack, showBackButton = false, onTog
                 }
                 return (
                   <div className="py-1 w-full">
-                    <WhatsAppMessageBubble message={item.message} />
+                    <WhatsAppMessageBubble 
+                      message={item.message} 
+                      isGroupChat={chat.chat_type === 'group'}
+                    />
                   </div>
                 );
               }}
