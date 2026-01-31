@@ -1,4 +1,5 @@
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useMemo } from "react";
+import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
 import { ArrowLeft, MoreVertical, Copy, Archive, Send, MessageSquare, Loader2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +18,12 @@ import { WhatsAppMessageBubble, DateDivider } from "./WhatsAppMessageBubble";
 import { MessageSkeleton } from "./WhatsAppSkeletonLoader";
 import { useWhatsAppMessages } from "@/hooks/whatsapp/useWhatsAppMessages";
 import { useWhatsAppSendMessage } from "@/hooks/whatsapp/useWhatsAppSendMessage";
-import type { WhatsAppChat } from "@/types/whatsapp";
+import type { WhatsAppChat, WhatsAppMessage } from "@/types/whatsapp";
+
+// Virtual item types for flattened list
+type VirtualItem = 
+  | { type: 'divider'; label: string; key: string }
+  | { type: 'message'; message: WhatsAppMessage; key: string };
 
 interface WhatsAppChatDetailProps {
   chat: WhatsAppChat;
@@ -33,10 +39,22 @@ function formatPhone(phone: string | null | undefined): string {
 
 export function WhatsAppChatDetail({ chat, onBack, showBackButton = false, onToggleProfile, showProfileButton = false }: WhatsAppChatDetailProps) {
   const { messages, groupedByDate, isLoading } = useWhatsAppMessages(chat.id);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
   const [newMessageAnnouncement, setNewMessageAnnouncement] = useState('');
   const [inputText, setInputText] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Flatten grouped messages into a single array with dividers
+  const flattenedItems = useMemo((): VirtualItem[] => {
+    const items: VirtualItem[] = [];
+    groupedByDate.forEach(group => {
+      items.push({ type: 'divider', label: group.label, key: `divider-${group.label}` });
+      group.messages.forEach(msg => {
+        items.push({ type: 'message', message: msg, key: msg.id });
+      });
+    });
+    return items;
+  }, [groupedByDate]);
 
   const displayName = chat.contact?.display_name || formatPhone(chat.contact?.phone_number);
   const phoneNumber = chat.contact?.phone_number;
@@ -70,11 +88,6 @@ export function WhatsAppChatDetail({ chat, onBack, showBackButton = false, onTog
       handleSend();
     }
   };
-
-  // Scroll to bottom when messages change
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
 
   // Announce new messages for screen readers
   useEffect(() => {
@@ -192,28 +205,36 @@ export function WhatsAppChatDetail({ chat, onBack, showBackButton = false, onTog
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-hidden">
         {isLoading ? (
-          <MessageSkeleton />
+          <div className="p-4">
+            <MessageSkeleton />
+          </div>
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <MessageSquare className="h-12 w-12 text-muted-foreground/50 mb-3" />
             <p className="text-muted-foreground">Nog geen berichten</p>
           </div>
         ) : (
-          <div className="space-y-2">
-            {groupedByDate.map((group) => (
-              <div key={group.label}>
-                <DateDivider label={group.label} />
-                <div className="space-y-2">
-                  {group.messages.map((message) => (
-                    <WhatsAppMessageBubble key={message.id} message={message} />
-                  ))}
+          <Virtuoso
+            ref={virtuosoRef}
+            data={flattenedItems}
+            initialTopMostItemIndex={flattenedItems.length - 1}
+            followOutput="smooth"
+            alignToBottom={true}
+            style={{ height: '100%' }}
+            className="px-4"
+            itemContent={(index, item) => {
+              if (item.type === 'divider') {
+                return <DateDivider label={item.label} />;
+              }
+              return (
+                <div className="py-1">
+                  <WhatsAppMessageBubble message={item.message} />
                 </div>
-              </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
+              );
+            }}
+          />
         )}
       </div>
 
