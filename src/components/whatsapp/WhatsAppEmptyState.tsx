@@ -1,4 +1,6 @@
 import { MessageSquare } from "lucide-react";
+import { useWhatsAppBackground, backgroundClasses } from "@/hooks/whatsapp/useWhatsAppBackground";
+import { cn } from "@/lib/utils";
 
 interface WhatsAppEmptyStateProps {
   stats?: {
@@ -9,8 +11,13 @@ interface WhatsAppEmptyStateProps {
 }
 
 export function WhatsAppEmptyState({ stats }: WhatsAppEmptyStateProps) {
+  const { background } = useWhatsAppBackground();
+  
   return (
-    <div className="flex flex-col items-center justify-center h-full bg-muted/30 p-8">
+    <div className={cn(
+      "flex flex-col items-center justify-center h-full p-8",
+      backgroundClasses[background]
+    )}>
       <div className="rounded-full bg-[#25D366]/10 p-8 mb-6">
         <MessageSquare className="h-16 w-16 text-[#25D366]" />
       </div>
