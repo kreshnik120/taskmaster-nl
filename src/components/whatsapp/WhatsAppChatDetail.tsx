@@ -19,9 +19,11 @@ import { WhatsAppMessageBubble, DateDivider } from "./WhatsAppMessageBubble";
 import { MessageSkeleton } from "./WhatsAppSkeletonLoader";
 import { WhatsAppBackgroundPicker } from "./WhatsAppBackgroundPicker";
 import { WhatsAppScrollToBottom } from "./WhatsAppScrollToBottom";
+import { WhatsAppTypingIndicator } from "./WhatsAppTypingIndicator";
 import { useWhatsAppMessages } from "@/hooks/whatsapp/useWhatsAppMessages";
 import { useWhatsAppSendMessage } from "@/hooks/whatsapp/useWhatsAppSendMessage";
 import { useWhatsAppBackground, backgroundClasses } from "@/hooks/whatsapp/useWhatsAppBackground";
+import { useTypingIndicator } from "@/hooks/whatsapp/useTypingIndicator";
 import type { WhatsAppChat, WhatsAppMessage } from "@/types/whatsapp";
 
 // Virtual item types for flattened list
@@ -44,6 +46,7 @@ function formatPhone(phone: string | null | undefined): string {
 export function WhatsAppChatDetail({ chat, onBack, showBackButton = false, onToggleProfile, showProfileButton = false }: WhatsAppChatDetailProps) {
   const { messages, groupedByDate, isLoading, loadMore, hasMore, isLoadingMore } = useWhatsAppMessages(chat.id);
   const { background } = useWhatsAppBackground();
+  const { isContactTyping, typingContactName } = useTypingIndicator(chat.id);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const [newMessageAnnouncement, setNewMessageAnnouncement] = useState('');
   const [inputText, setInputText] = useState('');
@@ -292,6 +295,14 @@ export function WhatsAppChatDetail({ chat, onBack, showBackButton = false, onTog
           </>
         )}
       </div>
+
+      {/* Typing indicator */}
+      {isContactTyping && (
+        <WhatsAppTypingIndicator 
+          contactName={typingContactName || chat.contact?.display_name} 
+          className="border-t bg-background/80 backdrop-blur-sm"
+        />
+      )}
 
       {/* Message input */}
       <div className="p-4 bg-background border-t">

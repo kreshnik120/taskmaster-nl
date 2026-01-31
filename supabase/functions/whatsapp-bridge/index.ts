@@ -189,6 +189,14 @@ Deno.serve(async (req) => {
         result = await handleSyncAllProfilePictures(supabase, sessionId, orgId, requestId);
         break;
 
+      case "message.ack":
+        result = await handleMessageAck(supabase, sessionId, orgId, data, requestId);
+        break;
+
+      case "message.typing":
+        result = await handleTypingEvent(supabase, sessionId, orgId, data, requestId);
+        break;
+
       default:
         return new Response(
           JSON.stringify({ success: false, error: `Unknown event type: ${event}` }),
@@ -1279,4 +1287,122 @@ async function getOrCreateChat(
     throw new Error(`Chat creation failed: ${formatError(error)}`);
   }
   return newChat;
+}
+
+// ============================================================================
+// MESSAGE ACK HANDLER - Read Receipts
+// ============================================================================
+
+async function handleMessageAck(
+  supabase: SupabaseClientAny,
+  sessionId: string,
+  orgId: string,
+  data: Record<string, unknown>,
+  requestId: string
+): Promise<Record<string, unknown>> {
+  const { messageId, ack, chatJid } = data as {
+    messageId: string;
+    ack: number; // 1=sent, 2=delivered, 3=read, 4=played (for audio)
+    chatJid?: string;
+  };
+
+  if (!messageId) {
+    console.log(`[${requestId}] Missing messageId for ack event`);
+    return { updated: false, reason: "missing_messageId" };
+  }
+
+  // Map WhatsApp ack values to our status enum
+  // 1 = sent (message sent to server)
+  // 2 = delivered (message delivered to recipient's device)
+  // 3 = read (message read by recipient)
+  // 4 = played (audio message played)
+  let newStatus: string;
+  switch (ack) {
+    case 1:
+      newStatus = "sent";
+      break;
+    case 2:
+      newStatus = "delivered";
+      break;
+    case 3:
+    case 4:
+      newStatus = "read";
+      break;
+    default:
+      console.log(`[${requestId}] Unknown ack value: ${ack}`);
+      return { updated: false, reason: "unknown_ack" };
+  }
+
+  console.log(`[${requestId}] Updating message status: ${messageId} -> ${newStatus}`);
+
+  // Update the message status in the database
+  const { data: updated, error } = await supabase
+    .from("whatsapp_messages")
+    .update({ status: newStatus })
+    .eq("message_id", messageId)
+    .eq("org_id", orgId)
+    .select("id, status")
+    .single();
+
+  if (error) {
+    // Message might not exist yet or already has higher status
+    console.log(`[${requestId}] Ack update skipped: ${error.message}`);
+    return { updated: false, reason: error.message };
+  }
+
+  console.log(`[${requestId}] ✅ Message ${messageId} status updated to ${newStatus}`);
+  return { updated: true, messageId: updated.id, status: newStatus };
+}
+
+// ============================================================================
+// TYPING EVENT HANDLER
+// ============================================================================
+
+async function handleTypingEvent(
+  supabase: SupabaseClientAny,
+  sessionId: string,
+  orgId: string,
+  data: Record<string, unknown>,
+  requestId: string
+): Promise<Record<string, unknown>> {
+  const { chatJid, from, fromName, isTyping } = data as {
+    chatJid: string;
+    from: string;
+    fromName?: string;
+    isTyping: boolean;
+  };
+
+  if (!chatJid || !from) {
+    console.log(`[${requestId}] Missing chatJid or from for typing event`);
+    return { broadcast: false, reason: "missing_fields" };
+  }
+
+  // Find the chat for this JID
+  const { data: chat } = await supabase
+    .from("whatsapp_chats")
+    .select("id")
+    .eq("chat_jid", chatJid)
+    .eq("org_id", orgId)
+    .single();
+
+  if (!chat) {
+    console.log(`[${requestId}] Chat not found for typing event: ${chatJid}`);
+    return { broadcast: false, reason: "chat_not_found" };
+  }
+
+  // Broadcast typing status via Supabase Realtime
+  // The frontend listens on channel `typing:{chatId}`
+  const channel = supabase.channel(`typing:${chat.id}`);
+  await channel.send({
+    type: "broadcast",
+    event: "typing",
+    payload: {
+      contactName: fromName || from,
+      isTyping: isTyping !== false, // Default to true if not specified
+    },
+  });
+  await supabase.removeChannel(channel);
+
+  console.log(`[${requestId}] ✅ Typing event broadcast for chat ${chat.id}: ${isTyping ? 'typing' : 'stopped'}`);
+  return { broadcast: true, chatId: chat.id };
 }
