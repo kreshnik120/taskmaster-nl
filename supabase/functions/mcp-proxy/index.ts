@@ -159,7 +159,7 @@ async function handleUiMode(
     // Get user's orgs for authorization
     const { data: userOrgs, error: orgsError } = await supabase
       .from("user_organizations")
-      .select("organization_id");
+      .select("org_id");
     
     if (orgsError) {
       console.error("[mcp-proxy] Error fetching user orgs:", orgsError);
@@ -169,7 +169,7 @@ async function handleUiMode(
       );
     }
 
-    const orgIds = userOrgs?.map((uo: { organization_id: string }) => uo.organization_id) || [];
+    const orgIds = userOrgs?.map((uo: { org_id: string }) => uo.org_id) || [];
     
     if (orgIds.length === 0) {
       console.log(`[mcp-proxy] User has no organizations, returning empty chats`);
