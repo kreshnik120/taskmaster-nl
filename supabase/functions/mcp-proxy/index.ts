@@ -173,12 +173,13 @@ async function handleUiMode(
         "x-api-key": bridgeApiKey,
       },
       body: JSON.stringify({
-      event: "message.send",
+        event: "message.send",
         sessionId: "clawdbot-default",
         orgId: "550e8400-e29b-41d4-a716-446655440000",
-        action: "send_message",
-        to: toolArgs.to,
-        message: toolArgs.message,
+        data: {
+          to: toolArgs.to,
+          body: toolArgs.message,
+        }
       }),
     });
 
@@ -428,9 +429,10 @@ async function handleSendMessage(
       event: "message.send",
       sessionId: "clawdbot-default",
       orgId: "550e8400-e29b-41d4-a716-446655440000",
-      action: "send_message",
-      to,
-      message,
+      data: {
+        to,
+        body: message,
+      }
     }),
   });
 
