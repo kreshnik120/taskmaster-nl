@@ -636,88 +636,84 @@ async function handleSendMessage(
   data: Record<string, unknown>,
   requestId: string
 ): Promise<Record<string, unknown>> {
-  const { chatJid, body, chatId } = data as {
-    chatJid: string;
-    body: string;
-    chatId: string;
-  };
+  // Support both formats: mcp-proxy sends 'to' + 'message', legacy uses 'chatJid' + 'body'
+  const to = (data.to as string) || (data.chatJid as string);
+  const body = (data.message as string) || (data.body as string);
+  const chatId = data.chatId as string | undefined;
 
-  if (!chatJid || !body || !chatId) {
-    throw new Error("Missing required data: chatJid, body, chatId");
+  if (!to || !body) {
+    throw new Error("Missing required fields: to/chatJid, message/body");
   }
 
-  console.log(`[${requestId}] Sending message to ${chatJid}`);
+  console.log(`[${requestId}] Sending message via Relay to: ${to}`);
 
-  // Get VPS credentials from secrets
-  const vpsApiKey = Deno.env.get("WHATSAPP_VPS_API_KEY");
-  const vpsSessionId = Deno.env.get("WHATSAPP_VPS_SESSION_ID");
+  // Get new Relay credentials
+  const vpsUrl = Deno.env.get("CLAWDBOT_VPS_URL");
+  const token = Deno.env.get("CLAWDBOT_TOKEN");
 
-  if (!vpsApiKey || !vpsSessionId) {
-    throw new Error("VPS credentials not configured");
+  if (!vpsUrl || !token) {
+    throw new Error("Configuration missing: CLAWDBOT_VPS_URL or CLAWDBOT_TOKEN");
   }
 
-  // Send to VPS
-  const vpsUrl = `http://72.61.155.82:3001/chats/${encodeURIComponent(chatJid)}/messages`;
-  
-  console.log(`[${requestId}] Calling VPS: ${vpsUrl}`);
-  
-  const vpsResponse = await fetch(vpsUrl, {
+  // Call the Relay Service
+  const relayResponse = await fetch(`${vpsUrl}/send`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": vpsApiKey,
+      "Authorization": `Bearer ${token}`,
     },
-    body: JSON.stringify({
-      sessionId: vpsSessionId,
-      text: body,
-    }),
+    body: JSON.stringify({ to, message: body }),
   });
 
-  if (!vpsResponse.ok) {
-    const errorText = await vpsResponse.text();
-    console.error(`[${requestId}] VPS error: ${vpsResponse.status} - ${errorText}`);
-    throw new Error(`VPS error: ${vpsResponse.status}`);
+  if (!relayResponse.ok) {
+    const errorText = await relayResponse.text();
+    console.error(`[${requestId}] Relay error: ${relayResponse.status} - ${errorText}`);
+    throw new Error(`Relay error: ${relayResponse.status} - ${errorText}`);
   }
 
-  const vpsResult = await vpsResponse.json();
-  console.log(`[${requestId}] VPS response:`, vpsResult);
+  const relayResult = await relayResponse.json();
+  console.log(`[${requestId}] Relay response:`, relayResult);
 
-  const messageId = vpsResult.messageId || vpsResult.id || crypto.randomUUID();
+  const messageId = relayResult.messageId || relayResult.id || crypto.randomUUID();
 
-  // Store sent message in database
-  const { data: message, error: messageError } = await supabase
-    .from("whatsapp_messages")
-    .insert({
-      org_id: orgId,
-      chat_id: chatId,
-      message_id: messageId,
-      message_type: "text",
-      message_body: body,
-      sender_type: "self",
-      sender_phone: null,
-      sent_at: new Date().toISOString(),
-      status: "sent",
-    })
-    .select("id")
-    .single();
+  // If chatId provided, store in database
+  if (chatId) {
+    const { data: message, error: messageError } = await supabase
+      .from("whatsapp_messages")
+      .insert({
+        org_id: orgId,
+        chat_id: chatId,
+        message_id: messageId,
+        message_type: "text",
+        message_body: body,
+        sender_type: "self",
+        sender_phone: null,
+        sent_at: new Date().toISOString(),
+        status: "sent",
+      })
+      .select("id")
+      .single();
 
-  if (messageError) {
-    console.error(`[${requestId}] DB insert error:`, messageError);
-    throw messageError;
+    if (messageError) {
+      console.error(`[${requestId}] DB insert error:`, messageError);
+      // Don't throw - message was sent successfully
+    } else {
+      // Update chat with last message info
+      await supabase
+        .from("whatsapp_chats")
+        .update({
+          last_message_at: new Date().toISOString(),
+          last_message_preview: body.substring(0, 100),
+        })
+        .eq("id", chatId);
+
+      console.log(`[${requestId}] ✅ Message sent and stored: ${message.id}`);
+      return { sent: true, messageId: message.id, providerId: messageId };
+    }
   }
 
-  // Update chat with last message info
-  await supabase
-    .from("whatsapp_chats")
-    .update({
-      last_message_at: new Date().toISOString(),
-      last_message_preview: body.substring(0, 100),
-    })
-    .eq("id", chatId);
-
-  console.log(`[${requestId}] ✅ Message sent and stored: ${message.id}`);
-
-  return { messageId: message.id, vpsMessageId: messageId };
+  console.log(`[${requestId}] ✅ Message sent via Relay (no DB storage)`);
+  return { sent: true, providerId: messageId };
 }
 
 async function handleContactProfilePicture(
