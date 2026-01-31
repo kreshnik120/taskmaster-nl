@@ -1,4 +1,5 @@
 import { Search } from "lucide-react";
+import { Virtuoso } from "react-virtuoso";
 import { Input } from "@/components/ui/input";
 import { WhatsAppFilterTabs } from "./WhatsAppFilterTabs";
 import { WhatsAppTagFilter } from "./WhatsAppTagFilter";
@@ -72,7 +73,7 @@ export function WhatsAppChatList({
 
       {/* Chat list */}
       <div 
-        className="flex-1 overflow-y-auto"
+        className="flex-1 overflow-hidden"
         role="listbox"
         aria-label="WhatsApp gesprekken"
         aria-activedescendant={selectedChatId ? `chat-${selectedChatId}` : undefined}
@@ -82,31 +83,34 @@ export function WhatsAppChatList({
         ) : chats.length === 0 ? (
           <ChatListEmptyState searchQuery={searchQuery} />
         ) : (
-          chats.map(chat => (
-            <WhatsAppChatContextMenu
-              key={chat.id}
-              chat={chat}
-            >
-              <div
-                id={`chat-${chat.id}`}
-                role="option"
-                aria-selected={selectedChatId === chat.id}
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onSelectChat(chat.id);
-                  }
-                }}
-              >
-                <WhatsAppChatItem
-                  chat={chat}
-                  isSelected={selectedChatId === chat.id}
-                  onClick={() => onSelectChat(chat.id)}
-                />
-              </div>
-            </WhatsAppChatContextMenu>
-          ))
+          <Virtuoso
+            data={chats}
+            style={{ height: '100%' }}
+            overscan={10}
+            className="scrollbar-thin"
+            itemContent={(index, chat) => (
+              <WhatsAppChatContextMenu chat={chat}>
+                <div
+                  id={`chat-${chat.id}`}
+                  role="option"
+                  aria-selected={selectedChatId === chat.id}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onSelectChat(chat.id);
+                    }
+                  }}
+                >
+                  <WhatsAppChatItem
+                    chat={chat}
+                    isSelected={selectedChatId === chat.id}
+                    onClick={() => onSelectChat(chat.id)}
+                  />
+                </div>
+              </WhatsAppChatContextMenu>
+            )}
+          />
         )}
       </div>
     </div>
