@@ -24,6 +24,7 @@ const VALID_ACTIONS = [
 ];
 
 const MCP_ENDPOINT = "https://mcp.abcito.io/call";
+const WHATSAPP_BRIDGE_URL = "https://oelmsmcgryeoryhonexw.supabase.co/functions/v1/whatsapp-bridge";
 
 Deno.serve(async (req) => {
   // Handle CORS preflight
@@ -151,6 +152,52 @@ async function handleUiMode(
     );
   }
 
+  // Special routing for whatsapp_send_message - direct to whatsapp-bridge
+  if (tool === "whatsapp_send_message") {
+    const bridgeApiKey = Deno.env.get("WHATSAPP_BRIDGE_API_KEY_V2") ?? "";
+    
+    if (!bridgeApiKey) {
+      console.error("[mcp-proxy] WHATSAPP_BRIDGE_API_KEY_V2 not configured");
+      return new Response(
+        JSON.stringify({ error: "Configuration error", message: "WhatsApp Bridge not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`[mcp-proxy] Routing whatsapp_send_message directly to bridge: to=${toolArgs.to}`);
+    
+    const bridgeResponse = await fetch(WHATSAPP_BRIDGE_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": bridgeApiKey,
+      },
+      body: JSON.stringify({
+        action: "send_message",
+        to: toolArgs.to,
+        message: toolArgs.message,
+      }),
+    });
+
+    if (!bridgeResponse.ok) {
+      const errorText = await bridgeResponse.text();
+      console.error(`[mcp-proxy] WhatsApp Bridge error: ${bridgeResponse.status} - ${errorText}`);
+      return new Response(
+        JSON.stringify({ error: "WhatsApp Bridge error", status: bridgeResponse.status, details: errorText }),
+        { status: bridgeResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const bridgeData = await bridgeResponse.json();
+    console.log(`[mcp-proxy] whatsapp_send_message success via bridge`);
+    
+    return new Response(
+      JSON.stringify({ result: bridgeData }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  // Default: forward to MCP server for other tools
   console.log(`[mcp-proxy] Forwarding to MCP: ${tool}`, JSON.stringify(toolArgs));
   
   const mcpResponse = await fetch(MCP_ENDPOINT, {
@@ -358,32 +405,40 @@ async function handleSendMessage(
     );
   }
 
-  // Forward to MCP server for actual WhatsApp delivery
-  const mcpApiKey = Deno.env.get("MCP_API_KEY")!;
-  
-  const mcpResponse = await fetch(MCP_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${mcpApiKey}`,
-    },
-    body: JSON.stringify({ 
-      tool: "whatsapp_send_message", 
-      arguments: { to, message } 
-    }),
-  });
+  // Forward to WhatsApp Bridge for actual delivery (direct route, bypasses MCP server)
+  const bridgeApiKey = Deno.env.get("WHATSAPP_BRIDGE_API_KEY_V2") ?? "";
 
-  if (!mcpResponse.ok) {
-    const errorText = await mcpResponse.text();
-    console.error(`[mcp-proxy] send_message MCP error: ${mcpResponse.status} - ${errorText}`);
+  if (!bridgeApiKey) {
     return new Response(
-      JSON.stringify({ success: false, error: "Send failed", message: errorText }),
-      { status: mcpResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ success: false, error: "Configuration error", message: "WhatsApp Bridge not configured" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 
-  const result = await mcpResponse.json();
-  console.log(`[mcp-proxy] send_message success: to=${to}`);
+  const bridgeResponse = await fetch(WHATSAPP_BRIDGE_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": bridgeApiKey,
+    },
+    body: JSON.stringify({
+      action: "send_message",
+      to,
+      message,
+    }),
+  });
+
+  if (!bridgeResponse.ok) {
+    const errorText = await bridgeResponse.text();
+    console.error(`[mcp-proxy] send_message bridge error: ${bridgeResponse.status} - ${errorText}`);
+    return new Response(
+      JSON.stringify({ success: false, error: "Send failed", message: errorText }),
+      { status: bridgeResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  const result = await bridgeResponse.json();
+  console.log(`[mcp-proxy] send_message success via bridge: to=${to}`);
 
   return new Response(
     JSON.stringify({ success: true, data: result }),
