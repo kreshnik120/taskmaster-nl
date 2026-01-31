@@ -3950,9 +3950,11 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
                     }
                   },
                   priority: { 
-                    type: "string", 
-                    enum: ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
-                    description: "Filter op prioriteit" 
+                    oneOf: [
+                      { type: "string", enum: ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+                      { type: "array", items: { type: "string", enum: ["LOW", "MEDIUM", "HIGH", "CRITICAL"] } }
+                    ],
+                    description: "Filter op prioriteit (enkele waarde of array voor meerdere prioriteiten)" 
                   },
                   on_time: { type: "boolean", description: "Filter op tijdig afgeronde taken" }
                 }
@@ -5166,7 +5168,28 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
                           }
                           
                           if (args.filter?.priority) {
-                            tasksQuery = tasksQuery.eq('priority', args.filter.priority);
+                            // Handle both string and array formats for priority filtering
+                            let priorities: string[];
+                            
+                            if (Array.isArray(args.filter.priority)) {
+                              priorities = args.filter.priority;
+                            } else if (typeof args.filter.priority === 'string') {
+                              // Split comma-separated string into array
+                              priorities = args.filter.priority.split(',').map((p: string) => p.trim().toUpperCase());
+                            } else {
+                              priorities = [];
+                            }
+                            
+                            // Validate priorities against valid enum values
+                            const validPriorities = priorities.filter((p: string) => 
+                              ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].includes(p)
+                            );
+                            
+                            if (validPriorities.length === 1) {
+                              tasksQuery = tasksQuery.eq('priority', validPriorities[0]);
+                            } else if (validPriorities.length > 1) {
+                              tasksQuery = tasksQuery.in('priority', validPriorities);
+                            }
                           }
                           
                           if (args.filter?.date_range) {
