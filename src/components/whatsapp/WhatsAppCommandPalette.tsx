@@ -8,6 +8,7 @@ import {
   CommandGroup,
   CommandItem,
   CommandSeparator,
+  CommandShortcut,
 } from "@/components/ui/command";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -20,10 +21,15 @@ import {
   Building2,
   Briefcase,
   Navigation,
+  Link,
 } from "lucide-react";
 import { useUpdateChatStatus } from "@/hooks/whatsapp/useUpdateChatStatus";
 import type { WhatsAppChat, WhatsAppFilter } from "@/types/whatsapp";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+
+const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+const mod = isMac ? '⌘' : 'Ctrl+';
 
 interface WhatsAppCommandPaletteProps {
   open: boolean;
@@ -207,6 +213,7 @@ export function WhatsAppCommandPalette({
             <span>
               {selectedChat?.is_pinned ? "Losmaken" : "Pin"} huidige chat
             </span>
+            <CommandShortcut>{mod}P</CommandShortcut>
           </CommandItem>
           <CommandItem
             value="mute-chat"
@@ -219,6 +226,7 @@ export function WhatsAppCommandPalette({
               {selectedChat?.is_muted ? "Demping opheffen" : "Mute"} huidige
               chat
             </span>
+            <CommandShortcut>{mod}M</CommandShortcut>
           </CommandItem>
           <CommandItem
             value="archive-chat"
@@ -228,6 +236,19 @@ export function WhatsAppCommandPalette({
           >
             <Archive className="mr-2 h-4 w-4" />
             <span>Archiveer chat</span>
+            <CommandShortcut>{mod}⇧A</CommandShortcut>
+          </CommandItem>
+          <CommandItem
+            value="link-task"
+            onSelect={() => {
+              toast.info("Taakkoppeling komt in een latere fase");
+              onOpenChange(false);
+            }}
+            disabled={!hasSelectedChat}
+            className={cn(!hasSelectedChat && "opacity-50 cursor-not-allowed")}
+          >
+            <Link className="mr-2 h-4 w-4" />
+            <span>Koppel aan taak</span>
           </CommandItem>
         </CommandGroup>
 
