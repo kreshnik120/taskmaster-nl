@@ -114,8 +114,10 @@ export function WhatsAppMessageBubble({ message }: WhatsAppMessageBubbleProps) {
             </div>
           )}
 
-          {/* Message content - filter out "[Media]" placeholder */}
-          {message.message_body && message.message_body !== '[Media]' && (
+          {/* Message content - filter out media placeholders */}
+          {message.message_body && 
+           message.message_body !== '[Media]' && 
+           !message.message_body.startsWith('<media:') && (
             <p className="text-sm text-foreground whitespace-pre-wrap break-words">
               {message.message_body}
             </p>

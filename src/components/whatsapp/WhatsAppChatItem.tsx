@@ -115,7 +115,12 @@ export function WhatsAppChatItem({ chat, isSelected, onClick }: WhatsAppChatItem
               "text-sm truncate",
               hasUnread ? "text-foreground/80" : "text-muted-foreground"
             )}>
-              {chat.last_message_preview || 'Geen berichten'}
+              {(() => {
+                const preview = chat.last_message_preview;
+                if (!preview) return 'Geen berichten';
+                if (preview === '[Media]' || preview.startsWith('<media:')) return '📷 Afbeelding';
+                return preview;
+              })()}
             </span>
           </div>
 
