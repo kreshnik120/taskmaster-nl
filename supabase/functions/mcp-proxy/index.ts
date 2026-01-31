@@ -152,6 +152,90 @@ async function handleUiMode(
     );
   }
 
+  // Special routing for whatsapp_get_chats - serve from local database
+  if (tool === "whatsapp_get_chats") {
+    console.log(`[mcp-proxy] Routing whatsapp_get_chats to local database`);
+    
+    // Get user's orgs for authorization
+    const { data: userOrgs, error: orgsError } = await supabase
+      .from("user_organizations")
+      .select("organization_id");
+    
+    if (orgsError) {
+      console.error("[mcp-proxy] Error fetching user orgs:", orgsError);
+      return new Response(
+        JSON.stringify({ error: "Authorization error", message: "Could not fetch user organizations" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const orgIds = userOrgs?.map((uo: { organization_id: string }) => uo.organization_id) || [];
+    
+    if (orgIds.length === 0) {
+      console.log(`[mcp-proxy] User has no organizations, returning empty chats`);
+      return new Response(
+        JSON.stringify({ result: [] }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Query chats from database using service role for elevated access
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const adminClient = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    const limit = Math.min(Number(toolArgs.limit) || 100, 200);
+    const offset = Number(toolArgs.offset) || 0;
+    const unreadOnly = Boolean(toolArgs.unread_only);
+
+    let query = adminClient
+      .from("whatsapp_chats")
+      .select(`
+        *,
+        contact:whatsapp_contacts!contact_id (
+          id,
+          phone_number,
+          display_name,
+          push_name,
+          profile_picture_url,
+          tags,
+          contact_notes,
+          is_business_account
+        ),
+        linked_professional:professionals!linked_professional_id (
+          id,
+          full_name
+        )
+      `)
+      .in("org_id", orgIds)
+      .is("deleted_at", null)
+      .is("is_archived", false)
+      .order("last_message_at", { ascending: false, nullsFirst: false })
+      .range(offset, offset + limit - 1);
+
+    if (unreadOnly) {
+      query = query.gt("unread_count", 0);
+    }
+
+    const { data: chats, error: chatsError } = await query;
+
+    if (chatsError) {
+      console.error("[mcp-proxy] Error fetching chats from DB:", chatsError);
+      return new Response(
+        JSON.stringify({ error: "Database error", message: chatsError.message }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`[mcp-proxy] whatsapp_get_chats success: ${chats?.length || 0} chats from DB`);
+    
+    return new Response(
+      JSON.stringify({ result: chats || [] }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
   // Special routing for whatsapp_send_message - direct to whatsapp-bridge
   if (tool === "whatsapp_send_message") {
     const bridgeApiKey = Deno.env.get("WHATSAPP_BRIDGE_API_KEY_V2") ?? "";
@@ -164,41 +248,64 @@ async function handleUiMode(
       );
     }
 
-    console.log(`[mcp-proxy] Routing whatsapp_send_message directly to bridge: to=${toolArgs.to}`);
+    // chatId is required for proper DB persistence
+    const chatId = toolArgs.chatId as string | undefined;
     
-    const bridgeResponse = await fetch(WHATSAPP_BRIDGE_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": bridgeApiKey,
-      },
-      body: JSON.stringify({
-        event: "message.send",
-        sessionId: "clawdbot-default",
-        orgId: "550e8400-e29b-41d4-a716-446655440000",
-        data: {
-          to: toolArgs.to,
-          body: toolArgs.message,
-        }
-      }),
-    });
+    console.log(`[mcp-proxy] Routing whatsapp_send_message directly to bridge: to=${toolArgs.to}, chatId=${chatId || 'none'}`);
+    
+    // Use AbortController for timeout (12s)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
 
-    if (!bridgeResponse.ok) {
-      const errorText = await bridgeResponse.text();
-      console.error(`[mcp-proxy] WhatsApp Bridge error: ${bridgeResponse.status} - ${errorText}`);
+    try {
+      const bridgeResponse = await fetch(WHATSAPP_BRIDGE_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": bridgeApiKey,
+        },
+        body: JSON.stringify({
+          event: "message.send",
+          sessionId: "clawdbot-default",
+          orgId: "550e8400-e29b-41d4-a716-446655440000",
+          data: {
+            to: toolArgs.to,
+            body: toolArgs.message,
+            chatId: chatId,
+          }
+        }),
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+
+      if (!bridgeResponse.ok) {
+        const errorText = await bridgeResponse.text();
+        console.error(`[mcp-proxy] WhatsApp Bridge error: ${bridgeResponse.status} - ${errorText}`);
+        return new Response(
+          JSON.stringify({ error: "WhatsApp Bridge error", status: bridgeResponse.status, details: errorText }),
+          { status: bridgeResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const bridgeData = await bridgeResponse.json();
+      console.log(`[mcp-proxy] whatsapp_send_message success via bridge`);
+      
       return new Response(
-        JSON.stringify({ error: "WhatsApp Bridge error", status: bridgeResponse.status, details: errorText }),
-        { status: bridgeResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ result: bridgeData }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.error(`[mcp-proxy] WhatsApp Bridge timeout after 12s`);
+        return new Response(
+          JSON.stringify({ error: "Timeout", message: "WhatsApp relay niet bereikbaar (timeout na 12s)" }),
+          { status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      throw err;
     }
-
-    const bridgeData = await bridgeResponse.json();
-    console.log(`[mcp-proxy] whatsapp_send_message success via bridge`);
-    
-    return new Response(
-      JSON.stringify({ result: bridgeData }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
   }
 
   // Default: forward to MCP server for other tools
