@@ -109,7 +109,7 @@ export function WhatsAppChatDetail({ chat, onBack, showBackButton = false, onTog
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#e5ddd5]">
+    <div className="flex flex-col h-full bg-[#e5ddd5] dark:bg-slate-900">
       {/* Screen reader announcements */}
       <div 
         role="status" 
