@@ -1,62 +1,68 @@
 
 
-## BUG FIX: Berichten positionering na virtualisatie
+## BUG FIX #2: Berichten positionering - sender_type mismatch
 
-### Probleem Analyse
+### Root Cause Analyse
 
-De `WhatsAppMessageBubble` component bevat al de correcte positioneringslogica:
+**Probleem gevonden!** De `WhatsAppMessageBubble` component verwacht `sender_type === 'self'`, maar de database gebruikt `'user'` voor eigen berichten:
 
+| Database waarde | Component verwacht | Resultaat |
+|-----------------|-------------------|-----------|
+| `'contact'` | `'contact'` | ✅ Correct (links) |
+| `'user'` | `'self'` | ❌ **MISMATCH** (wordt links i.p.v. rechts) |
+
+**Code die faalt (regel 25 in WhatsAppMessageBubble.tsx):**
 ```tsx
-// Regel 42-46 in WhatsAppMessageBubble.tsx
-<div className={cn("flex", isOutgoing ? "justify-end" : "justify-start")}>
+const isOutgoing = message.sender_type === 'self';  // 'self' komt nooit voor!
 ```
-
-Het probleem is dat de wrapper div in de Virtuoso `itemContent` geen volledige breedte heeft:
-
-```tsx
-// Huidige code (broken)
-<div className="py-1">
-  <WhatsAppMessageBubble message={item.message} />
-</div>
-```
-
-De flex container in `WhatsAppMessageBubble` werkt alleen correct als de parent element de volledige breedte heeft. Zonder `w-full` of expliciete width neemt de wrapper div alleen de minimale ruimte in.
 
 ---
 
 ### Oplossing
 
-**Bestand:** `src/components/whatsapp/WhatsAppChatDetail.tsx`
+**Bestand:** `src/components/whatsapp/WhatsAppMessageBubble.tsx`
 
-Voeg `w-full` toe aan de wrapper div zodat de flex justify classes correct werken:
+#### Wijziging
+
+Update de isOutgoing check om zowel `'self'` als `'user'` te accepteren:
 
 ```tsx
-itemContent={(index, item) => {
-  if (item.type === 'divider') {
-    return <DateDivider label={item.label} />;
-  }
-  return (
-    <div className="py-1 w-full">  {/* <-- w-full toegevoegd */}
-      <WhatsAppMessageBubble message={item.message} />
-    </div>
-  );
-}}
+// Regel 25: van
+const isOutgoing = message.sender_type === 'self';
+
+// Naar
+const isOutgoing = message.sender_type === 'self' || message.sender_type === 'user';
+```
+
+---
+
+### Alternatieve Aanpak
+
+Optioneel kunnen we ook het type in `src/types/whatsapp.ts` updaten voor documentatie clarity (regel 63):
+
+```tsx
+// Huidige definitie
+sender_type: 'contact' | 'self' | 'user';
+
+// Commentaar toevoegen voor clarity
+sender_type: 'contact' | 'self' | 'user';  // 'user' en 'self' = outgoing berichten
 ```
 
 ---
 
 ### Technische Details
 
-| Aspect | Uitleg |
-|--------|--------|
-| Root cause | Wrapper div had geen expliciete width |
-| Fix | `w-full` zorgt dat flex justify-end werkt |
-| Alternatief | Zou ook kunnen met `flex` maar `w-full` is simpeler |
+| Aspect | Details |
+|--------|---------|
+| Root cause | Code check op `'self'` maar DB bevat `'user'` |
+| Fix | Accept beide waarden als "outgoing" |
+| Impact | Alleen styling, geen data wijzigingen |
 
 ---
 
 ### Resultaat na fix
 
-- Eigen berichten (`sender_type === 'self'`): RECHTS, groen (#dcf8c6)
-- Contact berichten (`sender_type === 'contact'`): LINKS, wit met border
+- `sender_type: 'contact'` → LINKS, witte bubble met border
+- `sender_type: 'user'` → RECHTS, groene bubble (#dcf8c6)
+- `sender_type: 'self'` → RECHTS, groene bubble (backwards compatible)
 
