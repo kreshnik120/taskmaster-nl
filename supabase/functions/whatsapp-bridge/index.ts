@@ -303,7 +303,26 @@ async function handleMessageReceived(
   // 3. Get or create chat
   const chat = await getOrCreateChat(supabase, session.id, orgId, chatJid, contact.id, isGroupChat, requestId);
 
-  // 4. Insert message with correct sender_type based on isFromSelf check
+  // 4. DEDUPLICATION CHECK: Prevent echo messages from being inserted
+  // When a message is sent via the UI, it gets stored with sender_type "user".
+  // WhatsApp then echoes this back, which would create a duplicate with sender_type "contact".
+  // Check if a similar message was recently sent by the user (within 60 seconds).
+  const oneMinuteAgo = new Date(Date.now() - 60000).toISOString();
+  const { data: recentDuplicate } = await supabase
+    .from("whatsapp_messages")
+    .select("id")
+    .eq("chat_id", chat.id)
+    .eq("message_body", effectiveBody)
+    .eq("sender_type", "user")
+    .gte("sent_at", oneMinuteAgo)
+    .limit(1);
+
+  if (recentDuplicate && recentDuplicate.length > 0) {
+    console.log(`[${requestId}] ⚡ Skipping duplicate echo message: "${effectiveBody?.substring(0, 30)}..." (matches recent user message ${recentDuplicate[0].id})`);
+    return { messageId: null, chatId: chat.id, contactId: contact.id, duplicate: true, reason: "echo_dedup" };
+  }
+
+  // 5. Insert message with correct sender_type based on isFromSelf check
   const { data: message, error: messageError } = await supabase
     .from("whatsapp_messages")
     .insert({
