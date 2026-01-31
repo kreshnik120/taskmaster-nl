@@ -1,138 +1,147 @@
 
 
-## MOLTBOT-UX-1.1: Chatlijst Virtualiseren
+## MOLTBOT-UX-1.3: Berichtenlijst Virtualiseren
 
 ### Doel
 
-Vervang de `.map()` rendering in `WhatsAppChatList.tsx` door `react-virtuoso` voor betere performance bij 50+ chats.
+Virtualiseer de berichtenlijst in `WhatsAppChatDetail.tsx` voor betere performance bij 100+ berichten per conversatie.
 
 ---
 
 ### Huidige Situatie
 
-De huidige implementatie (regel 85-109) gebruikt een standaard `.map()` loop:
+De huidige implementatie (regel 194-218) gebruikt geneste `.map()` loops met datum-groepen:
 
 ```tsx
-chats.map(chat => (
-  <WhatsAppChatContextMenu key={chat.id} chat={chat}>
-    <div id={`chat-${chat.id}`} role="option" ...>
-      <WhatsAppChatItem chat={chat} isSelected={...} onClick={...} />
+<div className="flex-1 overflow-y-auto p-4">
+  {groupedByDate.map((group) => (
+    <div key={group.label}>
+      <DateDivider label={group.label} />
+      <div className="space-y-2">
+        {group.messages.map((message) => (
+          <WhatsAppMessageBubble key={message.id} message={message} />
+        ))}
+      </div>
     </div>
-  </WhatsAppChatContextMenu>
-))
+  ))}
+  <div ref={messagesEndRef} />
+</div>
 ```
 
-**Probleem:** Bij 50+ chats worden alle DOM-elementen tegelijk gerenderd, wat leidt tot:
+**Probleem:** Bij 100+ berichten worden alle DOM-elementen tegelijk gerenderd, wat leidt tot:
 - Langzame initiële render
 - Hoge geheugengebruik
-- Trage scroll performance
+- Scroll-lag bij lange conversaties
+
+---
+
+### Uitdaging: Datum Dividers
+
+Virtuoso werkt met een platte array, maar de huidige structuur is genest (groepen met berichten). Ik moet een nieuwe data structuur maken die zowel datum-dividers als berichten bevat in één platte lijst.
+
+**Oplossing:** Een "flattened" array maken met twee typen items:
+
+```typescript
+type VirtualItem = 
+  | { type: 'divider'; label: string }
+  | { type: 'message'; message: WhatsAppMessage };
+```
 
 ---
 
 ### Implementatie
 
-**Bestand:** `src/components/whatsapp/WhatsAppChatList.tsx`
+**Bestand:** `src/components/whatsapp/WhatsAppChatDetail.tsx`
 
 #### Wijzigingen
 
-1. **Import toevoegen:**
-   - Voeg `Virtuoso` toe van `react-virtuoso`
+1. **Imports toevoegen:**
+   - `Virtuoso` en `VirtuosoHandle` van `react-virtuoso`
 
-2. **Vervang de `.map()` loop (regels 85-109):**
-   - Behoud loading state en empty state logica
-   - Gebruik `Virtuoso` met `data` en `itemContent` props
-   - Behoud `WhatsAppChatContextMenu` wrapper
-   - Behoud alle ARIA attributen en keyboard handlers
+2. **Flatten functie toevoegen:**
+   - Converteer `groupedByDate` naar een platte array met dividers en berichten
 
-3. **Container styling aanpassen:**
-   - Verwijder `overflow-y-auto` van parent container (Virtuoso regelt scrolling)
-   - Voeg explicit height styling toe
+3. **Virtuoso implementeren:**
+   - Gebruik `alignToBottom={true}` voor chat-style layout
+   - Gebruik `followOutput="smooth"` voor auto-scroll bij nieuwe berichten
+   - Gebruik `initialTopMostItemIndex` om onderaan te starten
 
-#### Nieuwe Code Structuur
+4. **Container styling aanpassen:**
+   - `overflow-y-auto` → `overflow-hidden`
+   - Padding verplaatsen naar Virtuoso items
 
-```tsx
-import { Virtuoso } from 'react-virtuoso';
+5. **Oude refs verwijderen:**
+   - `messagesEndRef` is niet meer nodig (Virtuoso regelt scroll)
 
-// In de component:
-<div 
-  className="flex-1 overflow-hidden"  // overflow-hidden i.p.v. overflow-y-auto
-  role="listbox"
-  aria-label="WhatsApp gesprekken"
-  aria-activedescendant={selectedChatId ? `chat-${selectedChatId}` : undefined}
->
-  {isLoading ? (
-    <ChatListSkeleton />
-  ) : chats.length === 0 ? (
-    <ChatListEmptyState searchQuery={searchQuery} />
-  ) : (
-    <Virtuoso
-      data={chats}
-      style={{ height: '100%' }}
-      overscan={10}
-      className="scrollbar-thin"
-      itemContent={(index, chat) => (
-        <WhatsAppChatContextMenu chat={chat}>
-          <div
-            id={`chat-${chat.id}`}
-            role="option"
-            aria-selected={selectedChatId === chat.id}
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                onSelectChat(chat.id);
-              }
-            }}
-          >
-            <WhatsAppChatItem
-              chat={chat}
-              isSelected={selectedChatId === chat.id}
-              onClick={() => onSelectChat(chat.id)}
-            />
-          </div>
-        </WhatsAppChatContextMenu>
-      )}
-    />
-  )}
-</div>
+#### Nieuwe Data Structuur
+
+```typescript
+type VirtualItem = 
+  | { type: 'divider'; label: string; key: string }
+  | { type: 'message'; message: WhatsAppMessage; key: string };
+
+// Flatten functie
+const flattenedItems = useMemo(() => {
+  const items: VirtualItem[] = [];
+  groupedByDate.forEach(group => {
+    items.push({ type: 'divider', label: group.label, key: `divider-${group.label}` });
+    group.messages.forEach(msg => {
+      items.push({ type: 'message', message: msg, key: msg.id });
+    });
+  });
+  return items;
+}, [groupedByDate]);
 ```
 
----
+#### Virtuoso Component
 
-### Bestaande Patronen in Project
-
-Het project gebruikt `react-virtuoso` al op twee plaatsen:
-
-| Component | Gebruik | Referentie |
-|-----------|---------|------------|
-| `TaskListVirtualized.tsx` | `TableVirtuoso` voor tabelweergave | Overscan: 5, fixed row height |
-| `ApplicationMatchesTab.tsx` | `Virtuoso` voor kaartweergave | Overscan: 10, dynamic height |
-
-Ik volg het patroon van `ApplicationMatchesTab.tsx` omdat dit het meest lijkt op onze chatlijst (verticale lijst met variabele items).
+```tsx
+<Virtuoso
+  ref={virtuosoRef}
+  data={flattenedItems}
+  initialTopMostItemIndex={flattenedItems.length - 1}
+  followOutput="smooth"
+  alignToBottom={true}
+  style={{ height: '100%' }}
+  className="px-4"
+  itemContent={(index, item) => {
+    if (item.type === 'divider') {
+      return <DateDivider label={item.label} />;
+    }
+    return (
+      <div className="py-1">
+        <WhatsAppMessageBubble message={item.message} />
+      </div>
+    );
+  }}
+/>
+```
 
 ---
 
 ### Technische Details
 
-| Aspect | Waarde |
-|--------|--------|
-| Overscan | 10 items (buffer voor smooth scrolling) |
-| Height | 100% (flex container) |
-| Key prop | Niet nodig - Virtuoso handelt dit intern af |
-| Scroll restoration | Automatisch door Virtuoso |
+| Aspect | Waarde | Reden |
+|--------|--------|-------|
+| `alignToBottom` | `true` | Chat-style layout (nieuwste onderaan) |
+| `followOutput` | `"smooth"` | Smooth scroll bij nieuwe berichten |
+| `initialTopMostItemIndex` | `items.length - 1` | Start onderaan bij openen |
+| Padding | Op items i.p.v. container | Virtuoso beheert eigen scrolling |
 
 ---
 
 ### Behouden Functionaliteit
 
-De volgende functionaliteit blijft volledig intact:
-
-- Context menu (rechtermuisklik)
-- Keyboard navigatie (Enter/Space om te selecteren)
-- Selected state highlighting
-- ARIA attributen voor accessibility
+- DateDividers tussen berichten
+- Screen reader announcements
 - Loading skeleton
-- Empty state bij geen resultaten
+- Empty state
+- Alle WhatsAppMessageBubble props
+
+### Te Verwijderen
+
+- `messagesEndRef` en bijbehorende scroll effect
+- Handmatige scroll-to-bottom logica
 
 ---
 
@@ -140,14 +149,13 @@ De volgende functionaliteit blijft volledig intact:
 
 Na implementatie verifieer:
 
-- [ ] Chats laden correct
-- [ ] Klikken opent detail view
-- [ ] Selected state werkt (blauwe border)
-- [ ] Zoeken werkt (lijst filtert correct)
-- [ ] Filter tabs werken (All/Unread/Linked)
-- [ ] Tag filter werkt
-- [ ] Realtime updates werken (nieuwe berichten verschijnen)
-- [ ] Context menu werkt (rechtsklik)
-- [ ] Keyboard navigatie werkt (Enter/Space)
-- [ ] Scroll performance is smooth bij 50+ chats
+- [ ] Berichten laden correct
+- [ ] Datum dividers tonen correct ("Vandaag", "Gisteren", etc.)
+- [ ] Scroll start onderaan (nieuwste berichten zichtbaar)
+- [ ] Nieuwe berichten verschijnen onderaan met smooth scroll
+- [ ] Omhoog scrollen werkt smooth
+- [ ] Message bubbles tonen correct (eigen vs contact)
+- [ ] Media (afbeeldingen, documenten) tonen correct
+- [ ] Screen reader announcements werken nog
+- [ ] Empty state werkt bij geen berichten
 
