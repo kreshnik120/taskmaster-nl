@@ -9,6 +9,17 @@ interface SendMessageParams {
   orgId: string;
 }
 
+// Match the InfiniteQuery structure from useWhatsAppMessages
+interface PageResult {
+  messages: WhatsAppMessage[];
+  nextCursor: number | null;
+}
+
+interface InfiniteData {
+  pages: PageResult[];
+  pageParams: number[];
+}
+
 export function useWhatsAppSendMessage({ chatId, chatJid, orgId }: SendMessageParams) {
   const queryClient = useQueryClient();
 
@@ -51,8 +62,8 @@ export function useWhatsAppSendMessage({ chatId, chatJid, orgId }: SendMessagePa
       // Cancel any outgoing refetches so they don't overwrite our optimistic update
       await queryClient.cancelQueries({ queryKey: ['whatsapp-messages', chatId] });
 
-      // Snapshot the previous value
-      const previousMessages = queryClient.getQueryData<WhatsAppMessage[]>(['whatsapp-messages', chatId]);
+      // Snapshot the previous value (InfiniteData structure)
+      const previousData = queryClient.getQueryData<InfiniteData>(['whatsapp-messages', chatId]);
 
       // Create optimistic message
       const optimisticMessage: WhatsAppMessage = {
@@ -69,23 +80,44 @@ export function useWhatsAppSendMessage({ chatId, chatJid, orgId }: SendMessagePa
         created_at: new Date().toISOString(),
       };
 
-      // Optimistically update to show the new message
-      queryClient.setQueryData<WhatsAppMessage[]>(['whatsapp-messages', chatId], (old) => {
-        return old ? [...old, optimisticMessage] : [optimisticMessage];
+      // Optimistically update using InfiniteData structure
+      queryClient.setQueryData<InfiniteData>(['whatsapp-messages', chatId], (old) => {
+        if (!old?.pages?.length) {
+          // If no pages exist yet, create initial structure
+          return {
+            pages: [{ messages: [optimisticMessage], nextCursor: null }],
+            pageParams: [0]
+          };
+        }
+        
+        // Add message to the first page (most recent messages)
+        const updatedPages = [...old.pages];
+        updatedPages[0] = {
+          ...updatedPages[0],
+          messages: [...updatedPages[0].messages, optimisticMessage]
+        };
+        
+        return { ...old, pages: updatedPages };
       });
 
       // Return context object with the snapshotted value
-      return { previousMessages, optimisticMessage };
+      return { previousData, optimisticMessage };
     },
     onSuccess: (_result, _text, context) => {
       // Update the optimistic message status to 'sent'
-      queryClient.setQueryData<WhatsAppMessage[]>(['whatsapp-messages', chatId], (old) => {
-        if (!old) return old;
-        return old.map(msg => 
-          msg.id === context?.optimisticMessage.id
-            ? { ...msg, status: 'sent' as const }
-            : msg
-        );
+      queryClient.setQueryData<InfiniteData>(['whatsapp-messages', chatId], (old) => {
+        if (!old?.pages?.length) return old;
+        
+        const updatedPages = old.pages.map(page => ({
+          ...page,
+          messages: page.messages.map(msg => 
+            msg.id === context?.optimisticMessage.id
+              ? { ...msg, status: 'sent' as const }
+              : msg
+          )
+        }));
+        
+        return { ...old, pages: updatedPages };
       });
       
       // Invalidate queries to refresh with real data
@@ -95,9 +127,9 @@ export function useWhatsAppSendMessage({ chatId, chatJid, orgId }: SendMessagePa
     onError: (error: Error, _text, context) => {
       console.error('[useWhatsAppSendMessage] Mutation error:', error);
       
-      // Rollback to previous value or mark message as failed
-      if (context?.previousMessages) {
-        queryClient.setQueryData(['whatsapp-messages', chatId], context.previousMessages);
+      // Rollback to previous value with correct InfiniteData structure
+      if (context?.previousData) {
+        queryClient.setQueryData(['whatsapp-messages', chatId], context.previousData);
       }
       
       toast.error(error.message || 'Kon bericht niet versturen');
