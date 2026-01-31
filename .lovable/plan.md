@@ -1,105 +1,175 @@
 
 
-## Command Palette voor WhatsApp Pagina
+## STAP 2.2: Keyboard Shortcuts
 
-### Overzicht
+### Doel
 
-Implementeer een Command Palette die opent met Cmd+K/Ctrl+K voor snelle navigatie en acties binnen de WhatsApp module.
-
----
-
-### Bestaande Onderdelen (Geen wijzigingen nodig)
-
-| Component | Locatie | Gebruik |
-|-----------|---------|---------|
-| `cmdk` library | package.json | Al geinstalleerd (^1.1.1) |
-| Command components | `src/components/ui/command.tsx` | CommandDialog, CommandInput, CommandGroup, etc. |
-| Chat status hook | `src/hooks/whatsapp/useUpdateChatStatus.ts` | Pin/Mute/Archive acties |
-| Filter types | `src/types/whatsapp.ts` | WhatsAppFilter type |
+Voeg extra keyboard shortcuts toe aan de WhatsApp pagina voor snelle acties zoals zoeken, pinnen, muten en archiveren.
 
 ---
 
-### Nieuw Bestand 1: WhatsAppCommandPalette.tsx
+### Huidige Situatie
 
-**Locatie:** `src/components/whatsapp/WhatsAppCommandPalette.tsx`
+**WhatsApp.tsx:**
+- Heeft al keyboard handling (regels 97-151)
+- `Cmd+K` opent command palette
+- Pijltjes navigeren door chats
+- `Escape` sluit profile/navigeert terug
+- `i` toont/verbergt profile panel
+- `selectedChat` is al beschikbaar via useMemo (regel 66-69)
+- Mist: `useUpdateChatStatus` hook import
 
-**Props Interface:**
-```typescript
-interface WhatsAppCommandPaletteProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  chats: WhatsAppChat[];
-  selectedChatId: string | null;
-  onSelectChat: (chatId: string) => void;
-  onFilterChange: (filter: WhatsAppFilter) => void;
-  currentFilter: WhatsAppFilter;
-}
-```
-
-**Structuur:**
-```text
-CommandDialog (open/onOpenChange)
-├── CommandInput (placeholder="Zoek chats, acties...")
-├── CommandList
-│   ├── CommandEmpty ("Geen resultaten gevonden")
-│   │
-│   ├── CommandGroup heading="Chats"
-│   │   └── [Dynamische lijst van chats]
-│   │       ├── CommandItem: [Avatar] [Naam] [Preview]
-│   │       └── onSelect → navigeer naar chat
-│   │
-│   ├── CommandGroup heading="Acties"
-│   │   ├── CommandItem: "Pin huidige chat" (Pin icon)
-│   │   ├── CommandItem: "Mute huidige chat" (BellOff icon)
-│   │   ├── CommandItem: "Archiveer chat" (Archive icon)
-│   │   └── [Disabled wanneer geen chat geselecteerd]
-│   │
-│   ├── CommandGroup heading="Filters"
-│   │   ├── CommandItem: "Toon alle chats"
-│   │   ├── CommandItem: "Toon ongelezen"
-│   │   ├── CommandItem: "Toon gekoppelde"
-│   │   └── onSelect → setFilter + close palette
-│   │
-│   └── CommandGroup heading="Navigatie"
-│       ├── CommandItem: "Ga naar Professionals" → /professionals
-│       ├── CommandItem: "Ga naar Klanten" → /klanten
-│       └── CommandItem: "Ga naar Plaatsingen" → /plaatsingen
-```
+**WhatsAppChatList.tsx:**
+- Search input op regel 48-54
+- Mist: `data-search-input` attribuut
 
 ---
 
-### Wijziging Bestand 2: WhatsApp.tsx
+### Nieuwe Shortcuts Overzicht
 
-**Toevoegingen:**
+| Shortcut | Actie | Voorwaarde |
+|----------|-------|------------|
+| `Cmd+F` / `Ctrl+F` | Focus zoekveld | Altijd |
+| `Cmd+P` / `Ctrl+P` | Pin/unpin chat | Chat geselecteerd |
+| `Cmd+M` / `Ctrl+M` | Mute/unmute chat | Chat geselecteerd |
+| `Cmd+Shift+A` / `Ctrl+Shift+A` | Archiveer chat | Chat geselecteerd |
 
-1. **State voor palette:**
+---
+
+### Bestand 1: WhatsApp.tsx
+
+**Wijzigingen:**
+
+1. **Importeer useUpdateChatStatus hook:**
    ```typescript
-   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+   import { useUpdateChatStatus } from "@/hooks/whatsapp/useUpdateChatStatus";
    ```
 
-2. **Keyboard shortcut Cmd+K/Ctrl+K:**
+2. **Initialiseer hook in component:**
    ```typescript
-   // Voeg toe aan bestaande handleKeyDown
-   case 'k':
+   const updateStatus = useUpdateChatStatus();
+   ```
+
+3. **Voeg shortcuts toe aan handleKeyDown (binnen switch statement):**
+
+   ```typescript
+   // Na case 'k' en voor de input check, voeg toe:
+   case 'f':
      if (e.metaKey || e.ctrlKey) {
        e.preventDefault();
-       setCommandPaletteOpen(true);
+       const searchInput = document.querySelector('[data-search-input]') as HTMLInputElement;
+       searchInput?.focus();
+     }
+     break;
+   
+   case 'p':
+     if ((e.metaKey || e.ctrlKey) && selectedChatId && selectedChat) {
+       e.preventDefault();
+       updateStatus.mutate({
+         chatId: selectedChatId,
+         field: 'is_pinned',
+         value: !selectedChat.is_pinned,
+       });
+     }
+     break;
+   
+   case 'm':
+     if ((e.metaKey || e.ctrlKey) && selectedChatId && selectedChat) {
+       e.preventDefault();
+       updateStatus.mutate({
+         chatId: selectedChatId,
+         field: 'is_muted',
+         value: !selectedChat.is_muted,
+       });
+     }
+     break;
+   
+   case 'a':
+     if ((e.metaKey || e.ctrlKey) && e.shiftKey && selectedChatId) {
+       e.preventDefault();
+       updateStatus.mutate({
+         chatId: selectedChatId,
+         field: 'is_archived',
+         value: true,
+       });
      }
      break;
    ```
 
-3. **Render component:**
+4. **Update useEffect dependencies:**
    ```typescript
-   <WhatsAppCommandPalette
-     open={commandPaletteOpen}
-     onOpenChange={setCommandPaletteOpen}
-     chats={filteredChats}
-     selectedChatId={selectedChatId}
-     onSelectChat={handleSelectChat}
-     onFilterChange={setFilter}
-     currentFilter={filter}
-   />
+   // Voeg updateStatus toe aan dependency array
+   }, [filteredChats, selectedChatId, selectedChat, handleSelectChat, handleBack, showProfile, toggleProfile, updateStatus]);
    ```
+
+---
+
+### Bestand 2: WhatsAppChatList.tsx
+
+**Wijziging:**
+
+Voeg `data-search-input` attribuut toe aan de Input component (regel 48-54):
+
+```tsx
+<Input
+  placeholder="Zoek in gesprekken..."
+  value={searchQuery}
+  onChange={(e) => onSearchChange(e.target.value)}
+  className="pl-10"
+  aria-label="Zoek in gesprekken"
+  data-search-input  // <-- Toevoegen
+/>
+```
+
+---
+
+### Toast Feedback
+
+De `useUpdateChatStatus` hook heeft al toast feedback ingebouwd:
+
+```typescript
+// In useUpdateChatStatus.ts (regel 26-30)
+const messages: Record<typeof field, string> = {
+  is_pinned: value ? 'Chat gepind' : 'Chat losgemaakt',
+  is_muted: value ? 'Chat gedempt' : 'Demping opgeheven',
+  is_archived: 'Chat gearchiveerd',
+};
+toast.success(messages[field]);
+```
+
+Er zijn geen extra toast implementaties nodig.
+
+---
+
+### Keyboard Flow Diagram
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                    handleKeyDown                             │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌────────────────┐                                         │
+│  │ Cmd+K          │ → Open Command Palette                  │
+│  │ Cmd+F          │ → Focus Search Input                    │
+│  └────────────────┘                                         │
+│         ↓ (works even in inputs)                            │
+│                                                              │
+│  ┌────────────────┐                                         │
+│  │ Input focused? │ → STOP (don't hijack typing)            │
+│  └────────────────┘                                         │
+│         ↓ (not in input)                                    │
+│                                                              │
+│  ┌────────────────┐                                         │
+│  │ Cmd+P          │ → Toggle Pin (if chat selected)         │
+│  │ Cmd+M          │ → Toggle Mute (if chat selected)        │
+│  │ Cmd+Shift+A    │ → Archive (if chat selected)            │
+│  │ Arrow keys     │ → Navigate chats                        │
+│  │ Escape         │ → Close profile / Go back               │
+│  │ i              │ → Toggle profile panel                  │
+│  └────────────────┘                                         │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -107,104 +177,71 @@ CommandDialog (open/onOpenChange)
 
 | Aspect | Implementatie |
 |--------|---------------|
-| Dialog styling | Gebruikt bestaande CommandDialog van shadcn/ui |
-| Keyboard trap | Automatisch door radix-ui Dialog |
-| Escape sluiten | Automatisch door CommandDialog |
-| Zoek filtering | Automatisch door cmdk |
-| Pijltjes navigatie | Automatisch door cmdk |
-| Animatie | Via shadcn Dialog (scale + fade) |
-
----
-
-### Acties Logica
-
-**Chat Acties (in palette):**
-
-```typescript
-const updateStatus = useUpdateChatStatus();
-
-const handlePinCurrentChat = () => {
-  if (!selectedChatId || !selectedChat) return;
-  updateStatus.mutate({
-    chatId: selectedChatId,
-    field: 'is_pinned',
-    value: !selectedChat.is_pinned,
-  });
-  onOpenChange(false);
-};
-```
-
-**Navigatie Acties:**
-
-```typescript
-const navigate = useNavigate();
-
-const navigationItems = [
-  { label: 'Ga naar Professionals', path: '/professionals', icon: Users },
-  { label: 'Ga naar Klanten', path: '/klanten', icon: Building2 },
-  { label: 'Ga naar Plaatsingen', path: '/plaatsingen', icon: Briefcase },
-];
-```
-
----
-
-### Visueel Ontwerp
-
-```text
-┌─────────────────────────────────────────────────┐
-│ 🔍 Zoek chats, acties...                        │
-├─────────────────────────────────────────────────┤
-│                                                 │
-│  CHATS                                          │
-│  ┌─────────────────────────────────────────┐   │
-│  │ 👤 Jan de Vries                         │   │
-│  │    Bedankt voor je bericht...           │   │
-│  └─────────────────────────────────────────┘   │
-│  ┌─────────────────────────────────────────┐   │
-│  │ 👤 Marie Jansen                         │   │
-│  │    Ik bel je morgen terug               │   │
-│  └─────────────────────────────────────────┘   │
-│                                                 │
-│  ACTIES                                         │
-│  📌 Pin huidige chat                            │
-│  🔇 Mute huidige chat                           │
-│  📦 Archiveer chat                              │
-│                                                 │
-│  FILTERS                                        │
-│  📋 Toon alle chats                             │
-│  🔴 Toon ongelezen                              │
-│  🔗 Toon gekoppelde                             │
-│                                                 │
-│  NAVIGATIE                                      │
-│  👥 Ga naar Professionals                       │
-│  🏢 Ga naar Klanten                             │
-│                                                 │
-└─────────────────────────────────────────────────┘
-```
+| Cmd+F positie | Voor input check (werkt altijd) |
+| Cmd+P/M/A positie | Na input check (niet in inputs) |
+| Browser default | `e.preventDefault()` voorkomt Print dialog (Cmd+P) |
+| Toast feedback | Via bestaande useUpdateChatStatus hook |
+| Archiveer | Alleen true (geen toggle, eenrichtingsactie) |
 
 ---
 
 ### Edge Cases
 
-1. **Geen chats geladen:** Toon alleen Acties, Filters, Navigatie groepen
-2. **Geen chat geselecteerd:** Acties items zijn disabled (grayed out)
-3. **Zoekresultaat leeg:** Toon "Geen resultaten gevonden"
-4. **Snelle opeenvolgende Cmd+K:** Debounce niet nodig, Dialog handled dit
+1. **Cmd+P in input veld:** Wordt nu toegestaan omdat het voor de input check staat - maar we willen dit NIET doen. Cmd+P moet na de input check staan zodat je nog gewoon kunt typen.
+
+2. **Cmd+F altijd:** Dit moet WEL voor de input check staan zodat je altijd kunt focussen op zoeken.
+
+3. **Chat niet geladen:** selectedChat kan null zijn bij page refresh - shortcuts negeren dan.
+
+---
+
+### Correcte Volgorde in handleKeyDown
+
+```typescript
+const handleKeyDown = (e: KeyboardEvent) => {
+  // STAP 1: Shortcuts die ALTIJD werken (ook in inputs)
+  if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault();
+    setCommandPaletteOpen(true);
+    return;
+  }
+  
+  if (e.key === 'f' && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault();
+    const searchInput = document.querySelector('[data-search-input]') as HTMLInputElement;
+    searchInput?.focus();
+    return;
+  }
+
+  // STAP 2: Stop als we in een input zitten
+  if (document.activeElement?.tagName === 'INPUT' || 
+      document.activeElement?.tagName === 'TEXTAREA') return;
+
+  // STAP 3: Shortcuts die NIET in inputs werken
+  switch (e.key) {
+    case 'p':
+      if ((e.metaKey || e.ctrlKey) && selectedChatId && selectedChat) { ... }
+      break;
+    case 'm':
+      if ((e.metaKey || e.ctrlKey) && selectedChatId && selectedChat) { ... }
+      break;
+    case 'a':
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && selectedChatId) { ... }
+      break;
+    // ... bestaande cases
+  }
+};
+```
 
 ---
 
 ### Test Checklist
 
-- [ ] Cmd+K (Mac) opent palette
-- [ ] Ctrl+K (Windows) opent palette
-- [ ] Escape sluit palette
-- [ ] Klik buiten modal sluit palette
-- [ ] Zoeken filtert chats correct
-- [ ] Pijltjes navigeren door items
-- [ ] Enter selecteert item
-- [ ] Chat selectie navigeert en sluit palette
-- [ ] Pin/Mute/Archive werkt op huidige chat
-- [ ] Filters wisselen correct
-- [ ] Navigatie items leiden naar juiste pagina
-- [ ] Disabled state voor acties zonder geselecteerde chat
+- [ ] Cmd+F focust zoekveld (ook als andere input focus heeft)
+- [ ] Cmd+P toggled pin status met toast "Chat gepind" / "Chat losgemaakt"
+- [ ] Cmd+M toggled mute status met toast "Chat gedempt" / "Demping opgeheven"
+- [ ] Cmd+Shift+A archiveert chat met toast "Chat gearchiveerd"
+- [ ] Cmd+P werkt NIET als zoekveld focus heeft (voorkomt typen problemen)
+- [ ] Shortcuts Cmd+P/M/A doen niets als geen chat geselecteerd
+- [ ] Cmd+P overschrijft browser print dialog
 
