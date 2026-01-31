@@ -1,109 +1,64 @@
 
-# Plan: Fix Payload Structuur voor WhatsApp Bridge
 
-## Probleem
+# Plan: Fix CLAWDBOT_VPS_URL Secret
 
-De `whatsapp-bridge` verwacht dat `to` en `body` (message) in een `data` object zitten, maar `mcp-proxy` stuurt deze momenteel op het hoogste niveau.
+## Root Cause Analyse
 
-**Error:** `500 - Cannot read properties of undefined (reading 'to')`
+De logs tonen twee verschillende errors in chronologische volgorde:
 
-## Huidige Structuur (Fout)
+| Timestamp | Error | Oorzaak |
+|-----------|-------|---------|
+| 01:07:32 - 01:10:48 | `Cannot read properties of undefined (reading 'to')` | Oude code draaide nog zonder de `data` wrapper fix |
+| 01:11:51 | `Invalid URL: 'CLAWDBOT_VPS_URL=http://72.61.155.82:58438/send'` | Secret bevat key naam als prefix |
 
-```json
-{
-  "event": "message.send",
-  "sessionId": "clawdbot-default",
-  "orgId": "550e8400-e29b-41d4-a716-446655440000",
-  "action": "send_message",
-  "to": "31648005001@s.whatsapp.net",
-  "message": "Test bericht"
-}
+**Bewijs dat de data wrapper fix WERKT:**
+```
+[b2c1396c] Sending message via Relay to: 31648005001@s.whatsapp.net
 ```
 
-## Gewenste Structuur (Correct)
+Dit log-statement bewijst dat `data.to` correct wordt uitgelezen. De nieuwe error komt van de volgende stap: het aanroepen van de Relay URL.
 
-```json
-{
-  "event": "message.send",
-  "sessionId": "clawdbot-default",
-  "orgId": "550e8400-e29b-41d4-a716-446655440000",
-  "data": {
-    "to": "31648005001@s.whatsapp.net",
-    "body": "Test bericht"
-  }
-}
+## Het Probleem
+
+De `CLAWDBOT_VPS_URL` secret is verkeerd opgeslagen. In plaats van:
+```
+http://72.61.155.82:58438
 ```
 
-## Wijzigingen
+Bevat het:
+```
+CLAWDBOT_VPS_URL=http://72.61.155.82:58438
+```
 
-### 1. handleUiMode (Regels 175-182)
-
-**Huidige code:**
+Wanneer de code dit doet:
 ```typescript
-body: JSON.stringify({
-  event: "message.send",
-  sessionId: "clawdbot-default",
-  orgId: "550e8400-e29b-41d4-a716-446655440000",
-  action: "send_message",
-  to: toolArgs.to,
-  message: toolArgs.message,
-}),
+const vpsUrl = Deno.env.get("CLAWDBOT_VPS_URL");
+await fetch(`${vpsUrl}/send`, ...)
 ```
 
-**Nieuwe code:**
-```typescript
-body: JSON.stringify({
-  event: "message.send",
-  sessionId: "clawdbot-default",
-  orgId: "550e8400-e29b-41d4-a716-446655440000",
-  data: {
-    to: toolArgs.to,
-    body: toolArgs.message,
-  }
-}),
+Wordt de URL:
+```
+CLAWDBOT_VPS_URL=http://72.61.155.82:58438/send
 ```
 
-### 2. handleSendMessage (Regels 427-434)
+Dit is geen geldige URL en faalt.
 
-**Huidige code:**
-```typescript
-body: JSON.stringify({
-  event: "message.send",
-  sessionId: "clawdbot-default",
-  orgId: "550e8400-e29b-41d4-a716-446655440000",
-  action: "send_message",
-  to,
-  message,
-}),
-```
+## Oplossing
 
-**Nieuwe code:**
-```typescript
-body: JSON.stringify({
-  event: "message.send",
-  sessionId: "clawdbot-default",
-  orgId: "550e8400-e29b-41d4-a716-446655440000",
-  data: {
-    to,
-    body: message,
-  }
-}),
-```
+De secret `CLAWDBOT_VPS_URL` moet opnieuw worden ingesteld met ALLEEN de waarde:
 
-## Samenvatting
+**Correcte waarde:** `http://72.61.155.82:58438`
 
-| Locatie | Regel | Wijziging |
-|---------|-------|-----------|
-| `handleUiMode` | 175-182 | Wrap `to`/`message` in `data` object, gebruik key `body` |
-| `handleSendMessage` | 427-434 | Wrap `to`/`message` in `data` object, gebruik key `body` |
+## Actie
 
-## Na Implementatie
+1. Verwijder of update de `CLAWDBOT_VPS_URL` secret
+2. Voeg opnieuw toe met de correcte waarde (zonder `CLAWDBOT_VPS_URL=` prefix)
+3. De code hoeft NIET aangepast te worden - de huidige implementatie is correct
 
-De bridge ontvangt nu het correcte formaat en kan `data.to` en `data.body` uitlezen zonder undefined errors.
+## Verificatie Na Fix
 
-## Verificatie
+Na het corrigeren van de secret:
+1. Verstuur een testbericht via WhatsApp
+2. De logs moeten tonen: `Relay response:` met een succesvolle response
+3. Het bericht moet aankomen op de ontvanger
 
-1. Open WhatsApp chat
-2. Stuur een testbericht
-3. Geen 500 error meer
-4. Bericht moet succesvol verstuurd worden via de Relay Service
