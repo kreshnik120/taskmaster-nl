@@ -131,12 +131,45 @@ export default {
           "50%": { transform: "scale(1.2)" },
           "100%": { transform: "scale(1)", opacity: "1" }
         },
+        "message-send": {
+          "0%": { 
+            opacity: "0", 
+            transform: "scale(0.95) translateY(10px)" 
+          },
+          "100%": { 
+            opacity: "1", 
+            transform: "scale(1) translateY(0)" 
+          }
+        },
+        "message-receive": {
+          "0%": { 
+            opacity: "0", 
+            transform: "translateY(20px)" 
+          },
+          "100%": { 
+            opacity: "1", 
+            transform: "translateY(0)" 
+          }
+        },
+        "pulse-once": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.6" }
+        },
+        "badge-pop": {
+          "0%": { transform: "scale(0)" },
+          "50%": { transform: "scale(1.15)" },
+          "100%": { transform: "scale(1)" }
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "complete-slide-up": "complete-slide-up 0.4s ease-out forwards",
         "check-pop": "check-pop 0.3s ease-out",
+        "message-send": "message-send 0.2s ease-out",
+        "message-receive": "message-receive 0.3s ease-out",
+        "pulse-once": "pulse-once 0.5s ease-in-out",
+        "badge-pop": "badge-pop 0.3s ease-out",
       },
     },
   },

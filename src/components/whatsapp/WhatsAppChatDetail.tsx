@@ -267,7 +267,7 @@ export function WhatsAppChatDetail({ chat, onBack, showBackButton = false, onTog
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={sendMessage.isPending}
-            className="flex-1"
+            className="flex-1 transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary"
             aria-label="Typ een bericht"
           />
           <Button 
