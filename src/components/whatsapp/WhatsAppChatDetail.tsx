@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useMemo } from "react";
+import { useRef, useEffect, useState, useMemo, useCallback } from "react";
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
 import { ArrowLeft, MoreVertical, Copy, Archive, Send, MessageSquare, Loader2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import { WhatsAppLinkedBanner } from "./WhatsAppLinkedBanner";
 import { WhatsAppMessageBubble, DateDivider } from "./WhatsAppMessageBubble";
 import { MessageSkeleton } from "./WhatsAppSkeletonLoader";
 import { WhatsAppBackgroundPicker } from "./WhatsAppBackgroundPicker";
+import { WhatsAppScrollToBottom } from "./WhatsAppScrollToBottom";
 import { useWhatsAppMessages } from "@/hooks/whatsapp/useWhatsAppMessages";
 import { useWhatsAppSendMessage } from "@/hooks/whatsapp/useWhatsAppSendMessage";
 import { useWhatsAppBackground, backgroundClasses } from "@/hooks/whatsapp/useWhatsAppBackground";
@@ -46,6 +47,7 @@ export function WhatsAppChatDetail({ chat, onBack, showBackButton = false, onTog
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const [newMessageAnnouncement, setNewMessageAnnouncement] = useState('');
   const [inputText, setInputText] = useState('');
+  const [showScrollButton, setShowScrollButton] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Flatten grouped messages into a single array with dividers
@@ -112,6 +114,20 @@ export function WhatsAppChatDetail({ chat, onBack, showBackButton = false, onTog
     }
   };
 
+  // Scroll to bottom handler
+  const scrollToBottom = useCallback(() => {
+    virtuosoRef.current?.scrollToIndex({
+      index: flattenedItems.length - 1,
+      behavior: 'smooth',
+      align: 'end'
+    });
+  }, [flattenedItems.length]);
+
+  // Handle scroll state changes from Virtuoso
+  const handleScrollStateChange = useCallback((atBottom: boolean) => {
+    setShowScrollButton(!atBottom);
+  }, []);
+
   return (
     <div className={cn("flex flex-col h-full", backgroundClasses[background])}>
       {/* Screen reader announcements */}
@@ -145,7 +161,9 @@ export function WhatsAppChatDetail({ chat, onBack, showBackButton = false, onTog
           displayName={chat.contact?.display_name}
           pushName={chat.contact?.push_name}
           phoneNumber={chat.contact?.phone_number || 'Onbekend'}
+          lastActiveAt={chat.last_message_at}
           size="md"
+          showOnlineStatus={true}
         />
         
         <div className="flex-1 min-w-0">
@@ -212,7 +230,7 @@ export function WhatsAppChatDetail({ chat, onBack, showBackButton = false, onTog
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden relative">
         {isLoading ? (
           <div className="p-4">
             <MessageSkeleton />
@@ -223,44 +241,55 @@ export function WhatsAppChatDetail({ chat, onBack, showBackButton = false, onTog
             <p className="text-muted-foreground">Nog geen berichten</p>
           </div>
         ) : (
-          <Virtuoso
-            ref={virtuosoRef}
-            data={flattenedItems}
-            firstItemIndex={Math.max(0, 10000 - flattenedItems.length)}
-            initialTopMostItemIndex={flattenedItems.length - 1}
-            followOutput="smooth"
-            alignToBottom={true}
-            style={{ height: '100%' }}
-            className="px-4"
-            startReached={() => {
-              if (hasMore && !isLoadingMore) {
-                loadMore();
-              }
-            }}
-            components={{
-              Header: () => hasMore ? (
-                <div className="flex justify-center py-4">
-                  {isLoadingMore ? (
-                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                  ) : (
-                    <span className="text-sm text-muted-foreground">
-                      Scroll omhoog voor meer berichten
-                    </span>
-                  )}
-                </div>
-              ) : null
-            }}
-            itemContent={(index, item) => {
-              if (item.type === 'divider') {
-                return <DateDivider label={item.label} />;
-              }
-              return (
-                <div className="py-1 w-full">
-                  <WhatsAppMessageBubble message={item.message} />
-                </div>
-              );
-            }}
-          />
+          <>
+            <Virtuoso
+              ref={virtuosoRef}
+              data={flattenedItems}
+              firstItemIndex={Math.max(0, 10000 - flattenedItems.length)}
+              initialTopMostItemIndex={flattenedItems.length - 1}
+              followOutput="smooth"
+              alignToBottom={true}
+              atBottomStateChange={handleScrollStateChange}
+              atBottomThreshold={100}
+              style={{ height: '100%' }}
+              className="px-4"
+              startReached={() => {
+                if (hasMore && !isLoadingMore) {
+                  loadMore();
+                }
+              }}
+              components={{
+                Header: () => hasMore ? (
+                  <div className="flex justify-center py-4">
+                    {isLoadingMore ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    ) : (
+                      <span className="text-sm text-muted-foreground">
+                        Scroll omhoog voor meer berichten
+                      </span>
+                    )}
+                  </div>
+                ) : null
+              }}
+              itemContent={(index, item) => {
+                if (item.type === 'divider') {
+                  return <DateDivider label={item.label} />;
+                }
+                return (
+                  <div className="py-1 w-full">
+                    <WhatsAppMessageBubble message={item.message} />
+                  </div>
+                );
+              }}
+            />
+            
+            {/* Scroll to bottom FAB */}
+            <WhatsAppScrollToBottom
+              visible={showScrollButton}
+              unreadCount={chat.unread_count}
+              onClick={scrollToBottom}
+            />
+          </>
         )}
       </div>
 

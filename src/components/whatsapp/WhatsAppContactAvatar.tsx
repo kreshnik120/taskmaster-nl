@@ -10,10 +10,21 @@ interface WhatsAppContactAvatarProps {
   displayName?: string | null;
   pushName?: string | null;
   phoneNumber: string;
+  lastActiveAt?: string | null;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   showOnlineStatus?: boolean;
   isGroup?: boolean;
   className?: string;
+}
+
+// Online threshold: 5 minutes
+const ONLINE_THRESHOLD_MS = 5 * 60 * 1000;
+
+function isOnline(lastActiveAt: string | null | undefined): boolean {
+  if (!lastActiveAt) return false;
+  const lastActive = new Date(lastActiveAt).getTime();
+  const now = Date.now();
+  return (now - lastActive) < ONLINE_THRESHOLD_MS;
 }
 
 const SIZE_MAP = {
@@ -61,15 +72,25 @@ function hashToColor(str: string): typeof AVATAR_COLORS[number] {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
+const ONLINE_DOT_SIZE = {
+  sm: 'h-2 w-2 border',
+  md: 'h-2.5 w-2.5 border-[1.5px]',
+  lg: 'h-3 w-3 border-2',
+  xl: 'h-4 w-4 border-2',
+} as const;
+
 export function WhatsAppContactAvatar({
   profilePictureUrl,
   displayName,
   pushName,
   phoneNumber,
+  lastActiveAt,
   size = 'md',
+  showOnlineStatus = false,
   isGroup = false,
   className,
 }: WhatsAppContactAvatarProps) {
+  const online = showOnlineStatus && !isGroup && isOnline(lastActiveAt);
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
 
@@ -80,37 +101,50 @@ export function WhatsAppContactAvatar({
   const showImage = profilePictureUrl && !imageError;
 
   return (
-    <Avatar className={cn(sizeClasses, "border-2 border-border flex-shrink-0 relative", className)}>
-      {showImage ? (
-        <>
-          {imageLoading && (
-            <Skeleton className="absolute inset-0 rounded-full" />
-          )}
-          <AvatarImage
-            src={profilePictureUrl}
-            alt={displayName || pushName || phoneNumber}
-            onLoad={() => setImageLoading(false)}
-            onError={() => setImageError(true)}
-            className={cn(
-              "transition-opacity duration-200",
-              imageLoading && "opacity-0"
+    <div className="relative flex-shrink-0">
+      <Avatar className={cn(sizeClasses, "border-2 border-border", className)}>
+        {showImage ? (
+          <>
+            {imageLoading && (
+              <Skeleton className="absolute inset-0 rounded-full" />
             )}
-          />
-        </>
-      ) : isGroup ? (
-        <AvatarFallback className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">
-          <Users className={cn(
-            size === 'sm' && "h-4 w-4",
-            size === 'md' && "h-5 w-5",
-            size === 'lg' && "h-7 w-7",
-            size === 'xl' && "h-10 w-10"
-          )} />
-        </AvatarFallback>
-      ) : (
-        <AvatarFallback className={cn(colorScheme.bg, colorScheme.text, "font-medium")}>
-          {initials}
-        </AvatarFallback>
+            <AvatarImage
+              src={profilePictureUrl}
+              alt={displayName || pushName || phoneNumber}
+              onLoad={() => setImageLoading(false)}
+              onError={() => setImageError(true)}
+              className={cn(
+                "transition-opacity duration-200",
+                imageLoading && "opacity-0"
+              )}
+            />
+          </>
+        ) : isGroup ? (
+          <AvatarFallback className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">
+            <Users className={cn(
+              size === 'sm' && "h-4 w-4",
+              size === 'md' && "h-5 w-5",
+              size === 'lg' && "h-7 w-7",
+              size === 'xl' && "h-10 w-10"
+            )} />
+          </AvatarFallback>
+        ) : (
+          <AvatarFallback className={cn(colorScheme.bg, colorScheme.text, "font-medium")}>
+            {initials}
+          </AvatarFallback>
+        )}
+      </Avatar>
+      
+      {/* Online status indicator */}
+      {online && (
+        <span 
+          className={cn(
+            "absolute bottom-0 right-0 rounded-full bg-[#25D366] border-background",
+            ONLINE_DOT_SIZE[size]
+          )}
+          aria-label="Online"
+        />
       )}
-    </Avatar>
+    </div>
   );
 }
