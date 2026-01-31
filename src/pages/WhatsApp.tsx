@@ -8,6 +8,7 @@ import { WhatsAppContactProfile } from "@/components/whatsapp/WhatsAppContactPro
 import { WhatsAppConnectionStatus } from "@/components/whatsapp/WhatsAppConnectionStatus";
 import { WhatsAppErrorBoundary } from "@/components/whatsapp/WhatsAppErrorBoundary";
 import { WhatsAppCommandPalette } from "@/components/whatsapp/WhatsAppCommandPalette";
+import { WhatsAppKeyboardHelp } from "@/components/whatsapp/WhatsAppKeyboardHelp";
 import { useWhatsAppChats } from "@/hooks/whatsapp/useWhatsAppChats";
 import { useWhatsAppRealtimeStatus } from "@/hooks/whatsapp/useWhatsAppRealtimeStatus";
 import { useUpdateChatStatus } from "@/hooks/whatsapp/useUpdateChatStatus";
@@ -33,6 +34,7 @@ export default function WhatsApp() {
 
   // Command palette state
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [keyboardHelpOpen, setKeyboardHelpOpen] = useState(false);
 
   const {
     filteredChats,
@@ -188,6 +190,11 @@ export default function WhatsApp() {
             toggleProfile();
           }
           break;
+        case '?':
+          // Show keyboard help overlay
+          e.preventDefault();
+          setKeyboardHelpOpen(true);
+          break;
       }
     };
 
@@ -285,6 +292,12 @@ export default function WhatsApp() {
         onSelectChat={handleSelectChat}
         onFilterChange={setFilter}
         currentFilter={filter}
+      />
+
+      {/* Keyboard Help Overlay */}
+      <WhatsAppKeyboardHelp
+        open={keyboardHelpOpen}
+        onOpenChange={setKeyboardHelpOpen}
       />
       </div>
     </WhatsAppErrorBoundary>
