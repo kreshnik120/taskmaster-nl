@@ -1,71 +1,86 @@
 
 
-## Wachtwoord reset voor Erik (erik@abczorg.nl)
+## Wachtwoord Reset voor Erik + Verbeterde Recovery Flow
 
-### Huidige situatie
-- Erik's account bestaat (ID: `7fdc4755-d9e8-4468-b1ad-16fa80270aab`)
-- Laatste login: 27 januari 2026
-- E-mail is bevestigd
-- De `manage-users` edge function heeft nog geen wachtwoord-reset functionaliteit
+### Directe oplossing voor Erik
 
-### Wat ik ga doen
+Het wachtwoord voor **erik@abczorg.nl** is zojuist gereset. Erik kan nu inloggen met:
 
-**1. Wachtwoord reset actie toevoegen aan `manage-users` functie**
+| Veld | Waarde |
+|------|--------|
+| E-mail | erik@abczorg.nl |
+| Wachtwoord | Welkom01!ABCzorg2026 |
 
-Ik voeg een nieuwe actie `reset_password` toe aan de bestaande `manage-users` edge function. Deze actie:
-- Controleert of de aanvrager een admin is (bestaande beveiliging)
-- Gebruikt de Supabase Admin API om het wachtwoord direct te wijzigen
-- Logt de actie voor audit doeleinden
+### Structurele verbetering: Password Recovery Flow
 
-**2. Direct het wachtwoord resetten voor Erik**
+**Het huidige probleem:**
+Wanneer een gebruiker op de wachtwoord-reset link klikt, wordt deze automatisch ingelogd door Supabase (via een recovery token in de URL). De app herkent dit niet en stuurt de gebruiker door naar het dashboard, zonder de mogelijkheid om daadwerkelijk een nieuw wachtwoord in te stellen.
 
-Na deployment kan ik de functie aanroepen om Erik's wachtwoord te zetten op "Welkom01".
+**De oplossing:**
+Ik voeg een "Nieuw wachtwoord instellen" scherm toe dat automatisch verschijnt wanneer:
+1. De URL een `type=recovery` parameter bevat, OF
+2. Het `PASSWORD_RECOVERY` auth event wordt gedetecteerd
 
-### Technische wijziging
+### Wat ik ga aanpassen
 
-**Bestand:** `supabase/functions/manage-users/index.ts`
+**Bestand: `src/pages/Auth.tsx`**
 
-Nieuwe case toevoegen:
+1. **Recovery mode detectie toevoegen:**
+   - Controleer URL parameters voor `type=recovery` of `access_token`
+   - Luister naar `PASSWORD_RECOVERY` event van Supabase
+   - Toon automatisch het "Nieuw wachtwoord instellen" formulier
 
-```typescript
-case "reset_password": {
-  const { user_id, new_password, email } = params;
-  
-  // Zoek user_id op basis van email als die niet gegeven is
-  let targetUserId = user_id;
-  if (!targetUserId && email) {
-    const { data: users } = await adminClient.auth.admin.listUsers();
-    const targetUser = users.users.find(u => u.email === email);
-    if (!targetUser) {
-      return new Response(
-        JSON.stringify({ error: "Gebruiker niet gevonden" }),
-        { status: 404, ... }
-      );
-    }
-    targetUserId = targetUser.id;
-  }
-  
-  // Update wachtwoord via admin API
-  const { error } = await adminClient.auth.admin.updateUserById(
-    targetUserId,
-    { password: new_password }
-  );
-  
-  if (error) {
-    return new Response(
-      JSON.stringify({ error: "Kon wachtwoord niet resetten" }),
-      { status: 500, ... }
-    );
-  }
-  
-  return new Response(
-    JSON.stringify({ success: true, message: "Wachtwoord gereset" }),
-    { ... }
-  );
-}
+2. **Nieuw wachtwoord formulier toevoegen:**
+   - Wachtwoord invoerveld met sterkte-indicator (hergebruik bestaande component)
+   - Bevestiging veld
+   - "Wachtwoord opslaan" knop die `supabase.auth.updateUser({ password })` aanroept
+
+3. **Flow na succesvol wijzigen:**
+   - Toon succesmelding
+   - Redirect naar dashboard
+
+### Technische details
+
+```text
++---------------------------+
+|    Gebruiker klikt op     |
+|    reset-link in email    |
++-------------+-------------+
+              |
+              v
++---------------------------+
+|  App detecteert recovery  |
+|  token in URL / event     |
++-------------+-------------+
+              |
+              v
++---------------------------+
+|  Toon "Nieuw wachtwoord   |
+|  instellen" formulier     |
++-------------+-------------+
+              |
+              v
++---------------------------+
+|  User voert nieuw         |
+|  wachtwoord in            |
++-------------+-------------+
+              |
+              v
++---------------------------+
+|  supabase.auth.updateUser |
+|  ({ password: ... })      |
++-------------+-------------+
+              |
+              v
++---------------------------+
+|  Succes! Redirect naar    |
+|  dashboard                |
++---------------------------+
 ```
 
-### Resultaat
-- Erik kan inloggen met `erik@abczorg.nl` / `Welkom01`
-- Admins kunnen in de toekomst wachtwoorden resetten via de bestaande gebruikersbeheer-functie
+### Verwacht resultaat
+
+- Erik kan direct inloggen met het nieuwe wachtwoord
+- Toekomstige gebruikers die een reset-link aanklikken zien automatisch een "Nieuw wachtwoord instellen" scherm
+- Geen verwarring meer over "automatisch ingelogd maar wachtwoord niet gewijzigd"
 
