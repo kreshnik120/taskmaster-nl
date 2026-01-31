@@ -133,7 +133,7 @@ export function useWhatsAppMessages(chatId: string | null): UseWhatsAppMessagesR
       });
   }, [chatId, queryClient]);
 
-  // Realtime subscription for new messages
+  // Realtime subscription for new messages AND status updates
   useEffect(() => {
     if (!chatId) return;
 
@@ -216,6 +216,37 @@ export function useWhatsAppMessages(chatId: string | null): UseWhatsAppMessagesR
             };
           }
         );
+      })
+      // Listen for status updates (read receipts)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'whatsapp_messages',
+        filter: `chat_id=eq.${chatId}`,
+      }, (payload) => {
+        const updatedMessage = payload.new as WhatsAppMessage;
+        
+        // Update message status in cache
+        queryClient.setQueryData<{ pages: PageResult[]; pageParams: number[] }>(
+          ['whatsapp-messages', chatId],
+          (old) => {
+            if (!old) return old;
+            
+            const updatedPages = old.pages.map(page => ({
+              ...page,
+              messages: page.messages.map(msg => {
+                if (msg.id === updatedMessage.id) {
+                  return { ...msg, status: updatedMessage.status };
+                }
+                return msg;
+              })
+            }));
+            
+            return { ...old, pages: updatedPages };
+          }
+        );
+        
+        console.log('[useWhatsAppMessages] Message status updated:', updatedMessage.id, '->', updatedMessage.status);
       })
       .subscribe();
 
