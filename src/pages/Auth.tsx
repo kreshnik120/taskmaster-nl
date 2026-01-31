@@ -124,6 +124,7 @@ const Auth = () => {
   
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [resetMode, setResetMode] = useState(false);
@@ -139,6 +140,9 @@ const Auth = () => {
   } | null>(null);
   const [forceLoginAttempt, setForceLoginAttempt] = useState(false);
   
+  // Password recovery flow state
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  
   // Invite flow state
   const [inviteData, setInviteData] = useState<InvitationData | null>(null);
   const [inviteLoading, setInviteLoading] = useState(false);
@@ -147,6 +151,32 @@ const Auth = () => {
   const navigate = useNavigate();
   const healthCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
+  
+  // Detect password recovery from URL hash (Supabase uses hash-based tokens)
+  useEffect(() => {
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const type = hashParams.get('type');
+    const accessToken = hashParams.get('access_token');
+    
+    if (type === 'recovery' && accessToken) {
+      log.log('[Recovery] Detected recovery token in URL');
+      setRecoveryMode(true);
+    }
+  }, []);
+  
+  // Listen for PASSWORD_RECOVERY auth event
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      log.log('[Auth] Event:', event);
+      
+      if (event === 'PASSWORD_RECOVERY') {
+        log.log('[Recovery] PASSWORD_RECOVERY event detected');
+        setRecoveryMode(true);
+      }
+    });
+    
+    return () => subscription.unsubscribe();
+  }, []);
 
   // Validate invite token on mount
   useEffect(() => {
@@ -461,6 +491,66 @@ const Auth = () => {
       setLoading(false);
     }
   };
+  
+  // Handle setting new password after recovery link click
+  const handleSetNewPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validate password match
+    if (password !== confirmPassword) {
+      toast.error('Wachtwoorden komen niet overeen');
+      return;
+    }
+    
+    // Validate password strength
+    const validation = passwordSchema.safeParse(password);
+    if (!validation.success) {
+      const errors = validation.error.errors.map(e => e.message);
+      setPasswordErrors(errors);
+      toast.error('Wachtwoord voldoet niet aan de vereisten');
+      return;
+    }
+    
+    // Block common passwords
+    const commonPasswords = [
+      'password', '123456', 'qwerty', 'admin123', 'welkom01', 
+      'welkom123', 'zorg123', 'abczorg', 'citozott', 'wachtwoord',
+      'password123', '12345678', '123456789', 'qwerty123', 'abc123',
+    ];
+    
+    if (commonPasswords.includes(password.toLowerCase())) {
+      setPasswordErrors(['Dit wachtwoord is te voorspelbaar']);
+      toast.error('Kies een uniek wachtwoord');
+      return;
+    }
+    
+    setLoading(true);
+    
+    try {
+      const { error } = await withTimeout(
+        supabase.auth.updateUser({ password }),
+        8000,
+      );
+      
+      if (error) throw error;
+      
+      toast.success('Wachtwoord succesvol gewijzigd! Je wordt doorgestuurd...');
+      
+      // Clear hash from URL
+      window.history.replaceState(null, '', window.location.pathname);
+      
+      // Small delay before redirect for user feedback
+      setTimeout(() => {
+        navigate('/');
+      }, 1500);
+      
+    } catch (error: any) {
+      log.error('[Recovery] Failed to set new password', error);
+      toast.error(translateAuthError(error));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleOAuthLogin = async (provider: 'github' | 'google') => {
     try {
@@ -485,6 +575,162 @@ const Auth = () => {
       setLoading(false);
     }
   };
+  
+  // Render password recovery form (new password after clicking reset link)
+  if (recoveryMode) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-accent/10 p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="flex items-center justify-center mb-4">
+              <ShieldCheck className="h-12 w-12 text-primary" />
+            </div>
+            <CardTitle className="text-2xl">Nieuw Wachtwoord Instellen</CardTitle>
+            <CardDescription>
+              Kies een sterk nieuw wachtwoord voor je account
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSetNewPassword} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="new-password">Nieuw wachtwoord</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => {
+                    const pwd = e.target.value;
+                    setPassword(pwd);
+                    setPasswordStrength(calculatePasswordStrength(pwd));
+                    
+                    const validation = passwordSchema.safeParse(pwd);
+                    if (validation.success) {
+                      setPasswordErrors([]);
+                    }
+                  }}
+                  required
+                  minLength={12}
+                  placeholder="Minimaal 12 tekens"
+                />
+                
+                {/* Password Strength Meter */}
+                {password && (
+                  <div className="space-y-3 mt-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Wachtwoord sterkte</span>
+                        <span className={
+                          passwordStrength === 100 ? "text-green-600 font-medium" :
+                          passwordStrength >= 60 ? "text-amber-600 font-medium" :
+                          "text-red-600 font-medium"
+                        }>
+                          {passwordStrength === 100 ? "Sterk" :
+                           passwordStrength >= 60 ? "Gemiddeld" :
+                           "Zwak"}
+                        </span>
+                      </div>
+                      <Progress 
+                        value={passwordStrength} 
+                        className="h-2"
+                      />
+                    </div>
+                    
+                    {/* Requirements Checklist */}
+                    <div className="space-y-1.5 text-xs">
+                      {Object.entries(getPasswordRequirements(password)).map(([key, met]) => (
+                        <div 
+                          key={key} 
+                          className={`flex items-center gap-2 ${met ? 'text-green-600' : 'text-muted-foreground'}`}
+                        >
+                          {met ? (
+                            <Check className="h-3.5 w-3.5" />
+                          ) : (
+                            <X className="h-3.5 w-3.5" />
+                          )}
+                          <span>
+                            {key === 'length' && 'Minimaal 12 tekens'}
+                            {key === 'uppercase' && 'Minimaal 1 hoofdletter'}
+                            {key === 'lowercase' && 'Minimaal 1 kleine letter'}
+                            {key === 'digit' && 'Minimaal 1 cijfer'}
+                            {key === 'special' && 'Minimaal 1 speciaal teken'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {passwordErrors.length > 0 && (
+                      <Alert variant="destructive" className="py-2">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription className="text-xs">
+                          <ul className="list-disc list-inside space-y-0.5">
+                            {passwordErrors.map((error, i) => (
+                              <li key={i}>{error}</li>
+                            ))}
+                          </ul>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+                )}
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password">Bevestig wachtwoord</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  minLength={12}
+                  placeholder="Herhaal wachtwoord"
+                />
+                {confirmPassword && password !== confirmPassword && (
+                  <p className="text-xs text-destructive flex items-center gap-1">
+                    <X className="h-3 w-3" />
+                    Wachtwoorden komen niet overeen
+                  </p>
+                )}
+                {confirmPassword && password === confirmPassword && password.length > 0 && (
+                  <p className="text-xs text-green-600 flex items-center gap-1">
+                    <Check className="h-3 w-3" />
+                    Wachtwoorden komen overeen
+                  </p>
+                )}
+              </div>
+              
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Wachtwoord opslaan...
+                  </>
+                ) : (
+                  'Wachtwoord Opslaan'
+                )}
+              </Button>
+              
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                onClick={() => {
+                  setRecoveryMode(false);
+                  setPassword("");
+                  setConfirmPassword("");
+                  setPasswordErrors([]);
+                  // Clear hash
+                  window.history.replaceState(null, '', window.location.pathname);
+                }}
+              >
+                Annuleren
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   // Render invite registration form
   if (inviteToken) {
