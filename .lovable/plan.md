@@ -1,51 +1,23 @@
+## WhatsApp Verbeteringen Geïmplementeerd ✅
 
+### Afgeronde taken
 
-## WhatsApp Diagnose Afgerond
+| Verbetering | Status | Details |
+|-------------|--------|---------|
+| Connection Status Indicator | ✅ | Toont realtime verbindingsstatus (groen/geel/rood) |
+| Retry-logica | ✅ | Exponential backoff (1s → 2s → 4s → max 30s) |
+| Stale-while-revalidate | ✅ | Data blijft 30s vers, cache 5 min, auto-refetch bij focus |
+| Error Boundary | ✅ | Vangt fouten op met "Opnieuw proberen" en "Vernieuwen" knoppen |
 
-### Bevindingen
+### Nieuwe bestanden
 
-Na uitgebreide analyse van alle systemen blijkt de WhatsApp integratie correct te functioneren:
+- `src/hooks/whatsapp/useWhatsAppRealtimeStatus.ts` - Hook voor realtime verbindingsstatus
+- `src/components/whatsapp/WhatsAppConnectionStatus.tsx` - UI component voor statusweergave
+- `src/components/whatsapp/WhatsAppErrorBoundary.tsx` - Error boundary met recovery opties
 
-| Component | Status | Details |
-|-----------|--------|---------|
-| Edge Functions | OK | `whatsapp-bridge` verwerkt berichten (laatste: 11:00:37) |
-| Database | OK | Berichten worden correct opgeslagen en opgehaald |
-| MCP Proxy | OK | 61 chats worden succesvol geladen |
-| RLS Policies | OK | Gebruiker heeft toegang via `org_id` mapping |
-| Realtime | OK | Subscriptions actief op `whatsapp_chats` en `whatsapp_messages` |
+### Gewijzigde bestanden
 
-### Wat ik heb gevonden
+- `src/pages/WhatsApp.tsx` - Geïntegreerd met status indicator en error boundary
+- `src/hooks/whatsapp/useWhatsAppChats.ts` - Verbeterde retry-logica en caching
 
-De integratie werkt en ik kon berichten zien in de UI. Het probleem lijkt tijdelijk te zijn geweest, mogelijk door:
-
-1. **Browser cache** - oude data die niet werd ververst
-2. **Sessie-timeout** - auth token was verlopen
-3. **WebSocket disconnectie** - realtime verbinding tijdelijk onderbroken
-4. **React Query stale data** - TanStack Query cache niet geïnvalideerd
-
-### Aanbevolen verbeteringen
-
-Om toekomstige problemen te voorkomen, stel ik voor:
-
-**1. Connection status indicator toevoegen**
-Een klein icoon dat toont of de realtime verbinding actief is, zodat gebruikers weten wanneer er een probleem is.
-
-**2. Retry-logica verbeteren**
-Automatisch opnieuw proberen bij falende queries met exponential backoff.
-
-**3. Stale-while-revalidate strategie**
-Toon gecachte data terwijl verse data wordt opgehaald.
-
-**4. Error boundary met refresh-optie**
-Bij fouten een duidelijke melding tonen met een "Ververs" knop.
-
-### Direct te testen
-
-De WhatsApp zou nu moeten werken. Als het probleem terugkomt, kun je:
-
-1. De pagina hard refreshen (Ctrl+Shift+R)
-2. Uitloggen en opnieuw inloggen
-3. Een ander apparaat/browser proberen
-
-Wil je dat ik een van de bovenstaande verbeteringen implementeer?
 

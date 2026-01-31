@@ -5,7 +5,10 @@ import { WhatsAppChatList } from "@/components/whatsapp/WhatsAppChatList";
 import { WhatsAppChatDetail } from "@/components/whatsapp/WhatsAppChatDetail";
 import { WhatsAppEmptyState } from "@/components/whatsapp/WhatsAppEmptyState";
 import { WhatsAppContactProfile } from "@/components/whatsapp/WhatsAppContactProfile";
+import { WhatsAppConnectionStatus } from "@/components/whatsapp/WhatsAppConnectionStatus";
+import { WhatsAppErrorBoundary } from "@/components/whatsapp/WhatsAppErrorBoundary";
 import { useWhatsAppChats } from "@/hooks/whatsapp/useWhatsAppChats";
+import { useWhatsAppRealtimeStatus } from "@/hooks/whatsapp/useWhatsAppRealtimeStatus";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Sheet,
@@ -37,7 +40,11 @@ export default function WhatsApp() {
     setTagFilter,
     availableTags,
     stats,
+    refetch,
   } = useWhatsAppChats();
+
+  // Realtime connection status
+  const { status: connectionStatus, reconnect } = useWhatsAppRealtimeStatus();
 
   // Persist profile state
   useEffect(() => {
@@ -136,14 +143,26 @@ export default function WhatsApp() {
   const isLargeScreen = !isMobile;
 
   return (
-    <div className="flex h-[calc(100vh-4rem)]">
-      {/* Chat List - responsive width */}
-      <div className={cn(
-        "border-r bg-background flex-shrink-0",
-        // Mobile: full width when no chat selected, hidden when chat is selected
-        "w-full md:w-[320px] lg:w-[280px]",
-        selectedChatId && "hidden md:block"
-      )}>
+    <WhatsAppErrorBoundary>
+      <div className="flex h-[calc(100vh-4rem)]">
+        {/* Connection Status - fixed position */}
+        <div className="fixed top-20 right-4 z-50">
+          <WhatsAppConnectionStatus 
+            status={connectionStatus} 
+            onReconnect={() => {
+              reconnect();
+              refetch();
+            }} 
+          />
+        </div>
+
+        {/* Chat List - responsive width */}
+        <div className={cn(
+          "border-r bg-background flex-shrink-0",
+          // Mobile: full width when no chat selected, hidden when chat is selected
+          "w-full md:w-[320px] lg:w-[280px]",
+          selectedChatId && "hidden md:block"
+        )}>
         <WhatsAppChatList
           chats={filteredChats}
           isLoading={isLoading}
@@ -200,6 +219,7 @@ export default function WhatsApp() {
           )}
         </SheetContent>
       </Sheet>
-    </div>
+      </div>
+    </WhatsAppErrorBoundary>
   );
 }
