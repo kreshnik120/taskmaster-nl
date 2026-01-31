@@ -290,7 +290,22 @@ const TOOL_HANDLERS: Record<string, (supabase: any, params: Record<string, unkno
         .select('id, title, description, status, priority, due_date, created_at');
       
       if (params.status) query = query.eq('status', params.status);
-      if (params.priority) query = query.eq('priority', params.priority);
+      if (params.priority) {
+        // Handle both string and array formats for priority filtering
+        const priorities = Array.isArray(params.priority) 
+          ? params.priority 
+          : (params.priority as string).split(',').map((p: string) => p.trim().toUpperCase());
+        
+        const validPriorities = priorities.filter((p: string) => 
+          ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].includes(p)
+        );
+        
+        if (validPriorities.length === 1) {
+          query = query.eq('priority', validPriorities[0]);
+        } else if (validPriorities.length > 1) {
+          query = query.in('priority', validPriorities);
+        }
+      }
       if (params.due_before) query = query.lte('due_date', params.due_before);
       
       query = query.order('due_date', { ascending: true }).limit(params.limit as number || 10);
