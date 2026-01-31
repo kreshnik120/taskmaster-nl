@@ -1,5 +1,10 @@
 project_id = "oelmsmcgryeoryhonexw"
 
+[functions.agent-router-proxy]
+verify_jwt = false
+# Purpose: Secure proxy to VPS Agent Router (srv1304497.hstgr.cloud:3002)
+# Auth: JWT validated in-code, rate limited to 10 req/min per user
+
 [functions.whatsapp-bridge]
 verify_jwt = false
 # Purpose: WhatsApp Bridge proxy for VPS communication
