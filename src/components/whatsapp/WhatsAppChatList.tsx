@@ -51,6 +51,7 @@ export function WhatsAppChatList({
             onChange={(e) => onSearchChange(e.target.value)}
             className="pl-10"
             aria-label="Zoek in gesprekken"
+            data-search-input
           />
         </div>
 

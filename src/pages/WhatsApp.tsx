@@ -10,6 +10,7 @@ import { WhatsAppErrorBoundary } from "@/components/whatsapp/WhatsAppErrorBounda
 import { WhatsAppCommandPalette } from "@/components/whatsapp/WhatsAppCommandPalette";
 import { useWhatsAppChats } from "@/hooks/whatsapp/useWhatsAppChats";
 import { useWhatsAppRealtimeStatus } from "@/hooks/whatsapp/useWhatsAppRealtimeStatus";
+import { useUpdateChatStatus } from "@/hooks/whatsapp/useUpdateChatStatus";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Sheet,
@@ -49,6 +50,9 @@ export default function WhatsApp() {
 
   // Realtime connection status
   const { status: connectionStatus, reconnect } = useWhatsAppRealtimeStatus();
+
+  // Chat status mutations for keyboard shortcuts
+  const updateStatus = useUpdateChatStatus();
 
   // Persist profile state
   useEffect(() => {
@@ -96,17 +100,58 @@ export default function WhatsApp() {
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Command palette shortcut - works even in inputs
+      // STAP 1: Shortcuts die ALTIJD werken (ook in inputs)
+      
+      // Command palette shortcut
       if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setCommandPaletteOpen(true);
         return;
       }
 
-      // Only handle other shortcuts if no input is focused
+      // Focus search input shortcut
+      if (e.key === 'f' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        const searchInput = document.querySelector('[data-search-input]') as HTMLInputElement;
+        searchInput?.focus();
+        return;
+      }
+
+      // STAP 2: Stop als we in een input zitten
       if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
 
+      // STAP 3: Shortcuts die NIET in inputs werken
       switch (e.key) {
+        case 'p':
+          if ((e.metaKey || e.ctrlKey) && selectedChatId && selectedChat) {
+            e.preventDefault();
+            updateStatus.mutate({
+              chatId: selectedChatId,
+              field: 'is_pinned',
+              value: !selectedChat.is_pinned,
+            });
+          }
+          break;
+        case 'm':
+          if ((e.metaKey || e.ctrlKey) && selectedChatId && selectedChat) {
+            e.preventDefault();
+            updateStatus.mutate({
+              chatId: selectedChatId,
+              field: 'is_muted',
+              value: !selectedChat.is_muted,
+            });
+          }
+          break;
+        case 'a':
+          if ((e.metaKey || e.ctrlKey) && e.shiftKey && selectedChatId) {
+            e.preventDefault();
+            updateStatus.mutate({
+              chatId: selectedChatId,
+              field: 'is_archived',
+              value: true,
+            });
+          }
+          break;
         case 'Escape':
           if (showProfile) {
             e.preventDefault();
@@ -148,7 +193,7 @@ export default function WhatsApp() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [filteredChats, selectedChatId, handleSelectChat, handleBack, showProfile, toggleProfile]);
+  }, [filteredChats, selectedChatId, selectedChat, handleSelectChat, handleBack, showProfile, toggleProfile, updateStatus]);
 
   // Check if we're on a larger screen for 3-column layout
   const isLargeScreen = !isMobile;
