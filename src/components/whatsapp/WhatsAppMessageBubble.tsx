@@ -22,7 +22,7 @@ function isDocumentMimeType(mimeType: string): boolean {
 
 export function WhatsAppMessageBubble({ message }: WhatsAppMessageBubbleProps) {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
-  const isOutgoing = message.sender_type === 'self';
+  const isOutgoing = message.sender_type === 'self' || message.sender_type === 'user';
   const timestamp = format(parseISO(message.sent_at), 'HH:mm');
 
   // Filter media by type
