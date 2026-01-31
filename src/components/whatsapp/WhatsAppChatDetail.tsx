@@ -38,7 +38,7 @@ function formatPhone(phone: string | null | undefined): string {
 }
 
 export function WhatsAppChatDetail({ chat, onBack, showBackButton = false, onToggleProfile, showProfileButton = false }: WhatsAppChatDetailProps) {
-  const { messages, groupedByDate, isLoading } = useWhatsAppMessages(chat.id);
+  const { messages, groupedByDate, isLoading, loadMore, hasMore, isLoadingMore } = useWhatsAppMessages(chat.id);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const [newMessageAnnouncement, setNewMessageAnnouncement] = useState('');
   const [inputText, setInputText] = useState('');
@@ -219,11 +219,30 @@ export function WhatsAppChatDetail({ chat, onBack, showBackButton = false, onTog
           <Virtuoso
             ref={virtuosoRef}
             data={flattenedItems}
+            firstItemIndex={Math.max(0, 10000 - flattenedItems.length)}
             initialTopMostItemIndex={flattenedItems.length - 1}
             followOutput="smooth"
             alignToBottom={true}
             style={{ height: '100%' }}
             className="px-4"
+            startReached={() => {
+              if (hasMore && !isLoadingMore) {
+                loadMore();
+              }
+            }}
+            components={{
+              Header: () => hasMore ? (
+                <div className="flex justify-center py-4">
+                  {isLoadingMore ? (
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  ) : (
+                    <span className="text-sm text-muted-foreground">
+                      Scroll omhoog voor meer berichten
+                    </span>
+                  )}
+                </div>
+              ) : null
+            }}
             itemContent={(index, item) => {
               if (item.type === 'divider') {
                 return <DateDivider label={item.label} />;
