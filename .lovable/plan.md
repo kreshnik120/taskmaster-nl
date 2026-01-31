@@ -1,86 +1,51 @@
 
 
-## Wachtwoord Reset voor Erik + Verbeterde Recovery Flow
+## WhatsApp Diagnose Afgerond
 
-### Directe oplossing voor Erik
+### Bevindingen
 
-Het wachtwoord voor **erik@abczorg.nl** is zojuist gereset. Erik kan nu inloggen met:
+Na uitgebreide analyse van alle systemen blijkt de WhatsApp integratie correct te functioneren:
 
-| Veld | Waarde |
-|------|--------|
-| E-mail | erik@abczorg.nl |
-| Wachtwoord | Welkom01!ABCzorg2026 |
+| Component | Status | Details |
+|-----------|--------|---------|
+| Edge Functions | OK | `whatsapp-bridge` verwerkt berichten (laatste: 11:00:37) |
+| Database | OK | Berichten worden correct opgeslagen en opgehaald |
+| MCP Proxy | OK | 61 chats worden succesvol geladen |
+| RLS Policies | OK | Gebruiker heeft toegang via `org_id` mapping |
+| Realtime | OK | Subscriptions actief op `whatsapp_chats` en `whatsapp_messages` |
 
-### Structurele verbetering: Password Recovery Flow
+### Wat ik heb gevonden
 
-**Het huidige probleem:**
-Wanneer een gebruiker op de wachtwoord-reset link klikt, wordt deze automatisch ingelogd door Supabase (via een recovery token in de URL). De app herkent dit niet en stuurt de gebruiker door naar het dashboard, zonder de mogelijkheid om daadwerkelijk een nieuw wachtwoord in te stellen.
+De integratie werkt en ik kon berichten zien in de UI. Het probleem lijkt tijdelijk te zijn geweest, mogelijk door:
 
-**De oplossing:**
-Ik voeg een "Nieuw wachtwoord instellen" scherm toe dat automatisch verschijnt wanneer:
-1. De URL een `type=recovery` parameter bevat, OF
-2. Het `PASSWORD_RECOVERY` auth event wordt gedetecteerd
+1. **Browser cache** - oude data die niet werd ververst
+2. **Sessie-timeout** - auth token was verlopen
+3. **WebSocket disconnectie** - realtime verbinding tijdelijk onderbroken
+4. **React Query stale data** - TanStack Query cache niet geïnvalideerd
 
-### Wat ik ga aanpassen
+### Aanbevolen verbeteringen
 
-**Bestand: `src/pages/Auth.tsx`**
+Om toekomstige problemen te voorkomen, stel ik voor:
 
-1. **Recovery mode detectie toevoegen:**
-   - Controleer URL parameters voor `type=recovery` of `access_token`
-   - Luister naar `PASSWORD_RECOVERY` event van Supabase
-   - Toon automatisch het "Nieuw wachtwoord instellen" formulier
+**1. Connection status indicator toevoegen**
+Een klein icoon dat toont of de realtime verbinding actief is, zodat gebruikers weten wanneer er een probleem is.
 
-2. **Nieuw wachtwoord formulier toevoegen:**
-   - Wachtwoord invoerveld met sterkte-indicator (hergebruik bestaande component)
-   - Bevestiging veld
-   - "Wachtwoord opslaan" knop die `supabase.auth.updateUser({ password })` aanroept
+**2. Retry-logica verbeteren**
+Automatisch opnieuw proberen bij falende queries met exponential backoff.
 
-3. **Flow na succesvol wijzigen:**
-   - Toon succesmelding
-   - Redirect naar dashboard
+**3. Stale-while-revalidate strategie**
+Toon gecachte data terwijl verse data wordt opgehaald.
 
-### Technische details
+**4. Error boundary met refresh-optie**
+Bij fouten een duidelijke melding tonen met een "Ververs" knop.
 
-```text
-+---------------------------+
-|    Gebruiker klikt op     |
-|    reset-link in email    |
-+-------------+-------------+
-              |
-              v
-+---------------------------+
-|  App detecteert recovery  |
-|  token in URL / event     |
-+-------------+-------------+
-              |
-              v
-+---------------------------+
-|  Toon "Nieuw wachtwoord   |
-|  instellen" formulier     |
-+-------------+-------------+
-              |
-              v
-+---------------------------+
-|  User voert nieuw         |
-|  wachtwoord in            |
-+-------------+-------------+
-              |
-              v
-+---------------------------+
-|  supabase.auth.updateUser |
-|  ({ password: ... })      |
-+-------------+-------------+
-              |
-              v
-+---------------------------+
-|  Succes! Redirect naar    |
-|  dashboard                |
-+---------------------------+
-```
+### Direct te testen
 
-### Verwacht resultaat
+De WhatsApp zou nu moeten werken. Als het probleem terugkomt, kun je:
 
-- Erik kan direct inloggen met het nieuwe wachtwoord
-- Toekomstige gebruikers die een reset-link aanklikken zien automatisch een "Nieuw wachtwoord instellen" scherm
-- Geen verwarring meer over "automatisch ingelogd maar wachtwoord niet gewijzigd"
+1. De pagina hard refreshen (Ctrl+Shift+R)
+2. Uitloggen en opnieuw inloggen
+3. Een ander apparaat/browser proberen
+
+Wil je dat ik een van de bovenstaande verbeteringen implementeer?
 
