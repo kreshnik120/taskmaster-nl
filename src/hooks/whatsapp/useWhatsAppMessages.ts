@@ -152,10 +152,58 @@ export function useWhatsAppMessages(chatId: string | null): UseWhatsAppMessagesR
             if (!old) return old;
             
             const newMessage = payload.new as WhatsAppMessage;
-            const updatedPages = [...old.pages];
             
+            // DEDUPLICATION: Check if this message already exists in the cache
+            // This handles both:
+            // 1. Exact duplicates (same ID)
+            // 2. Optimistic messages that need to be replaced with real data
+            let optimisticFound = false;
+            let exactDuplicate = false;
+            
+            for (const page of old.pages) {
+              for (const msg of page.messages) {
+                // Exact duplicate by ID or message_id
+                if (msg.id === newMessage.id || msg.message_id === newMessage.message_id) {
+                  exactDuplicate = true;
+                  break;
+                }
+                // Optimistic message match (same body and chat)
+                if (msg.id.startsWith('optimistic_') && 
+                    msg.message_body === newMessage.message_body &&
+                    msg.chat_id === newMessage.chat_id) {
+                  optimisticFound = true;
+                  break;
+                }
+              }
+              if (exactDuplicate || optimisticFound) break;
+            }
+            
+            // Skip exact duplicates
+            if (exactDuplicate) {
+              console.log('[useWhatsAppMessages] Skipping exact duplicate:', newMessage.id);
+              return old;
+            }
+            
+            // Replace optimistic message with real data
+            if (optimisticFound) {
+              console.log('[useWhatsAppMessages] Replacing optimistic message with real data:', newMessage.id);
+              const updatedPages = old.pages.map(page => ({
+                ...page,
+                messages: page.messages.map(msg => {
+                  if (msg.id.startsWith('optimistic_') && 
+                      msg.message_body === newMessage.message_body &&
+                      msg.chat_id === newMessage.chat_id) {
+                    return newMessage; // Replace with real data
+                  }
+                  return msg;
+                })
+              }));
+              return { ...old, pages: updatedPages };
+            }
+            
+            // New message - add to first page
+            const updatedPages = [...old.pages];
             if (updatedPages.length > 0) {
-              // Add to the end of the first page (which is the most recent after flattening)
               updatedPages[0] = {
                 ...updatedPages[0],
                 messages: [...updatedPages[0].messages, newMessage]
