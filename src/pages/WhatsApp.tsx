@@ -7,6 +7,7 @@ import { WhatsAppEmptyState } from "@/components/whatsapp/WhatsAppEmptyState";
 import { WhatsAppContactProfile } from "@/components/whatsapp/WhatsAppContactProfile";
 import { WhatsAppConnectionStatus } from "@/components/whatsapp/WhatsAppConnectionStatus";
 import { WhatsAppErrorBoundary } from "@/components/whatsapp/WhatsAppErrorBoundary";
+import { WhatsAppCommandPalette } from "@/components/whatsapp/WhatsAppCommandPalette";
 import { useWhatsAppChats } from "@/hooks/whatsapp/useWhatsAppChats";
 import { useWhatsAppRealtimeStatus } from "@/hooks/whatsapp/useWhatsAppRealtimeStatus";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -28,6 +29,9 @@ export default function WhatsApp() {
     }
     return false;
   });
+
+  // Command palette state
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   const {
     filteredChats,
@@ -92,7 +96,14 @@ export default function WhatsApp() {
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Only handle if no input is focused
+      // Command palette shortcut - works even in inputs
+      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setCommandPaletteOpen(true);
+        return;
+      }
+
+      // Only handle other shortcuts if no input is focused
       if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
 
       switch (e.key) {
@@ -219,6 +230,17 @@ export default function WhatsApp() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Command Palette */}
+      <WhatsAppCommandPalette
+        open={commandPaletteOpen}
+        onOpenChange={setCommandPaletteOpen}
+        chats={filteredChats}
+        selectedChatId={selectedChatId}
+        onSelectChat={handleSelectChat}
+        onFilterChange={setFilter}
+        currentFilter={filter}
+      />
       </div>
     </WhatsAppErrorBoundary>
   );
