@@ -1,161 +1,169 @@
 
+# Enterprise-Niveau Subtiele Verbeteringen voor WhatsApp Module
 
-## Fix: Dubbele Berichten bij Verzenden (2 Problemen)
+## Huidige Status (Reeds Geïmplementeerd)
 
-### Analyse van de Screenshots
-
-De gebruiker toonde duidelijk het probleem:
-1. **"hallo"** verschijnt 1x RECHTS (correct - zelf verzonden via UI)
-2. **"hallo"** verschijnt 1x LINKS (fout - komt terug via webhook als "contact" bericht)
-
-Dit komt doordat het bericht **TWEE KEER** in de database wordt opgeslagen:
-1. Door `handleSendMessage` (whatsapp-bridge) met `sender_type: "user"` + status: "sent"
-2. Door `handleMessageReceived` (webhook) als echo-bericht met `sender_type: "contact"` (ondanks de `isFromSelf` check)
-
----
-
-### Probleem 1: isFromSelf Detectie Faalt
-
-De `isFromSelf` check vergelijkt `from` (afzender) met `session.phone_number`:
-- Maar bij groepschats of wanneer WhatsApp het bericht teruggeeft als "van jou", is de `from` soms anders geformatteerd
-- De normalisatie werkt niet correct bij alle formaten
-
-Belangrijker nog: **berichten verstuurd via de UI hebben een ander patroon**:
-- De afzender is **niet** het sessie-telefoonnummer
-- De afzender is de **ontvanger** (want het is een echo van het verzonden bericht)
+| Feature | Status |
+|---------|--------|
+| Virtualisatie chatlijst + berichten | ✅ react-virtuoso |
+| Infinite scrolling berichten | ✅ useInfiniteQuery |
+| Command Palette (Cmd+K) | ✅ Volledig werkend |
+| Keyboard shortcuts | ✅ Uitgebreid |
+| Online status indicator | ✅ Groene stip |
+| Scroll-to-bottom FAB | ✅ Met unread badge |
+| Hover Previews | ✅ HoverCard met details |
+| Error Boundary | ✅ Robuuste foutafhandeling |
+| Connection monitor | ✅ Exponential backoff |
+| Deduplicatie berichten | ✅ Zojuist gefixt |
 
 ---
 
-### Probleem 2: Dubbele Realtime + Optimistic Update
+## Voorgestelde Enterprise Verbeteringen
 
-Flow:
-1. UI maakt **optimistic message** (in React Query cache)
-2. `handleSendMessage` slaat bericht op in DB
-3. Realtime subscription detecteert INSERT → voegt **nog een keer** toe aan cache
-4. Resultaat: 2x hetzelfde bericht tijdelijk zichtbaar
+### 1. Typing Indicator ("...is aan het typen")
+Toon wanneer de andere partij aan het typen is - essentieel voor enterprise-communicatie.
 
----
+**Technisch:**
+- Luister naar `message.typing` events van WhatsApp webhook
+- Opslaan in realtime state (niet in database - ephemeral)
+- Toon animatie onder de header: "Jan is aan het typen..."
 
-### Oplossingen
-
-#### Fix 1: Deduplicatie in `handleMessageReceived`
-
-In de whatsapp-bridge moet worden gecontroleerd of het bericht **recent al is verzonden via handleSendMessage**. Dit kan door:
-- Check op `message_body` + `chat_id` + `sent_at` binnen 60 seconden
-- Of: check of er al een bericht bestaat met dezelfde body in de afgelopen minuut voor deze chat
-
-```typescript
-// In handleMessageReceived, VOOR de insert:
-const oneMinuteAgo = new Date(Date.now() - 60000).toISOString();
-const { data: recentDuplicate } = await supabase
-  .from("whatsapp_messages")
-  .select("id")
-  .eq("chat_id", chat.id)
-  .eq("message_body", effectiveBody)
-  .eq("sender_type", "user")  // Alleen check tegen UI-verzonden berichten
-  .gte("sent_at", oneMinuteAgo)
-  .single();
-
-if (recentDuplicate) {
-  console.log(`[${requestId}] Skipping duplicate echo message: ${messageId}`);
-  return { messageId: null, chatId: chat.id, duplicate: true };
-}
-```
-
-#### Fix 2: Realtime Deduplicatie in Frontend
-
-In `useWhatsAppMessages.ts`, controleer of het nieuwe bericht al in de cache zit (voorkom dubbele optimistic messages):
-
-```typescript
-.on('postgres_changes', { ... }, (payload) => {
-  queryClient.setQueryData<{ pages: PageResult[]; pageParams: number[] }>(
-    ['whatsapp-messages', chatId],
-    (old) => {
-      if (!old) return old;
-      
-      const newMessage = payload.new as WhatsAppMessage;
-      
-      // Check of dit bericht al bestaat (voorkom dubbele toevoeging)
-      const alreadyExists = old.pages.some(page => 
-        page.messages.some(msg => 
-          msg.id === newMessage.id || 
-          msg.message_id === newMessage.message_id ||
-          // Check optimistic messages (id begint met "optimistic_")
-          (msg.id.startsWith('optimistic_') && 
-           msg.message_body === newMessage.message_body &&
-           msg.chat_id === newMessage.chat_id)
-        )
-      );
-      
-      if (alreadyExists) {
-        console.log('[useWhatsAppMessages] Skipping duplicate message:', newMessage.id);
-        return old;
-      }
-      
-      // ... rest van de logica
-    }
-  );
-})
-```
-
-#### Fix 3: Vervang Optimistic Message met Echte Data
-
-Na realtime insert, vervang de optimistic message (met fake ID) door het echte database record:
-
-```typescript
-// In plaats van alleen toevoegen, vervang optimistic met echt bericht
-if (alreadyExists) {
-  // Vervang optimistic message met echte data
-  const updatedPages = old.pages.map(page => ({
-    ...page,
-    messages: page.messages.map(msg => {
-      if (msg.id.startsWith('optimistic_') && 
-          msg.message_body === newMessage.message_body) {
-        return newMessage; // Vervang met echte data
-      }
-      return msg;
-    })
-  }));
-  return { ...old, pages: updatedPages };
-}
-```
+**Locatie:** `WhatsAppChatDetail.tsx` + nieuw `useTypingIndicator.ts` hook
 
 ---
 
-### Bestanden te Wijzigen
+### 2. Leesbevestigingen (Read Receipts)
+Update berichtstatus wanneer WhatsApp confirmeert dat een bericht is gelezen.
 
-| Bestand | Wijziging |
-|---------|-----------|
-| `supabase/functions/whatsapp-bridge/index.ts` | + Deduplicatie check in `handleMessageReceived` voor echo-berichten |
-| `src/hooks/whatsapp/useWhatsAppMessages.ts` | + Realtime deduplicatie: check bestaande berichten + vervang optimistic messages |
+**Huidige flow:**
+- pending → sent → delivered → read
 
----
+**Ontbrekend:**
+- Webhook handler voor `message.ack` events
+- Realtime updates van berichtstatus
 
-### Visueel Resultaat Na Fix
-
-```text
-VOOR (huidige situatie - 2x "hallo"):
-┌─────────────────────────────────────┐
-│                          hallo →    │ ← verzonden (correct)
-│                           18:40 ✓   │
-├─────────────────────────────────────┤
-│ hallo                               │ ← echo als "contact" (FOUT)
-│ 18:41                               │
-└─────────────────────────────────────┘
-
-NA (gefixte situatie - 1x "hallo"):
-┌─────────────────────────────────────┐
-│                          hallo →    │ ← verzonden (correct)
-│                           18:40 ✓   │
-└─────────────────────────────────────┘
-```
+**Technisch:**
+- Voeg `handleMessageAck` toe aan `whatsapp-bridge`
+- Update `whatsapp_messages.status` naar 'delivered' of 'read'
+- Frontend: realtime subscription voor status updates
 
 ---
 
-### Prioriteit
+### 3. Quick Replies (/ Trigger)
+Snelle antwoordtemplates via `/` in het invoerveld.
 
-1. **Backend fix** (whatsapp-bridge) - voorkomt dat echo überhaupt in DB komt
-2. **Frontend fix** (useWhatsAppMessages) - voorkomt tijdelijke dubbele weergave
+**UX:**
+- Typ `/` → dropdown met templates verschijnt
+- Selecteer template → tekst wordt ingevoerd
+- Templates: `/dank` → "Bedankt voor je bericht!", `/afwezig` → "Ik ben momenteel niet beschikbaar"
 
-De backend fix is het belangrijkst omdat het de bron van het probleem aanpakt. De frontend fix is een extra veiligheidslaag.
+**Technisch:**
+- Nieuw component: `WhatsAppQuickReplies.tsx`
+- Templates opslaan in `ai_knowledge_base` met category: `whatsapp_quick_reply`
+- Detectie van `/` in input field
+
+---
+
+### 4. Reactie op Specifiek Bericht (Inline Reply)
+Quote een bericht waar je op reageert.
+
+**UX:**
+- Swipe of klik op bericht → "Reageer" actie
+- Bericht wordt geciteerd boven het invoerveld
+- Verzonden met `quoted_message_id` referentie
+
+**Technisch:**
+- Voeg `quoted_message_id` kolom toe aan `whatsapp_messages`
+- Pas `WhatsAppMessageBubble` aan om quotes te tonen
+- State in `WhatsAppChatDetail` voor geselecteerd bericht
+
+---
+
+### 5. Bulk Acties voor Meerdere Chats
+Enterprise-niveau: selecteer meerdere chats en voer bulk-acties uit.
+
+**UX:**
+- Long-press of checkbox → selectiemodus
+- Bulk: archiveren, muten, pinnen, verwijderen
+
+**Technisch:**
+- `selectedChats: Set<string>` state
+- Multi-select mode toggle
+- Batch update via `Promise.all`
+
+---
+
+### 6. Message Search Binnen Chat
+Zoek door berichten binnen een specifieke conversatie.
+
+**UX:**
+- Zoekicoon in chat header
+- Overlay met zoekresultaten
+- Spring naar bericht bij selectie
+
+**Technisch:**
+- `useWhatsAppMessageSearch(chatId, query)` hook
+- Fulltext search op `message_body`
+- Highlight matching tekst in resultaten
+
+---
+
+### 7. Audio Message Recording
+Opnemen en versturen van spraakberichten.
+
+**UX:**
+- Microfoon icoon naast verzendknop
+- Hold-to-record met visuele feedback
+- Preview voor verzenden
+
+**Technisch:**
+- `MediaRecorder` API voor opname
+- Upload naar Supabase Storage
+- Verzend als `message_type: 'audio'`
+
+---
+
+### 8. Scheduled Messages
+Plan berichten om later te versturen.
+
+**UX:**
+- Klok icoon naast verzendknop
+- Kies datum/tijd
+- Geplande berichten in aparte tab
+
+**Technisch:**
+- Nieuwe tabel: `whatsapp_scheduled_messages`
+- Edge function cron job om te versturen
+- UI voor beheren van geplande berichten
+
+---
+
+## Prioritering
+
+| Priority | Feature | Impact | Effort |
+|----------|---------|--------|--------|
+| **P1** | Typing Indicator | Hoog | Laag |
+| **P1** | Read Receipts | Hoog | Laag |
+| **P2** | Quick Replies | Medium | Medium |
+| **P2** | Inline Reply | Hoog | Medium |
+| **P3** | Bulk Actions | Medium | Medium |
+| **P3** | Message Search | Medium | Medium |
+| **P4** | Audio Recording | Laag | Hoog |
+| **P4** | Scheduled Messages | Laag | Hoog |
+
+---
+
+## Aanbevolen Eerste Stap
+
+Start met **P1 features** (Typing Indicator + Read Receipts) omdat:
+1. Hoogste impact op gebruikerservaring
+2. Relatief lage implementatie-effort
+3. Benut bestaande webhook infrastructuur
+4. Direct zichtbaar voor eindgebruikers
+
+### Geschatte Tijdsinvestering
+- Typing Indicator: ~2-3 uur
+- Read Receipts: ~3-4 uur
+- Quick Replies: ~4-5 uur
+- Inline Reply: ~6-8 uur
 
