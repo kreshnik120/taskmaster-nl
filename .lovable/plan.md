@@ -1,81 +1,49 @@
 
-# Plan: Fix Missing Fields in WhatsApp Bridge Request
+# Plan: Wijzig Event Type naar message.send
 
 ## Probleem
 
-De `whatsapp-bridge` Edge Function valideert strikt op verplichte velden:
-- `event` - Type event (bijv. `system.outgoing_message`)
-- `sessionId` - ClawdBot sessie identifier
-- `orgId` - Organisatie UUID
+De `whatsapp-bridge` accepteert `system.outgoing_message` niet. De bridge is aangepast om te luisteren naar `message.send`.
 
-**Error:** `400 - Missing required fields: event, sessionId, orgId`
+**Huidige error:** Event type wordt niet herkend door de bridge.
 
 ## Oplossing
 
-Voeg de ontbrekende velden toe aan beide plekken waar `WHATSAPP_BRIDGE_URL` wordt aangeroepen.
+Wijzig het `event` veld in de JSON body op twee locaties.
 
 ## Wijzigingen
 
-### 1. UI Mode (handleUiMode - regel 175-179)
+### 1. UI Mode (handleUiMode - regel 176)
 
-**Huidige code:**
-```typescript
-body: JSON.stringify({
-  action: "send_message",
-  to: toolArgs.to,
-  message: toolArgs.message,
-}),
+```text
+// Oud:
+event: "system.outgoing_message",
+
+// Nieuw:
+event: "message.send",
 ```
 
-**Nieuwe code:**
-```typescript
-body: JSON.stringify({
-  event: "system.outgoing_message",
-  sessionId: "clawdbot-default",
-  orgId: "550e8400-e29b-41d4-a716-446655440000",
-  action: "send_message",
-  to: toolArgs.to,
-  message: toolArgs.message,
-}),
+### 2. MCP Mode (handleSendMessage - regel 428)
+
+```text
+// Oud:
+event: "system.outgoing_message",
+
+// Nieuw:
+event: "message.send",
 ```
 
-### 2. MCP Mode (handleSendMessage - regel 424-428)
+## Bestand
 
-**Huidige code:**
-```typescript
-body: JSON.stringify({
-  action: "send_message",
-  to,
-  message,
-}),
-```
+`supabase/functions/mcp-proxy/index.ts`
 
-**Nieuwe code:**
-```typescript
-body: JSON.stringify({
-  event: "system.outgoing_message",
-  sessionId: "clawdbot-default",
-  orgId: "550e8400-e29b-41d4-a716-446655440000",
-  action: "send_message",
-  to,
-  message,
-}),
-```
+## Resultaat Na Implementatie
 
-## Samenvatting
-
-| Locatie | Regel | Wijziging |
-|---------|-------|-----------|
-| `handleUiMode` | 175-179 | Voeg `event`, `sessionId`, `orgId` toe |
-| `handleSendMessage` | 424-428 | Voeg `event`, `sessionId`, `orgId` toe |
-
-## Na Implementatie
-
-De request body bevat nu alle verplichte velden die `whatsapp-bridge` verwacht:
+De request body wordt:
 ```json
 {
-  "event": "system.outgoing_message",
-  "sessionId": "clawdbot-default", 
+  "event": "message.send",
+  "sessionId": "clawdbot-default",
   "orgId": "550e8400-e29b-41d4-a716-446655440000",
   "action": "send_message",
   "to": "31648005001@s.whatsapp.net",
@@ -88,5 +56,4 @@ De request body bevat nu alle verplichte velden die `whatsapp-bridge` verwacht:
 Na deployment:
 1. Open WhatsApp chat
 2. Stuur een testbericht
-3. Geen 400 error meer
-4. Bericht moet succesvol verstuurd worden
+3. Bericht moet succesvol verstuurd worden
