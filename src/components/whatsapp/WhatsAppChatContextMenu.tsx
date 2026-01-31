@@ -1,4 +1,4 @@
-import { Pencil, Pin, BellOff, Volume2, Archive, Trash2 } from "lucide-react";
+import { Pin, BellOff, Volume2, Archive, Trash2 } from "lucide-react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -13,10 +13,9 @@ import type { WhatsAppChat } from "@/types/whatsapp";
 interface WhatsAppChatContextMenuProps {
   chat: WhatsAppChat;
   children: React.ReactNode;
-  onRename: () => void;
 }
 
-export function WhatsAppChatContextMenu({ chat, children, onRename }: WhatsAppChatContextMenuProps) {
+export function WhatsAppChatContextMenu({ chat, children }: WhatsAppChatContextMenuProps) {
   const updateStatus = useUpdateChatStatus();
   const deleteChat = useDeleteChat();
   
@@ -54,13 +53,6 @@ export function WhatsAppChatContextMenu({ chat, children, onRename }: WhatsAppCh
         {children}
       </ContextMenuTrigger>
       <ContextMenuContent className="w-48">
-        <ContextMenuItem onClick={onRename}>
-          <Pencil className="h-4 w-4 mr-2" />
-          Contact hernoemen
-        </ContextMenuItem>
-        
-        <ContextMenuSeparator />
-        
         <ContextMenuItem onClick={handlePin}>
           <Pin className="h-4 w-4 mr-2" />
           {chat.is_pinned ? 'Losmaken' : 'Chat pinnen'}
@@ -92,7 +84,7 @@ export function WhatsAppChatContextMenu({ chat, children, onRename }: WhatsAppCh
           className="text-destructive focus:text-destructive"
         >
           <Trash2 className="h-4 w-4 mr-2" />
-          Chat archiveren
+          Chat verwijderen
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

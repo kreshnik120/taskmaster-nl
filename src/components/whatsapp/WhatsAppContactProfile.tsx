@@ -1,6 +1,5 @@
-import { X, Copy, Pin, BellOff, Archive, Bot, Ban, Info, Tag } from "lucide-react";
+import { X, Copy, Pin, BellOff, Volume2, Archive, Bot, Ban, Info, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { WhatsAppContactAvatar } from "./WhatsAppContactAvatar";
@@ -8,6 +7,7 @@ import { WhatsAppContactName } from "./WhatsAppContactName";
 import { WhatsAppContactTags } from "./WhatsAppContactTags";
 import { WhatsAppContactNotes } from "./WhatsAppContactNotes";
 import { useWhatsAppContact } from "@/hooks/whatsapp/useWhatsAppContact";
+import { useUpdateChatStatus } from "@/hooks/whatsapp/useUpdateChatStatus";
 import type { WhatsAppChat } from "@/types/whatsapp";
 import { formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -35,6 +35,7 @@ function formatRelativeTime(dateString: string | null): string {
 
 export function WhatsAppContactProfile({ chat, onClose }: WhatsAppContactProfileProps) {
   const { data: contact } = useWhatsAppContact(chat.contact?.id);
+  const updateStatus = useUpdateChatStatus();
   
   // Use chat.contact as fallback if contact query hasn't loaded yet
   const displayContact = contact || chat.contact;
@@ -45,6 +46,31 @@ export function WhatsAppContactProfile({ chat, onClose }: WhatsAppContactProfile
       navigator.clipboard.writeText(phoneNumber);
       toast.success('Telefoonnummer gekopieerd');
     }
+  };
+
+  const handlePin = () => {
+    updateStatus.mutate({
+      chatId: chat.id,
+      field: 'is_pinned',
+      value: !chat.is_pinned,
+    });
+  };
+
+  const handleMute = () => {
+    updateStatus.mutate({
+      chatId: chat.id,
+      field: 'is_muted',
+      value: !chat.is_muted,
+    });
+  };
+
+  const handleArchive = () => {
+    updateStatus.mutate({
+      chatId: chat.id,
+      field: 'is_archived',
+      value: true,
+    });
+    onClose();
   };
 
   return (
@@ -168,15 +194,33 @@ export function WhatsAppContactProfile({ chat, onClose }: WhatsAppContactProfile
               <Bot className="h-4 w-4 mr-2" />
               AI antwoorden
             </Button>
-            <Button variant="outline" className="w-full justify-start" disabled>
-              <Pin className="h-4 w-4 mr-2" />
-              Pin chat
+            <Button variant="outline" className="w-full justify-start" onClick={handlePin}>
+              {chat.is_pinned ? (
+                <>
+                  <Pin className="h-4 w-4 mr-2" />
+                  Chat losmaken
+                </>
+              ) : (
+                <>
+                  <Pin className="h-4 w-4 mr-2" />
+                  Pin chat
+                </>
+              )}
             </Button>
-            <Button variant="outline" className="w-full justify-start" disabled>
-              <BellOff className="h-4 w-4 mr-2" />
-              Mute chat
+            <Button variant="outline" className="w-full justify-start" onClick={handleMute}>
+              {chat.is_muted ? (
+                <>
+                  <Volume2 className="h-4 w-4 mr-2" />
+                  Unmute chat
+                </>
+              ) : (
+                <>
+                  <BellOff className="h-4 w-4 mr-2" />
+                  Mute chat
+                </>
+              )}
             </Button>
-            <Button variant="outline" className="w-full justify-start" disabled>
+            <Button variant="outline" className="w-full justify-start" onClick={handleArchive}>
               <Archive className="h-4 w-4 mr-2" />
               Archiveer
             </Button>

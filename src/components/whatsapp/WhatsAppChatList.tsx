@@ -1,21 +1,12 @@
-import { useState } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { WhatsAppFilterTabs } from "./WhatsAppFilterTabs";
 import { WhatsAppTagFilter } from "./WhatsAppTagFilter";
 import { WhatsAppChatItem } from "./WhatsAppChatItem";
 import { WhatsAppChatContextMenu } from "./WhatsAppChatContextMenu";
-import { WhatsAppRenameDialog } from "./WhatsAppRenameDialog";
 import { ChatListSkeleton } from "./WhatsAppSkeletonLoader";
 import { ChatListEmptyState } from "./WhatsAppEmptyState";
 import type { WhatsAppChat, WhatsAppFilter } from "@/types/whatsapp";
-
-interface ContactForRename {
-  id: string;
-  display_name: string | null;
-  push_name: string | null;
-  phone_number: string;
-}
 
 interface WhatsAppChatListProps {
   chats: WhatsAppChat[];
@@ -46,21 +37,6 @@ export function WhatsAppChatList({
   onTagFilterChange,
   availableTags,
 }: WhatsAppChatListProps) {
-  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
-  const [selectedContactForRename, setSelectedContactForRename] = useState<ContactForRename | null>(null);
-
-  const handleRename = (chat: WhatsAppChat) => {
-    if (chat.contact) {
-      setSelectedContactForRename({
-        id: chat.contact.id,
-        display_name: chat.contact.display_name,
-        push_name: chat.contact.push_name,
-        phone_number: chat.contact.phone_number,
-      });
-      setRenameDialogOpen(true);
-    }
-  };
-
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -110,7 +86,6 @@ export function WhatsAppChatList({
             <WhatsAppChatContextMenu
               key={chat.id}
               chat={chat}
-              onRename={() => handleRename(chat)}
             >
               <div
                 id={`chat-${chat.id}`}
@@ -134,13 +109,6 @@ export function WhatsAppChatList({
           ))
         )}
       </div>
-
-      {/* Rename dialog */}
-      <WhatsAppRenameDialog
-        open={renameDialogOpen}
-        onOpenChange={setRenameDialogOpen}
-        contact={selectedContactForRename}
-      />
     </div>
   );
 }
