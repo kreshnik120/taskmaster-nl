@@ -10,14 +10,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { WhatsAppContactAvatar } from "./WhatsAppContactAvatar";
 import { WhatsAppContactName } from "./WhatsAppContactName";
 import { WhatsAppProfessionalDropdown } from "./WhatsAppProfessionalDropdown";
 import { WhatsAppLinkedBanner } from "./WhatsAppLinkedBanner";
 import { WhatsAppMessageBubble, DateDivider } from "./WhatsAppMessageBubble";
 import { MessageSkeleton } from "./WhatsAppSkeletonLoader";
+import { WhatsAppBackgroundPicker } from "./WhatsAppBackgroundPicker";
 import { useWhatsAppMessages } from "@/hooks/whatsapp/useWhatsAppMessages";
 import { useWhatsAppSendMessage } from "@/hooks/whatsapp/useWhatsAppSendMessage";
+import { useWhatsAppBackground, backgroundClasses } from "@/hooks/whatsapp/useWhatsAppBackground";
 import type { WhatsAppChat, WhatsAppMessage } from "@/types/whatsapp";
 
 // Virtual item types for flattened list
@@ -39,6 +42,7 @@ function formatPhone(phone: string | null | undefined): string {
 
 export function WhatsAppChatDetail({ chat, onBack, showBackButton = false, onToggleProfile, showProfileButton = false }: WhatsAppChatDetailProps) {
   const { messages, groupedByDate, isLoading, loadMore, hasMore, isLoadingMore } = useWhatsAppMessages(chat.id);
+  const { background } = useWhatsAppBackground();
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const [newMessageAnnouncement, setNewMessageAnnouncement] = useState('');
   const [inputText, setInputText] = useState('');
@@ -109,7 +113,7 @@ export function WhatsAppChatDetail({ chat, onBack, showBackButton = false, onTog
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#e5ddd5] dark:bg-slate-900">
+    <div className={cn("flex flex-col h-full", backgroundClasses[background])}>
       {/* Screen reader announcements */}
       <div 
         role="status" 
@@ -158,6 +162,9 @@ export function WhatsAppChatDetail({ chat, onBack, showBackButton = false, onTog
 
         {/* Actions */}
         <div className="flex items-center gap-1">
+          {/* Background picker */}
+          <WhatsAppBackgroundPicker />
+          
           {showProfileButton && (
             <Button
               variant="ghost"
