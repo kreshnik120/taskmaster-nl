@@ -235,7 +235,11 @@ async function handleMessageReceived(
   requestId: string
 ): Promise<Record<string, unknown>> {
 const { 
-    messageId, chatJid, from, fromName, body, timestamp, type, isGroup, groupName,
+    messageId, chatJid, 
+    // Support BOTH legacy and VPS Spec v1.0 field names
+    from, fromName,           // Legacy field names
+    senderJid, pushName,      // VPS Spec v1.0 field names
+    body, timestamp, type, isGroup, groupName,
     // New ClawdBot format: media fields in data object
     media_base64, media_filename, mediaType,
     // Quote/Reply data
@@ -243,8 +247,12 @@ const {
   } = data as {
     messageId: string;
     chatJid: string;
-    from: string;
+    // Legacy
+    from?: string;
     fromName?: string;
+    // VPS Spec v1.0
+    senderJid?: string;
+    pushName?: string;
     body?: string;
     timestamp: number;
     type?: string;
@@ -261,6 +269,18 @@ const {
       from?: string;
     };
   };
+
+  // DEBUG: Log raw incoming data to diagnose field mapping
+  console.log(`[${requestId}] 🔍 RAW DATA FIELDS:`, {
+    from, fromName, senderJid, pushName, 
+    isGroup, chatJid, messageId
+  });
+
+  // Prioritize VPS Spec v1.0 field names, fallback to legacy
+  const effectiveFrom = senderJid || from;
+  const effectiveFromName = pushName || fromName;
+
+  console.log(`[${requestId}] 📍 Effective sender: from="${effectiveFrom}", name="${effectiveFromName}"`);
 
   // Extract quote data for replies
   const quotedMessageId = quotedMessage?.id || null;
@@ -287,14 +307,14 @@ const {
   // Determine effective body: use cleaned body, or emoji placeholder for media-only messages
   const effectiveBody = cleanBody || (effectiveMedia ? '📷 Afbeelding' : '');
 
-  if (!messageId || !chatJid || !from || !timestamp) {
-    throw new Error("Missing required message data: messageId, chatJid, from, timestamp");
+  if (!messageId || !chatJid || !effectiveFrom || !timestamp) {
+    throw new Error(`Missing required message data: messageId=${messageId}, chatJid=${chatJid}, from=${effectiveFrom}, timestamp=${timestamp}`);
   }
 
   // Detect group chat - either by VPS flag or by JID pattern
   const isGroupChat = isGroup === true || chatJid.includes("@g.us");
   
-  console.log(`[${requestId}] Processing ${isGroupChat ? 'group' : 'direct'} message from ${from} in ${chatJid}`);
+  console.log(`[${requestId}] Processing ${isGroupChat ? 'group' : 'direct'} message from ${effectiveFrom} in ${chatJid}`);
 
   // 1. Ensure session exists
   const session = await getOrCreateSession(supabase, sessionId, orgId, requestId);
@@ -307,19 +327,19 @@ const {
   }
 
   // Determine if this message is from the session owner (self)
-  const normalizedFrom = normalizePhone(from);
+  const normalizedFrom = normalizePhone(effectiveFrom);
   const normalizedSessionPhone = normalizePhone(session.phone_number);
   const isFromSelf = !isGroupChat && normalizedFrom && normalizedSessionPhone && 
                      normalizedFrom === normalizedSessionPhone;
 
-  console.log(`[${requestId}] Message from ${from}, session phone: ${session.phone_number}, isFromSelf: ${isFromSelf}`);
+  console.log(`[${requestId}] Message from ${effectiveFrom}, session phone: ${session.phone_number}, isFromSelf: ${isFromSelf}`);
 
   // 2. Get or create contact (different logic for groups vs direct)
   let contact;
   if (isGroupChat) {
-    contact = await getOrCreateGroupContact(supabase, session.id, orgId, chatJid, groupName || fromName, requestId);
+    contact = await getOrCreateGroupContact(supabase, session.id, orgId, chatJid, groupName || effectiveFromName, requestId);
   } else {
-    contact = await getOrCreateContact(supabase, session.id, orgId, from, fromName, requestId);
+    contact = await getOrCreateContact(supabase, session.id, orgId, effectiveFrom, effectiveFromName, requestId);
   }
 
   // 3. Get or create chat
@@ -354,12 +374,12 @@ const {
       message_type: type || "text",
       message_body: effectiveBody,
       sender_type: isFromSelf ? "self" : "contact",
-      sender_phone: from,
+      sender_phone: effectiveFrom,
       sent_at: new Date(timestamp).toISOString(),
       status: isFromSelf ? "sent" : "received",
       // Groepsberichten: sla afzender info op
-      sender_jid: isGroupChat ? from : null,
-      sender_name: isGroupChat ? (fromName || null) : null,
+      sender_jid: isGroupChat ? effectiveFrom : null,
+      sender_name: isGroupChat ? (effectiveFromName || null) : null,
       // Quote/Reply: sla referentie en preview op
       quoted_message_id: quotedMessageId,
       quoted_message_preview: quotedMessagePreview,

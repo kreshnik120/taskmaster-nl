@@ -1,129 +1,71 @@
+# WhatsApp Groepsberichten Sender Data - Fix Geïmplementeerd
 
+## Status: ✅ VOLTOOID
 
-# Diagnose: Groepsberichten Sender Data
-
-## Conclusie
-
-**Er zijn TWEE problemen gevonden:**
-
-### Probleem 1: Veld Mapping Mismatch (Lovable-zijde)
-
-De VPS Webhook Spec definieert:
-```json
-{
-  "senderJid": "31612345678@s.whatsapp.net",
-  "pushName": "Jan de Vries"
-}
-```
-
-Maar de `whatsapp-bridge` code verwacht:
-```typescript
-const { from, fromName } = data;  // Verkeerde veldnamen!
-```
-
-| VPS Stuurt | Code Verwacht | Status |
-|------------|---------------|--------|
-| `senderJid` | `from` | Mismatch |
-| `pushName` | `fromName` | Mismatch |
-
-### Probleem 2: VPS Stuurt Inconsistente Data
-
-Database query resultaten tonen:
-- **Oudere berichten**: `sender_phone` = `98917425365000` (individueel telefoonnummer - CORRECT)
-- **Nieuwere berichten**: `sender_phone` = `31618710360-1629291774@g.us` (groep JID - FOUT)
-
-Dit suggereert een regressie op de VPS of dat sommige events met andere veldnamen komen.
+**Datum:** 2026-02-01
 
 ---
 
-## Oplossing
+## Probleem
 
-### Stap 1: Update whatsapp-bridge om BEIDE veldnamen te ondersteunen
+De `whatsapp-bridge` Edge Function gebruikte verkeerde veldnamen:
+- Code verwachtte: `from`, `fromName`  
+- VPS stuurt: `senderJid`, `pushName`
 
-De code moet flexibel zijn en zowel de oude als nieuwe veldnamen accepteren:
+---
+
+## Oplossing Geïmplementeerd
+
+### Wijziging in `supabase/functions/whatsapp-bridge/index.ts`
 
 ```typescript
-// In handleMessageReceived (regel 237-247)
+// Nu worden BEIDE veldnamen ondersteund:
 const { 
-  messageId, chatJid, 
-  // Support both old and new field names
   from, fromName,           // Legacy
   senderJid, pushName,      // VPS Spec v1.0
-  body, timestamp, type, isGroup, groupName,
-  quotedMessage
-} = data as { ... };
+  // ... andere velden
+} = data;
 
-// Prioriteer spec-compliant velden, val terug op legacy
+// Prioriteer spec-compliant, fallback naar legacy
 const effectiveFrom = senderJid || from;
 const effectiveFromName = pushName || fromName;
 ```
 
-### Stap 2: Update isFromSelf logic
-
-De `isFromSelf` check moet de `effectiveFrom` gebruiken:
+### Debug Logging Toegevoegd
 
 ```typescript
-const normalizedFrom = normalizePhone(effectiveFrom);
-const isFromSelf = !isGroupChat && normalizedFrom === normalizedSessionPhone;
-```
-
-### Stap 3: Update insert statement
-
-```typescript
-.insert({
-  // ... existing fields ...
-  sender_phone: effectiveFrom,
-  sender_jid: isGroupChat ? effectiveFrom : null,
-  sender_name: isGroupChat ? (effectiveFromName || null) : null,
-})
-```
-
-### Stap 4: Add debug logging
-
-Tijdelijk extra logging om te zien wat er exact binnenkomt:
-
-```typescript
-console.log(`[${requestId}] Raw data fields:`, {
-  from, fromName, senderJid, pushName, 
-  isGroup, chatJid
+console.log(`[${requestId}] 🔍 RAW DATA FIELDS:`, {
+  from, fromName, senderJid, pushName, isGroup, chatJid, messageId
 });
 ```
 
 ---
 
-## VPS-zijde Fix Nodig
+## Volgende Stappen
 
-De VPS moet ook worden gecontroleerd:
-
-1. **Controleer of `senderJid` correct wordt meegegeven** voor groepsberichten
-2. **Controleer of `pushName`** (afzender naam) wordt meegegeven
-3. **Vergelijk oude vs nieuwe code** - er lijkt een regressie te zijn
-
----
-
-## Bestanden aan te passen
-
-| Bestand | Wijziging |
-|---------|-----------|
-| `supabase/functions/whatsapp-bridge/index.ts` | Veld mapping fix + debug logging |
+1. **Test een nieuw groepsbericht** - stuur een bericht in een groep
+2. **Check edge function logs** - zoek naar "🔍 RAW DATA FIELDS"
+3. **Verifieer in database:**
+   ```sql
+   SELECT message_id, sender_jid, sender_name 
+   FROM whatsapp_messages 
+   WHERE sender_jid IS NOT NULL 
+   ORDER BY created_at DESC 
+   LIMIT 5;
+   ```
 
 ---
 
-## Verwacht Resultaat
+## VPS-zijde Verificatie Nodig
 
-Na de fix:
-- Nieuwe groepsberichten tonen de afzender naam boven het bericht
-- `sender_jid` bevat het individuele telefoonnummer van de afzender
-- `sender_name` bevat de pushName/displayName
+Als `senderJid` nog steeds leeg is in de logs, moet de VPS code worden gecontroleerd:
+- Is `senderJid` correct gevuld voor groepsberichten?
+- Wordt `pushName` meegegeven?
 
 ---
 
-## Samenvatting
+## Bestanden Gewijzigd
 
-| Issue | Locatie | Actie |
-|-------|---------|-------|
-| Veld mapping mismatch | Lovable | Fix in whatsapp-bridge |
-| Inconsistente VPS data | VPS | Controleer VPS relay code |
-
-De Lovable-fix kan direct worden geïmplementeerd. Voor de VPS-fix is toegang tot de VPS relay code nodig.
-
+| Bestand | Status |
+|---------|--------|
+| `supabase/functions/whatsapp-bridge/index.ts` | ✅ Updated |
