@@ -1,124 +1,99 @@
 
 
-# WhatsApp Data Integriteit - Herstelplan
+# Bulk Profielfoto Sync - Oplossingsplan
 
-## 📊 Huidige Situatie (Geverifieerd)
+## Huidige Situatie
 
-### Issue 1: BLOEZEM Chat JID Probleem
-| Chat ID | JID Format | Status | Berichten |
-|---------|------------|--------|-----------|
-| `95649281...` | `26873727819967@lid` (LID) | **Actief** | 2 berichten |
-| `f07c22ec...` | `31686861816@s.whatsapp.net` (Standaard) | **Soft-deleted** | 1 bericht |
+Er bestaat al een `contact.syncAllProfilePictures` event handler in de whatsapp-bridge die:
+- Max 50 contacten zonder foto ophaalt
+- Rate limiting toepast (5 requests/seconde)
+- VPS aanroept voor elke contact
 
-**Probleem:** De migratie heeft de **verkeerde** chat behouden. De LID-format chat (`@lid`) is actief, terwijl de leesbare standaard-format chat (`@s.whatsapp.net`) is verwijderd. Dit is problematisch omdat:
-- LID is een intern WhatsApp ID dat kan veranderen
-- Standaard JID bevat het telefoonnummer en is stabieler
-
-### Issue 2: Ontbrekende Profielfoto's
-- **56 van 840 contacten** (6.7%) hebben geen profielfoto
-- De automatische sync-code is geïmplementeerd maar gebruikt `WHATSAPP_VPS_URL`
-- **Status:** `WHATSAPP_VPS_URL` secret **ontbreekt** (alleen `CLAWDBOT_VPS_URL` bestaat)
-
-### Issue 3: Geen Duplicaten Meer
-✅ De eerdere migratie heeft alle duplicaten succesvol gemerged - er zijn geen actieve duplicate chats meer per contact.
+**Probleem:** De VPS URL is hardcoded en filtert geen ongeldige contacten.
 
 ---
 
-## 🔧 Oplossingsplan
+## Oplossing
 
-### Stap 1: BLOEZEM Chat Herstellen (KRITIEK)
+### Stap 1: Fix de syncAllProfilePictures functie
 
-**Doel:** Behoud de actieve LID-chat maar update de JID naar het standaard formaat, en verplaats het bericht uit de verwijderde chat.
+**Bestand:** `supabase/functions/whatsapp-bridge/index.ts`
 
-**Aanpak (veilig - geen data verlies):**
-
-```sql
--- A. Update de actieve chat naar standaard JID formaat
-UPDATE whatsapp_chats
-SET chat_jid = '31686861816@s.whatsapp.net'
-WHERE id = '95649281-0d37-490f-9494-236a260e01d4';
-
--- B. Verplaats het bericht uit de soft-deleted chat naar de actieve chat
-UPDATE whatsapp_messages
-SET chat_id = '95649281-0d37-490f-9494-236a260e01d4'
-WHERE chat_id = 'f07c22ec-33ea-4ee6-bb77-01ac1c2914b6';
-
--- C. Verwijder nu definitief de lege duplicate chat (was al soft-deleted)
--- (optioneel - kan ook soft-deleted blijven voor audit trail)
-```
-
-**Verificatie na uitvoering:**
-- BLOEZEM heeft 1 chat met JID `31686861816@s.whatsapp.net`
-- Alle 3 berichten zitten in deze ene chat
-
----
-
-### Stap 2: Profielfoto Sync Repareren
-
-**Probleem:** De code in `fetchProfilePictureForNewContact` zoekt naar:
-```typescript
-const vpsUrl = Deno.env.get("WHATSAPP_VPS_URL");  // ❌ Bestaat niet
-const vpsApiKey = Deno.env.get("WHATSAPP_VPS_API_KEY");  // ✅ Bestaat
-```
-
-**Oplossing - twee opties:**
-
-#### Optie A: Bestaande secret hergebruiken (Aanbevolen)
-Pas de code aan om `CLAWDBOT_VPS_URL` te gebruiken (die al bestaat):
+**Wijzigingen:**
 
 ```typescript
-// Gewijzigde code:
+// Regel 1020-1026: Voeg VPS URL toe met fallback
 const vpsUrl = Deno.env.get("WHATSAPP_VPS_URL") || Deno.env.get("CLAWDBOT_VPS_URL");
+const vpsApiKey = Deno.env.get("WHATSAPP_VPS_API_KEY");
+const vpsSessionId = Deno.env.get("WHATSAPP_VPS_SESSION_ID") || "clawdbot-default";
+
+if (!vpsUrl || !vpsApiKey) {
+  throw new Error("VPS credentials not configured (WHATSAPP_VPS_URL/CLAWDBOT_VPS_URL)");
+}
+
+// Regel 1029-1034: Voeg filter toe voor geldige contacten
+const { data: contacts, error } = await supabase
+  .from('whatsapp_contacts')
+  .select('id, phone_number')
+  .eq('org_id', orgId)
+  .is('profile_picture_url', null)
+  .not('phone_number', 'like', 'group-%')  // Skip groepen
+  .neq('phone_number', 'unknown')          // Skip unknown
+  .limit(100);  // Verhoog batch naar 100
+
+// Regel 1062: Gebruik dynamische VPS URL
+const profilePictureEndpoint = `${vpsUrl}/contacts/${encodeURIComponent(phone)}/profile-picture`;
 ```
 
-#### Optie B: Nieuwe secret toevoegen
-Voeg `WHATSAPP_VPS_URL` toe met dezelfde waarde als `CLAWDBOT_VPS_URL`.
+---
+
+### Stap 2: Trigger de sync via API call
+
+Na deployment, trigger de sync:
+
+```bash
+curl -X POST "https://oelmsmcgryeoryhonexw.supabase.co/functions/v1/whatsapp-bridge" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: [WHATSAPP_VPS_API_KEY]" \
+  -d '{
+    "event": "contact.syncAllProfilePictures",
+    "sessionId": "clawdbot-default",
+    "orgId": "550e8400-e29b-41d4-a716-446655440000",
+    "data": {}
+  }'
+```
+
+Of via de Supabase SDK vanuit de app (met auth header).
 
 ---
 
-### Stap 3: Bestaande Contacten Profielfoto's Ophalen
+## Technische Details
 
-**Doel:** De 56 contacten zonder foto een profielfoto geven.
-
-**Aanpak:**
-1. Voeg een admin-endpoint toe aan `whatsapp-bridge` voor handmatige sync trigger
-2. Of gebruik de bestaande `syncAllProfilePictures` functie via een API call
-
-**Filtering:** Sla groep-contacten over (phone_number begint met `group-`) en contacten met `unknown` als nummer.
-
----
-
-## 📋 Implementatievolgorde
-
-| # | Actie | Risico | Rollback |
-|---|-------|--------|----------|
-| 1 | SQL: Update BLOEZEM chat_jid | Laag | Herstel oude JID |
-| 2 | SQL: Verplaats bericht naar actieve chat | Laag | Verplaats terug |
-| 3 | Code: Fallback naar CLAWDBOT_VPS_URL | Geen | Revert code |
-| 4 | Deploy: Herstart Edge Function | Geen | - |
-| 5 | Trigger: Bulk profielfoto sync | Laag | - |
+| Aspect | Waarde |
+|--------|--------|
+| Rate limit | 5 requests per seconde |
+| Batch size | 100 contacten per call |
+| Timeout | ~25 seconden voor 100 contacten |
+| Herhalingen | Meerdere calls nodig als >100 contacten |
 
 ---
 
-## ⚠️ Belangrijke Waarborgen
+## Implementatievolgorde
 
-### Wat wordt NIET aangepast:
-- Chat ID's blijven ongewijzigd (berichten blijven gekoppeld)
-- Contact ID's blijven ongewijzigd
-- Session ID's blijven ongewijzigd
-- De `getOrCreateChat` logica die duplicaten voorkomt blijft intact
-
-### Backup-strategie:
-- Alle wijzigingen zijn omkeerbaar
-- Soft-deleted records blijven beschikbaar
-- Berichten worden alleen verplaatst, niet verwijderd
+| # | Actie | Risico |
+|---|-------|--------|
+| 1 | Update `syncAllProfilePictures` met VPS URL fallback | Laag |
+| 2 | Voeg filter toe voor group/unknown contacten | Laag |
+| 3 | Deploy edge function | Geen |
+| 4 | Trigger sync via curl of browser | Laag |
+| 5 | Verificatie: check aantal contacten zonder foto | - |
 
 ---
 
-## 🧪 Verificatie Stappen
+## Verwacht Resultaat
 
-Na implementatie:
-1. **BLOEZEM test:** Stuur bericht naar BLOEZEM via telefoon, controleer dat het in dezelfde chat komt
-2. **Geen duplicaten:** Query `SELECT contact_id, COUNT(*) FROM whatsapp_chats WHERE deleted_at IS NULL GROUP BY contact_id HAVING COUNT(*) > 1`
-3. **Profielfoto's:** Controleer dat nieuwe contacten automatisch een foto krijgen
+- **51 contacten** worden verwerkt (minus groepen/unknown)
+- Foto's worden async opgehaald door VPS
+- VPS stuurt `contact.profilePicture` events terug
+- Database wordt automatisch bijgewerkt
 
