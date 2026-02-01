@@ -1,13 +1,15 @@
+import { useCallback } from "react";
 import { X, Pin, BellOff, Volume2, Archive, Users, MessageCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { WhatsAppContactAvatar } from "./WhatsAppContactAvatar";
 import { useWhatsAppGroupMembers } from "@/hooks/whatsapp/useWhatsAppGroupMembers";
 import { useUpdateChatStatus } from "@/hooks/whatsapp/useUpdateChatStatus";
 import { cn } from "@/lib/utils";
-import type { WhatsAppChat } from "@/types/whatsapp";
+import type { WhatsAppChat, WhatsAppGroupMember } from "@/types/whatsapp";
 
 interface WhatsAppGroupProfileProps {
   chat: WhatsAppChat;
@@ -46,6 +48,24 @@ export function WhatsAppGroupProfile({ chat, onClose }: WhatsAppGroupProfileProp
     });
     onClose();
   };
+
+  const handleMemberClick = useCallback((member: WhatsAppGroupMember) => {
+    if (member.direct_chat_id) {
+      navigate(`/whatsapp/chat/${member.direct_chat_id}`);
+      onClose();
+    }
+  }, [navigate, onClose]);
+
+  const handleMemberKeyDown = useCallback((
+    e: React.KeyboardEvent,
+    member: WhatsAppGroupMember
+  ) => {
+    if (member.direct_chat_id && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      navigate(`/whatsapp/chat/${member.direct_chat_id}`);
+      onClose();
+    }
+  }, [navigate, onClose]);
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -107,48 +127,58 @@ export function WhatsAppGroupProfile({ chat, onClose }: WhatsAppGroupProfileProp
               Geen deelnemers gevonden. Stuur een bericht om leden te registreren.
             </p>
           ) : (
-            <div className="space-y-1">
-              {members?.map((member) => (
-                <div
-                  key={member.id}
-                  className={cn(
-                    "flex items-center gap-3 p-2 rounded-lg transition-colors",
-                    member.direct_chat_id 
-                      ? "hover:bg-muted/50 cursor-pointer" 
-                      : "hover:bg-muted/30"
-                  )}
-                  onClick={() => {
-                    if (member.direct_chat_id) {
-                      navigate(`/whatsapp/chat/${member.direct_chat_id}`);
-                      onClose();
-                    }
-                  }}
-                >
-                  <WhatsAppContactAvatar
-                    contactId={member.contact_id || undefined}
-                    displayName={member.display_name}
-                    phoneNumber={member.member_jid}
-                    size="sm"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">
-                      {member.display_name || member.member_jid}
-                      {member.is_self && (
-                        <span className="ml-2 text-xs text-muted-foreground">(Jij)</span>
-                      )}
-                    </p>
-                    {member.role !== 'member' && (
-                      <p className="text-xs text-muted-foreground capitalize">
-                        {member.role === 'superadmin' ? 'Beheerder' : 'Admin'}
+            <TooltipProvider>
+              <div className="space-y-1">
+                {members?.map((member) => (
+                  <div
+                    key={member.id}
+                    role={member.direct_chat_id ? "button" : undefined}
+                    tabIndex={member.direct_chat_id ? 0 : undefined}
+                    aria-label={member.direct_chat_id 
+                      ? `Open privé gesprek met ${member.display_name || 'contact'}` 
+                      : undefined}
+                    className={cn(
+                      "flex items-center gap-3 p-2 rounded-lg transition-all",
+                      member.direct_chat_id 
+                        ? "hover:bg-muted/50 cursor-pointer active:scale-[0.98]" 
+                        : "opacity-75"
+                    )}
+                    onClick={() => handleMemberClick(member)}
+                    onKeyDown={(e) => handleMemberKeyDown(e, member)}
+                  >
+                    <WhatsAppContactAvatar
+                      contactId={member.contact_id || undefined}
+                      displayName={member.display_name}
+                      phoneNumber={member.member_jid}
+                      size="sm"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {member.display_name || member.member_jid}
+                        {member.is_self && (
+                          <span className="ml-2 text-xs text-muted-foreground">(Jij)</span>
+                        )}
                       </p>
+                      {member.role !== 'member' && (
+                        <p className="text-xs text-muted-foreground capitalize">
+                          {member.role === 'superadmin' ? 'Beheerder' : 'Admin'}
+                        </p>
+                      )}
+                    </div>
+                    {member.direct_chat_id && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <MessageCircle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        </TooltipTrigger>
+                        <TooltipContent side="left">
+                          <p>Open privé gesprek</p>
+                        </TooltipContent>
+                      </Tooltip>
                     )}
                   </div>
-                  {member.direct_chat_id && (
-                    <MessageCircle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  )}
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </TooltipProvider>
           )}
         </div>
 
