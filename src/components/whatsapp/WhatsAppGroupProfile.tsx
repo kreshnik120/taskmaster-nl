@@ -1,10 +1,12 @@
-import { X, Pin, BellOff, Volume2, Archive, Users } from "lucide-react";
+import { X, Pin, BellOff, Volume2, Archive, Users, MessageCircle } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { WhatsAppContactAvatar } from "./WhatsAppContactAvatar";
 import { useWhatsAppGroupMembers } from "@/hooks/whatsapp/useWhatsAppGroupMembers";
 import { useUpdateChatStatus } from "@/hooks/whatsapp/useUpdateChatStatus";
+import { cn } from "@/lib/utils";
 import type { WhatsAppChat } from "@/types/whatsapp";
 
 interface WhatsAppGroupProfileProps {
@@ -13,6 +15,7 @@ interface WhatsAppGroupProfileProps {
 }
 
 export function WhatsAppGroupProfile({ chat, onClose }: WhatsAppGroupProfileProps) {
+  const navigate = useNavigate();
   const { data: members, isLoading } = useWhatsAppGroupMembers(chat.id);
   const updateStatus = useUpdateChatStatus();
   
@@ -108,7 +111,18 @@ export function WhatsAppGroupProfile({ chat, onClose }: WhatsAppGroupProfileProp
               {members?.map((member) => (
                 <div
                   key={member.id}
-                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
+                  className={cn(
+                    "flex items-center gap-3 p-2 rounded-lg transition-colors",
+                    member.direct_chat_id 
+                      ? "hover:bg-muted/50 cursor-pointer" 
+                      : "hover:bg-muted/30"
+                  )}
+                  onClick={() => {
+                    if (member.direct_chat_id) {
+                      navigate(`/whatsapp/chat/${member.direct_chat_id}`);
+                      onClose();
+                    }
+                  }}
                 >
                   <WhatsAppContactAvatar
                     contactId={member.contact_id || undefined}
@@ -129,6 +143,9 @@ export function WhatsAppGroupProfile({ chat, onClose }: WhatsAppGroupProfileProp
                       </p>
                     )}
                   </div>
+                  {member.direct_chat_id && (
+                    <MessageCircle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  )}
                 </div>
               ))}
             </div>

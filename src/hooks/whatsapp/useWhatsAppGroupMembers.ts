@@ -20,6 +20,7 @@ export function useWhatsAppGroupMembers(chatId: string | undefined) {
           member_jid,
           display_name,
           contact_id,
+          direct_chat_id,
           role,
           is_self,
           joined_at,

@@ -91,6 +91,7 @@ export interface WhatsAppGroupMember {
   member_jid: string;
   display_name: string | null;
   contact_id: string | null;
+  direct_chat_id: string | null; // Link naar privé chat
   role: 'member' | 'admin' | 'superadmin';
   is_self: boolean;
   joined_at: string;

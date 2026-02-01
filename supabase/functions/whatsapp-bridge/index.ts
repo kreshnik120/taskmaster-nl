@@ -1155,6 +1155,7 @@ async function handleSyncAllProfilePictures(
 /**
  * Upsert a group member when a group message is received.
  * Tracks unique participants by chat_id + member_jid.
+ * Auto-links to direct chat if the member has one (by matching member_jid prefix to phone_number).
  */
 async function upsertGroupMember(
   supabase: SupabaseClientAny,
@@ -1165,6 +1166,46 @@ async function upsertGroupMember(
 ): Promise<void> {
   if (!memberJid || !chatId) return;
 
+  // Extract numeric part from member_jid (e.g., "260318672515302@lid" → "260318672515302")
+  const memberNumber = memberJid.split('@')[0];
+
+  // First get the org_id from the chat to scope the direct chat lookup
+  const { data: chat } = await supabase
+    .from("whatsapp_chats")
+    .select("org_id")
+    .eq("id", chatId)
+    .single();
+
+  let directChatId: string | null = null;
+  let contactId: string | null = null;
+
+  if (chat?.org_id && memberNumber) {
+    // Step 1: Find contact by phone_number matching member's numeric ID
+    const { data: contact } = await supabase
+      .from("whatsapp_contacts")
+      .select("id")
+      .eq("phone_number", memberNumber)
+      .eq("org_id", chat.org_id)
+      .maybeSingle();
+
+    if (contact) {
+      // Step 2: Find direct chat for this contact
+      const { data: directChat } = await supabase
+        .from("whatsapp_chats")
+        .select("id")
+        .eq("org_id", chat.org_id)
+        .eq("chat_type", "direct")
+        .eq("contact_id", contact.id)
+        .maybeSingle();
+
+      if (directChat) {
+        directChatId = directChat.id;
+        contactId = contact.id;
+        console.log(`[${requestId}] 🔗 Linked group member ${memberNumber} to direct chat ${directChatId}`);
+      }
+    }
+  }
+
   const { error } = await supabase
     .from("whatsapp_group_members")
     .upsert(
@@ -1172,6 +1213,8 @@ async function upsertGroupMember(
         chat_id: chatId,
         member_jid: memberJid,
         display_name: displayName,
+        direct_chat_id: directChatId,
+        contact_id: contactId,
         updated_at: new Date().toISOString(),
       },
       {
@@ -1183,7 +1226,7 @@ async function upsertGroupMember(
   if (error) {
     console.error(`[${requestId}] Group member upsert failed:`, error);
   } else {
-    console.log(`[${requestId}] ✅ Group member tracked: ${displayName || memberJid}`);
+    console.log(`[${requestId}] ✅ Group member tracked: ${displayName || memberJid}${directChatId ? ' (linked to private chat)' : ''}`);
   }
 }
 

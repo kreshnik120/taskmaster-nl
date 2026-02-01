@@ -6688,6 +6688,7 @@ export type Database = {
           chat_id: string
           contact_id: string | null
           created_at: string | null
+          direct_chat_id: string | null
           display_name: string | null
           id: string
           is_self: boolean | null
@@ -6701,6 +6702,7 @@ export type Database = {
           chat_id: string
           contact_id?: string | null
           created_at?: string | null
+          direct_chat_id?: string | null
           display_name?: string | null
           id?: string
           is_self?: boolean | null
@@ -6714,6 +6716,7 @@ export type Database = {
           chat_id?: string
           contact_id?: string | null
           created_at?: string | null
+          direct_chat_id?: string | null
           display_name?: string | null
           id?: string
           is_self?: boolean | null
@@ -6736,6 +6739,13 @@ export type Database = {
             columns: ["contact_id"]
             isOneToOne: false
             referencedRelation: "whatsapp_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_group_members_direct_chat_id_fkey"
+            columns: ["direct_chat_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_chats"
             referencedColumns: ["id"]
           },
         ]
