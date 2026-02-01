@@ -1,16 +1,21 @@
-import { useEffect, useRef, useState } from "react";
-import { Search, User, Briefcase } from "lucide-react";
+import { useEffect, useRef, useState, ReactNode } from "react";
+import { Search, User, Briefcase, AlertCircle, Clock } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { WhatsAppContact } from "@/types/whatsapp";
 
 interface WhatsAppContactSearchResultsProps {
   results: WhatsAppContact[];
   isLoading: boolean;
+  isError?: boolean;
   searchQuery: string;
   onSelectContact: (contact: WhatsAppContact) => void;
   onClose: () => void;
+  onRetry?: () => void;
+  recentContacts?: WhatsAppContact[];
+  showRecent?: boolean;
 }
 
 function getInitials(contact: WhatsAppContact): string {
@@ -22,6 +27,29 @@ function getInitials(contact: WhatsAppContact): string {
     .join("")
     .toUpperCase()
     .slice(0, 2);
+}
+
+// Escape special regex characters in user input
+function escapeRegExp(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Highlight matching text in search results
+function highlightMatch(text: string | null, query: string): ReactNode {
+  if (!text || !query || query.length < 2) return text;
+  
+  try {
+    const escapedQuery = escapeRegExp(query);
+    const parts = text.split(new RegExp(`(${escapedQuery})`, 'gi'));
+    
+    return parts.map((part, i) =>
+      part.toLowerCase() === query.toLowerCase()
+        ? <mark key={i} className="bg-yellow-200 dark:bg-yellow-800 rounded-sm px-0.5">{part}</mark>
+        : part
+    );
+  } catch {
+    return text;
+  }
 }
 
 function ContactResultSkeleton() {
@@ -50,20 +78,112 @@ function EmptySearchState({ query }: { query: string }) {
   );
 }
 
+function ErrorState({ onRetry }: { onRetry?: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+      <div className="rounded-full bg-destructive/10 p-3 mb-3">
+        <AlertCircle className="h-5 w-5 text-destructive" />
+      </div>
+      <p className="text-sm font-medium text-foreground">Er ging iets mis</p>
+      <p className="text-xs text-muted-foreground mt-1">
+        Kon contacten niet laden
+      </p>
+      {onRetry && (
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={onRetry}
+          className="mt-3"
+        >
+          Probeer opnieuw
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function RecentContactsHeader() {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground border-b">
+      <Clock className="h-3.5 w-3.5" />
+      <span>Recent gecontacteerd</span>
+    </div>
+  );
+}
+
+interface ContactItemProps {
+  contact: WhatsAppContact;
+  isFocused: boolean;
+  searchQuery: string;
+  onSelect: () => void;
+  onMouseEnter: () => void;
+}
+
+function ContactItem({ contact, isFocused, searchQuery, onSelect, onMouseEnter }: ContactItemProps) {
+  const displayName = contact.display_name || contact.push_name || contact.phone_number;
+  
+  return (
+    <button
+      onClick={onSelect}
+      onMouseEnter={onMouseEnter}
+      className={cn(
+        "w-full flex items-center gap-3 p-3 rounded-md text-left transition-colors",
+        isFocused
+          ? "bg-accent text-accent-foreground"
+          : "hover:bg-muted"
+      )}
+      role="option"
+      aria-selected={isFocused}
+    >
+      <Avatar className="h-10 w-10">
+        <AvatarImage
+          src={contact.profile_picture_url || undefined}
+          alt={displayName}
+        />
+        <AvatarFallback className="bg-primary/10 text-primary text-sm">
+          {getInitials(contact)}
+        </AvatarFallback>
+      </Avatar>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-sm truncate">
+            {highlightMatch(displayName, searchQuery)}
+          </span>
+          {contact.is_business_account && (
+            <Briefcase className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+          )}
+        </div>
+        <span className="text-xs text-muted-foreground truncate block">
+          {highlightMatch(contact.phone_number, searchQuery)}
+        </span>
+      </div>
+    </button>
+  );
+}
+
 export function WhatsAppContactSearchResults({
   results,
   isLoading,
+  isError = false,
   searchQuery,
   onSelectContact,
   onClose,
+  onRetry,
+  recentContacts = [],
+  showRecent = false,
 }: WhatsAppContactSearchResultsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [focusedIndex, setFocusedIndex] = useState(0);
 
+  // Determine which contacts to display
+  const displayContacts = showRecent && searchQuery.length < 2 ? recentContacts : results;
+  const isShowingRecent = showRecent && searchQuery.length < 2 && recentContacts.length > 0;
+
   // Reset focus when results change
   useEffect(() => {
     setFocusedIndex(0);
-  }, [results]);
+  }, [results, recentContacts, showRecent]);
 
   // Handle click outside
   useEffect(() => {
@@ -83,22 +203,19 @@ export function WhatsAppContactSearchResults({
   // Keyboard navigation
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      // Don't handle if in input (except navigation keys)
-      const isInput = document.activeElement?.tagName === "INPUT";
-      
       switch (event.key) {
         case "ArrowDown":
           event.preventDefault();
-          setFocusedIndex((prev) => Math.min(prev + 1, results.length - 1));
+          setFocusedIndex((prev) => Math.min(prev + 1, displayContacts.length - 1));
           break;
         case "ArrowUp":
           event.preventDefault();
           setFocusedIndex((prev) => Math.max(prev - 1, 0));
           break;
         case "Enter":
-          if (results[focusedIndex]) {
+          if (displayContacts[focusedIndex]) {
             event.preventDefault();
-            onSelectContact(results[focusedIndex]);
+            onSelectContact(displayContacts[focusedIndex]);
           }
           break;
         case "Escape":
@@ -110,7 +227,19 @@ export function WhatsAppContactSearchResults({
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [results, focusedIndex, onSelectContact, onClose]);
+  }, [displayContacts, focusedIndex, onSelectContact, onClose]);
+
+  // Error state
+  if (isError) {
+    return (
+      <div
+        ref={containerRef}
+        className="absolute top-full left-0 right-0 mt-1 bg-background border rounded-lg shadow-lg z-50"
+      >
+        <ErrorState onRetry={onRetry} />
+      </div>
+    );
+  }
 
   // Loading state
   if (isLoading) {
@@ -128,8 +257,8 @@ export function WhatsAppContactSearchResults({
     );
   }
 
-  // Empty state
-  if (results.length === 0) {
+  // Empty state (only for search, not recent)
+  if (!isShowingRecent && displayContacts.length === 0 && searchQuery.length >= 2) {
     return (
       <div
         ref={containerRef}
@@ -140,53 +269,35 @@ export function WhatsAppContactSearchResults({
     );
   }
 
+  // No recent contacts and no search
+  if (isShowingRecent && recentContacts.length === 0) {
+    return null;
+  }
+
+  // Hide if no results and short query (not showing recent)
+  if (!isShowingRecent && displayContacts.length === 0) {
+    return null;
+  }
+
   // Results list
   return (
     <div
       ref={containerRef}
       className="absolute top-full left-0 right-0 mt-1 bg-background border rounded-lg shadow-lg z-50 max-h-[320px] overflow-y-auto"
       role="listbox"
-      aria-label="Zoekresultaten contacten"
+      aria-label={isShowingRecent ? "Recente contacten" : "Zoekresultaten contacten"}
     >
+      {isShowingRecent && <RecentContactsHeader />}
       <div className="p-1">
-        {results.map((contact, index) => (
-          <button
+        {displayContacts.map((contact, index) => (
+          <ContactItem
             key={contact.id}
-            onClick={() => onSelectContact(contact)}
+            contact={contact}
+            isFocused={focusedIndex === index}
+            searchQuery={isShowingRecent ? "" : searchQuery}
+            onSelect={() => onSelectContact(contact)}
             onMouseEnter={() => setFocusedIndex(index)}
-            className={cn(
-              "w-full flex items-center gap-3 p-3 rounded-md text-left transition-colors",
-              focusedIndex === index
-                ? "bg-accent text-accent-foreground"
-                : "hover:bg-muted"
-            )}
-            role="option"
-            aria-selected={focusedIndex === index}
-          >
-            <Avatar className="h-10 w-10">
-              <AvatarImage
-                src={contact.profile_picture_url || undefined}
-                alt={contact.display_name || contact.phone_number}
-              />
-              <AvatarFallback className="bg-primary/10 text-primary text-sm">
-                {getInitials(contact)}
-              </AvatarFallback>
-            </Avatar>
-
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-sm truncate">
-                  {contact.display_name || contact.push_name || contact.phone_number}
-                </span>
-                {contact.is_business_account && (
-                  <Briefcase className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                )}
-              </div>
-              <span className="text-xs text-muted-foreground truncate block">
-                {contact.phone_number}
-              </span>
-            </div>
-          </button>
+          />
         ))}
       </div>
     </div>
