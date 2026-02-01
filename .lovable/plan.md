@@ -1,230 +1,293 @@
 
+# WhatsApp Groepsleden Module - Implementatieplan
 
-# WhatsApp Chat Duplicaten - Merge Plan
+## Huidige Situatie Analyse
 
-## 📊 Geverifieerde Situatie
+### Wat werkt:
+| Component | Status | Detail |
+|-----------|--------|--------|
+| Groepschat herkenning | ✅ | `chat_type === 'group'` en `@g.us` detectie |
+| Afzendernamen in berichten | ✅ | `sender_jid` + `sender_name` in `whatsapp_messages` |
+| Groepsicoon in chatlijst | ✅ | `<Users>` icoon via `WhatsAppContactAvatar` |
+| Profielpaneel | ⚠️ | Toont 1 "contact" voor groepen, geen ledenlijst |
 
-### Probleem Geïdentificeerd
+### Gevonden Groepsdata:
 
-| Contact | Duplicate Chats | Sessies | Totaal Berichten |
-|---------|-----------------|---------|------------------|
-| Kreshnik | 3 | 3 verschillende | 45 |
+| Groep | Unieke Afzenders | Berichten |
+|-------|------------------|-----------|
+| Shkelzen | 3 (🙏, K, .) | 11 |
+| Simon de Jong | 1 | 10 |
+| Sarah | 0 (geen sender_jid) | 3 |
+| abczorg | 0 (geen sender_jid) | 10 |
 
-### Root Cause
-
-De `getOrCreateChat` functie zoekt op `session_id + contact_id`:
-
-```text
-Huidige lookup (regel 1422-1428):
-  .eq("session_id", sessionId)  ← Elke sessie krijgt eigen chat
-  .eq("contact_id", contactId)
-```
-
-Dit veroorzaakt duplicate chats wanneer:
-1. WhatsApp opnieuw wordt verbonden (nieuwe sessie)
-2. Berichten van hetzelfde contact komen in nieuwe sessie
-
-### Sessie Overzicht
-
-| Sessie ID | Status | Chats | Laatste Bericht |
-|-----------|--------|-------|-----------------|
-| `61f4b1fb-5bcf...` | **ACTIEF** | 65 | 2026-02-01 19:51 |
-| `9a8c604c-4237...` | Oud | 1 | 2026-01-29 08:17 |
-| `999a8fdb-7a36...` | Oud | 3 | 1970 (corrupt) |
+### Observaties:
+1. Oudere berichten missen `sender_jid`/`sender_name` (legacy data)
+2. Nieuwe berichten van VPS hebben correcte sender info
+3. Groepen worden als "contact" opgeslagen in `whatsapp_contacts` met `group-{jid}` als phone_number
 
 ---
 
-## 🔧 Oplossing
+## Oplossing in 6 Stappen
 
-### Stap 1: Database Cleanup - Merge Kreshnik Chats
+### Stap 1: Database Schema - Groepsleden Tabel
 
-```sql
--- Kreshnik heeft 3 chats, we behouden de actieve (meeste berichten + nieuwste)
--- Chat IDs:
--- 4c9a25f0... = 32 berichten (BEHOUDEN - actieve sessie)
--- a1cd195d... = 10 berichten (MERGE)
--- f46d3fa3... = 3 berichten (MERGE)
+Maak een nieuwe tabel `whatsapp_group_members` om groepsdeelnemers te tracken:
 
--- 1A: Verplaats alle berichten naar de primaire chat
-UPDATE whatsapp_messages 
-SET chat_id = '4c9a25f0-f1a2-4957-a09d-b4e03ee2a1da'
-WHERE chat_id IN (
-  'a1cd195d-7894-49b3-98aa-a66626a53620',
-  'f46d3fa3-d560-4412-a110-94ac23f64d37'
-);
-
--- 1B: Update unread_count door som te nemen
-UPDATE whatsapp_chats 
-SET unread_count = (
-  SELECT COALESCE(SUM(unread_count), 0)
-  FROM whatsapp_chats 
-  WHERE contact_id = '9f68dd01-0bfc-4eb4-bd0e-cdd5b79eae03'
-)
-WHERE id = '4c9a25f0-f1a2-4957-a09d-b4e03ee2a1da';
-
--- 1C: Verwijder de lege duplicate chats
-DELETE FROM whatsapp_chats 
-WHERE id IN (
-  'a1cd195d-7894-49b3-98aa-a66626a53620',
-  'f46d3fa3-d560-4412-a110-94ac23f64d37'
-);
+```text
+whatsapp_group_members
+├── id (UUID, PK)
+├── chat_id (UUID, FK → whatsapp_chats)
+├── member_jid (TEXT)           -- WhatsApp ID van lid
+├── display_name (TEXT)         -- Naam uit berichten
+├── contact_id (UUID, nullable) -- Link naar bestaand contact
+├── role (TEXT)                 -- 'member' | 'admin' | 'superadmin'
+├── is_self (BOOLEAN)           -- Eigen account markering
+├── joined_at (TIMESTAMPTZ)
+├── left_at (TIMESTAMPTZ)       -- NULL = actief lid
+├── created_at (TIMESTAMPTZ)
+├── updated_at (TIMESTAMPTZ)
+└── UNIQUE(chat_id, member_jid)
 ```
 
-### Stap 2: Code Fix - Lookup op org_id (niet session_id)
+RLS: Toegang via organisatie-lidmaatschap, identiek aan `whatsapp_chats`.
 
-**Bestand:** `supabase/functions/whatsapp-bridge/index.ts`
+### Stap 2: Backfill - Historische Leden Extraheren
 
-Wijzig `getOrCreateChat` (regel 1419-1428):
+SQL-script om bestaande afzenders uit `whatsapp_messages` te extraheren:
 
-```typescript
-// VOOR (veroorzaakt duplicaten):
-const { data: existingByContact } = await supabase
-  .from("whatsapp_chats")
-  .select("id, unread_count, chat_jid")
-  .eq("session_id", sessionId)  // ❌ Elke sessie = nieuwe chat
-  .eq("contact_id", contactId)
-  .is("deleted_at", null)
-  .maybeSingle();
+```text
+Bron: whatsapp_messages WHERE chat_type = 'group' AND sender_jid IS NOT NULL
+Actie: INSERT INTO whatsapp_group_members met DISTINCT (chat_id, sender_jid)
+Resultaat: Automatisch alle bekende groepsleden vullen
+```
 
-// NA (voorkomt duplicaten):
-const { data: existingByContact } = await supabase
-  .from("whatsapp_chats")
-  .select("id, unread_count, chat_jid, session_id")
-  .eq("org_id", orgId)  // ✅ Zoek binnen hele organisatie
-  .eq("contact_id", contactId)
-  .is("deleted_at", null)
-  .maybeSingle();
+### Stap 3: Edge Function Update - Auto-registratie
 
-if (existingByContact) {
-  // Update session_id naar huidige sessie (voor realtime sync)
-  if (existingByContact.session_id !== sessionId) {
-    console.log(`[${requestId}] Migrating chat to new session`);
-    await supabase
-      .from("whatsapp_chats")
-      .update({ session_id: sessionId })
-      .eq("id", existingByContact.id);
-  }
-  // ... rest van de logica
+Bij elk inkomend groepsbericht: controleer of afzender al geregistreerd staat.
+
+```text
+Locatie: whatsapp-bridge/index.ts → handleMessageReceived()
+Trigger: isGroupChat && sender_jid aanwezig
+Actie: upsertGroupMember(chatId, senderJid, senderName)
+```
+
+Logica:
+- Zoek bestaand lid op `chat_id + member_jid`
+- Update `display_name` als deze verandert (push_name update)
+- Voeg toe als lid niet bestaat
+
+### Stap 4: React Hook - Ledenlijst Ophalen
+
+Nieuwe hook `useWhatsAppGroupMembers`:
+
+```text
+Query: SELECT * FROM whatsapp_group_members WHERE chat_id = ? ORDER BY display_name
+Realtime: Subscribe op INSERT/UPDATE voor live updates
+Cache: 30 seconden stale time
+```
+
+### Stap 5: UI Component - Groepsprofiel
+
+Nieuw component `WhatsAppGroupProfile` als alternatief voor `WhatsAppContactProfile`:
+
+```text
+┌────────────────────────────┐
+│ Groepsinfo               X │
+├────────────────────────────┤
+│         [Groep Icon]       │
+│        "Shkelzen"          │
+│       3 deelnemers         │
+├────────────────────────────┤
+│ DEELNEMERS                 │
+│ ┌──────────────────────┐   │
+│ │ [🙏] 🙏               │   │
+│ │ [K ] K                │   │
+│ │ [. ] .                │   │
+│ └──────────────────────┘   │
+├────────────────────────────┤
+│ ACTIES                     │
+│ [📌 Pin groep           ]  │
+│ [🔇 Mute groep          ]  │
+│ [📁 Archiveer           ]  │
+└────────────────────────────┘
+```
+
+Features:
+- Ledenlijst met avatars (initials fallback)
+- Aantal deelnemers
+- Zelfde acties als contactprofiel (pin/mute/archive)
+
+### Stap 6: Profiel Switcher
+
+Update `WhatsApp.tsx` om het juiste profiel te tonen:
+
+```text
+if (selectedChat.chat_type === 'group') {
+  render <WhatsAppGroupProfile />
+} else {
+  render <WhatsAppContactProfile />
 }
 ```
 
-### Stap 3: Database Constraint - Voorkom Toekomstige Duplicaten
-
-```sql
--- Unique index op org_id + contact_id
--- Zorgt ervoor dat er maar 1 chat per contact per organisatie kan bestaan
-CREATE UNIQUE INDEX IF NOT EXISTS idx_chats_org_contact_unique 
-ON whatsapp_chats (org_id, contact_id) 
-WHERE deleted_at IS NULL;
-```
-
 ---
 
-## Implementatievolgorde
+## Bestandswijzigingen
 
-| # | Actie | Type | Impact |
-|---|-------|------|--------|
-| 1 | Merge Kreshnik berichten naar 1 chat | SQL | 45 berichten → 1 chat |
-| 2 | Verwijder 2 lege duplicate chats | SQL | -2 chats |
-| 3 | Update `getOrCreateChat` naar org_id lookup | Code | Preventief |
-| 4 | Voeg UNIQUE INDEX toe | Schema | Garantie |
-| 5 | Deploy Edge Function | Deploy | Activeer |
+| Bestand | Actie | Omschrijving |
+|---------|-------|--------------|
+| `migrations/xxx_group_members.sql` | Nieuw | Tabel + RLS + Backfill |
+| `supabase/functions/whatsapp-bridge/index.ts` | Update | `upsertGroupMember()` functie |
+| `src/types/whatsapp.ts` | Update | `WhatsAppGroupMember` interface |
+| `src/hooks/whatsapp/useWhatsAppGroupMembers.ts` | Nieuw | Hook voor ledenlijst |
+| `src/components/whatsapp/WhatsAppGroupProfile.tsx` | Nieuw | Groepsprofiel component |
+| `src/pages/WhatsApp.tsx` | Update | Profiel switcher logica |
 
 ---
 
 ## Technische Details
 
-### Stap 2: Volledige getOrCreateChat Update
+### 1. Database Migratie
 
-Locatie: `supabase/functions/whatsapp-bridge/index.ts` regel 1410-1472
+```sql
+-- Tabel aanmaken
+CREATE TABLE whatsapp_group_members (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  chat_id UUID NOT NULL REFERENCES whatsapp_chats(id) ON DELETE CASCADE,
+  member_jid TEXT NOT NULL,
+  display_name TEXT,
+  contact_id UUID REFERENCES whatsapp_contacts(id),
+  role TEXT DEFAULT 'member' CHECK (role IN ('member', 'admin', 'superadmin')),
+  is_self BOOLEAN DEFAULT false,
+  joined_at TIMESTAMPTZ DEFAULT NOW(),
+  left_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  CONSTRAINT unique_chat_member UNIQUE(chat_id, member_jid)
+);
+
+-- Index voor snelle lookups
+CREATE INDEX idx_group_members_chat ON whatsapp_group_members(chat_id);
+CREATE INDEX idx_group_members_contact ON whatsapp_group_members(contact_id) WHERE contact_id IS NOT NULL;
+
+-- RLS activeren
+ALTER TABLE whatsapp_group_members ENABLE ROW LEVEL SECURITY;
+
+-- Lees policy: via org toegang
+CREATE POLICY "Users can view group members of their org"
+ON whatsapp_group_members FOR SELECT
+USING (
+  EXISTS (
+    SELECT 1 FROM whatsapp_chats ch
+    JOIN user_organizations uo ON ch.org_id = uo.org_id
+    WHERE ch.id = whatsapp_group_members.chat_id
+    AND uo.user_id = auth.uid()
+  )
+);
+
+-- Backfill bestaande data
+INSERT INTO whatsapp_group_members (chat_id, member_jid, display_name, joined_at)
+SELECT DISTINCT 
+  m.chat_id,
+  m.sender_jid,
+  m.sender_name,
+  MIN(m.sent_at)
+FROM whatsapp_messages m
+JOIN whatsapp_chats ch ON m.chat_id = ch.id
+WHERE ch.chat_type = 'group'
+  AND m.sender_jid IS NOT NULL
+  AND m.sender_jid != ''
+GROUP BY m.chat_id, m.sender_jid, m.sender_name
+ON CONFLICT (chat_id, member_jid) DO NOTHING;
+
+-- Realtime activeren
+ALTER PUBLICATION supabase_realtime ADD TABLE whatsapp_group_members;
+```
+
+### 2. Edge Function Update
 
 ```typescript
-async function getOrCreateChat(
+// Nieuwe helper functie
+async function upsertGroupMember(
   supabase: SupabaseClientAny,
-  sessionId: string,
-  orgId: string,
-  chatJid: string,
-  contactId: string,
-  isGroupChat: boolean,
+  chatId: string,
+  memberJid: string,
+  displayName: string | null,
   requestId: string
-) {
-  // VERBETERD: Zoek op org_id + contact_id (niet session_id)
-  // Dit voorkomt duplicate chats bij sessie-wissels
-  const { data: existingByContact } = await supabase
-    .from("whatsapp_chats")
-    .select("id, unread_count, chat_jid, session_id")
-    .eq("org_id", orgId)  // ✅ Organisatie-breed zoeken
-    .eq("contact_id", contactId)
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  if (existingByContact) {
-    let needsUpdate = false;
-    const updates: Record<string, string> = {};
-
-    // Migreer naar huidige sessie als nodig
-    if (existingByContact.session_id !== sessionId) {
-      console.log(`[${requestId}] ⚡ Migrating chat from session ${existingByContact.session_id} to ${sessionId}`);
-      updates.session_id = sessionId;
-      needsUpdate = true;
-    }
-
-    // Update chat_jid als het verandert (bijv. LID → JID)
-    if (existingByContact.chat_jid !== chatJid) {
-      console.log(`[${requestId}] ⚡ Updating chat_jid from ${existingByContact.chat_jid} to ${chatJid}`);
-      updates.chat_jid = chatJid;
-      needsUpdate = true;
-    }
-
-    if (needsUpdate) {
-      await supabase
-        .from("whatsapp_chats")
-        .update(updates)
-        .eq("id", existingByContact.id);
-    }
-
-    return existingByContact;
-  }
-
-  // Fallback: zoek op exacte JID binnen org (voor groepschats of chats zonder contact)
-  const { data: existingByJid } = await supabase
-    .from("whatsapp_chats")
-    .select("id, unread_count, session_id")
-    .eq("org_id", orgId)  // ✅ Ook hier org_id gebruiken
-    .eq("chat_jid", chatJid)
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  if (existingByJid) {
-    // Migreer naar huidige sessie
-    if (existingByJid.session_id !== sessionId) {
-      await supabase
-        .from("whatsapp_chats")
-        .update({ session_id: sessionId })
-        .eq("id", existingByJid.id);
-    }
-    return existingByJid;
-  }
-
-  // Nieuwe chat aanmaken
-  console.log(`[${requestId}] Creating new ${isGroupChat ? 'group' : 'direct'} chat: ${chatJid}`);
-  const { data: newChat, error } = await supabase
-    .from("whatsapp_chats")
-    .insert({
-      org_id: orgId,
-      session_id: sessionId,
-      contact_id: contactId,
-      chat_jid: chatJid,
-      chat_type: isGroupChat ? "group" : "direct",
-      unread_count: 0,
-    })
-    .select("id, unread_count")
-    .single();
+): Promise<void> {
+  if (!memberJid) return;
+  
+  const { error } = await supabase
+    .from("whatsapp_group_members")
+    .upsert(
+      {
+        chat_id: chatId,
+        member_jid: memberJid,
+        display_name: displayName,
+        updated_at: new Date().toISOString(),
+      },
+      { 
+        onConflict: 'chat_id,member_jid',
+        ignoreDuplicates: false 
+      }
+    );
 
   if (error) {
-    throw new Error(`Chat creation failed: ${formatError(error)}`);
+    console.error(`[${requestId}] Group member upsert failed:`, error);
+  } else {
+    console.log(`[${requestId}] ✅ Group member tracked: ${displayName || memberJid}`);
   }
-  return newChat;
+}
+
+// Aanroep in handleMessageReceived(), na message insert:
+if (isGroupChat && effectiveFrom) {
+  await upsertGroupMember(supabase, chat.id, effectiveFrom, effectiveFromName, requestId);
+}
+```
+
+### 3. TypeScript Interface
+
+```typescript
+export interface WhatsAppGroupMember {
+  id: string;
+  chat_id: string;
+  member_jid: string;
+  display_name: string | null;
+  contact_id: string | null;
+  role: 'member' | 'admin' | 'superadmin';
+  is_self: boolean;
+  joined_at: string;
+  left_at: string | null;
+  created_at: string;
+  updated_at: string;
+  // Relaties
+  contact?: WhatsAppContact | null;
+}
+```
+
+### 4. React Hook
+
+```typescript
+export function useWhatsAppGroupMembers(chatId: string | undefined) {
+  return useQuery({
+    queryKey: ['whatsapp-group-members', chatId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('whatsapp_group_members')
+        .select(`
+          *,
+          contact:whatsapp_contacts(id, display_name, profile_picture_url)
+        `)
+        .eq('chat_id', chatId)
+        .is('left_at', null)
+        .order('display_name', { ascending: true });
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!chatId,
+    staleTime: 30000,
+  });
 }
 ```
 
@@ -233,38 +296,34 @@ async function getOrCreateChat(
 ## Verwacht Resultaat
 
 ### Voor:
-- Kreshnik: 3 chats met 32 + 10 + 3 berichten verspreid
-- UI toont 3x dezelfde persoon
+- Groep "Shkelzen" toont 1 contact in profielpaneel
+- Geen overzicht van wie er in de groep zitten
+- Afzendernamen alleen zichtbaar in berichten
 
 ### Na:
-- Kreshnik: 1 chat met alle 45 berichten
-- UI toont 1x Kreshnik met complete geschiedenis
-- Nieuwe sessies hergebruiken bestaande chat
+- Groep "Shkelzen" toont 3 deelnemers: 🙏, K, .
+- Elk nieuw groepsbericht voegt automatisch afzenders toe
+- Profielpaneel past zich aan op basis van chat type
+- Ledenlijst met avatars en namen
 
 ---
 
 ## Verificatie
 
 ```sql
--- Test 1: Kreshnik heeft 1 chat
-SELECT COUNT(*) FROM whatsapp_chats ch
+-- Test 1: Leden correct geïmporteerd
+SELECT gm.display_name, gm.member_jid, c.display_name as group_name
+FROM whatsapp_group_members gm
+JOIN whatsapp_chats ch ON gm.chat_id = ch.id
 JOIN whatsapp_contacts c ON ch.contact_id = c.id
-WHERE c.display_name = 'Kreshnik';
--- Verwacht: 1
+ORDER BY c.display_name, gm.display_name;
 
--- Test 2: Alle 45 berichten in die chat
-SELECT COUNT(*) FROM whatsapp_messages m
-JOIN whatsapp_chats ch ON m.chat_id = ch.id
+-- Test 2: Aantal leden per groep
+SELECT c.display_name, COUNT(gm.id) as member_count
+FROM whatsapp_chats ch
 JOIN whatsapp_contacts c ON ch.contact_id = c.id
-WHERE c.display_name = 'Kreshnik';
--- Verwacht: 45
-
--- Test 3: Geen duplicate chats per contact
-SELECT contact_id, COUNT(*) 
-FROM whatsapp_chats 
-WHERE deleted_at IS NULL 
-GROUP BY contact_id 
-HAVING COUNT(*) > 1;
--- Verwacht: 0 rijen
+LEFT JOIN whatsapp_group_members gm ON ch.id = gm.chat_id
+WHERE ch.chat_type = 'group'
+GROUP BY c.display_name;
 ```
 
