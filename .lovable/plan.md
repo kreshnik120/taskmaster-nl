@@ -1,301 +1,270 @@
 
 
-# WhatsApp Data Quality - Verbeterd Herstelplan
+# WhatsApp Chat Duplicaten - Merge Plan
 
 ## 📊 Geverifieerde Situatie
 
-### Exacte Duplicaten Gevonden
+### Probleem Geïdentificeerd
 
-| Nummer (genormaliseerd) | Aantal records | Formaten | Met foto | Met chat |
-|------------------------|----------------|----------|----------|----------|
-| `31648005001` (Kreshnik) | **4** | `+31...`, `31...`, `31...@s.whatsapp.net` | 2 | 3 |
-| `31642520970` (Vigiilent) | 2 | `+31...`, `31...` | 1 | 1 (andere) |
-| `31686861816` (BLOEZEM) | 2 | `+31...`, `31...` | 1 | 2 (andere) |
-| + 8 andere paren | 16 | Mix | Mix | Mix |
+| Contact | Duplicate Chats | Sessies | Totaal Berichten |
+|---------|-----------------|---------|------------------|
+| Kreshnik | 3 | 3 verschillende | 45 |
 
-**Totaal: 11 duplicate sets = 24+ extra records**
+### Root Cause
 
-### Root Cause (Bevestigd in Code)
+De `getOrCreateChat` functie zoekt op `session_id + contact_id`:
 
-```typescript
-// Regel 1199-1204: EXACT match op phone_number
-const { data: existing } = await supabase
-  .from("whatsapp_contacts")
-  .select("id, display_name, profile_picture_url")
-  .eq("session_id", sessionId)
-  .eq("phone_number", phoneNumber)  // ❌ "+31642520970" !== "31642520970"
-  .maybeSingle();
+```text
+Huidige lookup (regel 1422-1428):
+  .eq("session_id", sessionId)  ← Elke sessie krijgt eigen chat
+  .eq("contact_id", contactId)
 ```
 
+Dit veroorzaakt duplicate chats wanneer:
+1. WhatsApp opnieuw wordt verbonden (nieuwe sessie)
+2. Berichten van hetzelfde contact komen in nieuwe sessie
+
+### Sessie Overzicht
+
+| Sessie ID | Status | Chats | Laatste Bericht |
+|-----------|--------|-------|-----------------|
+| `61f4b1fb-5bcf...` | **ACTIEF** | 65 | 2026-02-01 19:51 |
+| `9a8c604c-4237...` | Oud | 1 | 2026-01-29 08:17 |
+| `999a8fdb-7a36...` | Oud | 3 | 1970 (corrupt) |
+
 ---
 
-## 🔧 Verbeterde Oplossing
+## 🔧 Oplossing
 
-### Architectuur Wijzigingen
+### Stap 1: Database Cleanup - Merge Kreshnik Chats
 
-| Huidige Situatie | Verbeterde Aanpak |
-|------------------|-------------------|
-| Lookup op `session_id` + exact `phone_number` | Lookup op `org_id` + genormaliseerd nummer |
-| Geen normalisatie | `normalizePhoneNumber()` functie |
-| Geen database constraint | `UNIQUE INDEX` op genormaliseerd nummer |
+```sql
+-- Kreshnik heeft 3 chats, we behouden de actieve (meeste berichten + nieuwste)
+-- Chat IDs:
+-- 4c9a25f0... = 32 berichten (BEHOUDEN - actieve sessie)
+-- a1cd195d... = 10 berichten (MERGE)
+-- f46d3fa3... = 3 berichten (MERGE)
 
----
+-- 1A: Verplaats alle berichten naar de primaire chat
+UPDATE whatsapp_messages 
+SET chat_id = '4c9a25f0-f1a2-4957-a09d-b4e03ee2a1da'
+WHERE chat_id IN (
+  'a1cd195d-7894-49b3-98aa-a66626a53620',
+  'f46d3fa3-d560-4412-a110-94ac23f64d37'
+);
 
-## Stap 1: Normalisatie Functie (Code)
+-- 1B: Update unread_count door som te nemen
+UPDATE whatsapp_chats 
+SET unread_count = (
+  SELECT COALESCE(SUM(unread_count), 0)
+  FROM whatsapp_chats 
+  WHERE contact_id = '9f68dd01-0bfc-4eb4-bd0e-cdd5b79eae03'
+)
+WHERE id = '4c9a25f0-f1a2-4957-a09d-b4e03ee2a1da';
+
+-- 1C: Verwijder de lege duplicate chats
+DELETE FROM whatsapp_chats 
+WHERE id IN (
+  'a1cd195d-7894-49b3-98aa-a66626a53620',
+  'f46d3fa3-d560-4412-a110-94ac23f64d37'
+);
+```
+
+### Stap 2: Code Fix - Lookup op org_id (niet session_id)
 
 **Bestand:** `supabase/functions/whatsapp-bridge/index.ts`
 
-Voeg toe na regel 14 (na `formatError` functie):
+Wijzig `getOrCreateChat` (regel 1419-1428):
 
 ```typescript
-/**
- * Normaliseert telefoon nummers naar standaard formaat.
- * Verwijdert '+', WhatsApp suffixes, en converteert naar alleen cijfers.
- * 
- * Voorbeelden:
- * - "+31642520970" → "31642520970"
- * - "31642520970@s.whatsapp.net" → "31642520970"
- * - "06-12345678" → "31612345678" (NL prefix)
- */
-function normalizePhoneNumber(input: string): string {
-  if (!input || input.startsWith('group-')) {
-    return input; // Groepen niet normaliseren
+// VOOR (veroorzaakt duplicaten):
+const { data: existingByContact } = await supabase
+  .from("whatsapp_chats")
+  .select("id, unread_count, chat_jid")
+  .eq("session_id", sessionId)  // ❌ Elke sessie = nieuwe chat
+  .eq("contact_id", contactId)
+  .is("deleted_at", null)
+  .maybeSingle();
+
+// NA (voorkomt duplicaten):
+const { data: existingByContact } = await supabase
+  .from("whatsapp_chats")
+  .select("id, unread_count, chat_jid, session_id")
+  .eq("org_id", orgId)  // ✅ Zoek binnen hele organisatie
+  .eq("contact_id", contactId)
+  .is("deleted_at", null)
+  .maybeSingle();
+
+if (existingByContact) {
+  // Update session_id naar huidige sessie (voor realtime sync)
+  if (existingByContact.session_id !== sessionId) {
+    console.log(`[${requestId}] Migrating chat to new session`);
+    await supabase
+      .from("whatsapp_chats")
+      .update({ session_id: sessionId })
+      .eq("id", existingByContact.id);
   }
-  
-  // Verwijder WhatsApp suffix eerst
-  let normalized = input.split('@')[0];
-  
-  // Verwijder alle niet-cijfers (inclusief + en -)
-  normalized = normalized.replace(/[^0-9]/g, '');
-  
-  // NL: converteer 06... naar 316...
-  if (normalized.startsWith('06') && normalized.length === 10) {
-    normalized = '31' + normalized.substring(1);
-  }
-  
-  // NL: converteer 6... (zonder 0) naar 316... als het 9 cijfers is
-  if (normalized.startsWith('6') && normalized.length === 9) {
-    normalized = '31' + normalized;
-  }
-  
-  return normalized;
+  // ... rest van de logica
 }
 ```
 
----
-
-## Stap 2: Update getOrCreateContact (Code)
-
-**Bestand:** `supabase/functions/whatsapp-bridge/index.ts` - regel 1190-1248
-
-Vervang de lookup logica met org_id en genormaliseerde zoekopdracht:
-
-```typescript
-async function getOrCreateContact(
-  supabase: SupabaseClientAny,
-  sessionId: string,
-  orgId: string,
-  phoneNumber: string,
-  displayName: string | undefined,
-  requestId: string
-) {
-  // Normaliseer het nummer voor consistente lookup
-  const normalizedPhone = normalizePhoneNumber(phoneNumber);
-  
-  // VERBETERD: Zoek op org_id + genormaliseerd nummer (niet session_id)
-  // Dit voorkomt duplicaten wanneer hetzelfde nummer in verschillende formaten binnenkomt
-  const { data: existing } = await supabase
-    .from("whatsapp_contacts")
-    .select("id, display_name, profile_picture_url, phone_number")
-    .eq("org_id", orgId)
-    .or(`phone_number.eq.${normalizedPhone},phone_number.eq.+${normalizedPhone}`)
-    .limit(1)
-    .maybeSingle();
-
-  if (existing) {
-    console.log(`[${requestId}] Found existing contact by normalized lookup: ${existing.phone_number} → ${normalizedPhone}`);
-    
-    // Update push_name if provided (maar overschrijf user-edited display_name niet)
-    if (displayName && !existing.display_name) {
-      await supabase
-        .from("whatsapp_contacts")
-        .update({ 
-          display_name: displayName,
-          push_name: displayName 
-        })
-        .eq("id", existing.id);
-    }
-    return existing;
-  }
-
-  // Maak nieuw contact met genormaliseerd nummer
-  console.log(`[${requestId}] Creating new contact: ${normalizedPhone} (original: ${phoneNumber})`);
-  const { data: newContact, error } = await supabase
-    .from("whatsapp_contacts")
-    .insert({
-      org_id: orgId,
-      session_id: sessionId,
-      phone_number: normalizedPhone,  // ✅ Opslaan als genormaliseerd
-      whatsapp_jid: `${normalizedPhone}@s.whatsapp.net`,
-      display_name: displayName || normalizedPhone,
-      push_name: displayName || null,
-    })
-    .select("id, display_name")
-    .single();
-
-  if (error) {
-    throw new Error(`Contact creation failed: ${formatError(error)}`);
-  }
-
-  // Trigger automatische profielfoto-sync
-  if (newContact) {
-    console.log(`[${requestId}] 📷 Triggering background profile picture fetch`);
-    EdgeRuntime.waitUntil(
-      fetchProfilePictureForNewContact(supabase, sessionId, orgId, newContact.id, normalizedPhone, requestId)
-    );
-  }
-
-  return newContact;
-}
-```
-
----
-
-## Stap 3: Database Cleanup (SQL Migratie)
-
-### 3A: Merge Bestaande Duplicaten
-
-Voor elk duplicate-set: behoud het record met foto, update chat referenties, verwijder rest.
+### Stap 3: Database Constraint - Voorkom Toekomstige Duplicaten
 
 ```sql
--- =====================================================
--- STAP 3A: MERGE DUPLICATES - Kreshnik (4 records → 1)
--- =====================================================
-
--- Behoud: 9f68dd01-0bfc-4eb4-bd0e-cdd5b79eae03 (heeft foto + chat)
--- Update phone_number naar genormaliseerd formaat
-UPDATE whatsapp_contacts 
-SET phone_number = '31648005001'
-WHERE id = '9f68dd01-0bfc-4eb4-bd0e-cdd5b79eae03';
-
--- Verplaats chats van duplicates naar behouden contact
-UPDATE whatsapp_chats 
-SET contact_id = '9f68dd01-0bfc-4eb4-bd0e-cdd5b79eae03'
-WHERE contact_id IN (
-  '916882a1-8440-4388-9ece-c22ea74046ae',
-  'c178d1d3-3394-4bea-8df9-83f74cb80727',
-  '890dddcd-5b20-4752-ae23-e21198e30429'
-);
-
--- Soft-delete duplicates
-DELETE FROM whatsapp_contacts
-WHERE id IN (
-  '916882a1-8440-4388-9ece-c22ea74046ae',
-  'c178d1d3-3394-4bea-8df9-83f74cb80727',
-  '890dddcd-5b20-4752-ae23-e21198e30429'
-);
-
--- =====================================================
--- STAP 3A: MERGE DUPLICATES - Vigiilent (2 records → 1)
--- =====================================================
-
--- Behoud: 813a7f37-87e2-4f0a-8a28-d4ba3ad24e63 (heeft foto)
-UPDATE whatsapp_chats 
-SET contact_id = '813a7f37-87e2-4f0a-8a28-d4ba3ad24e63'
-WHERE contact_id = 'f9c079e1-2723-4f27-aa19-982c9fc10300';
-
-DELETE FROM whatsapp_contacts
-WHERE id = 'f9c079e1-2723-4f27-aa19-982c9fc10300';
-
--- =====================================================
--- STAP 3A: MERGE DUPLICATES - BLOEZEM (2 records → 1)
--- =====================================================
-
--- Behoud: 43b156aa-4439-4600-9014-b67e9869c7ef (heeft foto)
--- Update display_name van duplicate (BLOEZEM is betere naam)
-UPDATE whatsapp_contacts 
-SET display_name = 'BLOEZEM'
-WHERE id = '43b156aa-4439-4600-9014-b67e9869c7ef';
-
-UPDATE whatsapp_chats 
-SET contact_id = '43b156aa-4439-4600-9014-b67e9869c7ef'
-WHERE contact_id = 'af1e3d90-fc42-4355-9f6b-4ad21a7ac107';
-
-DELETE FROM whatsapp_contacts
-WHERE id = 'af1e3d90-fc42-4355-9f6b-4ad21a7ac107';
-
--- (Herhaal voor de overige 8 duplicate sets)
-```
-
-### 3B: Database Constraint Toevoegen
-
-```sql
--- =====================================================
--- STAP 3B: PREVENTIEVE CONSTRAINT
--- =====================================================
-
--- Voeg unique index toe op genormaliseerd nummer per organisatie
--- Dit voorkomt toekomstige duplicaten zelfs als code faalt
-CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_org_normalized_phone 
-ON whatsapp_contacts (
-  org_id, 
-  REGEXP_REPLACE(phone_number, '[^0-9]', '', 'g')
-) 
-WHERE phone_number NOT LIKE 'group-%';
+-- Unique index op org_id + contact_id
+-- Zorgt ervoor dat er maar 1 chat per contact per organisatie kan bestaan
+CREATE UNIQUE INDEX IF NOT EXISTS idx_chats_org_contact_unique 
+ON whatsapp_chats (org_id, contact_id) 
+WHERE deleted_at IS NULL;
 ```
 
 ---
 
 ## Implementatievolgorde
 
-| # | Actie | Type | Risico | Rollback |
-|---|-------|------|--------|----------|
-| 1 | Voeg `normalizePhoneNumber` functie toe | Code | Geen | Revert |
-| 2 | Update `getOrCreateContact` met org_id lookup | Code | Laag | Revert |
-| 3 | Deploy Edge Function | Deploy | Geen | - |
-| 4 | SQL: Merge Kreshnik (4→1) | Data | Medium | Herstel backup |
-| 5 | SQL: Merge Vigiilent (2→1) | Data | Medium | Herstel backup |
-| 6 | SQL: Merge BLOEZEM (2→1) | Data | Medium | Herstel backup |
-| 7 | SQL: Merge overige 8 sets | Data | Medium | Herstel backup |
-| 8 | SQL: Voeg UNIQUE INDEX toe | Schema | Laag | Drop index |
-| 9 | Verificatie queries | Test | Geen | - |
+| # | Actie | Type | Impact |
+|---|-------|------|--------|
+| 1 | Merge Kreshnik berichten naar 1 chat | SQL | 45 berichten → 1 chat |
+| 2 | Verwijder 2 lege duplicate chats | SQL | -2 chats |
+| 3 | Update `getOrCreateChat` naar org_id lookup | Code | Preventief |
+| 4 | Voeg UNIQUE INDEX toe | Schema | Garantie |
+| 5 | Deploy Edge Function | Deploy | Activeer |
+
+---
+
+## Technische Details
+
+### Stap 2: Volledige getOrCreateChat Update
+
+Locatie: `supabase/functions/whatsapp-bridge/index.ts` regel 1410-1472
+
+```typescript
+async function getOrCreateChat(
+  supabase: SupabaseClientAny,
+  sessionId: string,
+  orgId: string,
+  chatJid: string,
+  contactId: string,
+  isGroupChat: boolean,
+  requestId: string
+) {
+  // VERBETERD: Zoek op org_id + contact_id (niet session_id)
+  // Dit voorkomt duplicate chats bij sessie-wissels
+  const { data: existingByContact } = await supabase
+    .from("whatsapp_chats")
+    .select("id, unread_count, chat_jid, session_id")
+    .eq("org_id", orgId)  // ✅ Organisatie-breed zoeken
+    .eq("contact_id", contactId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (existingByContact) {
+    let needsUpdate = false;
+    const updates: Record<string, string> = {};
+
+    // Migreer naar huidige sessie als nodig
+    if (existingByContact.session_id !== sessionId) {
+      console.log(`[${requestId}] ⚡ Migrating chat from session ${existingByContact.session_id} to ${sessionId}`);
+      updates.session_id = sessionId;
+      needsUpdate = true;
+    }
+
+    // Update chat_jid als het verandert (bijv. LID → JID)
+    if (existingByContact.chat_jid !== chatJid) {
+      console.log(`[${requestId}] ⚡ Updating chat_jid from ${existingByContact.chat_jid} to ${chatJid}`);
+      updates.chat_jid = chatJid;
+      needsUpdate = true;
+    }
+
+    if (needsUpdate) {
+      await supabase
+        .from("whatsapp_chats")
+        .update(updates)
+        .eq("id", existingByContact.id);
+    }
+
+    return existingByContact;
+  }
+
+  // Fallback: zoek op exacte JID binnen org (voor groepschats of chats zonder contact)
+  const { data: existingByJid } = await supabase
+    .from("whatsapp_chats")
+    .select("id, unread_count, session_id")
+    .eq("org_id", orgId)  // ✅ Ook hier org_id gebruiken
+    .eq("chat_jid", chatJid)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (existingByJid) {
+    // Migreer naar huidige sessie
+    if (existingByJid.session_id !== sessionId) {
+      await supabase
+        .from("whatsapp_chats")
+        .update({ session_id: sessionId })
+        .eq("id", existingByJid.id);
+    }
+    return existingByJid;
+  }
+
+  // Nieuwe chat aanmaken
+  console.log(`[${requestId}] Creating new ${isGroupChat ? 'group' : 'direct'} chat: ${chatJid}`);
+  const { data: newChat, error } = await supabase
+    .from("whatsapp_chats")
+    .insert({
+      org_id: orgId,
+      session_id: sessionId,
+      contact_id: contactId,
+      chat_jid: chatJid,
+      chat_type: isGroupChat ? "group" : "direct",
+      unread_count: 0,
+    })
+    .select("id, unread_count")
+    .single();
+
+  if (error) {
+    throw new Error(`Chat creation failed: ${formatError(error)}`);
+  }
+  return newChat;
+}
+```
 
 ---
 
 ## Verwacht Resultaat
 
 ### Voor:
-- 24+ duplicate contact records
-- 11 nummers met meerdere contacten
-- Profielfoto's niet gekoppeld aan chats
+- Kreshnik: 3 chats met 32 + 10 + 3 berichten verspreid
+- UI toont 3x dezelfde persoon
 
 ### Na:
-- **0 duplicaten** (alle gemerged)
-- Database constraint voorkomt nieuwe duplicaten
-- Genormaliseerde nummers (`31...` formaat)
-- Alle chats gekoppeld aan contact met profielfoto
+- Kreshnik: 1 chat met alle 45 berichten
+- UI toont 1x Kreshnik met complete geschiedenis
+- Nieuwe sessies hergebruiken bestaande chat
 
 ---
 
-## Verificatie Queries
+## Verificatie
 
 ```sql
--- Test 1: Geen duplicaten meer
-SELECT 
-  REGEXP_REPLACE(phone_number, '[^0-9]', '', 'g') as normalized,
-  COUNT(*) 
-FROM whatsapp_contacts
-WHERE phone_number NOT LIKE 'group-%'
-GROUP BY 1
+-- Test 1: Kreshnik heeft 1 chat
+SELECT COUNT(*) FROM whatsapp_chats ch
+JOIN whatsapp_contacts c ON ch.contact_id = c.id
+WHERE c.display_name = 'Kreshnik';
+-- Verwacht: 1
+
+-- Test 2: Alle 45 berichten in die chat
+SELECT COUNT(*) FROM whatsapp_messages m
+JOIN whatsapp_chats ch ON m.chat_id = ch.id
+JOIN whatsapp_contacts c ON ch.contact_id = c.id
+WHERE c.display_name = 'Kreshnik';
+-- Verwacht: 45
+
+-- Test 3: Geen duplicate chats per contact
+SELECT contact_id, COUNT(*) 
+FROM whatsapp_chats 
+WHERE deleted_at IS NULL 
+GROUP BY contact_id 
 HAVING COUNT(*) > 1;
 -- Verwacht: 0 rijen
-
--- Test 2: Vigiilent heeft 1 contact met foto en chat
-SELECT c.phone_number, c.display_name, c.profile_picture_url IS NOT NULL as has_photo, COUNT(ch.id) as chats
-FROM whatsapp_contacts c
-LEFT JOIN whatsapp_chats ch ON ch.contact_id = c.id
-WHERE REGEXP_REPLACE(c.phone_number, '[^0-9]', '', 'g') = '31642520970'
-GROUP BY 1,2,3;
--- Verwacht: 1 rij met has_photo=true, chats>=1
 ```
 
