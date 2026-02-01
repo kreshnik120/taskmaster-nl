@@ -1416,41 +1416,65 @@ async function getOrCreateChat(
   isGroupChat: boolean,
   requestId: string
 ) {
-  // STAP 1: Zoek eerst op contact_id (voorkomt duplicaten door LID vs JID formaten)
-  // WhatsApp stuurt soms berichten met LID formaat (e.g., 26873727819967@lid) 
-  // in plaats van standaard JID (e.g., 31686861816@s.whatsapp.net)
+  // VERBETERD: Zoek op org_id + contact_id (niet session_id)
+  // Dit voorkomt duplicate chats bij sessie-wissels
   const { data: existingByContact } = await supabase
     .from("whatsapp_chats")
-    .select("id, unread_count, chat_jid")
-    .eq("session_id", sessionId)
+    .select("id, unread_count, chat_jid, session_id")
+    .eq("org_id", orgId)
     .eq("contact_id", contactId)
     .is("deleted_at", null)
     .maybeSingle();
 
   if (existingByContact) {
-    // Update chat_jid als het verandert (bijv. van LID naar s.whatsapp.net)
+    let needsUpdate = false;
+    const updates: Record<string, string> = {};
+
+    // Migreer naar huidige sessie als nodig
+    if (existingByContact.session_id !== sessionId) {
+      console.log(`[${requestId}] ⚡ Migrating chat from session ${existingByContact.session_id} to ${sessionId}`);
+      updates.session_id = sessionId;
+      needsUpdate = true;
+    }
+
+    // Update chat_jid als het verandert (bijv. LID → JID)
     if (existingByContact.chat_jid !== chatJid) {
-      console.log(`[${requestId}] ⚡ Updating chat_jid from ${existingByContact.chat_jid} to ${chatJid} (same contact_id: ${contactId})`);
+      console.log(`[${requestId}] ⚡ Updating chat_jid from ${existingByContact.chat_jid} to ${chatJid}`);
+      updates.chat_jid = chatJid;
+      needsUpdate = true;
+    }
+
+    if (needsUpdate) {
       await supabase
         .from("whatsapp_chats")
-        .update({ chat_jid: chatJid })
+        .update(updates)
         .eq("id", existingByContact.id);
     }
+
     return existingByContact;
   }
 
-  // STAP 2: Fallback op exacte JID match (voor bestaande chats zonder contact_id)
+  // Fallback: zoek op exacte JID binnen org (voor groepschats of chats zonder contact)
   const { data: existingByJid } = await supabase
     .from("whatsapp_chats")
-    .select("id, unread_count")
-    .eq("session_id", sessionId)
+    .select("id, unread_count, session_id")
+    .eq("org_id", orgId)
     .eq("chat_jid", chatJid)
     .is("deleted_at", null)
     .maybeSingle();
 
-  if (existingByJid) return existingByJid;
+  if (existingByJid) {
+    // Migreer naar huidige sessie
+    if (existingByJid.session_id !== sessionId) {
+      await supabase
+        .from("whatsapp_chats")
+        .update({ session_id: sessionId })
+        .eq("id", existingByJid.id);
+    }
+    return existingByJid;
+  }
 
-  // STAP 3: Nieuwe chat aanmaken
+  // Nieuwe chat aanmaken
   console.log(`[${requestId}] Creating new ${isGroupChat ? 'group' : 'direct'} chat: ${chatJid}`);
   const { data: newChat, error } = await supabase
     .from("whatsapp_chats")
