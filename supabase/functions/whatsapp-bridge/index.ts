@@ -1017,21 +1017,26 @@ async function handleSyncAllProfilePictures(
 ): Promise<Record<string, unknown>> {
   console.log(`[${requestId}] Starting profile picture sync for org ${orgId}`);
   
-  // 1. Get VPS credentials
+  // 1. Get VPS credentials with fallback
+  const vpsUrl = Deno.env.get("WHATSAPP_VPS_URL") || Deno.env.get("CLAWDBOT_VPS_URL");
   const vpsApiKey = Deno.env.get("WHATSAPP_VPS_API_KEY");
-  const vpsSessionId = Deno.env.get("WHATSAPP_VPS_SESSION_ID");
+  const vpsSessionId = Deno.env.get("WHATSAPP_VPS_SESSION_ID") || "clawdbot-default";
   
-  if (!vpsApiKey || !vpsSessionId) {
-    throw new Error("VPS credentials not configured");
+  if (!vpsUrl || !vpsApiKey) {
+    throw new Error("VPS credentials not configured (WHATSAPP_VPS_URL/CLAWDBOT_VPS_URL and WHATSAPP_VPS_API_KEY required)");
   }
   
-  // 2. Get all contacts without profile pictures
+  console.log(`[${requestId}] Using VPS URL: ${vpsUrl}`);
+  
+  // 2. Get all contacts without profile pictures (filter invalid contacts)
   const { data: contacts, error } = await supabase
     .from('whatsapp_contacts')
     .select('id, phone_number')
     .eq('org_id', orgId)
     .is('profile_picture_url', null)
-    .limit(50); // Batch limit to prevent timeouts
+    .not('phone_number', 'like', 'group-%')  // Skip group contacts
+    .neq('phone_number', 'unknown')          // Skip unknown contacts
+    .limit(100); // Increased batch limit
   
   if (error) throw error;
   
@@ -1040,7 +1045,7 @@ async function handleSyncAllProfilePictures(
     return { synced: 0, message: "No contacts without profile pictures" };
   }
   
-  console.log(`[${requestId}] Found ${contacts.length} contacts without profile pictures`);
+  console.log(`[${requestId}] Found ${contacts.length} contacts without profile pictures (excluding groups/unknown)`);
   
   // 3. Process contacts with rate limiting (5 per second)
   const results = { success: 0, failed: 0, skipped: 0 };
@@ -1059,13 +1064,13 @@ async function handleSyncAllProfilePictures(
       }
       
       try {
-        const vpsUrl = `http://72.61.155.82:3001/contacts/${encodeURIComponent(phone)}/profile-picture`;
+        const profilePictureEndpoint = `${vpsUrl}/contacts/${encodeURIComponent(phone)}/profile-picture`;
         
-        const response = await fetch(vpsUrl, {
+        const response = await fetch(profilePictureEndpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-api-key': vpsApiKey,
+            'x-api-key': vpsApiKey!,
           },
           body: JSON.stringify({ sessionId: vpsSessionId }),
         });
