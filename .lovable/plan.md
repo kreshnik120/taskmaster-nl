@@ -1,118 +1,158 @@
 
 
-# WhatsApp Contact Search - Verbeteringsplan
+# WhatsApp Duplicatie & Profielfoto Problemen - Analyse & Oplossingsplan
 
-## Huidige Status: ✅ Volledig Geïmplementeerd
+## Geïdentificeerde Problemen
 
-De basisfeature werkt correct met alle geplande functionaliteit:
-- 300ms debounced zoeken
-- Overlay met resultaten bij 2+ karakters
-- Keyboard navigatie (pijltjes, Enter, ESC)
-- Click-outside sluit overlay
-- Avatar, naam, telefoonnummer per resultaat
-- Business account badge
+### Probleem 1: Dubbele chats door WhatsApp LID-formaat (KRITIEK)
+
+**Oorzaak:** WhatsApp stuurt soms berichten met een **LID (Local ID)** formaat (`26873727819967@lid`) in plaats van het standaard telefoonnummer JID (`31686861816@s.whatsapp.net`). 
+
+De `getOrCreateChat` functie in `whatsapp-bridge` zoekt op `chat_jid`, wat resulteert in twee aparte chats voor dezelfde persoon:
+
+```text
+Chat 1: chat_jid = "31686861816@s.whatsapp.net" (normaal formaat)
+Chat 2: chat_jid = "26873727819967@lid"        (LID formaat)
+Beide: contact_id = "af1e3d90-..." (BLOEZEM)
+```
+
+**Impact:** BLOEZEM verschijnt 2x in de chatlijst, zoals zichtbaar op je screenshot.
 
 ---
 
-## Voorgestelde Verbeteringen
+### Probleem 2: Ontbrekende profielfoto's
 
-### 1. Uitbreiden Zoekvelden (Prioriteit: Hoog)
+**Oorzaak:** Profielfoto's worden alleen opgehaald via het `contact.profilePicture` event of de `syncAllProfilePictures` batch-sync. Er is geen automatische trigger bij nieuwe contacten.
 
-**Probleem:** Nu wordt alleen gezocht op `display_name` en `phone_number`, maar `push_name` (de WhatsApp naam die de gebruiker zelf heeft ingesteld) wordt genegeerd.
+Contacten zonder foto (20+):
+- Ismail, Jones, Simon de Jong, Sarah, N, +31613576869, etc.
 
-**Oplossing:**
+---
+
+## Technische Oplossing
+
+### Oplossing 1: Chat-koppeling op basis van contact_id (niet chat_jid)
+
+**Aanpak:** In `getOrCreateChat` eerst zoeken naar bestaande chat met dezelfde `contact_id`, ongeacht het JID-formaat.
+
+**Bestand:** `supabase/functions/whatsapp-bridge/index.ts`
+
+**Huidige code (regel 1292-1309):**
+```typescript
+async function getOrCreateChat(...) {
+  const { data: existing } = await supabase
+    .from("whatsapp_chats")
+    .select("id, unread_count")
+    .eq("session_id", sessionId)
+    .eq("chat_jid", chatJid)  // ❌ Alleen op JID
+    .single();
+  ...
+}
+```
+
+**Nieuwe code:**
+```typescript
+async function getOrCreateChat(...) {
+  // Stap 1: Zoek eerst op contact_id (voorkomt duplicaten)
+  const { data: existingByContact } = await supabase
+    .from("whatsapp_chats")
+    .select("id, unread_count, chat_jid")
+    .eq("session_id", sessionId)
+    .eq("contact_id", contactId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (existingByContact) {
+    // Update chat_jid als nodig (van LID naar s.whatsapp.net)
+    if (existingByContact.chat_jid !== chatJid) {
+      console.log(`[${requestId}] Updating chat_jid from ${existingByContact.chat_jid} to ${chatJid}`);
+      // Optioneel: bewaar beide JIDs in een array-kolom
+    }
+    return existingByContact;
+  }
+
+  // Stap 2: Fallback op exacte JID match
+  const { data: existingByJid } = await supabase
+    .from("whatsapp_chats")
+    .select("id, unread_count")
+    .eq("session_id", sessionId)
+    .eq("chat_jid", chatJid)
+    .maybeSingle();
+
+  if (existingByJid) return existingByJid;
+
+  // Stap 3: Nieuwe chat aanmaken
+  ...
+}
+```
+
+---
+
+### Oplossing 2: Database opschoning (eenmalige migratie)
+
+Merge bestaande duplicate chats naar één per contact:
+
 ```sql
-WHERE display_name ILIKE '%query%'
-   OR phone_number ILIKE '%query%'
-   OR push_name ILIKE '%query%'  -- TOEVOEGEN
+-- Identificeer duplicaten (meerdere chats per contact)
+WITH duplicates AS (
+  SELECT 
+    contact_id,
+    array_agg(id ORDER BY created_at ASC) as chat_ids,
+    count(*) as cnt
+  FROM whatsapp_chats
+  WHERE contact_id IS NOT NULL
+    AND deleted_at IS NULL
+  GROUP BY contact_id
+  HAVING count(*) > 1
+)
+-- Behoud oudste chat, markeer rest als deleted
+UPDATE whatsapp_chats
+SET deleted_at = now()
+WHERE id IN (
+  SELECT unnest(chat_ids[2:]) FROM duplicates
+);
 ```
-
-**Bestand:** `src/hooks/whatsapp/useSearchContacts.ts`
 
 ---
 
-### 2. Zoekterm Highlighting (Prioriteit: Medium)
+### Oplossing 3: Automatische profielfoto-sync bij nieuw contact
 
-**Probleem:** Gebruikers zien niet welk deel van de naam/nummer matchte met hun zoekopdracht.
+**Aanpak:** In `getOrCreateContact` een background-trigger toevoegen om profielfoto op te halen.
 
-**Oplossing:** Functie om matchende tekst te highlighten:
+**Bestand:** `supabase/functions/whatsapp-bridge/index.ts`
 
+Na het aanmaken van een nieuw contact:
 ```typescript
-function highlightMatch(text: string, query: string): ReactNode {
-  if (!query) return text;
-  const parts = text.split(new RegExp(`(${query})`, 'gi'));
-  return parts.map((part, i) => 
-    part.toLowerCase() === query.toLowerCase() 
-      ? <mark key={i} className="bg-yellow-200">{part}</mark> 
-      : part
+// Na succesvolle contact insert:
+if (newContact) {
+  // Trigger async profile picture fetch (fire-and-forget)
+  EdgeRuntime.waitUntil(
+    fetchProfilePictureAsync(orgId, newContact.id, phoneNumber)
   );
 }
 ```
 
-**Bestand:** `src/components/whatsapp/WhatsAppContactSearchResults.tsx`
+---
+
+## Implementatievolgorde
+
+| Stap | Actie | Risico |
+|------|-------|--------|
+| 1 | Pas `getOrCreateChat` aan om eerst op `contact_id` te zoeken | Laag - backward compatible |
+| 2 | Voer database-migratie uit om bestaande duplicaten te mergen | Medium - vereist backup |
+| 3 | Voeg automatische profielfoto-sync toe bij nieuw contact | Laag |
+| 4 | Test end-to-end met nieuwe berichten | - |
 
 ---
 
-### 3. Error State UI (Prioriteit: Medium)
+## Belangrijke Waarschuwingen
 
-**Probleem:** Bij zoekfouten wordt alleen naar console gelogd, gebruiker ziet niets.
+**Bestaande koppelingen worden NIET gebroken:**
+- De oplossing voegt alleen een extra lookup toe op `contact_id`
+- Bestaande chats behouden hun `id` en `chat_jid`
+- Berichten blijven gekoppeld aan de juiste chat
 
-**Oplossing:** Voeg error state toe aan de hook en toon een foutmelding in de overlay:
-
-```typescript
-// In useSearchContacts:
-const { data, error, isError } = useQuery({ ... });
-
-// In WhatsAppContactSearchResults:
-if (isError) {
-  return (
-    <div className="...">
-      <AlertCircle className="h-5 w-5 text-destructive" />
-      <p>Er ging iets mis bij het zoeken</p>
-      <Button onClick={retry}>Probeer opnieuw</Button>
-    </div>
-  );
-}
-```
-
-**Bestanden:** 
-- `src/hooks/whatsapp/useSearchContacts.ts`
-- `src/components/whatsapp/WhatsAppContactSearchResults.tsx`
-
----
-
-### 4. Recente Contacten bij Lege Query (Prioriteit: Laag)
-
-**Probleem:** Bij focus op zoekbalk zonder tekst is de overlay leeg/gesloten.
-
-**Oplossing:** Toon recent gecontacteerde personen wanneer query leeg is:
-
-- Query: `ORDER BY updated_at DESC LIMIT 5` 
-- Titel: "Recent gecontacteerd"
-
----
-
-### 5. Nieuwe Chat Starten (Prioriteit: Laag - Future Feature)
-
-**Probleem:** Bij contact zonder bestaande chat wordt alleen een toast getoond.
-
-**Oplossing:** Direct een nieuwe `whatsapp_chats` record aanmaken en openen. Dit vereist meer logica en wordt aangeraden als aparte feature.
-
----
-
-## Aanbevolen Volgorde
-
-| Fase | Verbetering | Geschatte Inspanning |
-|------|-------------|---------------------|
-| 1 | Uitbreiden zoekvelden (push_name) | 5 minuten |
-| 2 | Error state UI | 15 minuten |
-| 3 | Zoekterm highlighting | 20 minuten |
-| 4 | Recente contacten | 30 minuten |
-| 5 | Nieuwe chat starten | 1+ uur |
-
----
-
-## Volgende Stappen
-
-Wil je dat ik een of meer van deze verbeteringen implementeer? Ik raad aan om te beginnen met **verbetering 1 (push_name toevoegen)** omdat dit een quick win is met directe waarde.
+**Rollback mogelijk:**
+- Migratie markeert duplicaten als `deleted_at` (soft delete)
+- Originele data blijft behouden
 
