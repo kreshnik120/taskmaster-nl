@@ -9,7 +9,7 @@ import { WhatsAppChatContextMenu } from "./WhatsAppChatContextMenu";
 import { WhatsAppContactSearchResults } from "./WhatsAppContactSearchResults";
 import { ChatListSkeleton } from "./WhatsAppSkeletonLoader";
 import { ChatListEmptyState } from "./WhatsAppEmptyState";
-import { useSearchContacts } from "@/hooks/whatsapp/useSearchContacts";
+import { useSearchContacts, useRecentContacts } from "@/hooks/whatsapp/useSearchContacts";
 import type { WhatsAppChat, WhatsAppFilter, WhatsAppContact } from "@/types/whatsapp";
 
 interface WhatsAppChatListProps {
@@ -46,13 +46,25 @@ export function WhatsAppChatList({
   const [isContactSearchMode, setIsContactSearchMode] = useState(false);
 
   // Contact search hook
-  const { data: searchResults = [], isLoading: isSearching } = useSearchContacts({
+  const { 
+    data: searchResults = [], 
+    isLoading: isSearching,
+    isError: isSearchError,
+    refetch: retrySearch,
+  } = useSearchContacts({
     query: searchQuery,
     enabled: isContactSearchMode,
   });
 
-  // Show contact results overlay when in search mode and query is long enough
-  const showContactResults = isContactSearchMode && searchQuery.length >= 2;
+  // Recent contacts hook
+  const { 
+    data: recentContacts = [],
+  } = useRecentContacts({
+    enabled: isContactSearchMode && searchQuery.length < 2,
+  });
+
+  // Show contact results overlay when in search mode
+  const showContactResults = isContactSearchMode && (searchQuery.length >= 2 || recentContacts.length > 0);
 
   // Handle contact selection
   const handleSelectContact = useCallback((contact: WhatsAppContact) => {
@@ -65,6 +77,11 @@ export function WhatsAppChatList({
   const handleCloseSearch = useCallback(() => {
     setIsContactSearchMode(false);
   }, []);
+
+  // Handle retry
+  const handleRetry = useCallback(() => {
+    retrySearch();
+  }, [retrySearch]);
 
   return (
     <div className="flex flex-col h-full">
@@ -90,9 +107,13 @@ export function WhatsAppChatList({
             <WhatsAppContactSearchResults
               results={searchResults}
               isLoading={isSearching}
+              isError={isSearchError}
               searchQuery={searchQuery}
               onSelectContact={handleSelectContact}
               onClose={handleCloseSearch}
+              onRetry={handleRetry}
+              recentContacts={recentContacts}
+              showRecent={searchQuery.length < 2}
             />
           )}
         </div>
