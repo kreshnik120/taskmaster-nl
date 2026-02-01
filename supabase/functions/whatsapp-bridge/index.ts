@@ -1193,10 +1193,10 @@ async function getOrCreateContact(
   // Try to find existing contact
   const { data: existing } = await supabase
     .from("whatsapp_contacts")
-    .select("id, display_name")
+    .select("id, display_name, profile_picture_url")
     .eq("session_id", sessionId)
     .eq("phone_number", phoneNumber)
-    .single();
+    .maybeSingle();
 
   if (existing) {
     // Update push_name if provided (but don't overwrite user-edited display_name)
@@ -1230,7 +1230,69 @@ async function getOrCreateContact(
   if (error) {
     throw new Error(`Contact creation failed: ${formatError(error)}`);
   }
+
+  // NIEUW: Trigger automatische profielfoto-sync voor nieuwe contacten (fire-and-forget)
+  if (newContact) {
+    console.log(`[${requestId}] 📷 Triggering background profile picture fetch for new contact: ${phoneNumber}`);
+    EdgeRuntime.waitUntil(
+      fetchProfilePictureForNewContact(supabase, sessionId, orgId, newContact.id, phoneNumber, requestId)
+    );
+  }
+
   return newContact;
+}
+
+// Background task: Fetch profile picture for newly created contact
+async function fetchProfilePictureForNewContact(
+  supabase: SupabaseClientAny,
+  sessionId: string,
+  orgId: string,
+  contactId: string,
+  phoneNumber: string,
+  requestId: string
+) {
+  try {
+    // Get VPS relay URL to request profile picture
+    const vpsUrl = Deno.env.get("WHATSAPP_VPS_URL");
+    const vpsApiKey = Deno.env.get("WHATSAPP_VPS_API_KEY");
+    
+    if (!vpsUrl || !vpsApiKey) {
+      console.log(`[${requestId}] 📷 Skipping profile picture fetch - VPS not configured`);
+      return;
+    }
+
+    const jid = `${phoneNumber}@s.whatsapp.net`;
+    
+    // Request profile picture from VPS
+    const response = await fetch(`${vpsUrl}/api/sessions/${sessionId}/profile-picture`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': vpsApiKey,
+      },
+      body: JSON.stringify({ jid }),
+    });
+
+    if (!response.ok) {
+      console.log(`[${requestId}] 📷 VPS profile picture request failed: ${response.status}`);
+      return;
+    }
+
+    const data = await response.json();
+    
+    if (data.profilePictureUrl) {
+      await supabase
+        .from("whatsapp_contacts")
+        .update({ profile_picture_url: data.profilePictureUrl })
+        .eq("id", contactId);
+      
+      console.log(`[${requestId}] 📷 Profile picture updated for contact ${contactId}`);
+    } else {
+      console.log(`[${requestId}] 📷 No profile picture available for ${phoneNumber}`);
+    }
+  } catch (err) {
+    console.error(`[${requestId}] 📷 Background profile picture fetch error:`, formatError(err));
+  }
 }
 
 // Get or create a GROUP contact (different from regular contacts)
@@ -1298,17 +1360,41 @@ async function getOrCreateChat(
   isGroupChat: boolean,
   requestId: string
 ) {
-  // Try to find existing chat
-  const { data: existing } = await supabase
+  // STAP 1: Zoek eerst op contact_id (voorkomt duplicaten door LID vs JID formaten)
+  // WhatsApp stuurt soms berichten met LID formaat (e.g., 26873727819967@lid) 
+  // in plaats van standaard JID (e.g., 31686861816@s.whatsapp.net)
+  const { data: existingByContact } = await supabase
+    .from("whatsapp_chats")
+    .select("id, unread_count, chat_jid")
+    .eq("session_id", sessionId)
+    .eq("contact_id", contactId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (existingByContact) {
+    // Update chat_jid als het verandert (bijv. van LID naar s.whatsapp.net)
+    if (existingByContact.chat_jid !== chatJid) {
+      console.log(`[${requestId}] ⚡ Updating chat_jid from ${existingByContact.chat_jid} to ${chatJid} (same contact_id: ${contactId})`);
+      await supabase
+        .from("whatsapp_chats")
+        .update({ chat_jid: chatJid })
+        .eq("id", existingByContact.id);
+    }
+    return existingByContact;
+  }
+
+  // STAP 2: Fallback op exacte JID match (voor bestaande chats zonder contact_id)
+  const { data: existingByJid } = await supabase
     .from("whatsapp_chats")
     .select("id, unread_count")
     .eq("session_id", sessionId)
     .eq("chat_jid", chatJid)
-    .single();
+    .is("deleted_at", null)
+    .maybeSingle();
 
-  if (existing) return existing;
+  if (existingByJid) return existingByJid;
 
-  // Create new chat with explicit chat_type
+  // STAP 3: Nieuwe chat aanmaken
   console.log(`[${requestId}] Creating new ${isGroupChat ? 'group' : 'direct'} chat: ${chatJid}`);
   const { data: newChat, error } = await supabase
     .from("whatsapp_chats")
