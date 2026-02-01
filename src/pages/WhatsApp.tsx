@@ -5,6 +5,7 @@ import { WhatsAppChatList } from "@/components/whatsapp/WhatsAppChatList";
 import { WhatsAppChatDetail } from "@/components/whatsapp/WhatsAppChatDetail";
 import { WhatsAppEmptyState } from "@/components/whatsapp/WhatsAppEmptyState";
 import { WhatsAppContactProfile } from "@/components/whatsapp/WhatsAppContactProfile";
+import { WhatsAppGroupProfile } from "@/components/whatsapp/WhatsAppGroupProfile";
 import { WhatsAppConnectionStatus } from "@/components/whatsapp/WhatsAppConnectionStatus";
 import { WhatsAppErrorBoundary } from "@/components/whatsapp/WhatsAppErrorBoundary";
 import { WhatsAppCommandPalette } from "@/components/whatsapp/WhatsAppCommandPalette";
@@ -280,24 +281,38 @@ export default function WhatsApp() {
         )}
       </div>
 
-      {/* Contact Profile - Desktop: inline panel */}
+      {/* Contact/Group Profile - Desktop: inline panel */}
       {isLargeScreen && showProfile && selectedChat && (
         <div className="hidden lg:block w-[320px] border-l flex-shrink-0">
-          <WhatsAppContactProfile
-            chat={selectedChat}
-            onClose={() => setShowProfile(false)}
-          />
-        </div>
-      )}
-
-      {/* Contact Profile - Mobile/Tablet: Sheet overlay */}
-      <Sheet open={showProfile && !!selectedChat && isMobile} onOpenChange={setShowProfile}>
-        <SheetContent side="right" className="w-[320px] p-0">
-          {selectedChat && (
+          {selectedChat.chat_type === 'group' ? (
+            <WhatsAppGroupProfile
+              chat={selectedChat}
+              onClose={() => setShowProfile(false)}
+            />
+          ) : (
             <WhatsAppContactProfile
               chat={selectedChat}
               onClose={() => setShowProfile(false)}
             />
+          )}
+        </div>
+      )}
+
+      {/* Contact/Group Profile - Mobile/Tablet: Sheet overlay */}
+      <Sheet open={showProfile && !!selectedChat && isMobile} onOpenChange={setShowProfile}>
+        <SheetContent side="right" className="w-[320px] p-0">
+          {selectedChat && (
+            selectedChat.chat_type === 'group' ? (
+              <WhatsAppGroupProfile
+                chat={selectedChat}
+                onClose={() => setShowProfile(false)}
+              />
+            ) : (
+              <WhatsAppContactProfile
+                chat={selectedChat}
+                onClose={() => setShowProfile(false)}
+              />
+            )
           )}
         </SheetContent>
       </Sheet>

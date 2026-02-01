@@ -83,3 +83,20 @@ export interface MessageGroup {
 export type WhatsAppFilter = 'all' | 'unread' | 'linked';
 
 export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'received';
+
+// Groepsleden tracking
+export interface WhatsAppGroupMember {
+  id: string;
+  chat_id: string;
+  member_jid: string;
+  display_name: string | null;
+  contact_id: string | null;
+  role: 'member' | 'admin' | 'superadmin';
+  is_self: boolean;
+  joined_at: string;
+  left_at: string | null;
+  created_at: string;
+  updated_at: string;
+  // Relaties
+  contact?: WhatsAppContact | null;
+}

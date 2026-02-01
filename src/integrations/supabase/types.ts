@@ -6683,6 +6683,63 @@ export type Database = {
           },
         ]
       }
+      whatsapp_group_members: {
+        Row: {
+          chat_id: string
+          contact_id: string | null
+          created_at: string | null
+          display_name: string | null
+          id: string
+          is_self: boolean | null
+          joined_at: string | null
+          left_at: string | null
+          member_jid: string
+          role: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          chat_id: string
+          contact_id?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          id?: string
+          is_self?: boolean | null
+          joined_at?: string | null
+          left_at?: string | null
+          member_jid: string
+          role?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          chat_id?: string
+          contact_id?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          id?: string
+          is_self?: boolean | null
+          joined_at?: string | null
+          left_at?: string | null
+          member_jid?: string
+          role?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_group_members_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_group_members_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_media: {
         Row: {
           created_at: string

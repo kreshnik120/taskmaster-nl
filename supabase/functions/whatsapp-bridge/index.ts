@@ -500,6 +500,11 @@ const {
       .eq("id", chat.id);
   }
 
+  // 7. Track group member if this is a group chat with sender info
+  if (isGroupChat && effectiveFrom) {
+    await upsertGroupMember(supabase, chat.id, effectiveFrom, effectiveFromName || null, requestId);
+  }
+
   console.log(`[${requestId}] ✅ Message stored: ${message.id}, sender_type: ${isFromSelf ? 'self' : 'contact'}`);
 
   return { messageId: message.id, chatId: chat.id, contactId: contact.id };
@@ -1146,6 +1151,41 @@ async function handleSyncAllProfilePictures(
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
+
+/**
+ * Upsert a group member when a group message is received.
+ * Tracks unique participants by chat_id + member_jid.
+ */
+async function upsertGroupMember(
+  supabase: SupabaseClientAny,
+  chatId: string,
+  memberJid: string,
+  displayName: string | null,
+  requestId: string
+): Promise<void> {
+  if (!memberJid || !chatId) return;
+
+  const { error } = await supabase
+    .from("whatsapp_group_members")
+    .upsert(
+      {
+        chat_id: chatId,
+        member_jid: memberJid,
+        display_name: displayName,
+        updated_at: new Date().toISOString(),
+      },
+      {
+        onConflict: "chat_id,member_jid",
+        ignoreDuplicates: false,
+      }
+    );
+
+  if (error) {
+    console.error(`[${requestId}] Group member upsert failed:`, error);
+  } else {
+    console.log(`[${requestId}] ✅ Group member tracked: ${displayName || memberJid}`);
+  }
+}
 
 async function getOrCreateSession(
   supabase: SupabaseClientAny,
