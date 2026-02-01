@@ -13,6 +13,39 @@ function formatError(err: unknown): string {
   return String(err);
 }
 
+/**
+ * Normalizes phone numbers to a standard format for consistent lookups.
+ * Removes '+', WhatsApp suffixes, and converts to digits only.
+ * 
+ * Examples:
+ * - "+31642520970" → "31642520970"
+ * - "31642520970@s.whatsapp.net" → "31642520970"
+ * - "06-12345678" → "31612345678" (NL prefix)
+ */
+function normalizePhoneNumber(input: string): string {
+  if (!input || input.startsWith('group-')) {
+    return input; // Don't normalize groups
+  }
+  
+  // Remove WhatsApp suffix first
+  let normalized = input.split('@')[0];
+  
+  // Remove all non-digits (including + and -)
+  normalized = normalized.replace(/[^0-9]/g, '');
+  
+  // NL: convert 06... to 316...
+  if (normalized.startsWith('06') && normalized.length === 10) {
+    normalized = '31' + normalized.substring(1);
+  }
+  
+  // NL: convert 6... (without 0) to 316... if 9 digits
+  if (normalized.startsWith('6') && normalized.length === 9) {
+    normalized = '31' + normalized;
+  }
+  
+  return normalized;
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -1195,15 +1228,23 @@ async function getOrCreateContact(
   displayName: string | undefined,
   requestId: string
 ) {
-  // Try to find existing contact
+  // Normalize the phone number for consistent lookup
+  const normalizedPhone = normalizePhoneNumber(phoneNumber);
+  
+  // IMPROVED: Search by org_id + normalized number (not session_id)
+  // This prevents duplicates when the same number arrives in different formats
+  // We check for both the normalized format and with + prefix
   const { data: existing } = await supabase
     .from("whatsapp_contacts")
-    .select("id, display_name, profile_picture_url")
-    .eq("session_id", sessionId)
-    .eq("phone_number", phoneNumber)
+    .select("id, display_name, profile_picture_url, phone_number")
+    .eq("org_id", orgId)
+    .or(`phone_number.eq.${normalizedPhone},phone_number.eq.+${normalizedPhone},phone_number.ilike.%${normalizedPhone.slice(-9)}`)
+    .limit(1)
     .maybeSingle();
 
   if (existing) {
+    console.log(`[${requestId}] Found existing contact by normalized lookup: ${existing.phone_number} → ${normalizedPhone}`);
+    
     // Update push_name if provided (but don't overwrite user-edited display_name)
     if (displayName && !existing.display_name) {
       await supabase
@@ -1214,19 +1255,29 @@ async function getOrCreateContact(
         })
         .eq("id", existing.id);
     }
+    
+    // If the stored number differs from normalized, update it for consistency
+    if (existing.phone_number !== normalizedPhone && !existing.phone_number.startsWith('group-')) {
+      console.log(`[${requestId}] Updating phone_number format: ${existing.phone_number} → ${normalizedPhone}`);
+      await supabase
+        .from("whatsapp_contacts")
+        .update({ phone_number: normalizedPhone })
+        .eq("id", existing.id);
+    }
+    
     return existing;
   }
 
-  // Create new contact with whatsapp_jid
-  console.log(`[${requestId}] Creating new contact: ${phoneNumber}`);
+  // Create new contact with normalized number
+  console.log(`[${requestId}] Creating new contact: ${normalizedPhone} (original: ${phoneNumber})`);
   const { data: newContact, error } = await supabase
     .from("whatsapp_contacts")
     .insert({
       org_id: orgId,
       session_id: sessionId,
-      phone_number: phoneNumber,
-      whatsapp_jid: `${phoneNumber}@s.whatsapp.net`,
-      display_name: displayName || phoneNumber,
+      phone_number: normalizedPhone,  // Store as normalized
+      whatsapp_jid: `${normalizedPhone}@s.whatsapp.net`,
+      display_name: displayName || normalizedPhone,
       push_name: displayName || null,
     })
     .select("id, display_name")
@@ -1236,11 +1287,11 @@ async function getOrCreateContact(
     throw new Error(`Contact creation failed: ${formatError(error)}`);
   }
 
-  // NIEUW: Trigger automatische profielfoto-sync voor nieuwe contacten (fire-and-forget)
+  // Trigger automatic profile picture sync for new contacts (fire-and-forget)
   if (newContact) {
-    console.log(`[${requestId}] 📷 Triggering background profile picture fetch for new contact: ${phoneNumber}`);
+    console.log(`[${requestId}] 📷 Triggering background profile picture fetch for new contact: ${normalizedPhone}`);
     EdgeRuntime.waitUntil(
-      fetchProfilePictureForNewContact(supabase, sessionId, orgId, newContact.id, phoneNumber, requestId)
+      fetchProfilePictureForNewContact(supabase, sessionId, orgId, newContact.id, normalizedPhone, requestId)
     );
   }
 
