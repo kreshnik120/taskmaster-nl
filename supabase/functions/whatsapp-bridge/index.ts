@@ -1252,12 +1252,12 @@ async function fetchProfilePictureForNewContact(
   requestId: string
 ) {
   try {
-    // Get VPS relay URL to request profile picture
-    const vpsUrl = Deno.env.get("WHATSAPP_VPS_URL");
+    // Get VPS relay URL to request profile picture (fallback to CLAWDBOT_VPS_URL)
+    const vpsUrl = Deno.env.get("WHATSAPP_VPS_URL") || Deno.env.get("CLAWDBOT_VPS_URL");
     const vpsApiKey = Deno.env.get("WHATSAPP_VPS_API_KEY");
     
     if (!vpsUrl || !vpsApiKey) {
-      console.log(`[${requestId}] 📷 Skipping profile picture fetch - VPS not configured`);
+      console.log(`[${requestId}] 📷 Skipping profile picture fetch - VPS not configured (checked WHATSAPP_VPS_URL, CLAWDBOT_VPS_URL)`);
       return;
     }
 
