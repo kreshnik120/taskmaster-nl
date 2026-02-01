@@ -13,6 +13,8 @@ import { useWhatsAppChats } from "@/hooks/whatsapp/useWhatsAppChats";
 import { useWhatsAppRealtimeStatus } from "@/hooks/whatsapp/useWhatsAppRealtimeStatus";
 import { useUpdateChatStatus } from "@/hooks/whatsapp/useUpdateChatStatus";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { toast } from "sonner";
+import type { WhatsAppContact } from "@/types/whatsapp";
 import {
   Sheet,
   SheetContent,
@@ -86,6 +88,22 @@ export default function WhatsApp() {
     setSelectedChatId(null);
     navigate('/whatsapp', { replace: true });
   }, [navigate]);
+
+  // Handle contact selection from search
+  const handleSelectContact = useCallback((contact: WhatsAppContact) => {
+    // Find existing chat with this contact
+    const existingChat = filteredChats.find(c => c.contact_id === contact.id);
+    
+    if (existingChat) {
+      // Open existing chat
+      handleSelectChat(existingChat.id);
+    } else {
+      // Show notification that no chat exists yet
+      toast.info(`Nog geen gesprek met ${contact.display_name || contact.phone_number}`, {
+        description: "Start een nieuw gesprek door een bericht te sturen",
+      });
+    }
+  }, [filteredChats, handleSelectChat]);
 
   // Toggle profile panel
   const toggleProfile = useCallback(() => {
@@ -239,6 +257,7 @@ export default function WhatsApp() {
           tagFilter={tagFilter}
           onTagFilterChange={setTagFilter}
           availableTags={availableTags}
+          onSelectContact={handleSelectContact}
         />
       </div>
 

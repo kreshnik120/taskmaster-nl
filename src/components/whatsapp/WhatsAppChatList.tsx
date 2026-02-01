@@ -1,3 +1,4 @@
+import { useState, useCallback } from "react";
 import { Search } from "lucide-react";
 import { Virtuoso } from "react-virtuoso";
 import { Input } from "@/components/ui/input";
@@ -5,9 +6,11 @@ import { WhatsAppFilterTabs } from "./WhatsAppFilterTabs";
 import { WhatsAppTagFilter } from "./WhatsAppTagFilter";
 import { WhatsAppChatItem } from "./WhatsAppChatItem";
 import { WhatsAppChatContextMenu } from "./WhatsAppChatContextMenu";
+import { WhatsAppContactSearchResults } from "./WhatsAppContactSearchResults";
 import { ChatListSkeleton } from "./WhatsAppSkeletonLoader";
 import { ChatListEmptyState } from "./WhatsAppEmptyState";
-import type { WhatsAppChat, WhatsAppFilter } from "@/types/whatsapp";
+import { useSearchContacts } from "@/hooks/whatsapp/useSearchContacts";
+import type { WhatsAppChat, WhatsAppFilter, WhatsAppContact } from "@/types/whatsapp";
 
 interface WhatsAppChatListProps {
   chats: WhatsAppChat[];
@@ -22,6 +25,7 @@ interface WhatsAppChatListProps {
   tagFilter: string | null;
   onTagFilterChange: (tag: string | null) => void;
   availableTags: string[];
+  onSelectContact?: (contact: WhatsAppContact) => void;
 }
 
 export function WhatsAppChatList({
@@ -37,7 +41,31 @@ export function WhatsAppChatList({
   tagFilter,
   onTagFilterChange,
   availableTags,
+  onSelectContact,
 }: WhatsAppChatListProps) {
+  const [isContactSearchMode, setIsContactSearchMode] = useState(false);
+
+  // Contact search hook
+  const { data: searchResults = [], isLoading: isSearching } = useSearchContacts({
+    query: searchQuery,
+    enabled: isContactSearchMode,
+  });
+
+  // Show contact results overlay when in search mode and query is long enough
+  const showContactResults = isContactSearchMode && searchQuery.length >= 2;
+
+  // Handle contact selection
+  const handleSelectContact = useCallback((contact: WhatsAppContact) => {
+    onSelectContact?.(contact);
+    setIsContactSearchMode(false);
+    onSearchChange(""); // Clear search after selection
+  }, [onSelectContact, onSearchChange]);
+
+  // Close search overlay
+  const handleCloseSearch = useCallback(() => {
+    setIsContactSearchMode(false);
+  }, []);
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -46,13 +74,27 @@ export function WhatsAppChatList({
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Zoek in gesprekken..."
+            placeholder={isContactSearchMode 
+              ? "Zoek contact op naam of nummer..." 
+              : "Zoek in gesprekken..."}
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
+            onFocus={() => setIsContactSearchMode(true)}
             className="pl-10"
             aria-label="Zoek in gesprekken"
             data-search-input
           />
+          
+          {/* Contact search results overlay */}
+          {showContactResults && (
+            <WhatsAppContactSearchResults
+              results={searchResults}
+              isLoading={isSearching}
+              searchQuery={searchQuery}
+              onSelectContact={handleSelectContact}
+              onClose={handleCloseSearch}
+            />
+          )}
         </div>
 
         {/* Filter tabs */}
