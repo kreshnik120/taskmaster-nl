@@ -144,6 +144,18 @@ export default function UnifiedDashboard() {
             <User className="h-4 w-4" />
             <span className="hidden sm:inline">Mijn Werk</span>
           </TabsTrigger>
+          <TabsTrigger value="kalender" className="gap-2">
+            <Calendar className="h-4 w-4" />
+            <span className="hidden sm:inline">Kalender</span>
+          </TabsTrigger>
+          <TabsTrigger value="lijst" className="gap-2">
+            <List className="h-4 w-4" />
+            <span className="hidden sm:inline">Lijst</span>
+          </TabsTrigger>
+          <TabsTrigger value="opvolging" className="gap-2">
+            <TrendingUp className="h-4 w-4" />
+            <span className="hidden sm:inline">Opvolging</span>
+          </TabsTrigger>
           <TabsTrigger value="team" className="gap-2">
             <Users className="h-4 w-4" />
             <span className="hidden sm:inline">Team</span>
@@ -151,18 +163,6 @@ export default function UnifiedDashboard() {
           <TabsTrigger value="recruitment" className="gap-2">
             <Briefcase className="h-4 w-4" />
             <span className="hidden sm:inline">Recruitment</span>
-          </TabsTrigger>
-          <TabsTrigger value="lijst" className="gap-2">
-            <List className="h-4 w-4" />
-            <span className="hidden sm:inline">Lijst</span>
-          </TabsTrigger>
-          <TabsTrigger value="kalender" className="gap-2">
-            <Calendar className="h-4 w-4" />
-            <span className="hidden sm:inline">Kalender</span>
-          </TabsTrigger>
-          <TabsTrigger value="opvolging" className="gap-2">
-            <TrendingUp className="h-4 w-4" />
-            <span className="hidden sm:inline">Opvolging</span>
           </TabsTrigger>
         </TabsList>
 
