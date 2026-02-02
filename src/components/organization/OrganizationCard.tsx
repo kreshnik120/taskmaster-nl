@@ -98,7 +98,7 @@ export function OrganizationCard({
   return (
     <div className="space-y-2">
       <Card
-        className="p-4 hover:shadow-lg hover:bg-accent/5 transition-all duration-200 cursor-pointer border-l-4 border-l-primary/60"
+        className="p-4 glass-hover-lift bg-white/75 dark:bg-slate-900/75 border-white/40 dark:border-white/12 border-l-4 border-l-primary/60 shadow-[0_2px_6px_hsla(215,25%,48%,0.06),0_8px_24px_hsla(215,25%,48%,0.10)] rounded-xl cursor-pointer"
         onClick={handleCardClick}
       >
         <div className="flex items-start justify-between gap-4">

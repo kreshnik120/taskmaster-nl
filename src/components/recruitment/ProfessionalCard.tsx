@@ -111,9 +111,9 @@ export function ProfessionalCard({
       <HoverCardTrigger asChild>
         <Card 
           className={cn(
-            "cursor-pointer border-border bg-background overflow-hidden",
-            "transition-shadow duration-150",
-            "hover:shadow-sm"
+            "cursor-pointer glass-hover-lift bg-white/75 dark:bg-slate-900/75 border-white/40 dark:border-white/12",
+            "shadow-[0_2px_6px_hsla(270,45%,55%,0.06),0_8px_24px_hsla(270,45%,55%,0.10)]",
+            "focus:outline-none focus:ring-2 focus:ring-violet-500/30 rounded-xl overflow-hidden"
           )}
           onClick={onClick}
         >
@@ -219,7 +219,7 @@ export function ProfessionalCard({
                     variant="ghost"
                     onClick={handlePhoneClick}
                     disabled={!professional.telefoonnummer}
-                    className="h-8 text-xs px-2"
+                    className="h-8 text-xs px-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_6px_hsla(270,45%,55%,0.08)] hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_10px_hsla(270,45%,55%,0.12)] transition-all duration-200"
                   >
                     <Phone className="h-3.5 w-3.5" />
                   </Button>
@@ -236,7 +236,7 @@ export function ProfessionalCard({
                     variant="ghost"
                     onClick={handleEmailClick}
                     disabled={!professional.email}
-                    className="h-8 text-xs px-2"
+                    className="h-8 text-xs px-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_6px_hsla(270,45%,55%,0.08)] hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_10px_hsla(270,45%,55%,0.12)] transition-all duration-200"
                   >
                     <Mail className="h-3.5 w-3.5" />
                   </Button>
@@ -253,7 +253,7 @@ export function ProfessionalCard({
                     variant="ghost"
                     onClick={handleLocationClick}
                     disabled={!professional.regio}
-                    className="h-8 text-xs px-2"
+                    className="h-8 text-xs px-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_6px_hsla(270,45%,55%,0.08)] hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_10px_hsla(270,45%,55%,0.12)] transition-all duration-200"
                   >
                     <MapPin className="h-3.5 w-3.5" />
                   </Button>
@@ -281,7 +281,7 @@ export function ProfessionalCard({
         </Card>
       </HoverCardTrigger>
 
-      <HoverCardContent className="w-80">
+      <HoverCardContent className="w-80 glass-layer-2 glass-light-bleed rounded-xl">
         <div className="space-y-3">
           <div>
             <div className="flex items-center gap-2 mb-1">

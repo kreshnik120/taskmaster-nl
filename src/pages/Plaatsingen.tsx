@@ -288,7 +288,7 @@ export default function Plaatsingen() {
                 transition={{ duration: 0.3, delay: idx * 0.03 }}
               >
                 <Card 
-                  className="hover:shadow-md transition-all duration-200 cursor-pointer border-border/50" 
+                  className="glass-hover-lift bg-white/75 dark:bg-slate-900/75 border-white/40 dark:border-white/12 shadow-[0_2px_6px_hsla(142,71%,45%,0.06),0_8px_24px_hsla(142,71%,45%,0.10)] rounded-xl cursor-pointer" 
                   onClick={() => {
                     setSelectedPlacement(placement);
                     setDetailModalOpen(true);

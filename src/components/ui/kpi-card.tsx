@@ -104,12 +104,13 @@ export function KPICard({
         isMinimal 
           ? "border-0 bg-background shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)]"
           : cn(
-              "border border-white/50 dark:border-white/10 backdrop-blur-sm",
+              "bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm",
+              "border border-white/50 dark:border-white/10",
               config.borderColor,
               "border-t-4",
               config.shadowColor
             ),
-        onClick && "cursor-pointer hover:translate-y-[-1px]",
+        onClick && "cursor-pointer glass-hover-lift",
         isActive && `ring-2 ring-offset-2 ${config.ringColor}`,
         className
       )}

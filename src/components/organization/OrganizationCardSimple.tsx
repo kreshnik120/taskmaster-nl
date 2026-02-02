@@ -175,7 +175,7 @@ export function OrganizationCardSimple({
           }}
         >
           <Card 
-            className={`cursor-pointer transition-all duration-200 hover:bg-muted/30 hover:shadow-md hover:-translate-y-0.5 ${isIncomplete ? 'opacity-80' : 'opacity-100'} flex flex-col overflow-hidden`}
+            className={`cursor-pointer glass-hover-lift bg-white/75 dark:bg-slate-900/75 border-white/40 dark:border-white/12 shadow-[0_2px_6px_hsla(215,25%,48%,0.06),0_8px_24px_hsla(215,25%,48%,0.10)] focus:outline-none focus:ring-2 focus:ring-slate-500/30 rounded-xl ${isIncomplete ? 'opacity-80' : 'opacity-100'} flex flex-col overflow-hidden`}
             onClick={() => onClick(organization)}
           >
             {/* Main content */}
@@ -273,7 +273,7 @@ export function OrganizationCardSimple({
                       size="sm"
                       onClick={handleQuickCall}
                       disabled={!primaryPhone}
-                      className="h-7 px-2 disabled:opacity-40 hover:scale-105 hover:bg-primary/10 transition-all duration-200"
+                      className="h-7 px-2 disabled:opacity-40 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_6px_hsla(215,25%,48%,0.08)] hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_10px_hsla(215,25%,48%,0.12)] transition-all duration-200"
                     >
                       <Phone className="h-3.5 w-3.5" />
                     </Button>
@@ -292,7 +292,7 @@ export function OrganizationCardSimple({
                       size="sm"
                       onClick={handleQuickEmail}
                       disabled={!primaryEmail}
-                      className="h-7 px-2 disabled:opacity-40 hover:scale-105 hover:bg-primary/10 transition-all duration-200"
+                      className="h-7 px-2 disabled:opacity-40 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_6px_hsla(215,25%,48%,0.08)] hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_10px_hsla(215,25%,48%,0.12)] transition-all duration-200"
                     >
                       <Mail className="h-3.5 w-3.5" />
                     </Button>
@@ -311,7 +311,7 @@ export function OrganizationCardSimple({
                       size="sm"
                       onClick={handleQuickWebsite}
                       disabled={!organization.website}
-                      className="h-7 px-2 disabled:opacity-40 hover:scale-105 hover:bg-primary/10 transition-all duration-200"
+                      className="h-7 px-2 disabled:opacity-40 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_6px_hsla(215,25%,48%,0.08)] hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_10px_hsla(215,25%,48%,0.12)] transition-all duration-200"
                     >
                       <Globe className="h-3.5 w-3.5" />
                     </Button>
@@ -326,7 +326,7 @@ export function OrganizationCardSimple({
         </motion.div>
       </HoverCardTrigger>
       
-      <HoverCardContent className="w-80" side="top">
+      <HoverCardContent className="w-80 glass-layer-2 glass-light-bleed rounded-xl" side="top">
         <div className="space-y-3">
           <div>
             <h4 className="text-sm font-semibold mb-1">{organization.name}</h4>
