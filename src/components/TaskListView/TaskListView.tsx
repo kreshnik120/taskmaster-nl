@@ -177,19 +177,18 @@ function TaskListViewContent({
 
   // Handle bulk actions (placeholder implementations)
   const handleBulkStatusChange = (status: string) => {
-    console.log('Bulk status change:', status, Array.from(selectedIds));
+    // TODO: Implement bulk status change
     announceToScreenReader(`${selectedIds.size} taken bijgewerkt`);
     clearSelection();
   };
 
   const handleBulkPriorityChange = (priority: string) => {
-    console.log('Bulk priority change:', priority, Array.from(selectedIds));
+    // TODO: Implement bulk priority change
     announceToScreenReader(`${selectedIds.size} taken bijgewerkt`);
     clearSelection();
   };
 
   const handleBulkDelete = () => {
-    console.log('Bulk delete:', Array.from(selectedIds));
     // TODO: Show delete confirmation
     clearSelection();
   };
@@ -275,12 +274,10 @@ function TaskListViewContent({
         task={panelTask}
         onClose={() => setPanelTask(null)}
         onEdit={(task) => {
-          console.log('Edit task:', task.id);
-          // TODO: Open edit modal
+          // TODO: Open edit modal for task.id
         }}
         onDelete={(task) => {
-          console.log('Delete task:', task.id);
-          // TODO: Show delete confirmation
+          // TODO: Show delete confirmation for task.id
         }}
       />
 

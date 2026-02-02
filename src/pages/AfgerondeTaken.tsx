@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useGreeting } from "@/hooks/useGreeting";
+
+const log = logger.create('AfgerondeTaken');
 
 interface CompletedTask {
   id: string;
@@ -72,7 +75,7 @@ const AfgerondeTaken = () => {
         table: 'tasks',
         filter: 'completed_at=not.is.null',  // Alleen completed task changes
       }, (payload) => {
-        console.log('[AfgerondeTaken] Realtime update:', payload.eventType);
+        log.debug('Realtime update:', payload.eventType);
         fetchCompletedTasks();
       })
       .subscribe();

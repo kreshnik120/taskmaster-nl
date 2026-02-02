@@ -2,6 +2,9 @@ import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('DiplomaUpgrade');
 
 interface DiplomaUpgradeNotification {
   id: string;
@@ -39,11 +42,11 @@ export function useDiplomaUpgradeNotifications(
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
-        console.debug('[useDiplomaUpgradeNotifications] No auth session, skipping subscription');
+        log.debug('No auth session, skipping subscription');
         return;
       }
       
-      console.log('[useDiplomaUpgradeNotifications] Setting up realtime subscription');
+      log.debug('Setting up realtime subscription');
       
       channel = supabase
         .channel('diploma-upgrade-notifications')
@@ -57,11 +60,11 @@ export function useDiplomaUpgradeNotifications(
           },
           async (payload) => {
             const notification = payload.new as DiplomaUpgradeNotification;
-            console.log('[useDiplomaUpgradeNotifications] Received notification:', notification);
+            log.debug('Received notification:', notification);
             
             // Prevent duplicate notifications in same session
             if (notifiedIds.current.has(notification.id)) {
-              console.log('[useDiplomaUpgradeNotifications] Duplicate notification, skipping');
+              log.debug('Duplicate notification, skipping');
               return;
             }
             notifiedIds.current.add(notification.id);
@@ -92,7 +95,7 @@ export function useDiplomaUpgradeNotifications(
           }
         )
         .subscribe((status) => {
-          console.log('[useDiplomaUpgradeNotifications] Subscription status:', status);
+          log.debug('Subscription status:', status);
         });
     };
     
@@ -100,7 +103,7 @@ export function useDiplomaUpgradeNotifications(
 
     return () => {
       if (channel) {
-        console.log('[useDiplomaUpgradeNotifications] Cleaning up subscription');
+        log.debug('Cleaning up subscription');
         supabase.removeChannel(channel);
       }
     };

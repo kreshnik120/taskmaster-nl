@@ -2,6 +2,9 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { WhatsAppChat, WhatsAppFilter, WhatsAppContact } from "@/types/whatsapp";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('WhatsAppChats');
 
 interface UseWhatsAppChatsReturn {
   chats: WhatsAppChat[];
@@ -94,7 +97,7 @@ export function useWhatsAppChats(): UseWhatsAppChatsReturn {
         ? data.result 
         : (data?.result?.chats || []);
       
-      console.log(`[useWhatsAppChats] Received ${chatsArray.length} chats from MCP`);
+      log.debug(`Received ${chatsArray.length} chats from MCP`);
       
       return chatsArray.map(mapMCPChatToWhatsAppChat) as WhatsAppChat[];
     },

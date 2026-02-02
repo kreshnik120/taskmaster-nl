@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { logger } from '@/lib/logger';
 
 /**
  * Hook that checks if an OAuth user was blocked (no profile created)
@@ -34,7 +35,7 @@ export function useOAuthGuard() {
         
         if (!profile) {
           // User was blocked - no profile was created by the trigger
-          console.warn('OAuth user blocked - no profile found');
+          logger.warn('OAuth user blocked - no profile found');
           
           // Sign out the blocked user
           await supabase.auth.signOut();

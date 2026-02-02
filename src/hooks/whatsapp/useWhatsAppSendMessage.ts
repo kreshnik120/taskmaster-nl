@@ -2,6 +2,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { WhatsAppMessage } from "@/types/whatsapp";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('WhatsAppSendMessage');
 
 interface SendMessageParams {
   chatId: string;
@@ -29,7 +32,7 @@ export function useWhatsAppSendMessage({ chatId, chatJid, orgId }: SendMessagePa
         throw new Error("Bericht mag niet leeg zijn");
       }
 
-      console.log(`[useWhatsAppSendMessage] Sending via MCP: to=${chatJid}, chatId=${chatId}`);
+      log.debug(`Sending via MCP: to=${chatJid}, chatId=${chatId}`);
 
       // Use MCP proxy to send message via ClawdBot
       const { data, error } = await supabase.functions.invoke('mcp-proxy', {
@@ -55,7 +58,7 @@ export function useWhatsAppSendMessage({ chatId, chatJid, orgId }: SendMessagePa
         throw new Error(result?.error || 'Fout bij versturen bericht');
       }
 
-      console.log('[useWhatsAppSendMessage] Message sent successfully via MCP');
+      log.debug('Message sent successfully via MCP');
       return result;
     },
     onMutate: async (text: string) => {
