@@ -1,105 +1,334 @@
 
-## Doel
-1) Het “schieten/jump” effect bij het vastpakken van een taak volledig elimineren, zodat de kaart exact onder de muis blijft tijdens slepen.  
-2) Het glass-effect verder aanscherpen (meer diepte, kleurige schaduw) zonder dat we nog `transform`-animaties gebruiken die DnD kunnen verstoren.
+
+# Fase 11: DnD-Fix & Glassmorphism Styling voor Andere Pagina's
+
+## Overzicht
+
+We passen dezelfde DnD cursor-fix en premium glassmorphism styling toe op de andere pagina's die drag-and-drop gebruiken. Elke pagina krijgt zijn eigen kleurthema conform het visionOS design system.
+
+## Betreffende Bestanden & Kleurschema's
+
+| Bestand | Kleurthema | HSL Basis |
+|---------|------------|-----------|
+| `Sollicitaties.tsx` | **Rose** (Recruitment) | `hsl(346, 77%, 50%)` |
+| `EmbeddedCalendarView.tsx` | **Teal** (Kalender) | `hsl(172, 66%, 50%)` |
+| `ApplicationCard.tsx` | **Rose** (Recruitment) | `hsl(346, 77%, 50%)` |
 
 ---
 
-## Analyse (waarom het nu nog “schiet”)
-We hebben `rotate/scale` uit de `DragOverlay` gehaald (goed), maar de **bronkaart (de echte TaskCard in de lijst)** heeft nog steeds een hover-lift via CSS:
+## Wijziging 1: Sollicitaties.tsx — Rose-themed DnD
 
-- In `src/index.css` staat `.glass-hover-lift:hover { transform: translateY(-2px) scale(1.005); }`
-- `TaskCard.tsx` gebruikt `glass-hover-lift` op de `<Card ...>`.
+### A) DnD Dragging Class Toggle
 
-Bij drag-start verliest het element vaak zijn `:hover`-staat (of verandert die abrupt), waardoor die `transform` ineens wegvalt terwijl dnd-kit net de startpositie heeft “gemeten”. Dat voelt voor de gebruiker alsof de kaart “wegschiet” bij het vastpakken.
+**Locatie:** Regels 281-288
 
-Kort: **DnD + hover transforms op het draggable element = visuele sprong**.
+```tsx
+// VOOR
+const handleDragStart = (event: DragStartEvent) => {
+  const application = applications.find((a) => a.id === event.active.id);
+  if (application) setActiveApplication(application);
+};
 
----
+const handleDragEnd = async (event: DragEndEvent) => {
+  const { active, over } = event;
+  setActiveApplication(null);
+  // ...rest
+};
 
-## Oplossing: Phase 10 — DnD-stabiele hover (shadows-only) + “dragging mode” freeze
-We gaan het zwevende gevoel behouden, maar tijdens drag (en voor TaskCard in het algemeen) **geen translate/scale transforms** meer gebruiken op het draggable element. We doen dit op twee niveaus:
+// NA
+const handleDragStart = (event: DragStartEvent) => {
+  document.documentElement.classList.add('dnd-dragging');
+  const application = applications.find((a) => a.id === event.active.id);
+  if (application) setActiveApplication(application);
+};
 
-### A) TaskCard hover-lift vervangen door shadow-only lift (geen transform)
-**Bestand:** `src/components/TaskCard.tsx`
+const handleDragEnd = async (event: DragEndEvent) => {
+  document.documentElement.classList.remove('dnd-dragging');
+  const { active, over } = event;
+  setActiveApplication(null);
+  // ...rest
+};
+```
 
-- Verwijder/replace `glass-hover-lift` op de TaskCard `<Card ...>` door een nieuwe class die alleen shadows/blur/border accentueert.
-- Resultaat: de kaart kan nog steeds “premium zweven”, maar zonder geometrische verplaatsing.
+### B) DragOverlay Premium Styling
 
-Concreet:
-- `glass-hover-lift` → `glass-hover-shadow` (nieuw)
-- Hover-effect blijft, maar via `box-shadow`, `border`, `background`, `backdrop-filter` (geen `transform`).
+**Locatie:** Regels 1276-1285
 
-### B) Tijdens actief draggen: hover-transforms globaal “bevriezen”
-**Bestanden:**
-- `src/components/dashboard/MyTasksFlowSection.tsx`
-- `src/pages/Kanban.tsx`
-- `src/index.css`
+```tsx
+// VOOR
+<DragOverlay>
+  {activeApplication ? (
+    <div className="rotate-2">
+      <ApplicationCard
+        application={activeApplication}
+        onClick={() => {}}
+      />
+    </div>
+  ) : null}
+</DragOverlay>
 
-**In code:**
-- In `handleDragStart`: `document.documentElement.classList.add('dnd-dragging')`
-- In `handleDragEnd` én `onDragCancel`: `document.documentElement.classList.remove('dnd-dragging')`
-
-**In CSS (`src/index.css`):**
-- Voeg een globale guard toe zodat tijdens drag alle hover-transforms uit staan:
-  - `.dnd-dragging .glass-hover-lift, .dnd-dragging .glass-hover-lift:hover { transform: none !important; }`
-  - (en idem voor andere plekken waar nog translateY/scale op hover voorkomt binnen draggable zones, indien nodig)
-
-Waarom dit extra helpt:
-- Ook als er elders nog een transform-hover staat (bijv. kolommen of cards), voorkom je micro-jumps tijdens slepen.
-
-### C) DragOverlay blijft “shadows-only”
-**Bestanden:**
-- `src/components/dashboard/MyTasksFlowSection.tsx`
-- `src/pages/Kanban.tsx`
-- `src/index.css`
-
-- We laten `glass-drag-overlay-enhanced` bestaan en zorgen dat deze uitsluitend shadows/outline gebruikt.
-- Geen `transform`, geen `opacity` wijzigingen die layout/positionering beïnvloeden.
-
----
-
-## Glass-effect verder afmaken (wat je aangaf: “echt van de achtergrond af”)
-Nadat DnD stabiel is, versterken we de “floating” illusie op de gemiste punten die je in de screenshot/flow ziet, zónder transforms:
-
-### 1) Overdue/“Verlopen” badge premium glass
-**Waarschijnlijk bestand:** `src/components/ui/urgency-badge.tsx` (of waar `UrgencyBadge` gedefinieerd is)  
-- Voeg indigo-tinted shadow + inner highlight toe
-- Zorg dat rood/oranje urgentie nog duidelijk is, maar met glass-depth (border + blur + zachte glow)
-
-### 2) Status-dot (rechtsonder op TaskCard) subtiel glass
-**Bestand:** `src/components/TaskCard.tsx`
-- Dot krijgt een mini glow + border i.p.v. een “platte” kleur
-- Hiermee voelt zelfs dat detail “bovenop” de kaart te liggen
-
----
-
-## Implementatiestappen (volgorde)
-1) **TaskCard hover transform verwijderen** (shadow-only hover toevoegen).
-2) **Dragging mode toevoegen** (`dnd-dragging` class togglen in beide DnD flows).
-3) CSS guard toevoegen om transforms tijdens drag te blokkeren.
-4) Controle: slepen vanuit de drag-handle blijft exact onder de cursor, zonder jump.
-5) Daarna: **urgency badge** + **status dot** upgraden naar premium glass.
+// NA - Rose-themed glass overlay
+<DragOverlay dropAnimation={null}>
+  {activeApplication ? (
+    <div className="cursor-grabbing">
+      <div className="glass-drag-overlay-rose">
+        <ApplicationCard
+          application={activeApplication}
+          onClick={() => {}}
+        />
+      </div>
+    </div>
+  ) : null}
+</DragOverlay>
+```
 
 ---
 
-## Bestanden die we aanpassen
-- `src/components/TaskCard.tsx`
-- `src/components/dashboard/MyTasksFlowSection.tsx`
-- `src/pages/Kanban.tsx`
-- `src/index.css`
-- (mogelijk) `src/components/ui/urgency-badge.tsx` (of equivalent waar `UrgencyBadge` staat)
+## Wijziging 2: EmbeddedCalendarView.tsx — Teal-themed DnD
+
+### A) DnD Dragging Class Toggle
+
+**Locatie:** Regels 472-501
+
+```tsx
+// VOOR
+const handleDragStart = (event: DragStartEvent) => {
+  const { active } = event;
+  const activeData = active.data.current;
+  // ...set state
+};
+
+const handleDragEnd = async (event: DragEndEvent) => {
+  const { active, over } = event;
+  setActiveItem(null);
+  // ...rest
+};
+
+// NA
+const handleDragStart = (event: DragStartEvent) => {
+  document.documentElement.classList.add('dnd-dragging');
+  const { active } = event;
+  const activeData = active.data.current;
+  // ...set state
+};
+
+const handleDragEnd = async (event: DragEndEvent) => {
+  document.documentElement.classList.remove('dnd-dragging');
+  const { active, over } = event;
+  setActiveItem(null);
+  // ...rest
+};
+```
+
+### B) DragOverlay Premium Styling
+
+**Locatie:** Regels 902-913
+
+```tsx
+// VOOR
+<DragOverlay>
+  {activeItem && (
+    <div className="p-2 rounded-lg bg-background border shadow-lg opacity-90">
+      <p className="text-xs font-medium">
+        {activeItem.type === 'task' 
+          ? (activeItem.data as Task).title 
+          : (activeItem.data as SubtaskFromHook).title
+        }
+      </p>
+    </div>
+  )}
+</DragOverlay>
+
+// NA - Teal-themed glass overlay
+<DragOverlay dropAnimation={null}>
+  {activeItem && (
+    <div className="cursor-grabbing">
+      <div className="glass-drag-overlay-teal p-2 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-white/40 dark:border-white/15">
+        <p className="text-xs font-medium">
+          {activeItem.type === 'task' 
+            ? (activeItem.data as Task).title 
+            : (activeItem.data as SubtaskFromHook).title
+          }
+        </p>
+      </div>
+    </div>
+  )}
+</DragOverlay>
+```
 
 ---
 
-## Acceptatiecriteria (wat jij meteen moet voelen/zien)
-1) Als je de drag-handle vastpakt, **blijft de taak exact onder je cursor** en “schiet” niet meer.
-2) Tijdens slepen voelt de kaart **premium elevated** door indigo multi-layer shadows, zonder dat hij geometrisch verschuift.
-3) De glass-look is consequent: badges/dots voelen “op” de UI i.p.v. “in” de achtergrond.
+## Wijziging 3: ApplicationCard.tsx — Glass Styling
+
+### A) Verwijder Transform-based Hover
+
+**Locatie:** Regel 266
+
+```tsx
+// VOOR
+<Card
+  className={`hover:scale-[1.01] hover:shadow-md active:scale-[0.99] transition-all duration-200 ease-out border-border/50 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-2 relative ${getCardBorder(completenessScore)}`}
+>
+
+// NA - Glass styling zonder transforms
+<Card
+  className={`glass-hover-lift bg-white/75 dark:bg-slate-900/75 border-white/40 dark:border-white/12 shadow-[0_2px_6px_hsla(346,77%,50%,0.06),0_8px_24px_hsla(346,77%,50%,0.10)] focus:outline-none focus:ring-2 focus:ring-rose-500/30 focus:ring-offset-2 relative rounded-xl ${getCardBorder(completenessScore)}`}
+>
+```
+
+### B) Quick Action Buttons Glass Styling
+
+**Locatie:** Regels 383-409
+
+```tsx
+// VOOR
+<Button
+  size="icon"
+  variant="ghost"
+  className="h-7 w-7"
+  onClick={handleCall}
+>
+
+// NA - Glass buttons
+<Button
+  size="icon"
+  variant="ghost"
+  className="h-7 w-7 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md border border-white/40 dark:border-white/15 shadow-[0_2px_8px_hsla(346,77%,50%,0.10)] hover:bg-white/90 dark:hover:bg-slate-800/90 hover:shadow-[0_4px_12px_hsla(346,77%,50%,0.15)] transition-all duration-200"
+  onClick={handleCall}
+>
+```
 
 ---
 
-## Testprotocol (snel, maar end-to-end)
-- Desktop: pak een taak bij de grip en sleep langzaam + snel; check of er geen jump is bij start.
-- Hover over kaart vóór het pakken: start drag terwijl je nog “hover” bent; check jump = 0.
-- Test ook in dark mode (indigo shadows moeten daar niet “modderig” worden).
+## Wijziging 4: CSS — Context-Gekleurde Drag Overlays
+
+**Bestand: `src/index.css`**
+
+Voeg nieuwe kleur-specifieke drag overlay classes toe:
+
+```css
+/* ============================================
+   CONTEXT-COLORED DRAG OVERLAYS - Phase 11
+   Each tab context gets its own shadow color
+   ============================================ */
+
+/* Rose/Recruitment context */
+.glass-drag-overlay-rose {
+  position: relative;
+  border-radius: 0.75rem;
+  box-shadow:
+    0 25px 60px -15px hsla(346, 77%, 50%, 0.25),
+    0 15px 35px -10px hsla(346, 77%, 50%, 0.18),
+    0 5px 15px -5px hsla(346, 77%, 50%, 0.12),
+    inset 0 1px 2px rgba(255, 255, 255, 0.25),
+    0 0 0 1px hsla(346, 77%, 50%, 0.08);
+  transition: none !important;
+  will-change: transform;
+  transform: none !important;
+}
+
+.dark .glass-drag-overlay-rose {
+  box-shadow:
+    0 25px 60px -15px hsla(346, 77%, 20%, 0.50),
+    0 15px 35px -10px hsla(346, 77%, 20%, 0.35),
+    0 5px 15px -5px hsla(346, 77%, 20%, 0.25),
+    inset 0 1px 2px rgba(255, 255, 255, 0.10),
+    0 0 0 1px hsla(346, 77%, 50%, 0.15);
+}
+
+/* Teal/Calendar context */
+.glass-drag-overlay-teal {
+  position: relative;
+  border-radius: 0.75rem;
+  box-shadow:
+    0 25px 60px -15px hsla(172, 66%, 50%, 0.25),
+    0 15px 35px -10px hsla(172, 66%, 50%, 0.18),
+    0 5px 15px -5px hsla(172, 66%, 50%, 0.12),
+    inset 0 1px 2px rgba(255, 255, 255, 0.25),
+    0 0 0 1px hsla(172, 66%, 50%, 0.08);
+  transition: none !important;
+  will-change: transform;
+  transform: none !important;
+}
+
+.dark .glass-drag-overlay-teal {
+  box-shadow:
+    0 25px 60px -15px hsla(172, 66%, 20%, 0.50),
+    0 15px 35px -10px hsla(172, 66%, 20%, 0.35),
+    0 5px 15px -5px hsla(172, 66%, 20%, 0.25),
+    inset 0 1px 2px rgba(255, 255, 255, 0.10),
+    0 0 0 1px hsla(172, 66%, 50%, 0.15);
+}
+
+/* Extend DnD guard to cover all context overlays */
+.dnd-dragging .glass-drag-overlay-rose,
+.dnd-dragging .glass-drag-overlay-teal,
+.dnd-dragging .glass-drag-overlay-enhanced {
+  /* Already have transform: none, but ensure consistency */
+}
+```
+
+---
+
+## Wijziging 5: HoverCard Content Glass Styling
+
+**ApplicationCard.tsx** regel 414:
+
+```tsx
+// VOOR
+<HoverCardContent className="w-80" side="right" align="start">
+
+// NA
+<HoverCardContent className="w-80 glass-layer-2 glass-light-bleed rounded-xl" side="right" align="start">
+```
+
+---
+
+## Samenvatting Wijzigingen
+
+| Bestand | Wijzigingen |
+|---------|-------------|
+| `src/pages/Sollicitaties.tsx` | DnD class toggle + Rose-themed DragOverlay |
+| `src/components/dashboard/EmbeddedCalendarView.tsx` | DnD class toggle + Teal-themed DragOverlay |
+| `src/components/ApplicationCard.tsx` | Glass hover (geen transforms) + Rose shadows + Glass buttons |
+| `src/index.css` | +40 regels: `.glass-drag-overlay-rose`, `.glass-drag-overlay-teal` |
+
+---
+
+## Visueel Resultaat
+
+```text
+┌──────────────────────────────────────────────────────────────────┐
+│  SOLLICITATIES (Rose Context)                                    │
+│                                                                  │
+│  Kandidaat Kaart                                                 │
+│  ┌────────────────────────────┐                                  │
+│  │  👤 Jan de Vries          │                                  │
+│  │  📧 jan@email.nl          │                                  │
+│  │  💼 ZZP • HBO+            │                                  │
+│  └────────────────────────────┘                                  │
+│  ░░░░ ROSE SHADOW GLOW ░░░░░                                     │
+│                                                                  │
+├──────────────────────────────────────────────────────────────────┤
+│  KALENDER (Teal Context)                                         │
+│                                                                  │
+│  Taak Item                                                       │
+│  ┌────────────────────────────┐                                  │
+│  │  📋 Intake gesprek        │                                  │
+│  └────────────────────────────┘                                  │
+│  ░░░░ TEAL SHADOW GLOW ░░░░░                                     │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Design Principes
+
+| Principe | Implementatie |
+|----------|---------------|
+| **Context Color** | Rose (346°) voor Recruitment, Teal (172°) voor Kalender, Indigo (234°) voor Mijn Werk |
+| **No Transforms** | Alle drag overlays gebruiken alleen shadows voor depth |
+| **Consistent Guard** | `.dnd-dragging` class bevriest alle hover effects globaal |
+| **Glass Consistency** | ApplicationCard krijgt dezelfde treatment als TaskCard |
+
