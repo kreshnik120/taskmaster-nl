@@ -117,10 +117,10 @@ const priorityConfig = {
 
 // Fase 1: Priority Badge Amber Kleursysteem
 const PRIORITY_BADGE_STYLES: Record<string, string> = {
-  LOW: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800",
-  MEDIUM: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800",
-  HIGH: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800",
-  CRITICAL: "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800"
+  LOW: "bg-emerald-500/15 text-emerald-700 border-emerald-400/30 backdrop-blur-sm dark:bg-emerald-500/20 dark:text-emerald-400 dark:border-emerald-500/20",
+  MEDIUM: "bg-blue-500/15 text-blue-700 border-blue-400/30 backdrop-blur-sm dark:bg-blue-500/20 dark:text-blue-400 dark:border-blue-500/20",
+  HIGH: "bg-amber-500/15 text-amber-700 border-amber-400/30 backdrop-blur-sm dark:bg-amber-500/20 dark:text-amber-400 dark:border-amber-500/20",
+  CRITICAL: "bg-red-500/15 text-red-700 border-red-400/30 backdrop-blur-sm dark:bg-red-500/20 dark:text-red-400 dark:border-red-500/20"
 };
 
 export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: TaskDetailModalProps) {
@@ -719,7 +719,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto glass-layer-2 glass-light-bleed">
           <DialogHeader>
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
