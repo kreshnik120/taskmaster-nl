@@ -151,7 +151,7 @@ export default function UnifiedDashboard() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid grid-cols-3 md:grid-cols-6 w-full bg-muted/50">
+        <TabsList className="grid grid-cols-3 md:grid-cols-6 w-full glass-layer-1 p-1.5 gap-1">
           {/* Mijn Werk */}
           <TabsTrigger 
             value="mijn-werk" 

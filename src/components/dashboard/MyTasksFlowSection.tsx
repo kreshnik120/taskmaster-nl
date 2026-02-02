@@ -580,7 +580,7 @@ export function MyTasksFlowSection() {
             onDragEnd={handleDragEnd}
           >
             {/* RESPONSIVE CONTAINER - snap-x on mobile */}
-            <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory md:snap-none scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+            <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory md:snap-none scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent scroll-fade-edges">
               {columns.map(column => {
                 const { visible, overflow, total } = getVisibleTasks(column.id);
                 const taskIds = visible.map(t => t.id);
@@ -588,10 +588,10 @@ export function MyTasksFlowSection() {
                 return (
                   <DroppableColumn key={column.id} column={column}>
                     <Card className="h-full min-h-[200px] glass-kanban-column border-t-2 border-t-tab-mijn-werk-300 dark:border-t-tab-mijn-werk-700">
-                      <CardHeader className="pb-2 pt-3 px-3">
+                      <CardHeader className="pb-2 pt-3 px-3 bg-gradient-to-b from-white/40 to-transparent dark:from-white/5 dark:to-transparent border-b border-white/20 dark:border-white/10">
                         <CardTitle className="text-sm font-medium flex items-center justify-between">
                           <span className="truncate">{column.name}</span>
-                          <Badge variant="outline" className="ml-2 text-xs bg-tab-mijn-werk-50 text-tab-mijn-werk-600 border-tab-mijn-werk-200 dark:bg-tab-mijn-werk-900/40 dark:text-tab-mijn-werk-300 dark:border-tab-mijn-werk-700">
+                          <Badge variant="glass" className="ml-2 text-xs">
                             {total}
                           </Badge>
                         </CardTitle>
@@ -603,8 +603,10 @@ export function MyTasksFlowSection() {
                             {visible.length === 0 ? (
                               /* EMPTY COLUMN STATE */
                               <div className="flex flex-col items-center justify-center py-8 text-center">
-                                <Inbox className="h-6 w-6 text-muted-foreground/30 mb-2" />
-                                <span className="text-xs text-muted-foreground/50">
+                                <div className="p-3 rounded-xl bg-white/30 dark:bg-slate-800/30 backdrop-blur-sm mb-2">
+                                  <Inbox className="h-6 w-6 text-tab-mijn-werk-300 dark:text-tab-mijn-werk-700" />
+                                </div>
+                                <span className="text-xs text-muted-foreground/60 font-medium">
                                   Geen taken
                                 </span>
                               </div>

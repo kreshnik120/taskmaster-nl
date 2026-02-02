@@ -15,6 +15,8 @@ const buttonVariants = cva(
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
+        // Glass variant - visionOS style
+        glass: "bg-white/60 backdrop-blur-md border border-white/30 text-foreground hover:bg-white/80 dark:bg-slate-800/60 dark:border-white/20 dark:hover:bg-slate-800/80 shadow-sm",
       },
       size: {
         default: "h-10 px-4 py-2",

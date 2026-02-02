@@ -19,6 +19,8 @@ const badgeVariants = cva(
         info: "border-transparent bg-blue-500/10 text-blue-700 dark:text-blue-400",
         // Ghost variant - ultra subtle
         ghost: "border-transparent bg-transparent text-muted-foreground hover:bg-muted",
+        // Glass variant - visionOS style
+        glass: "border-white/30 bg-white/50 backdrop-blur-md text-foreground dark:border-white/20 dark:bg-slate-800/50",
       },
     },
     defaultVariants: {
