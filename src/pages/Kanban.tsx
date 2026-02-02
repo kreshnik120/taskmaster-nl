@@ -881,12 +881,16 @@ const Kanban = () => {
                   </div>
                 ))}
               </div>
-              <DragOverlay>
+              <DragOverlay dropAnimation={null}>
                 {activeTask && (
-                  <TaskCard 
-                    task={activeTask} 
-                    subtasks={subtasksByTaskId.get(activeTask.id) || []}
-                  />
+                  <div className="opacity-95 rotate-[1.5deg] cursor-grabbing">
+                    <div className="glass-drag-overlay">
+                      <TaskCard 
+                        task={activeTask} 
+                        subtasks={subtasksByTaskId.get(activeTask.id) || []}
+                      />
+                    </div>
+                  </div>
                 )}
               </DragOverlay>
             </DndContext>

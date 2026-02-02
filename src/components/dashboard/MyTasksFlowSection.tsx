@@ -118,7 +118,9 @@ function DroppableColumn({
       role="region"
       aria-label={`Kolom ${column.name}`}
       className={`flex-shrink-0 w-72 md:w-64 snap-start transition-all duration-200 ${
-        isOver ? "bg-tab-mijn-werk-100/60 dark:bg-tab-mijn-werk-900/40 backdrop-blur-xl rounded-xl ring-2 ring-tab-mijn-werk-400/60 shadow-lg shadow-tab-mijn-werk-500/10" : ""
+        isOver 
+          ? "bg-tab-mijn-werk-100/70 dark:bg-tab-mijn-werk-900/50 backdrop-blur-xl rounded-xl ring-2 ring-tab-mijn-werk-400/70 shadow-[0_8px_24px_hsla(234,45%,52%,0.20),0_16px_48px_hsla(234,45%,52%,0.12),inset_0_1px_2px_rgba(255,255,255,0.2)]" 
+          : ""
       }`}
     >
       {children}
@@ -483,7 +485,7 @@ export function MyTasksFlowSection() {
                     <SelectValue />
                   </div>
                 </SelectTrigger>
-                <SelectContent className="bg-popover">
+                <SelectContent className="glass-layer-2 border-white/30 dark:border-white/15">
                   <SelectItem value="due_at">
                     <div className="flex items-center gap-2">
                       <Calendar className="h-3 w-3" />
@@ -630,7 +632,7 @@ export function MyTasksFlowSection() {
                                           <Button 
                                             variant="ghost" 
                                             size="icon" 
-                                            className="h-6 w-6 bg-background/80 backdrop-blur-sm"
+                                            className="h-6 w-6 glass-icon-button"
                                           >
                                             <MoreHorizontal className="h-3 w-3" />
                                             <span className="sr-only">
@@ -675,7 +677,7 @@ export function MyTasksFlowSection() {
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="w-full text-xs text-tab-mijn-werk-500 hover:text-tab-mijn-werk-600 dark:text-tab-mijn-werk-400 dark:hover:text-tab-mijn-werk-300 hover:bg-tab-mijn-werk-50/50 dark:hover:bg-tab-mijn-werk-900/30"
+                                    className="w-full text-xs text-tab-mijn-werk-500 hover:text-tab-mijn-werk-600 dark:text-tab-mijn-werk-400 dark:hover:text-tab-mijn-werk-300 hover:bg-white/50 dark:hover:bg-slate-800/50 hover:backdrop-blur-sm hover:shadow-[0_2px_8px_hsla(234,45%,52%,0.08)] transition-all duration-200"
                                     onClick={() => navigate("/kanban")}
                                   >
                                     +{overflow} meer in team overzicht
@@ -692,11 +694,13 @@ export function MyTasksFlowSection() {
               })}
             </div>
 
-            {/* DRAG OVERLAY */}
-            <DragOverlay>
+            {/* DRAG OVERLAY - No scale to prevent cursor offset */}
+            <DragOverlay dropAnimation={null}>
               {activeTask && (
-                <div className="opacity-90 rotate-2 scale-105">
-                  <TaskCard task={activeTask} />
+                <div className="opacity-95 rotate-[1.5deg] cursor-grabbing">
+                  <div className="glass-drag-overlay">
+                    <TaskCard task={activeTask} />
+                  </div>
                 </div>
               )}
             </DragOverlay>
