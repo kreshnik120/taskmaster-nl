@@ -769,11 +769,11 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
               </div>
             )}
 
-            {/* Fase 2: Quick Actions Grid Layout */}
+            {/* Fase 2: Quick Actions Grid Layout - Enhanced with glassmorphism */}
             <div className="grid grid-cols-3 gap-3">
               <Button 
                 onClick={() => setConfirmCompleteOpen(true)}
-                className="group"
+                className="group btn-primary-glass"
                 size="lg"
                 disabled={completing}
                 aria-label="Taak afronden (sneltoets: c)"
@@ -785,10 +785,11 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                 </kbd>
               </Button>
               <Button 
-                variant={isTimerActive ? "destructive" : "outline"}
+                variant={isTimerActive ? "destructive" : "glass"}
                 className={cn(
                   "transition-all group",
-                  isTimerActive && "animate-pulse border-2"
+                  isTimerActive && "animate-pulse border-2",
+                  !isTimerActive && "shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)]"
                 )}
                 size="lg"
                 onClick={isTimerActive ? stopTimer : () => startTimer()}
@@ -812,10 +813,10 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
               </Button>
               <div className="flex items-center gap-2">
                 <Button 
-                  variant="outline"
+                  variant="glass"
                   size="lg"
                   onClick={() => setReminderDialogOpen(true)}
-                  className="flex-1"
+                  className="flex-1 shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)]"
                 >
                   <Bell className="h-4 w-4 mr-2" />
                   Herinnering
@@ -832,9 +833,9 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
               </div>
             </div>
 
-            {/* Interview-Specifieke Sectie */}
+            {/* Interview-Specifieke Sectie - Premium glassmorphism */}
             {task.category === 'interview' && task.interview_details && (
-              <div className="p-5 rounded-xl bg-gradient-to-br from-purple-50/60 to-purple-100/30 dark:from-purple-900/20 dark:to-purple-800/10 border border-purple-200/50 dark:border-purple-700/30 space-y-4 animate-fade-in">
+              <div className="p-5 rounded-xl glass-card-violet glass-light-bleed border border-violet-200/50 dark:border-violet-700/30 space-y-4 animate-fade-in">
                 {/* Header */}
                 <div className="flex items-start justify-between">
                   <div className="space-y-1">
@@ -972,12 +973,12 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
               </div>
             )}
 
-            {/* Basic Info Section - Fase 5, 7, 8, 9 */}
+            {/* Basic Info Section - Fase 5, 7, 8, 9 with glass collapsible */}
             <Collapsible 
               open={sectionsOpen.info} 
               onOpenChange={() => toggleSection('info')}
             >
-              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg hover:bg-muted/20 transition-colors duration-150 group">
+              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg glass-collapsible-trigger group">
                 <div className="flex items-center gap-2">
                   <Info className="h-5 w-5 text-primary/80" />
                   <h3 className="font-semibold text-foreground">Basis informatie</h3>
