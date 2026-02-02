@@ -436,7 +436,7 @@ export function MyTasksFlowSection() {
         <div className="flex gap-4 overflow-x-auto pb-4">
           {[1, 2, 3, 4, 5].map(i => (
             <div key={i} className="flex-shrink-0 w-64">
-              <Skeleton className="h-[300px] w-full" />
+              <Skeleton className="h-[300px] w-full bg-tab-mijn-werk-100/50 dark:bg-tab-mijn-werk-900/30" />
             </div>
           ))}
         </div>
@@ -456,7 +456,9 @@ export function MyTasksFlowSection() {
         {statusMessage}
       </div>
 
-      <div className="border-t border-border pt-6 mt-6">
+      <div className="pt-6 mt-6">
+        {/* Gradient separator - glassmorphism compatible */}
+        <div className="h-px bg-gradient-to-r from-transparent via-tab-mijn-werk-200/50 dark:via-tab-mijn-werk-700/50 to-transparent mb-6 -mt-6" />
         {/* SECTION HEADER */}
         <div className="flex flex-col gap-3 mb-4">
           {/* Title row */}
@@ -473,7 +475,7 @@ export function MyTasksFlowSection() {
             {/* Sort controls */}
             <div className="flex items-center gap-2">
               <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
-                <SelectTrigger className="h-8 w-[140px] text-xs bg-background">
+                <SelectTrigger className="h-8 w-[140px] text-xs bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border-tab-mijn-werk-200/50 dark:border-tab-mijn-werk-700/50">
                   <div className="flex items-center gap-1.5">
                     {sortBy === 'due_at' && <Calendar className="h-3 w-3" />}
                     {sortBy === 'priority' && <AlertCircle className="h-3 w-3" />}
@@ -536,7 +538,7 @@ export function MyTasksFlowSection() {
                 placeholder="Zoek taken... (/)"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-8 pl-8 text-sm"
+                className="h-8 pl-8 text-sm bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border-tab-mijn-werk-200/50 dark:border-tab-mijn-werk-700/50 focus:border-tab-mijn-werk-400"
                 aria-label="Zoek in mijn taken"
               />
             </div>
@@ -589,7 +591,7 @@ export function MyTasksFlowSection() {
                       <CardHeader className="pb-2 pt-3 px-3">
                         <CardTitle className="text-sm font-medium flex items-center justify-between">
                           <span className="truncate">{column.name}</span>
-                          <Badge variant="outline" className="ml-2 text-xs">
+                          <Badge variant="outline" className="ml-2 text-xs bg-tab-mijn-werk-50 text-tab-mijn-werk-600 border-tab-mijn-werk-200 dark:bg-tab-mijn-werk-900/40 dark:text-tab-mijn-werk-300 dark:border-tab-mijn-werk-700">
                             {total}
                           </Badge>
                         </CardTitle>
@@ -667,7 +669,7 @@ export function MyTasksFlowSection() {
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="w-full text-xs text-muted-foreground hover:text-foreground"
+                                    className="w-full text-xs text-tab-mijn-werk-500 hover:text-tab-mijn-werk-600 dark:text-tab-mijn-werk-400 dark:hover:text-tab-mijn-werk-300 hover:bg-tab-mijn-werk-50/50 dark:hover:bg-tab-mijn-werk-900/30"
                                     onClick={() => navigate("/kanban")}
                                   >
                                     +{overflow} meer in team overzicht

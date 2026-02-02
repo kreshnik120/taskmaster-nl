@@ -80,7 +80,7 @@ export function UpcomingRemindersWidget() {
     <Card className="glass-layer-2 glass-light-bleed border-tab-mijn-werk-200/30 dark:border-tab-mijn-werk-800/30">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger className="w-full">
-          <div className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors">
+          <div className="flex items-center justify-between p-4 hover:bg-tab-mijn-werk-50/50 dark:hover:bg-tab-mijn-werk-900/30 transition-colors">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-tab-mijn-werk-100 dark:bg-tab-mijn-werk-900/40">
                 <Bell className="h-4 w-4 text-tab-mijn-werk-500" />

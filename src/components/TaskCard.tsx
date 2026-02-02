@@ -158,7 +158,7 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
                   {...attributes}
                   {...listeners}
                   data-drag-handle
-                  className="flex-shrink-0 pt-1 cursor-grab active:cursor-grabbing opacity-30 hover:opacity-60 transition-opacity"
+                  className="flex-shrink-0 pt-1 cursor-grab active:cursor-grabbing opacity-40 hover:opacity-80 transition-opacity"
                 >
                   <GripVertical className="h-4 w-4 text-muted-foreground" />
                 </div>
@@ -279,12 +279,12 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
               </div>
             </CardContent>
 
-            {/* Quick Actions (Hover Only) */}
+            {/* Quick Actions (Hover Only) - Glass styling */}
             <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-7 w-7"
+                className="h-7 w-7 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm hover:bg-tab-mijn-werk-50 dark:hover:bg-tab-mijn-werk-900/50"
                 onClick={handleEditClick}
                 title="Bewerk taak"
               >
@@ -293,7 +293,7 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-7 w-7"
+                className="h-7 w-7 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm hover:bg-tab-mijn-werk-50 dark:hover:bg-tab-mijn-werk-900/50"
                 onClick={handleReminderClick}
                 title="Plan herinnering"
               >
@@ -303,7 +303,7 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
           </Card>
         </div>
       </HoverCardTrigger>
-      <HoverCardContent className="w-80 glass-layer-2 glass-light-bleed" side="right" align="start">
+      <HoverCardContent className="w-80 glass-layer-2 glass-light-bleed rounded-xl" side="right" align="start">
         <div className="space-y-2">
           <h4 className="text-sm font-semibold text-foreground">{task.title}</h4>
           <div className="space-y-1 text-xs text-muted-foreground">
