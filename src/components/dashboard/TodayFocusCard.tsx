@@ -90,7 +90,7 @@ export function TodayFocusCard() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-2 text-muted-foreground">
+          <div className="flex items-center gap-2 text-tab-mijn-werk-600 dark:text-tab-mijn-werk-400">
             <TrendingUp className="h-4 w-4" />
             <p className="text-sm">Alles loopt op schema! 🎉</p>
           </div>
@@ -113,7 +113,7 @@ export function TodayFocusCard() {
       <CardContent className="space-y-3">
         {focusItems.stuckApplications.length > 0 && (
           <div className="flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+            <AlertCircle className="h-4 w-4 text-tab-mijn-werk-400 mt-0.5 flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium">
                 {focusItems.stuckApplications.length} sollicitatie{focusItems.stuckApplications.length !== 1 ? "s" : ""} wacht{focusItems.stuckApplications.length === 1 ? "" : "en"} op screening
@@ -132,7 +132,7 @@ export function TodayFocusCard() {
 
         {focusItems.urgentTasks.length > 0 && (
           <div className="flex items-start gap-2">
-            <Calendar className="h-4 w-4 text-orange-500 mt-0.5 flex-shrink-0" />
+            <Calendar className="h-4 w-4 text-tab-mijn-werk-500 mt-0.5 flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium">
                 {focusItems.urgentTasks.length} taak{focusItems.urgentTasks.length !== 1 ? " taken" : ""} met deadline vandaag/morgen
@@ -151,7 +151,7 @@ export function TodayFocusCard() {
 
         {focusItems.upcomingInterviews.length > 0 && (
           <div className="flex items-start gap-2">
-            <Users className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
+            <Users className="h-4 w-4 text-tab-mijn-werk-600 mt-0.5 flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium">
                 {focusItems.upcomingInterviews.length} interview{focusItems.upcomingInterviews.length !== 1 ? "s" : ""} gepland deze week
