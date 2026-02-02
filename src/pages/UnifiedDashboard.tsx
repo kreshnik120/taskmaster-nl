@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { LayoutDashboard, User, Users, Briefcase, Focus, List, Calendar, TrendingUp } from "lucide-react";
+import { LayoutDashboard, User, Users, Briefcase, List, Calendar, TrendingUp } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import { useUserRole } from "@/hooks/useUserRole";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -35,11 +34,10 @@ interface Application {
   updated_at: string | null;
 }
 
-// Type for sub-views within "Mijn Werk" tab
-type MijnWerkView = 'focus' | 'lijst' | 'kalender' | 'opvolging';
+// Type for sub-views within "Mijn Werk" tab (null = default Focus content)
+type MijnWerkView = 'lijst' | 'kalender' | 'opvolging';
 
-const MIJN_WERK_VIEWS: { value: MijnWerkView; label: string; icon: typeof Focus }[] = [
-  { value: 'focus', label: 'Focus', icon: Focus },
+const SUB_VIEWS: { value: MijnWerkView; label: string; icon: typeof List }[] = [
   { value: 'lijst', label: 'Lijst', icon: List },
   { value: 'kalender', label: 'Kalender', icon: Calendar },
   { value: 'opvolging', label: 'Opvolging', icon: TrendingUp },
@@ -69,17 +67,17 @@ export default function UnifiedDashboard() {
   const tabParam = searchParams.get('tab');
   const activeTab = tabParam || getDefaultTab();
 
-  // Get active view for "Mijn Werk" tab from URL or default to 'focus'
+  // Get active view for "Mijn Werk" tab from URL (null = default Focus content)
   const viewParam = searchParams.get('view') as MijnWerkView | null;
-  const mijnWerkView: MijnWerkView = 
-    viewParam && MIJN_WERK_VIEWS.some(v => v.value === viewParam) 
+  const mijnWerkView: MijnWerkView | null = 
+    viewParam && SUB_VIEWS.some(v => v.value === viewParam) 
       ? viewParam 
-      : 'focus';
+      : null;
 
   // Handle tab change - update URL
   const handleTabChange = (value: string) => {
-    // Preserve view param if switching to mijn-werk, otherwise remove it
-    if (value === 'mijn-werk' && mijnWerkView !== 'focus') {
+    // Preserve view param if switching to mijn-werk and a view is selected
+    if (value === 'mijn-werk' && mijnWerkView) {
       setSearchParams({ tab: value, view: mijnWerkView });
     } else {
       setSearchParams({ tab: value });
@@ -87,15 +85,14 @@ export default function UnifiedDashboard() {
   };
 
   // Handle view change within "Mijn Werk" tab
-  const handleViewChange = (value: string) => {
-    if (value && MIJN_WERK_VIEWS.some(v => v.value === value)) {
-      const newView = value as MijnWerkView;
-      if (newView === 'focus') {
-        // Remove view param for default focus view
-        setSearchParams({ tab: 'mijn-werk' });
-      } else {
-        setSearchParams({ tab: 'mijn-werk', view: newView });
-      }
+  const handleViewChange = (view: MijnWerkView | null) => {
+    if (view === mijnWerkView) {
+      // Toggle off - terug naar standaard Focus content
+      setSearchParams({ tab: 'mijn-werk' });
+    } else if (view) {
+      setSearchParams({ tab: 'mijn-werk', view });
+    } else {
+      setSearchParams({ tab: 'mijn-werk' });
     }
   };
 
@@ -164,67 +161,48 @@ export default function UnifiedDashboard() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:inline-grid">
-          <TabsTrigger value="mijn-werk" className="gap-2">
-            <User className="h-4 w-4" />
-            <span className="hidden sm:inline">Mijn Werk</span>
-          </TabsTrigger>
-          <TabsTrigger value="team" className="gap-2">
-            <Users className="h-4 w-4" />
-            <span className="hidden sm:inline">Team Overzicht</span>
-          </TabsTrigger>
-          <TabsTrigger value="recruitment" className="gap-2">
-            <Briefcase className="h-4 w-4" />
-            <span className="hidden sm:inline">Recruitment</span>
-          </TabsTrigger>
-        </TabsList>
+        <div className="flex flex-wrap items-center gap-4">
+          <TabsList className="grid grid-cols-3 lg:inline-grid lg:w-auto">
+            <TabsTrigger value="mijn-werk" className="gap-2">
+              <User className="h-4 w-4" />
+              <span className="hidden sm:inline">Mijn Werk</span>
+            </TabsTrigger>
+            <TabsTrigger value="team" className="gap-2">
+              <Users className="h-4 w-4" />
+              <span className="hidden sm:inline">Team Overzicht</span>
+            </TabsTrigger>
+            <TabsTrigger value="recruitment" className="gap-2">
+              <Briefcase className="h-4 w-4" />
+              <span className="hidden sm:inline">Recruitment</span>
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Sub-navigatie - alleen zichtbaar bij Mijn Werk */}
+          {activeTab === 'mijn-werk' && (
+            <div className="flex items-center gap-1 border-l border-border pl-4 ml-2">
+              {SUB_VIEWS.map((view) => (
+                <button
+                  key={view.value}
+                  onClick={() => handleViewChange(mijnWerkView === view.value ? null : view.value)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md transition-colors",
+                    mijnWerkView === view.value
+                      ? "bg-primary/10 text-primary font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  )}
+                >
+                  <view.icon className="h-4 w-4" />
+                  {view.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Tab 1: Mijn Werk */}
         <TabsContent value="mijn-werk" className="space-y-6 mt-6">
-          {/* Sub-view switcher: Desktop ToggleGroup / Mobile Select */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {/* Desktop: ToggleGroup */}
-              <ToggleGroup 
-                type="single" 
-                value={mijnWerkView} 
-                onValueChange={handleViewChange}
-                className="hidden md:flex"
-              >
-                {MIJN_WERK_VIEWS.map((view) => (
-                  <ToggleGroupItem 
-                    key={view.value} 
-                    value={view.value}
-                    aria-label={view.label}
-                    className="gap-2"
-                  >
-                    <view.icon className="h-4 w-4" />
-                    {view.label}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-
-              {/* Mobile: Select dropdown */}
-              <Select value={mijnWerkView} onValueChange={handleViewChange}>
-                <SelectTrigger className="w-[160px] md:hidden">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MIJN_WERK_VIEWS.map((view) => (
-                    <SelectItem key={view.value} value={view.value}>
-                      <div className="flex items-center gap-2">
-                        <view.icon className="h-4 w-4" />
-                        {view.label}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Render view based on selection */}
-          {mijnWerkView === 'focus' && (
+          {/* Render default Focus content when no sub-view is selected */}
+          {!mijnWerkView && (
             <>
               <div className="grid gap-6 md:grid-cols-2">
                 <TodayFocusCard />
