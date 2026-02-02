@@ -1019,6 +1019,131 @@ All colors MUST be HSL.
   }
 }
 
+/* ============================================
+   PHASE 6: EXPERT GLASSMORPHISM PERFECTION
+   ============================================ */
+
+/* Nested dialog - slightly darker overlay for layering */
+.dialog-nested-overlay {
+  background: rgba(0, 0, 0, 0.40);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Dialog content hierarchy - deeper shadows for child dialogs */
+.dialog-nested-content {
+  box-shadow: 
+    0 32px 64px -16px rgba(0, 0, 0, 0.30),
+    0 16px 32px -8px rgba(0, 0, 0, 0.20),
+    inset 0 1px 2px rgba(255, 255, 255, 0.15);
+}
+
+/* Primary button with gradient and glow */
+.btn-primary-glass {
+  background: linear-gradient(180deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.9) 100%);
+  box-shadow: 
+    0 2px 8px hsla(221, 83%, 53%, 0.25),
+    inset 0 1px 1px rgba(255, 255, 255, 0.2);
+  transition: all 0.2s ease-out;
+}
+
+.btn-primary-glass:hover {
+  box-shadow: 
+    0 4px 16px hsla(221, 83%, 53%, 0.35),
+    inset 0 1px 2px rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-primary-glass:active {
+  transform: translateY(0);
+  box-shadow: 
+    0 1px 4px hsla(221, 83%, 53%, 0.2),
+    inset 0 1px 1px rgba(255, 255, 255, 0.15);
+}
+
+/* Glass input - enhanced focus */
+.glass-input-enhanced {
+  background: rgba(255, 255, 255, 0.50);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.30);
+  transition: all 0.2s ease-out;
+}
+
+.glass-input-enhanced:focus {
+  background: rgba(255, 255, 255, 0.70);
+  box-shadow: 
+    0 0 0 3px hsla(234, 45%, 52%, 0.15),
+    0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.dark .glass-input-enhanced {
+  background: rgba(30, 41, 59, 0.50);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.dark .glass-input-enhanced:focus {
+  background: rgba(30, 41, 59, 0.70);
+}
+
+/* Progress bar glass */
+.progress-glass {
+  background: rgba(255, 255, 255, 0.40);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.20);
+}
+
+.progress-glass-indicator {
+  box-shadow: 
+    inset 0 1px 1px rgba(255, 255, 255, 0.3),
+    0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.dark .progress-glass {
+  background: rgba(30, 41, 59, 0.40);
+  border-color: rgba(255, 255, 255, 0.10);
+}
+
+/* Collapsible section header - enhanced */
+.glass-collapsible-trigger {
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  transition: all 0.2s ease-out;
+}
+
+.glass-collapsible-trigger:hover {
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.dark .glass-collapsible-trigger {
+  background: rgba(30, 41, 59, 0.35);
+  border-color: rgba(255, 255, 255, 0.10);
+}
+
+.dark .glass-collapsible-trigger:hover {
+  background: rgba(30, 41, 59, 0.55);
+}
+
+/* Glass tabs list - premium */
+.glass-tabs-list {
+  background: rgba(255, 255, 255, 0.50);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.30);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.dark .glass-tabs-list {
+  background: rgba(30, 41, 59, 0.50);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
 /* WhatsApp chat background pattern */
 .bg-chat-pattern {
   background-image: radial-gradient(circle, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
