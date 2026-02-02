@@ -31,10 +31,12 @@ export function UrgencyBadge({ dueAt, showDate = true, className }: UrgencyBadge
       {urgency.badge && (
         <span className={cn(
           "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium",
+          "backdrop-blur-sm shadow-[0_1px_3px_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.2)]",
           badgeClasses.container
         )}>
           <span className={cn(
             "h-1.5 w-1.5 rounded-full",
+            "shadow-[0_0_4px_currentColor,0_0_8px_currentColor]",
             badgeClasses.dot
           )} />
           {urgency.badge}
@@ -58,11 +60,16 @@ export function UrgencyDot({ dueAt, showText = false, className }: UrgencyBadgeP
   return (
     <span className={cn(
       "inline-flex items-center gap-1",
-      showText && cn("px-2 py-0.5 rounded-full text-xs font-medium", badgeClasses.container),
+      showText && cn(
+        "px-2 py-0.5 rounded-full text-xs font-medium",
+        "backdrop-blur-sm shadow-[0_1px_3px_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.2)]",
+        badgeClasses.container
+      ),
       className
     )}>
       <span className={cn(
         "h-1.5 w-1.5 rounded-full flex-shrink-0",
+        "shadow-[0_0_4px_currentColor,0_0_8px_currentColor]",
         badgeClasses.dot
       )} />
       {showText && urgency.badge}
