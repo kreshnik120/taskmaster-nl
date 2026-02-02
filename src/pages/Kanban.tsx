@@ -881,10 +881,11 @@ const Kanban = () => {
                   </div>
                 ))}
               </div>
+              {/* DRAG OVERLAY - NO transforms, only shadows for floating effect */}
               <DragOverlay dropAnimation={null}>
                 {activeTask && (
-                  <div className="opacity-95 rotate-[1.5deg] cursor-grabbing">
-                    <div className="glass-drag-overlay">
+                  <div className="cursor-grabbing">
+                    <div className="glass-drag-overlay-enhanced">
                       <TaskCard 
                         task={activeTask} 
                         subtasks={subtasksByTaskId.get(activeTask.id) || []}
