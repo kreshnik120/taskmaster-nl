@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { format, startOfWeek, endOfDay, startOfDay, addDays, isSameDay, parseISO, getWeek, endOfWeek, differenceInDays, isAfter } from "date-fns";
@@ -6,6 +6,7 @@ import { nl } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, Trash2, Plus, Calendar, CheckCircle2, Clock, AlertCircle, User, Users, Sparkles, Coffee } from "lucide-react";
 import { useMySubtasks } from "@/hooks/useMySubtasks";
 import { useGlobalTaskFilter } from "@/hooks/useGlobalTaskFilter";
+import { useRealtimeChannel } from "@/hooks/useRealtimeChannel";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useDroppable, useDraggable, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -268,23 +269,6 @@ export default function EmbeddedCalendarView() {
     }
   }, [showOnlyMyTasks]);
 
-  useEffect(() => {
-    const tasksChannel = supabase
-      .channel('embedded-kalender-tasks-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => fetchTasks())
-      .subscribe();
-
-    const remindersChannel = supabase
-      .channel('embedded-kalender-reminders-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'reminders' }, () => fetchReminders())
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(tasksChannel);
-      supabase.removeChannel(remindersChannel);
-    };
-  }, []);
-
   // Calculate values for animated counters (before early return)
   const allWeekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i));
   const weekDays = viewMode === "5" ? allWeekDays.slice(0, 5) : allWeekDays;
@@ -371,6 +355,21 @@ export default function EmbeddedCalendarView() {
       console.error("Error fetching reminders:", error);
     }
   };
+
+  // Real-time listener via standardized hook (AFTER function definitions)
+  useRealtimeChannel({
+    channelName: 'embedded-calendar-tasks-realtime',
+    table: 'tasks',
+    onEvent: fetchTasks,
+    debounceMs: 200
+  });
+
+  useRealtimeChannel({
+    channelName: 'embedded-calendar-reminders-realtime',
+    table: 'reminders',
+    onEvent: fetchReminders,
+    debounceMs: 200
+  });
 
   const getRemindersForDay = (day: Date) => reminders.filter((reminder) => isSameDay(parseISO(reminder.at), day));
 

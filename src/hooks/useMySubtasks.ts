@@ -1,5 +1,6 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useRealtimeChannel } from "@/hooks/useRealtimeChannel";
 
 interface Subtask {
   id: string;
@@ -15,7 +16,6 @@ interface Subtask {
 export function useMySubtasks(userId: string | null) {
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [loading, setLoading] = useState(true);
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const loadSubtasks = async () => {
     if (!userId) {
@@ -68,30 +68,18 @@ export function useMySubtasks(userId: string | null) {
     }
   };
 
+  // Real-time listener via standardized hook
+  useRealtimeChannel({
+    channelName: 'my-subtasks-updates',
+    table: 'subtasks',
+    onEvent: loadSubtasks,
+    debounceMs: 200,
+    enabled: !!userId
+  });
+
+  // Initial load
   useEffect(() => {
     loadSubtasks();
-
-    // Real-time listener for subtask changes
-    channelRef.current = supabase
-      .channel("my-subtasks-updates")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "subtasks",
-        },
-        () => {
-          loadSubtasks();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-      }
-    };
   }, [userId]);
 
   return {

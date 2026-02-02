@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAiScoring } from "@/hooks/useAiScoring";
 import { useGreeting } from "@/hooks/useGreeting";
+import { useRealtimeChannel } from "@/hooks/useRealtimeChannel";
 
 import { logger } from "@/lib/logger";
 
@@ -169,32 +170,6 @@ const Kanban = () => {
     localStorage.setItem('kanban-sort-direction', sortDirection);
   }, [sortBy, sortDirection]);
 
-  // Realtime subscription voor subtaken - direct updates bij toewijzing
-  useEffect(() => {
-    if (!user) return;
-
-    const channel = supabase
-      .channel('my-subtasks-kanban')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'subtasks',
-          filter: `assignee_id=eq.${user.id}`
-        },
-        () => {
-          // Herlaad subtaken bij wijziging
-          loadSubtasks();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user]);
-
   // Aparte functie om subtaken te laden (voor realtime refresh)
   const loadSubtasks = async () => {
     if (!user) return;
@@ -278,6 +253,25 @@ const Kanban = () => {
       toast.error("Er is een fout opgetreden bij het laden van data");
     }
   };
+
+  // Realtime subscription voor subtaken - direct updates bij toewijzing (AFTER function definitions)
+  useRealtimeChannel({
+    channelName: 'kanban-subtasks-realtime',
+    table: 'subtasks',
+    filter: user ? `assignee_id=eq.${user.id}` : undefined,
+    onEvent: loadSubtasks,
+    debounceMs: 200,
+    enabled: !!user
+  });
+
+  // Realtime subscription voor taken - updates van alle gebruikers
+  useRealtimeChannel({
+    channelName: 'kanban-tasks-realtime',
+    table: 'tasks',
+    onEvent: loadData,
+    debounceMs: 200,
+    enabled: !!user
+  });
 
   const createDefaultColumns = async () => {
     const { data: orgsData } = await supabase.from("organizations").select("id").limit(1);

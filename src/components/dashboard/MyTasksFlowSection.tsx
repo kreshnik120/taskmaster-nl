@@ -57,6 +57,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { User } from "@supabase/supabase-js";
+import { useRealtimeChannel } from "@/hooks/useRealtimeChannel";
 
 // ENTERPRISE CONFIG
 const MAX_VISIBLE_TASKS = 5;
@@ -235,7 +236,16 @@ export function MyTasksFlowSection() {
     }
   };
 
-  // Get tasks for column with filtering and sorting
+  // Realtime subscription for task updates (AFTER loadData definition)
+  useRealtimeChannel({
+    channelName: 'mytasks-flow-realtime',
+    table: 'tasks',
+    filter: user ? `assignee_id=eq.${user.id}` : undefined,
+    onEvent: loadData,
+    debounceMs: 200,
+    enabled: !!user
+  });
+
   const getTasksForColumn = (columnId: string): Task[] => {
     const column = columns.find(c => c.id === columnId);
     let filteredTasks = tasks.filter(t =>

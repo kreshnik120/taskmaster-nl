@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo, useRef, memo } from "react";
+import { useState, useEffect, useMemo, useRef, memo, useCallback } from "react";
 import { logger } from "@/lib/logger";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { useRealtimeChannel } from "@/hooks/useRealtimeChannel";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
 import { KPICard } from "@/components/ui/kpi-card";
@@ -132,24 +133,6 @@ export default function EmbeddedListView() {
     initUser();
     fetchTasks();
     loadProfiles();
-
-    // Real-time listener voor taak updates
-    const tasksChannel = supabase
-      .channel('embedded-lijst-tasks-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'tasks'
-        },
-        () => fetchTasks()
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(tasksChannel);
-    };
   }, []);
 
   // Refetch wanneer filter wijzigt
@@ -222,6 +205,14 @@ export default function EmbeddedListView() {
       setLoading(false);
     }
   };
+
+  // Real-time listener via standardized hook (AFTER function definitions)
+  useRealtimeChannel({
+    channelName: 'embedded-list-tasks-realtime',
+    table: 'tasks',
+    onEvent: fetchTasks,
+    debounceMs: 200
+  });
 
   const handleToggleComplete = async (taskId: string, currentStatus: string | null) => {
     try {
