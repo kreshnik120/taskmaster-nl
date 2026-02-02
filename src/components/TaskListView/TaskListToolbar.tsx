@@ -69,7 +69,7 @@ export function TaskListToolbar({
           placeholder="Zoek taken... (druk / om te zoeken)"
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          className="pl-9"
+          className="pl-9 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border-white/40 dark:border-white/12 focus:bg-white/80 dark:focus:bg-slate-800/80 transition-all duration-200"
         />
       </div>
 
@@ -77,7 +77,7 @@ export function TaskListToolbar({
       <div className="flex items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2">
+            <Button variant="outline" size="sm" className="gap-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border-white/40 dark:border-white/12 hover:bg-white/80 dark:hover:bg-slate-800/80">
               <currentSortOption.icon className="h-4 w-4" />
               <span className="hidden sm:inline">{currentSortOption.label}</span>
             </Button>
@@ -101,6 +101,7 @@ export function TaskListToolbar({
           size="icon"
           onClick={toggleSortDirection}
           title={filters.sortDirection === 'asc' ? 'Oplopend' : 'Aflopend'}
+          className="bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border-white/40 dark:border-white/12 hover:bg-white/80 dark:hover:bg-slate-800/80"
         >
           <ArrowUpDown className={`h-4 w-4 transition-transform ${
             filters.sortDirection === 'desc' ? 'rotate-180' : ''

@@ -100,7 +100,7 @@ export function TaskListTable({
   }
 
   return (
-    <div className="rounded-md border">
+    <div className="rounded-xl border border-white/40 dark:border-white/12 overflow-hidden bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm">
       <Table role="grid" aria-rowcount={tasks.length + 1} aria-colcount={5}>
         <TableHeader>
           <TableRow role="row">
@@ -137,10 +137,10 @@ export function TaskListTable({
                 aria-selected={isSelected}
                 aria-label={generateTaskAriaLabel(task)}
                 className={cn(
-                  'cursor-pointer transition-colors',
+                  'cursor-pointer transition-all duration-150',
                   isSelected && 'bg-accent/50',
                   isFocused && 'ring-2 ring-primary ring-inset',
-                  !isSelected && !isFocused && 'hover:bg-muted/50'
+                  !isSelected && !isFocused && 'hover:bg-white/60 dark:hover:bg-slate-800/60'
                 )}
                 onClick={() => onTaskSelect?.(task)}
               >

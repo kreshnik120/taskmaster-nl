@@ -43,8 +43,10 @@ export function TaskListFilterPills({
         size="sm"
         onClick={onClearAll}
         className={cn(
-          'shrink-0 rounded-full text-xs font-medium transition-colors',
-          !hasActiveFilters && 'bg-primary text-primary-foreground'
+          'shrink-0 rounded-full text-xs font-medium transition-all duration-200',
+          !hasActiveFilters 
+            ? 'bg-primary text-primary-foreground shadow-[0_2px_6px_hsla(221,83%,53%,0.2)]' 
+            : 'bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border-white/40 dark:border-white/12 hover:bg-white/80'
         )}
       >
         Alle
@@ -60,10 +62,11 @@ export function TaskListFilterPills({
             size="sm"
             onClick={() => onToggleFilter(filter)}
             className={cn(
-              'shrink-0 rounded-full text-xs font-medium transition-colors',
-              isActive && 'bg-primary text-primary-foreground',
-              filter === 'critical' && isActive && 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
-              filter === 'due_today' && isActive && 'bg-orange-500 text-white hover:bg-orange-600'
+              'shrink-0 rounded-full text-xs font-medium transition-all duration-200',
+              !isActive && 'bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border-white/40 dark:border-white/12 hover:bg-white/80',
+              isActive && 'shadow-[0_2px_6px_hsla(221,83%,53%,0.2)]',
+              filter === 'critical' && isActive && 'bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-[0_2px_6px_hsla(0,84%,60%,0.2)]',
+              filter === 'due_today' && isActive && 'bg-orange-500 text-white hover:bg-orange-600 shadow-[0_2px_6px_hsla(24,95%,53%,0.2)]'
             )}
           >
             {QUICK_FILTER_LABELS[filter]}

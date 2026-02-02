@@ -358,9 +358,9 @@ export function AppSidebar() {
           <DropdownMenuTrigger asChild>
             <Button 
               variant="ghost" 
-              className="w-full justify-start gap-3 px-3 py-2 h-auto hover:bg-sidebar-accent"
+              className="w-full justify-start gap-3 px-3 py-2 h-auto hover:bg-white/60 dark:hover:bg-slate-800/60 rounded-xl transition-all duration-200 bg-white/30 dark:bg-slate-900/30 border border-white/20 dark:border-white/8"
             >
-              <Avatar className="h-8 w-8">
+              <Avatar className="h-8 w-8 ring-2 ring-white/20 dark:ring-white/10">
                 <AvatarFallback className="text-xs">{initials}</AvatarFallback>
               </Avatar>
               <div className="flex flex-col items-start text-sm flex-1 min-w-0">

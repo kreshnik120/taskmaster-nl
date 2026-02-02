@@ -70,7 +70,7 @@ export function UpcomingTasksList({ tasks, isLoading, maxItems = 5 }: UpcomingTa
   }
 
   return (
-    <Card>
+    <Card className="glass-card-slate">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-lg">
           <Calendar className="h-5 w-5" />
@@ -85,7 +85,7 @@ export function UpcomingTasksList({ tasks, isLoading, maxItems = 5 }: UpcomingTa
           <div
             key={task.id}
             onClick={() => handleClick(task.id)}
-            className="p-3 rounded-lg border cursor-pointer hover:bg-muted/50 transition-colors group"
+            className="p-3 rounded-xl cursor-pointer transition-all duration-200 group bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border border-white/30 dark:border-white/12 shadow-[0_2px_6px_hsla(215,25%,48%,0.06)] hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_12px_hsla(215,25%,48%,0.12)]"
           >
             <div className="flex items-start gap-3">
               <div className="flex-1 min-w-0">
