@@ -85,7 +85,7 @@ export function TodayFocusCard() {
       <Card className="backdrop-blur-sm border-white/50 dark:border-white/10 bg-gradient-to-br from-tab-mijn-werk-50/80 to-white/60 dark:from-tab-mijn-werk-900/30 dark:to-background/60">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Target className="h-5 w-5 text-purple-500" />
+            <Target className="h-5 w-5 text-tab-mijn-werk-500" />
             Vandaag Focus
           </CardTitle>
         </CardHeader>
@@ -105,7 +105,7 @@ export function TodayFocusCard() {
         <CardTitle className="flex items-center gap-2">
           <Target className="h-5 w-5 text-tab-mijn-werk-500" />
           Vandaag Focus
-          <Badge variant="secondary" className="ml-auto">
+          <Badge className="ml-auto bg-tab-mijn-werk-100 text-tab-mijn-werk-700 border border-tab-mijn-werk-200 dark:bg-tab-mijn-werk-900/40 dark:text-tab-mijn-werk-300 dark:border-tab-mijn-werk-700">
             {totalItems} item{totalItems !== 1 ? "s" : ""}
           </Badge>
         </CardTitle>
@@ -121,7 +121,7 @@ export function TodayFocusCard() {
               <Button
                 variant="link"
                 size="sm"
-                className="h-auto p-0 text-xs text-muted-foreground"
+                className="h-auto p-0 text-xs text-tab-mijn-werk-600 hover:text-tab-mijn-werk-700 dark:text-tab-mijn-werk-400 dark:hover:text-tab-mijn-werk-300"
                 onClick={() => navigate("/sollicitaties")}
               >
                 Bekijk sollicitaties →
@@ -140,7 +140,7 @@ export function TodayFocusCard() {
               <Button
                 variant="link"
                 size="sm"
-                className="h-auto p-0 text-xs text-muted-foreground"
+                className="h-auto p-0 text-xs text-tab-mijn-werk-600 hover:text-tab-mijn-werk-700 dark:text-tab-mijn-werk-400 dark:hover:text-tab-mijn-werk-300"
                 onClick={() => navigate("/dashboard?tab=lijst")}
               >
                 Bekijk taken →
@@ -159,7 +159,7 @@ export function TodayFocusCard() {
               <Button
                 variant="link"
                 size="sm"
-                className="h-auto p-0 text-xs text-muted-foreground"
+                className="h-auto p-0 text-xs text-tab-mijn-werk-600 hover:text-tab-mijn-werk-700 dark:text-tab-mijn-werk-400 dark:hover:text-tab-mijn-werk-300"
                 onClick={() => navigate("/sollicitaties")}
               >
                 Bekijk interviews →
