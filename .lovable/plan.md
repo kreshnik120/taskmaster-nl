@@ -1,158 +1,105 @@
 
-
-# Fase 9: Definitieve Drag-and-Drop Cursor Fix
-
-## Probleem Geidentificeerd
-
-Op basis van de screenshot zie ik dat de cursor (rode stip rechtsonder) nog steeds niet goed aansluit bij de gesleepte kaart. Dit komt door:
-
-1. **De `rotate-[1.5deg]` transformatie** - Dit verandert het visuele centrum van de kaart en creëert een waargenomen offset
-2. **Geen transform-origin specificatie** - De rotatie draait rond het centrum van de kaart, niet rond de cursor
-
-## Oplossing
-
-### Strategie 1: Verwijder Rotatie Volledig (Aanbevolen)
-
-De rotatie is puur cosmetisch en veroorzaakt het cursor offset probleem. We vervangen het door alleen een premium shadow effect voor het "zwevende" gevoel.
-
-### Wijzigingen
-
-**Bestand: `src/components/dashboard/MyTasksFlowSection.tsx` (regel 697-706)**
-
-```tsx
-// HUIDIGE CODE (PROBLEEM)
-<DragOverlay dropAnimation={null}>
-  {activeTask && (
-    <div className="opacity-95 rotate-[1.5deg] cursor-grabbing">  {/* ❌ rotate veroorzaakt offset */}
-      <div className="glass-drag-overlay">
-        <TaskCard task={activeTask} />
-      </div>
-    </div>
-  )}
-</DragOverlay>
-
-// NIEUWE CODE (FIX)
-<DragOverlay dropAnimation={null}>
-  {activeTask && (
-    <div className="cursor-grabbing">
-      <div className="glass-drag-overlay-enhanced">
-        <TaskCard task={activeTask} />
-      </div>
-    </div>
-  )}
-</DragOverlay>
-```
-
-**Bestand: `src/pages/Kanban.tsx` (regel 884-895)**
-
-Synchroniseer dezelfde fix:
-
-```tsx
-<DragOverlay dropAnimation={null}>
-  {activeTask && (
-    <div className="cursor-grabbing">
-      <div className="glass-drag-overlay-enhanced">
-        <TaskCard 
-          task={activeTask} 
-          subtasks={subtasksByTaskId.get(activeTask.id) || []}
-        />
-      </div>
-    </div>
-  )}
-</DragOverlay>
-```
-
-**Bestand: `src/index.css`**
-
-Vervang de bestaande `.glass-drag-overlay` met een enhanced versie die geen transforms gebruikt maar alleen premium shadows:
-
-```css
-/* Drag overlay - premium floating effect WITHOUT any transforms */
-.glass-drag-overlay-enhanced {
-  position: relative;
-  border-radius: 0.75rem;
-  /* Premium multi-layer shadow for maximum floating effect */
-  box-shadow:
-    /* Ambient shadow - large, soft, colored */
-    0 25px 60px -15px hsla(234, 45%, 52%, 0.30),
-    /* Main shadow - medium distance */
-    0 15px 35px -10px hsla(234, 45%, 52%, 0.20),
-    /* Close shadow - sharp definition */
-    0 5px 15px -5px hsla(234, 45%, 52%, 0.15),
-    /* Inner highlight - top edge glow */
-    inset 0 1px 2px rgba(255, 255, 255, 0.25),
-    /* Subtle border glow */
-    0 0 0 1px hsla(234, 45%, 52%, 0.08);
-  /* Slightly elevated scale without affecting cursor position */
-  /* NO rotate, NO scale - only shadows for floating effect */
-  transition: none !important;
-  will-change: transform;
-  /* Ensure card content also has no transforms */
-  transform: none !important;
-}
-
-.dark .glass-drag-overlay-enhanced {
-  box-shadow:
-    0 25px 60px -15px hsla(234, 45%, 15%, 0.55),
-    0 15px 35px -10px hsla(234, 45%, 15%, 0.40),
-    0 5px 15px -5px hsla(234, 45%, 15%, 0.30),
-    inset 0 1px 2px rgba(255, 255, 255, 0.10),
-    0 0 0 1px hsla(234, 45%, 52%, 0.15);
-}
-```
+## Doel
+1) Het “schieten/jump” effect bij het vastpakken van een taak volledig elimineren, zodat de kaart exact onder de muis blijft tijdens slepen.  
+2) Het glass-effect verder aanscherpen (meer diepte, kleurige schaduw) zonder dat we nog `transform`-animaties gebruiken die DnD kunnen verstoren.
 
 ---
 
-## Gemiste Glassmorphism Elementen
+## Analyse (waarom het nu nog “schiet”)
+We hebben `rotate/scale` uit de `DragOverlay` gehaald (goed), maar de **bronkaart (de echte TaskCard in de lijst)** heeft nog steeds een hover-lift via CSS:
 
-Na analyse van de screenshot zie ik ook deze elementen die nog premium glass kunnen krijgen:
+- In `src/index.css` staat `.glass-hover-lift:hover { transform: translateY(-2px) scale(1.005); }`
+- `TaskCard.tsx` gebruikt `glass-hover-lift` op de `<Card ...>`.
 
-### 1. De rode "Verlopen" badge
+Bij drag-start verliest het element vaak zijn `:hover`-staat (of verandert die abrupt), waardoor die `transform` ineens wegvalt terwijl dnd-kit net de startpositie heeft “gemeten”. Dat voelt voor de gebruiker alsof de kaart “wegschiet” bij het vastpakken.
 
-De deadline badge kan meer diepte krijgen.
-
-### 2. Task status dot
-
-De rode stip rechtsonder de kaart (status indicator) kan subtieler.
+Kort: **DnD + hover transforms op het draggable element = visuele sprong**.
 
 ---
 
-## Samenvatting Wijzigingen
+## Oplossing: Phase 10 — DnD-stabiele hover (shadows-only) + “dragging mode” freeze
+We gaan het zwevende gevoel behouden, maar tijdens drag (en voor TaskCard in het algemeen) **geen translate/scale transforms** meer gebruiken op het draggable element. We doen dit op twee niveaus:
 
-| Bestand | Wijzigingen |
-|---------|-------------|
-| `src/components/dashboard/MyTasksFlowSection.tsx` | Verwijder `rotate-[1.5deg]`, gebruik `glass-drag-overlay-enhanced` |
-| `src/pages/Kanban.tsx` | Synchroniseer dezelfde fix |
-| `src/index.css` | Nieuwe `.glass-drag-overlay-enhanced` class zonder transforms |
+### A) TaskCard hover-lift vervangen door shadow-only lift (geen transform)
+**Bestand:** `src/components/TaskCard.tsx`
+
+- Verwijder/replace `glass-hover-lift` op de TaskCard `<Card ...>` door een nieuwe class die alleen shadows/blur/border accentueert.
+- Resultaat: de kaart kan nog steeds “premium zweven”, maar zonder geometrische verplaatsing.
+
+Concreet:
+- `glass-hover-lift` → `glass-hover-shadow` (nieuw)
+- Hover-effect blijft, maar via `box-shadow`, `border`, `background`, `backdrop-filter` (geen `transform`).
+
+### B) Tijdens actief draggen: hover-transforms globaal “bevriezen”
+**Bestanden:**
+- `src/components/dashboard/MyTasksFlowSection.tsx`
+- `src/pages/Kanban.tsx`
+- `src/index.css`
+
+**In code:**
+- In `handleDragStart`: `document.documentElement.classList.add('dnd-dragging')`
+- In `handleDragEnd` én `onDragCancel`: `document.documentElement.classList.remove('dnd-dragging')`
+
+**In CSS (`src/index.css`):**
+- Voeg een globale guard toe zodat tijdens drag alle hover-transforms uit staan:
+  - `.dnd-dragging .glass-hover-lift, .dnd-dragging .glass-hover-lift:hover { transform: none !important; }`
+  - (en idem voor andere plekken waar nog translateY/scale op hover voorkomt binnen draggable zones, indien nodig)
+
+Waarom dit extra helpt:
+- Ook als er elders nog een transform-hover staat (bijv. kolommen of cards), voorkom je micro-jumps tijdens slepen.
+
+### C) DragOverlay blijft “shadows-only”
+**Bestanden:**
+- `src/components/dashboard/MyTasksFlowSection.tsx`
+- `src/pages/Kanban.tsx`
+- `src/index.css`
+
+- We laten `glass-drag-overlay-enhanced` bestaan en zorgen dat deze uitsluitend shadows/outline gebruikt.
+- Geen `transform`, geen `opacity` wijzigingen die layout/positionering beïnvloeden.
 
 ---
 
-## Visueel Resultaat
+## Glass-effect verder afmaken (wat je aangaf: “echt van de achtergrond af”)
+Nadat DnD stabiel is, versterken we de “floating” illusie op de gemiste punten die je in de screenshot/flow ziet, zónder transforms:
 
-```text
-VOOR (Probleem):
-                    ┌──────────────────┐
-                    │    Taak Kaart    │
-                    │                  │    ← Kaart gedraaid
-                    └──────────────────┘
-                                        ↖
-                                    🖱️ Cursor hier (ver weg door rotatie)
+### 1) Overdue/“Verlopen” badge premium glass
+**Waarschijnlijk bestand:** `src/components/ui/urgency-badge.tsx` (of waar `UrgencyBadge` gedefinieerd is)  
+- Voeg indigo-tinted shadow + inner highlight toe
+- Zorg dat rood/oranje urgentie nog duidelijk is, maar met glass-depth (border + blur + zachte glow)
 
-NA (Fix):
-    🖱️┌──────────────────┐
-      │    Taak Kaart    │    ← Cursor op de kaart
-      │                  │
-      └──────────────────┘
-      ░░░░░░░░░░░░░░░░░░░░    ← Premium shadow geeft floating effect
-       ░░░ INDIGO GLOW ░░░
-```
+### 2) Status-dot (rechtsonder op TaskCard) subtiel glass
+**Bestand:** `src/components/TaskCard.tsx`
+- Dot krijgt een mini glow + border i.p.v. een “platte” kleur
+- Hiermee voelt zelfs dat detail “bovenop” de kaart te liggen
 
-## Design Principe
+---
 
-Het "zwevende" gevoel wordt nu volledig bereikt door **shadows** in plaats van **transforms**:
+## Implementatiestappen (volgorde)
+1) **TaskCard hover transform verwijderen** (shadow-only hover toevoegen).
+2) **Dragging mode toevoegen** (`dnd-dragging` class togglen in beide DnD flows).
+3) CSS guard toevoegen om transforms tijdens drag te blokkeren.
+4) Controle: slepen vanuit de drag-handle blijft exact onder de cursor, zonder jump.
+5) Daarna: **urgency badge** + **status dot** upgraden naar premium glass.
 
-- **Transforms (rotate, scale)** = Veranderen de geometrie en veroorzaken cursor offset
-- **Shadows** = Visuele illusie van diepte zonder de positie te veranderen
+---
 
-Dit is hoe Apple visionOS ook werkt - diepte wordt gesimuleerd met schaduwen en blur, niet met geometrische transformaties.
+## Bestanden die we aanpassen
+- `src/components/TaskCard.tsx`
+- `src/components/dashboard/MyTasksFlowSection.tsx`
+- `src/pages/Kanban.tsx`
+- `src/index.css`
+- (mogelijk) `src/components/ui/urgency-badge.tsx` (of equivalent waar `UrgencyBadge` staat)
 
+---
+
+## Acceptatiecriteria (wat jij meteen moet voelen/zien)
+1) Als je de drag-handle vastpakt, **blijft de taak exact onder je cursor** en “schiet” niet meer.
+2) Tijdens slepen voelt de kaart **premium elevated** door indigo multi-layer shadows, zonder dat hij geometrisch verschuift.
+3) De glass-look is consequent: badges/dots voelen “op” de UI i.p.v. “in” de achtergrond.
+
+---
+
+## Testprotocol (snel, maar end-to-end)
+- Desktop: pak een taak bij de grip en sleep langzaam + snel; check of er geen jump is bij start.
+- Hover over kaart vóór het pakken: start drag terwijl je nog “hover” bent; check jump = 0.
+- Test ook in dark mode (indigo shadows moeten daar niet “modderig” worden).
