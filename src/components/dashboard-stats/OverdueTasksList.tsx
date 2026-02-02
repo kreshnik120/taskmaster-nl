@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 import { OverdueTask } from "@/hooks/useDashboardStats";
 
 interface OverdueTasksListProps {
@@ -59,7 +60,7 @@ export function OverdueTasksList({ tasks, isLoading, maxItems = 5 }: OverdueTask
   }
 
   return (
-    <Card className="border-destructive/20 bg-destructive/5">
+    <Card className="border-destructive/30 bg-destructive/5 glass-hover-lift rounded-xl backdrop-blur-sm">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-lg text-destructive">
           <AlertTriangle className="h-5 w-5" />
@@ -74,7 +75,14 @@ export function OverdueTasksList({ tasks, isLoading, maxItems = 5 }: OverdueTask
           <div
             key={task.id}
             onClick={() => handleClick(task.id)}
-            className="p-3 rounded-lg bg-background border cursor-pointer hover:bg-muted/50 transition-colors group"
+            className={cn(
+              "p-3 rounded-xl transition-all duration-200 cursor-pointer group",
+              "bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm",
+              "border border-destructive/20 dark:border-destructive/30",
+              "shadow-[0_2px_8px_hsla(0,84%,60%,0.08)]",
+              "hover:bg-white/80 dark:hover:bg-slate-800/80",
+              "hover:shadow-[0_4px_16px_hsla(0,84%,60%,0.15)]"
+            )}
           >
             <div className="flex items-start gap-3">
               <div className="flex-1 min-w-0">

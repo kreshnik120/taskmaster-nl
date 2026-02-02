@@ -19,11 +19,12 @@ interface StatCardProps {
 }
 
 function StatCard({ title, value, icon, variant = 'default', isLoading }: StatCardProps) {
+  // Glass card styles with context-colored shadows
   const variantStyles = {
-    default: 'bg-card',
-    warning: 'bg-destructive/10 border-destructive/20',
-    success: 'bg-green-500/10 border-green-500/20',
-    info: 'bg-primary/10 border-primary/20',
+    default: 'glass-card-violet glass-hover-lift',
+    warning: 'bg-destructive/10 border-destructive/20 glass-hover-lift shadow-[0_2px_6px_hsla(0,84%,60%,0.08),0_8px_24px_hsla(0,84%,60%,0.12)]',
+    success: 'bg-green-500/10 border-green-500/20 glass-hover-lift shadow-[0_2px_6px_hsla(142,71%,45%,0.08),0_8px_24px_hsla(142,71%,45%,0.12)]',
+    info: 'bg-primary/10 border-primary/20 glass-hover-lift shadow-[0_2px_6px_hsla(221,83%,53%,0.08),0_8px_24px_hsla(221,83%,53%,0.12)]',
   };
 
   const iconStyles = {
@@ -34,7 +35,7 @@ function StatCard({ title, value, icon, variant = 'default', isLoading }: StatCa
   };
 
   return (
-    <Card className={cn("transition-all hover:shadow-md", variantStyles[variant])}>
+    <Card className={cn("rounded-xl", variantStyles[variant])}>
       <CardContent className="p-4 sm:p-6">
         <div className="flex items-center justify-between">
           <div className="space-y-1">
@@ -45,7 +46,7 @@ function StatCard({ title, value, icon, variant = 'default', isLoading }: StatCa
               <p className="text-2xl sm:text-3xl font-bold">{value}</p>
             )}
           </div>
-          <div className={cn("p-2 rounded-full bg-background/50", iconStyles[variant])}>
+          <div className={cn("p-2 rounded-full glass-layer-1 backdrop-blur-sm", iconStyles[variant])}>
             {icon}
           </div>
         </div>
