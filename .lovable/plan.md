@@ -292,12 +292,12 @@ Dit is NIET nodig voor de huidige workflow maar kan later toegevoegd worden:
 
 ## Validatie Checklist (Na Implementatie)
 
-- [ ] **Nieuwe taak via Dashboard** → Direct geaccepteerd (accepted_at gevuld)
-- [ ] **Taak delegeren** → Badge "Wacht op acceptatie" zichtbaar
-- [ ] **Accept klikken** → Badge verdwijnt, toast "Taak geaccepteerd"
-- [ ] **Notulen naar taken** → Self-assigned taken zijn geaccepteerd
-- [ ] **AI-taken** → priority = 'MEDIUM' (uppercase), staan in team overzicht
-- [ ] **Bestaande Lijst.tsx** → Blijft ongewijzigd werken
+- [x] **Nieuwe taak via Dashboard** → Direct geaccepteerd (accepted_at gevuld) ✅ TaskDialog.tsx
+- [x] **Taak delegeren** → Badge "Wacht op acceptatie" zichtbaar ✅ TaskCard.tsx
+- [x] **Accept klikken** → Badge verdwijnt, toast "Taak geaccepteerd" ✅ MyTasksFlowSection.tsx
+- [x] **Notulen naar taken** → Self-assigned taken zijn geaccepteerd ✅ useCreateTasksFromItems.ts
+- [x] **AI-taken** → priority = 'MEDIUM' (uppercase), staan in team overzicht ✅ ai-agent-orchestrator
+- [ ] **Bestaande Lijst.tsx** → Blijft ongewijzigd werken (te testen)
 
 ---
 

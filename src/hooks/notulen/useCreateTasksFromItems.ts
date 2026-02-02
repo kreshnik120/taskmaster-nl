@@ -193,6 +193,9 @@ export function useCreateTasksFromItems() {
       if (orgError) throw orgError;
       if (!userOrg?.org_id) throw new Error("Geen organisatie gevonden");
 
+      // Haal huidige user op voor auto-accept logica
+      const { data: { user } } = await supabase.auth.getUser();
+
       // Fase 7D: Haal meeting minute op voor context
       const { data: meetingMinute } = await supabase
         .from('meeting_minutes')
@@ -252,38 +255,46 @@ export function useCreateTasksFromItems() {
         meeting_attendees: []
       } : null;
 
-      // Build tasks met rijke context (Fase 7D)
+      // Build tasks met rijke context (Fase 7D) + auto-accept logica
       // Serialize ai_context to plain JSON objects for Supabase
-      const tasksToInsert = processedItems.map(({ item, assigneeMatch }) => ({
-        org_id: userOrg.org_id,
-        title: (item.action || 'Taak uit notule').substring(0, 100),
-        description: generateTaskDescription(item, meetingMinuteForDesc),
-        priority: mapPriority(item.urgency) as 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW',
-        due_at: item.deadline ? new Date(item.deadline).toISOString() : null,
-        assignee_id: assigneeMatch.userId,
-        category: 'action_item' as const,
-        source_meeting_minute_id: meetingMinuteId,
-        ai_context: JSON.parse(JSON.stringify({
-          onderwerp: item.onderwerp || null,
-          doelgroep: item.doelgroep || null,
-          actie_type: item.actie_type || null,
-          betrokkenen: item.betrokkenen || [],
-          externe_partij: item.externe_partij || null,
-          actieplan: item.actieplan || [],
-          suggestie: item.suggestie || null,
-          bron: {
-            notule_titel: meetingMinute?.tasks?.title || null,
-            notule_datum: meetingMinute?.tasks?.start_at || null,
-            citaat: item.source_quote || null,
-            meeting_minute_id: meetingMinuteId
-          },
-          ai_metadata: {
-            confidence: item.confidence || 0,
-            classificatie: item.classification || 'TAAK',
-            extraction_version: '7D'
-          }
-        }))
-      }));
+      const tasksToInsert = processedItems.map(({ item, assigneeMatch }) => {
+        // Auto-accept als de taak aan de huidige user wordt toegewezen
+        const isAutoAccept = assigneeMatch.userId === user?.id;
+        
+        return {
+          org_id: userOrg.org_id,
+          title: (item.action || 'Taak uit notule').substring(0, 100),
+          description: generateTaskDescription(item, meetingMinuteForDesc),
+          priority: mapPriority(item.urgency) as 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW',
+          due_at: item.deadline ? new Date(item.deadline).toISOString() : null,
+          assignee_id: assigneeMatch.userId,
+          // AUTO-ACCEPT LOGICA: self-assigned taken zijn direct geaccepteerd
+          accepted_by: isAutoAccept ? user?.id : null,
+          accepted_at: isAutoAccept ? new Date().toISOString() : null,
+          category: 'action_item' as const,
+          source_meeting_minute_id: meetingMinuteId,
+          ai_context: JSON.parse(JSON.stringify({
+            onderwerp: item.onderwerp || null,
+            doelgroep: item.doelgroep || null,
+            actie_type: item.actie_type || null,
+            betrokkenen: item.betrokkenen || [],
+            externe_partij: item.externe_partij || null,
+            actieplan: item.actieplan || [],
+            suggestie: item.suggestie || null,
+            bron: {
+              notule_titel: meetingMinute?.tasks?.title || null,
+              notule_datum: meetingMinute?.tasks?.start_at || null,
+              citaat: item.source_quote || null,
+              meeting_minute_id: meetingMinuteId
+            },
+            ai_metadata: {
+              confidence: item.confidence || 0,
+              classificatie: item.classification || 'TAAK',
+              extraction_version: '7D'
+            }
+          }))
+        };
+      });
 
       const { data: createdTasks, error: insertError } = await supabase
         .from('tasks')
