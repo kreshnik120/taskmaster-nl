@@ -1,350 +1,399 @@
 
 
-# Gekleurde Schaduwen & Zwevend Effect - Apple visionOS Fase 4
+# Expert-Niveau Glassmorphism Fase 5: Contextuele Kleuridentiteit & Perfecte Separatie
 
-## Concept: Indigo Colored Shadows
+## Expertanalyse: Wat Ontbreekt Er Nog?
 
-In Apple visionOS hebben schaduwen een subtiele tint van de omgevingskleur. Dit creëert het gevoel dat elementen echt losstaan van de achtergrond - een "zwevend" effect dat diepte suggereert.
+Na grondige analyse van de codebase identificeer ik als UI/UX specialist gespecialiseerd in Apple Design Systems de volgende verbeterpunten:
+
+---
+
+## 1. PROBLEEM: Alleen "Mijn Werk" Tab Heeft Kleur
+
+**Huidige Staat:**
+- `glass-card-indigo` bestaat alleen voor Indigo (Mijn Werk)
+- `shadow-float-indigo` bestaat alleen voor Indigo
+- Andere tabs (Kalender, Lijst, Opvolging, Team, Recruitment) gebruiken generieke schaduwen
+
+**Expert Oplossing:**
+Creëer een compleet kleursysteem voor ELKE tab - zodat gebruikers direct aan de schaduwkleur kunnen zien op welke pagina ze zitten.
+
+```text
+Tab              | HSL Kleur          | Shadow Class
+─────────────────┼────────────────────┼─────────────────────
+Mijn Werk        | 234, 45%           | shadow-float-indigo ✓
+Kalender         | 174, 42%           | shadow-float-teal (NIEUW)
+Lijst            | 215, 25%           | shadow-float-slate (NIEUW)
+Opvolging        | 38, 55%            | shadow-float-amber (NIEUW)
+Team             | 270, 45%           | shadow-float-violet (NIEUW)
+Recruitment      | 345, 48%           | shadow-float-rose (NIEUW)
+```
+
+---
+
+## 2. PROBLEEM: Sidebar Heeft Geen Visuele Separatie
+
+**Huidige Staat:**
+De sidebar en main content hebben dezelfde achtergrondkleur. Er is geen duidelijke visuele "kloof" die het zwevende effect versterkt.
+
+**Expert Oplossing: Subtle Background Gradient**
+Voeg een subtiele gradient toe aan de main content area die lichter wordt naarmate je verder van de sidebar bent:
+
+```css
+/* Sidebar separation effect */
+.main-content-gradient {
+  background: linear-gradient(
+    90deg,
+    hsla(234, 45%, 98%, 0.5) 0%,
+    transparent 10%
+  );
+}
+```
+
+---
+
+## 3. PROBLEEM: Geen Dynamische Kleurwisseling Bij Tab Change
+
+**Huidige Staat:**
+- Tab indicator kleurt correct
+- Maar de CONTAINER schaduwen blijven altijd Indigo
+
+**Expert Oplossing:**
+De glass-layer-1 container moet dynamisch de context-kleur krijgen via CSS custom properties die wisselen per tab:
+
+```tsx
+// UnifiedDashboard.tsx - Dynamic context color
+<div 
+  className="glass-layer-1"
+  style={{ '--context-hue': getTabHue(activeTab) } as React.CSSProperties}
+>
+```
+
+```css
+/* CSS met dynamic hue */
+.glass-layer-1 {
+  box-shadow:
+    0 4px 16px hsla(var(--context-hue), 45%, 52%, 0.06),
+    0 12px 40px hsla(var(--context-hue), 45%, 52%, 0.08);
+}
+```
+
+---
+
+## 4. PROBLEEM: Embedded Views Missen Kleur Context
+
+**Huidige Staat:**
+- `EmbeddedCalendarView`, `EmbeddedListView`, `EmbeddedOpvolgingView` gebruiken standaard Card styling
+- Ze "weten" niet welke tab-context ze hebben
+
+**Expert Oplossing:**
+Voeg een context-aware wrapper toe die automatisch de juiste kleur toepast:
+
+```tsx
+// Kalender tab
+<TabsContent value="kalender">
+  <div className="glass-layer-1 glass-context-teal p-6 rounded-2xl">
+    <EmbeddedCalendarView />
+  </div>
+</TabsContent>
+```
+
+---
+
+## 5. PROBLEEM: KPI Cards Hebben Geen Context-Kleuren
+
+**Huidige Staat:**
+KPI cards in Kalender/Opvolging views gebruiken generieke kleuren.
+
+**Expert Oplossing:**
+Geef KPI cards een subtiele tint van de huidige tab-context:
+
+```css
+/* KPI card in Kalender context */
+.context-teal .kpi-card {
+  box-shadow: 0 4px 12px hsla(174, 42%, 43%, 0.08);
+  border-left: 2px solid hsla(174, 42%, 43%, 0.3);
+}
+```
+
+---
+
+## 6. NIEUW: Sidebar "Glow" Effect
+
+**Expert Techniek:**
+Voeg een subtiele glow toe aan de sidebar-rand die de active tab kleur weerspiegelt:
+
+```css
+/* Sidebar right-edge glow */
+[data-sidebar="sidebar"]::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    hsla(var(--active-tab-hue), 45%, 52%, 0.3) 50%,
+    transparent 100%
+  );
+}
+```
 
 ---
 
 ## Technische Implementatie
 
-### 1. CSS Shadow Tokens met Indigo Tint
+### Fase 5.1: CSS Kleur Tokens Uitbreiden
 
 **Bestand: `src/index.css`**
 
-Voeg nieuwe Indigo-tinted shadow classes toe:
+Voeg shadow classes toe voor alle 6 tabs:
 
 ```css
 /* ============================================
-   COLORED SHADOWS - visionOS Floating Effect
+   TAB-SPECIFIC FLOATING SHADOWS
    ============================================ */
 
-/* Indigo-tinted shadows for Mijn Werk context */
-.shadow-indigo-sm {
-  box-shadow: 
-    0 1px 2px hsla(234, 45%, 52%, 0.04),
-    0 4px 8px hsla(234, 45%, 52%, 0.06);
-}
-
-.shadow-indigo-md {
-  box-shadow: 
-    0 4px 12px hsla(234, 45%, 52%, 0.08),
-    0 8px 24px hsla(234, 45%, 52%, 0.12);
-}
-
-.shadow-indigo-lg {
-  box-shadow: 
-    0 8px 24px hsla(234, 45%, 52%, 0.12),
-    0 16px 48px hsla(234, 45%, 52%, 0.16);
-}
-
-/* Hover state - intensere gekleurde schaduw */
-.shadow-indigo-hover {
-  box-shadow: 
-    0 12px 32px hsla(234, 45%, 52%, 0.15),
-    0 24px 64px hsla(234, 45%, 52%, 0.10),
-    inset 0 1px 1px rgba(255, 255, 255, 0.15);
-}
-
-/* Card floating effect - combineert zwart + indigo */
-.shadow-float-indigo {
+/* Teal (Kalender) */
+.shadow-float-teal {
   box-shadow: 
     0 4px 8px rgba(0, 0, 0, 0.04),
-    0 8px 24px hsla(234, 45%, 52%, 0.10),
-    0 16px 48px hsla(234, 45%, 52%, 0.08);
+    0 8px 24px hsla(174, 42%, 43%, 0.10),
+    0 16px 48px hsla(174, 42%, 43%, 0.08);
 }
 
-.shadow-float-indigo-hover {
+/* Slate (Lijst) */
+.shadow-float-slate {
   box-shadow: 
-    0 8px 16px rgba(0, 0, 0, 0.05),
-    0 16px 40px hsla(234, 45%, 52%, 0.14),
-    0 32px 80px hsla(234, 45%, 52%, 0.10),
-    inset 0 1px 2px rgba(255, 255, 255, 0.2);
+    0 4px 8px rgba(0, 0, 0, 0.04),
+    0 8px 24px hsla(215, 25%, 48%, 0.10),
+    0 16px 48px hsla(215, 25%, 48%, 0.08);
 }
 
-/* Dark mode variants */
-.dark .shadow-indigo-sm {
+/* Amber (Opvolging) */
+.shadow-float-amber {
   box-shadow: 
-    0 1px 2px hsla(234, 45%, 20%, 0.2),
-    0 4px 8px hsla(234, 45%, 15%, 0.3);
+    0 4px 8px rgba(0, 0, 0, 0.04),
+    0 8px 24px hsla(38, 55%, 50%, 0.10),
+    0 16px 48px hsla(38, 55%, 50%, 0.08);
 }
 
-.dark .shadow-indigo-md {
+/* Violet (Team) */
+.shadow-float-violet {
   box-shadow: 
-    0 4px 12px hsla(234, 45%, 15%, 0.3),
-    0 8px 24px hsla(234, 45%, 10%, 0.4);
+    0 4px 8px rgba(0, 0, 0, 0.04),
+    0 8px 24px hsla(270, 45%, 55%, 0.10),
+    0 16px 48px hsla(270, 45%, 55%, 0.08);
 }
 
-.dark .shadow-indigo-lg {
+/* Rose (Recruitment) */
+.shadow-float-rose {
   box-shadow: 
-    0 8px 24px hsla(234, 45%, 15%, 0.35),
-    0 16px 48px hsla(234, 45%, 10%, 0.45);
-}
-
-.dark .shadow-float-indigo {
-  box-shadow: 
-    0 4px 8px rgba(0, 0, 0, 0.2),
-    0 8px 24px hsla(234, 45%, 15%, 0.25),
-    0 16px 48px hsla(234, 45%, 10%, 0.2);
-}
-
-.dark .shadow-float-indigo-hover {
-  box-shadow: 
-    0 8px 16px rgba(0, 0, 0, 0.25),
-    0 16px 40px hsla(234, 45%, 15%, 0.35),
-    0 32px 80px hsla(234, 45%, 10%, 0.25),
-    inset 0 1px 2px rgba(255, 255, 255, 0.1);
+    0 4px 8px rgba(0, 0, 0, 0.04),
+    0 8px 24px hsla(345, 48%, 52%, 0.10),
+    0 16px 48px hsla(345, 48%, 52%, 0.08);
 }
 ```
 
----
-
-### 2. Glass Card Indigo - Enhanced Floating
-
-**Bestand: `src/index.css`**
-
-Update de bestaande `.glass-card-indigo` met gekleurde schaduwen:
+Voeg ook glass-card varianten toe per kleur:
 
 ```css
-/* Indigo-tinted glass for Mijn Werk - ENHANCED */
-.glass-card-indigo {
-  position: relative;
-  overflow: hidden;
-  border-radius: 0.75rem;
-  background: linear-gradient(
-    135deg,
-    hsla(234, 45%, 97%, 0.75) 0%,
-    hsla(234, 45%, 97%, 0.45) 100%
-  );
-  backdrop-filter: blur(20px) saturate(150%);
-  -webkit-backdrop-filter: blur(20px) saturate(150%);
-  border: 1px solid hsla(234, 45%, 88%, 0.5);
-  /* GEKLEURDE SCHADUW - zwevend effect */
-  box-shadow:
-    0 4px 12px hsla(234, 45%, 52%, 0.08),
-    0 8px 32px hsla(234, 45%, 52%, 0.12),
-    inset 0 1px 1px hsla(234, 45%, 97%, 0.4);
+/* Teal-tinted glass for Kalender */
+.glass-card-teal {
+  background: linear-gradient(135deg, hsla(174, 42%, 97%, 0.75) 0%, hsla(174, 42%, 97%, 0.45) 100%);
+  border: 1px solid hsla(174, 42%, 85%, 0.5);
+  box-shadow: 0 4px 12px hsla(174, 42%, 43%, 0.08), 0 8px 32px hsla(174, 42%, 43%, 0.12);
 }
 
-.glass-card-indigo:hover {
-  box-shadow:
-    0 8px 24px hsla(234, 45%, 52%, 0.12),
-    0 16px 48px hsla(234, 45%, 52%, 0.16),
-    inset 0 1px 2px hsla(234, 45%, 97%, 0.5);
-  transform: translateY(-2px);
+/* Amber-tinted glass for Opvolging */
+.glass-card-amber {
+  background: linear-gradient(135deg, hsla(38, 55%, 97%, 0.75) 0%, hsla(38, 55%, 97%, 0.45) 100%);
+  border: 1px solid hsla(38, 55%, 85%, 0.5);
+  box-shadow: 0 4px 12px hsla(38, 55%, 50%, 0.08), 0 8px 32px hsla(38, 55%, 50%, 0.12);
 }
 
-.dark .glass-card-indigo {
-  background: linear-gradient(
-    135deg,
-    hsla(234, 45%, 26%, 0.55) 0%,
-    hsla(234, 45%, 20%, 0.35) 100%
-  );
-  border-color: hsla(234, 45%, 40%, 0.35);
-  box-shadow:
-    0 4px 12px hsla(234, 45%, 15%, 0.25),
-    0 8px 32px hsla(234, 45%, 10%, 0.35),
-    inset 0 1px 1px hsla(234, 45%, 52%, 0.15);
+/* Violet-tinted glass for Team */
+.glass-card-violet {
+  background: linear-gradient(135deg, hsla(270, 45%, 97%, 0.75) 0%, hsla(270, 45%, 97%, 0.45) 100%);
+  border: 1px solid hsla(270, 45%, 86%, 0.5);
+  box-shadow: 0 4px 12px hsla(270, 45%, 55%, 0.08), 0 8px 32px hsla(270, 45%, 55%, 0.12);
 }
 
-.dark .glass-card-indigo:hover {
-  box-shadow:
-    0 8px 24px hsla(234, 45%, 15%, 0.35),
-    0 16px 48px hsla(234, 45%, 10%, 0.45),
-    inset 0 1px 2px hsla(234, 45%, 52%, 0.2);
+/* Rose-tinted glass for Recruitment */
+.glass-card-rose {
+  background: linear-gradient(135deg, hsla(345, 48%, 97%, 0.75) 0%, hsla(345, 48%, 97%, 0.45) 100%);
+  border: 1px solid hsla(345, 48%, 86%, 0.5);
+  box-shadow: 0 4px 12px hsla(345, 48%, 52%, 0.08), 0 8px 32px hsla(345, 48%, 52%, 0.12);
 }
 ```
 
 ---
 
-### 3. Main Container - Floating Effect
+### Fase 5.2: Design Tokens Uitbreiden
+
+**Bestand: `src/lib/constants/designTokens.ts`**
+
+Voeg glassClass en shadowClass toe aan TAB_CONTEXT_COLORS:
+
+```typescript
+export const TAB_CONTEXT_COLORS = {
+  'mijn-werk': {
+    ...existing,
+    glassClass: 'glass-card-indigo',
+    shadowClass: 'shadow-float-indigo',
+    hue: 234,
+  },
+  'kalender': {
+    ...existing,
+    glassClass: 'glass-card-teal',
+    shadowClass: 'shadow-float-teal',
+    hue: 174,
+  },
+  'lijst': {
+    ...existing,
+    glassClass: 'glass-layer-1', // Slate is neutral
+    shadowClass: 'shadow-float-slate',
+    hue: 215,
+  },
+  'opvolging': {
+    ...existing,
+    glassClass: 'glass-card-amber',
+    shadowClass: 'shadow-float-amber',
+    hue: 38,
+  },
+  'team': {
+    ...existing,
+    glassClass: 'glass-card-violet',
+    shadowClass: 'shadow-float-violet',
+    hue: 270,
+  },
+  'recruitment': {
+    ...existing,
+    glassClass: 'glass-card-rose',
+    shadowClass: 'shadow-float-rose',
+    hue: 345,
+  },
+} as const;
+```
+
+---
+
+### Fase 5.3: UnifiedDashboard Dynamische Kleuren
 
 **Bestand: `src/pages/UnifiedDashboard.tsx`**
 
-Update de glass-layer-1 container:
+Wrap elke TabsContent met de juiste context-kleur:
 
 ```tsx
-// Regel 272 - Voeg shadow-float-indigo toe
-<div className="glass-layer-1 glass-light-bleed shadow-float-indigo p-6 rounded-2xl space-y-6">
+{/* Tab 1: Mijn Werk */}
+<TabsContent value="mijn-werk" className="mt-6">
+  <div className={cn(
+    "glass-layer-1 glass-light-bleed p-6 rounded-2xl space-y-6",
+    getTabColors('mijn-werk').shadowClass // shadow-float-indigo
+  )}>
+    <div className="grid gap-6 md:grid-cols-2">
+      <TodayFocusCard />
+      <UpcomingRemindersWidget />
+    </div>
+    <MyTasksFlowSection />
+  </div>
+</TabsContent>
+
+{/* Tab 5: Kalender */}
+<TabsContent value="kalender" className="mt-6">
+  <div className={cn(
+    "glass-layer-1 glass-light-bleed p-6 rounded-2xl",
+    getTabColors('kalender').shadowClass // shadow-float-teal
+  )}>
+    <EmbeddedCalendarView />
+  </div>
+</TabsContent>
+
+// ... etc voor alle tabs
 ```
 
 ---
 
-### 4. TaskCard - Indigo Floating Shadows
-
-**Bestand: `src/components/TaskCard.tsx`**
-
-Update regel 153 met gekleurde schaduwen:
-
-```tsx
-<Card className="glass-task-card glass-hover-lift active:scale-[0.99] 
-                bg-white/75 dark:bg-slate-900/75 
-                border-white/40 dark:border-white/12 
-                shadow-[0_2px_6px_hsla(234,45%,52%,0.06),0_8px_24px_hsla(234,45%,52%,0.10)] 
-                hover:shadow-[0_12px_32px_hsla(234,45%,52%,0.14),0_24px_64px_hsla(234,45%,52%,0.08),inset_0_1px_1px_rgba(255,255,255,0.15)] 
-                transition-all duration-250 ease-out 
-                focus:outline-none focus:ring-2 focus:ring-tab-mijn-werk-500/30 focus:ring-offset-2 
-                relative rounded-xl">
-```
-
----
-
-### 5. Kanban Columns - Floating Effect
-
-**Bestand: `src/components/dashboard/MyTasksFlowSection.tsx`**
-
-Update regel 590:
-
-```tsx
-<Card className="h-full min-h-[200px] glass-kanban-column 
-                border-t-2 border-t-tab-mijn-werk-400/80 dark:border-t-tab-mijn-werk-600/80
-                shadow-[0_4px_12px_hsla(234,45%,52%,0.08),0_12px_32px_hsla(234,45%,52%,0.06)]">
-```
-
----
-
-### 6. TodayFocusCard - Premium Floating
-
-**Bestand: `src/components/dashboard/TodayFocusCard.tsx`**
-
-De `glass-card-indigo` class krijgt automatisch de nieuwe schaduwen via CSS.
-Voeg extra hover transition toe:
-
-```tsx
-// Regel 85 en 105
-<Card className="glass-card-indigo glass-light-bleed-indigo glass-hover-lift transition-all duration-300">
-```
-
----
-
-### 7. UpcomingRemindersWidget - Colored Shadow
-
-**Bestand: `src/components/UpcomingRemindersWidget.tsx`**
-
-Update regel 80:
-
-```tsx
-<Card className="glass-layer-2 glass-light-bleed glass-hover-lift 
-                border-tab-mijn-werk-200/30 dark:border-tab-mijn-werk-800/30
-                shadow-[0_4px_12px_hsla(234,45%,52%,0.08),0_8px_24px_hsla(234,45%,52%,0.06)]
-                hover:shadow-[0_8px_24px_hsla(234,45%,52%,0.12),0_16px_48px_hsla(234,45%,52%,0.08)]
-                transition-all duration-300">
-```
-
----
-
-### 8. Glass Layer 1 - Ambient Indigo Glow
+### Fase 5.4: Sidebar Glow Effect
 
 **Bestand: `src/index.css`**
 
-Voeg een subtiele ambient glow toe onder de glass-layer-1:
+Voeg sidebar edge glow toe:
 
 ```css
-/* Glass layer 1 with floating effect */
-.glass-layer-1 {
+/* Sidebar edge glow - reflects active context */
+[data-sidebar="sidebar"] {
   position: relative;
-  overflow: hidden;
-  border-radius: 0.75rem;
-  background: rgba(255, 255, 255, 0.60);
-  backdrop-filter: blur(24px) saturate(150%);
-  -webkit-backdrop-filter: blur(24px) saturate(150%);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  /* FLOATING INDIGO SHADOW */
-  box-shadow:
-    0 4px 16px hsla(234, 45%, 52%, 0.06),
-    0 12px 40px hsla(234, 45%, 52%, 0.08),
-    inset 0 1px 1px rgba(255, 255, 255, 0.1);
 }
 
-.dark .glass-layer-1 {
-  background: rgba(15, 23, 42, 0.60);
-  border-color: rgba(255, 255, 255, 0.12);
-  box-shadow:
-    0 4px 16px hsla(234, 45%, 15%, 0.2),
-    0 12px 40px hsla(234, 45%, 10%, 0.25),
-    inset 0 1px 1px rgba(255, 255, 255, 0.05);
-}
-```
-
----
-
-### 9. Quick Action Buttons - Subtle Indigo
-
-**Bestand: `src/components/TaskCard.tsx`**
-
-Update regel 287 en 296:
-
-```tsx
-className="h-7 w-7 
-           bg-white/70 dark:bg-slate-900/70 
-           backdrop-blur-md 
-           border border-white/40 dark:border-white/15
-           shadow-[0_2px_8px_hsla(234,45%,52%,0.10)]
-           hover:bg-white/90 dark:hover:bg-slate-800/90 
-           hover:shadow-[0_4px_12px_hsla(234,45%,52%,0.15)]
-           transition-all duration-200"
-```
-
----
-
-### 10. Ambient Background Glow Enhancement
-
-**Bestand: `src/index.css`**
-
-Versterk de ambient mesh met meer Indigo:
-
-```css
-/* Ambient gradient mesh - ENHANCED visionOS style */
-.glass-ambient-mesh::before {
+[data-sidebar="sidebar"]::after {
   content: '';
   position: absolute;
-  inset: -150px;
-  background: 
-    radial-gradient(ellipse 700px 500px at 0% 0%, hsla(234, 45%, 75%, 0.18) 0%, transparent 50%),
-    radial-gradient(ellipse 600px 400px at 100% 100%, hsla(234, 45%, 65%, 0.12) 0%, transparent 50%),
-    radial-gradient(ellipse 400px 300px at 50% 50%, hsla(234, 45%, 80%, 0.08) 0%, transparent 60%);
+  right: -1px;
+  top: 20%;
+  bottom: 20%;
+  width: 2px;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    hsla(234, 45%, 52%, 0.2) 20%,
+    hsla(234, 45%, 52%, 0.35) 50%,
+    hsla(234, 45%, 52%, 0.2) 80%,
+    transparent 100%
+  );
+  border-radius: 1px;
   pointer-events: none;
-  z-index: -1;
-  filter: blur(50px);
+}
+
+/* Dark mode variant */
+.dark [data-sidebar="sidebar"]::after {
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    hsla(234, 45%, 52%, 0.15) 20%,
+    hsla(234, 45%, 52%, 0.25) 50%,
+    hsla(234, 45%, 52%, 0.15) 80%,
+    transparent 100%
+  );
 }
 ```
 
 ---
 
-## Visuele Vergelijking
+### Fase 5.5: Background Depth Enhancement
 
-```text
-┌─────────────────────────────────────────────────────────────────────┐
-│  VOOR: Grijze/zwarte schaduwen                                      │
-│                                                                     │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │   │
-│  │ ░  Card met rgba(0,0,0,0.1) shadow                        ░ │   │
-│  │ ░  Voelt "plat" - schaduw matcht niet met context         ░ │   │
-│  │ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-│                                                                     │
-├─────────────────────────────────────────────────────────────────────┤
-│  NA: Indigo gekleurde schaduwen                                     │
-│                                                                     │
-│  ╔══════════════════════════════════════════════════════════════╗   │
-│  ║                                                              ║   │
-│  ║   ┌────────────────────────────────────────────────────┐     ║   │
-│  ║   │                                                    │     ║   │
-│  ║   │   Card met hsla(234,45%,52%,0.12) shadow          │     ║   │
-│  ║   │   ZWEEFT boven de achtergrond                     │     ║   │
-│  ║   │   Schaduw heeft Indigo tint                       │     ║   │
-│  ║   │                                                    │     ║   │
-│  ║   └────────────────────────────────────────────────────┘     ║   │
-│  ║       ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓           ║   │
-│  ║       ▓ INDIGO GEKLEURDE SCHADUW - DIEPTE           ▓       ║   │
-│  ║       ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓           ║   │
-│  ║                                                              ║   │
-│  ╚══════════════════════════════════════════════════════════════╝   │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+**Bestand: `src/index.css`**
+
+Voeg subtiele depth toe aan de main content area:
+
+```css
+/* Main content area - subtle depth from sidebar */
+.main-content-depth {
+  position: relative;
+}
+
+.main-content-depth::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    hsla(234, 20%, 96%, 0.8) 0%,
+    transparent 15%
+  );
+  pointer-events: none;
+  z-index: -1;
+}
+
+.dark .main-content-depth::before {
+  background: linear-gradient(
+    90deg,
+    hsla(234, 20%, 8%, 0.6) 0%,
+    transparent 15%
+  );
+}
 ```
 
 ---
@@ -353,45 +402,78 @@ Versterk de ambient mesh met meer Indigo:
 
 | Bestand | Wijzigingen |
 |---------|-------------|
-| `src/index.css` | +50 regels (shadow-indigo-*, glass-card-indigo update, glass-layer-1 update, ambient mesh) |
-| `src/components/TaskCard.tsx` | Regel 153: Indigo shadow, Regel 287/296: button shadows |
-| `src/components/dashboard/MyTasksFlowSection.tsx` | Regel 590: Kolom Indigo shadow |
-| `src/components/dashboard/TodayFocusCard.tsx` | Regel 85, 105: transition class |
-| `src/components/UpcomingRemindersWidget.tsx` | Regel 80: Indigo shadow + hover |
-| `src/pages/UnifiedDashboard.tsx` | Regel 272: shadow-float-indigo class |
-
-**Totaal: ~60 regels CSS + 6 component updates**
+| `src/index.css` | +80 regels (5 nieuwe shadow-float-*, 4 nieuwe glass-card-*, sidebar glow, main depth) |
+| `src/lib/constants/designTokens.ts` | +18 regels (glassClass, shadowClass, hue per tab) |
+| `src/pages/UnifiedDashboard.tsx` | Dynamische shadow classes per TabsContent |
+| `src/components/ui/sidebar.tsx` | (Optioneel) Dynamic sidebar edge glow |
 
 ---
 
-## Apple visionOS Reference
+## Visueel Resultaat
 
-| Effect | Implementatie | Apple Equivalent |
-|--------|--------------|------------------|
-| Colored shadow | `hsla(234, 45%, 52%, 0.12)` | visionOS app icons |
-| Multi-layer depth | 3 shadow layers | visionOS window depth |
-| Hover lift | `translateY(-2px)` + shadow grow | tvOS focus states |
-| Ambient glow | Radial gradient mesh | visionOS environmental lighting |
-| Inner rim light | `inset 0 1px` | visionOS frosted glass |
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│  ┌─────────────┐ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
+│  │             │ ░                                                       ░ │
+│  │  SIDEBAR    │▓░  ╔═══════════════════════════════════════════════════╗░ │
+│  │             │▓░  ║                                                   ║░ │
+│  │  ○ Mijn Werk│▓░  ║   MIJN WERK TAB                                  ║░ │
+│  │    Kalender │▓░  ║   Indigo shadow: hsla(234, 45%, 52%, 0.10)       ║░ │
+│  │    Lijst    │▓░  ║                                                   ║░ │
+│  │    Opvolging│▓░  ║   ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓           ║░ │
+│  │    Team     │▓░  ║   ▓ INDIGO GEKLEURDE SCHADUW                ▓    ║░ │
+│  │    Recruit  │▓░  ║   ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓           ║░ │
+│  │             │▓░  ║                                                   ║░ │
+│  │             │▓░  ╚═══════════════════════════════════════════════════╝░ │
+│  │             │▓░                                                       ░ │
+│  └─────────────┘ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
+│                  ↑                                                          │
+│                  SIDEBAR GLOW (Indigo tint)                                 │
+│                                                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  BIJ WISSELEN NAAR KALENDER TAB:                                            │
+│                                                                             │
+│  ┌─────────────┐ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
+│  │             │ ░                                                       ░ │
+│  │  SIDEBAR    │▓░  ╔═══════════════════════════════════════════════════╗░ │
+│  │             │▓░  ║                                                   ║░ │
+│  │    Mijn Werk│▓░  ║   KALENDER TAB                                   ║░ │
+│  │  ○ Kalender │▓░  ║   Teal shadow: hsla(174, 42%, 43%, 0.10)         ║░ │
+│  │    Lijst    │▓░  ║                                                   ║░ │
+│  │    Opvolging│▓░  ║   ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒           ║░ │
+│  │    Team     │▓░  ║   ▒ TEAL GEKLEURDE SCHADUW                  ▒    ║░ │
+│  │    Recruit  │▓░  ║   ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒           ║░ │
+│  │             │▓░  ║                                                   ║░ │
+│  │             │▓░  ╚═══════════════════════════════════════════════════╝░ │
+│  │             │▓░                                                       ░ │
+│  └─────────────┘ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
+│                  ↑                                                          │
+│                  SIDEBAR GLOW (nu Teal tint)                                │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## Schaduw Kleur Theorie
+## Expert Design Principes Toegepast
 
-Waarom Indigo-tinted shadows werken:
-
-1. **Harmonie**: Schaduw neemt kleur over van de tab context
-2. **Diepte**: Gekleurde schaduwen suggereren afstand tot oppervlak
-3. **Premium feel**: Apple visionOS, iOS 17+ gebruiken dit patroon
-4. **Consistentie**: Alle elementen in "Mijn Werk" delen dezelfde kleur DNA
+| Principe | Implementatie |
+|----------|---------------|
+| **Spatial Memory** | Kleur = locatie. Gebruiker herkent tab aan schaduwkleur |
+| **Contextual Depth** | Schaduwen erven omgevingskleur (visionOS techniek) |
+| **Visual Hierarchy** | Sidebar < Container < Cards (3 lagen diepte) |
+| **Subtle Separation** | Sidebar glow creëert "floating" gevoel zonder harde border |
+| **Consistent Language** | Elke tab heeft complete kleur-vocabulaire |
 
 ---
 
-## Browser Compatibility
+## Accessibility Behouden
 
-| Feature | Chrome | Safari | Firefox | Edge |
-|---------|--------|--------|---------|------|
-| HSLA shadows | All | All | All | All |
-| Multi-layer shadow | All | All | All | All |
-| backdrop-filter | 76+ | 9+ | 103+ | 79+ |
+| Aspect | Implementatie |
+|--------|---------------|
+| Contrast | Kleuren alleen voor decoratie, niet informatiedrager |
+| Focus | Focus states onafhankelijk van context-kleur |
+| Motion | Alle effecten zijn static (geen animatie) |
+| Screen reader | Tab identiteit via tekst, niet kleur |
 
