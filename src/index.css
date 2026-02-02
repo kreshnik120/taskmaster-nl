@@ -541,6 +541,146 @@ All colors MUST be HSL.
     background-size: 200% 200%;
     animation: glass-shimmer 8s ease infinite;
   }
+  /* ============================================
+     APPLE visionOS SHADOW SYSTEM
+     ============================================ */
+
+  /* Apple-level layered shadows */
+  .shadow-glass-card {
+    box-shadow: 
+      0 1px 3px rgba(0, 0, 0, 0.04),
+      0 4px 12px rgba(0, 0, 0, 0.06);
+  }
+
+  .shadow-glass-card-hover {
+    box-shadow: 
+      0 8px 24px rgba(0, 0, 0, 0.1),
+      0 4px 8px rgba(0, 0, 0, 0.05),
+      inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  }
+
+  .shadow-glass-dialog {
+    box-shadow: 
+      0 25px 50px -12px rgba(0, 0, 0, 0.25),
+      0 8px 24px -8px rgba(0, 0, 0, 0.15),
+      inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  }
+
+  .shadow-glass-dropdown {
+    box-shadow: 
+      0 10px 40px -10px rgba(0, 0, 0, 0.15),
+      0 4px 16px rgba(0, 0, 0, 0.1);
+  }
+
+  .dark .shadow-glass-card {
+    box-shadow: 
+      0 1px 3px rgba(0, 0, 0, 0.2),
+      0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  .dark .shadow-glass-card-hover {
+    box-shadow: 
+      0 8px 24px rgba(0, 0, 0, 0.35),
+      0 4px 8px rgba(0, 0, 0, 0.25),
+      inset 0 1px 1px rgba(255, 255, 255, 0.05);
+  }
+
+  .dark .shadow-glass-dialog {
+    box-shadow: 
+      0 25px 50px -12px rgba(0, 0, 0, 0.5),
+      0 8px 24px -8px rgba(0, 0, 0, 0.4),
+      inset 0 1px 1px rgba(255, 255, 255, 0.05);
+  }
+
+  /* Apple glass button - saturated blur */
+  .glass-button {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(12px) saturate(150%);
+    -webkit-backdrop-filter: blur(12px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 
+      0 2px 8px rgba(0, 0, 0, 0.06),
+      inset 0 1px 1px rgba(255, 255, 255, 0.2);
+    transition: all 0.2s ease-out;
+  }
+
+  .glass-button:hover {
+    background: rgba(255, 255, 255, 0.85);
+    box-shadow: 
+      0 4px 12px rgba(0, 0, 0, 0.1),
+      inset 0 1px 1px rgba(255, 255, 255, 0.25);
+  }
+
+  .dark .glass-button {
+    background: rgba(30, 41, 59, 0.7);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  .dark .glass-button:hover {
+    background: rgba(30, 41, 59, 0.85);
+  }
+
+  /* Premium input focus glow */
+  .glass-input:focus-visible {
+    box-shadow: 
+      0 0 0 3px hsla(234, 45%, 52%, 0.15),
+      0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+
+  /* Collapsible section glass styling */
+  .glass-section-trigger {
+    background: rgba(255, 255, 255, 0.4);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-radius: 0.5rem;
+    transition: all 0.2s ease-out;
+  }
+
+  .glass-section-trigger:hover {
+    background: rgba(255, 255, 255, 0.6);
+  }
+
+  .dark .glass-section-trigger {
+    background: rgba(30, 41, 59, 0.4);
+  }
+
+  .dark .glass-section-trigger:hover {
+    background: rgba(30, 41, 59, 0.6);
+  }
+
+  /* Glass layer with enhanced depth - for dialogs */
+  .glass-dialog {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(40px) saturate(180%);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+  }
+
+  .dark .glass-dialog {
+    background: rgba(15, 23, 42, 0.90);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  /* Glass overlay - softer with blur */
+  .glass-overlay {
+    background: rgba(0, 0, 0, 0.50);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  /* Icon bubble - glassmorphism for empty states */
+  .glass-icon-bubble {
+    background: rgba(255, 255, 255, 0.50);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.30);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  }
+
+  .dark .glass-icon-bubble {
+    background: rgba(30, 41, 59, 0.50);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
 }
 
 /* Respecteer reduced motion voorkeur */
