@@ -1,4 +1,4 @@
-import { Home, Kanban, List, Calendar, Clock, BarChart3, Trash2, CheckCircle2, Brain, Users, ChevronDown, ChevronUp, Briefcase, Building2, Link2, LogOut, RefreshCw, Archive, Paperclip, FileText, LayoutDashboard, MessageCircle } from "lucide-react";
+import { Home, Kanban, Clock, Trash2, CheckCircle2, Brain, Users, ChevronDown, ChevronUp, Briefcase, Building2, Link2, LogOut, RefreshCw, Archive, Paperclip, FileText, LayoutDashboard, MessageCircle } from "lucide-react";
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarFooter } from "@/components/ui/sidebar";
@@ -43,19 +43,7 @@ const menuGroups: MenuGroup[] = [{
     url: "/whatsapp",
     icon: MessageCircle,
     badge: 'whatsappUnreadCount'
-  }, {
-    title: "Lijstweergave",
-    url: "/lijst",
-    icon: List
-  }, {
-    title: "Kalender",
-    url: "/kalender",
-    icon: Calendar
-  }, {
-    title: "Opvolging",
-    url: "/opvolging",
-    icon: BarChart3
-  }, {
+}, {
   title: "Bijlagen",
     url: "/bijlagen",
     icon: Paperclip
