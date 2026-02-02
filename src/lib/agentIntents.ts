@@ -298,17 +298,40 @@ export const DEFAULT_PAGE_CONFIG: PageAgentConfig = {
 };
 
 /**
+ * Get effective path considering dashboard tabs
+ * Maps /dashboard?tab=lijst to /lijst for agent context detection
+ */
+export function getEffectivePath(pathname: string, search: string): string {
+  const params = new URLSearchParams(search);
+  const tab = params.get('tab');
+  
+  if (pathname === '/dashboard' && tab) {
+    const tabMapping: Record<string, string> = {
+      'lijst': '/lijst',
+      'kalender': '/kalender',
+      'opvolging': '/opvolging',
+      'mijn-werk': '/',
+    };
+    return tabMapping[tab] || pathname;
+  }
+  
+  return pathname;
+}
+
+/**
  * Get agent configuration for a specific page
  */
-export function getPageAgentConfig(pathname: string): PageAgentConfig {
+export function getPageAgentConfig(pathname: string, search: string = ''): PageAgentConfig {
+  const effectivePath = getEffectivePath(pathname, search);
+  
   // Exact match first
-  if (PAGE_AGENT_CONFIG[pathname]) {
-    return PAGE_AGENT_CONFIG[pathname];
+  if (PAGE_AGENT_CONFIG[effectivePath]) {
+    return PAGE_AGENT_CONFIG[effectivePath];
   }
 
   // Partial match (e.g., /sollicitaties/123)
   for (const [route, config] of Object.entries(PAGE_AGENT_CONFIG)) {
-    if (pathname.startsWith(route)) {
+    if (effectivePath.startsWith(route)) {
       return config;
     }
   }

@@ -2044,7 +2044,7 @@ export function ApplicationDetailModal({
                               variant="ghost"
                               size="sm"
                               onClick={() => {
-                                window.location.href = `/lijst?task=${task.id}`;
+                                window.location.href = `/dashboard?tab=lijst&taskId=${task.id}`;
                               }}
                             >
                               <ExternalLink className="h-4 w-4" />

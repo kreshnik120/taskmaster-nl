@@ -31,10 +31,10 @@ export function useAgentRouter(options: UseAgentRouterOptions = {}) {
   const [lastResult, setLastResult] = useState<AgentResult | null>(null);
   const [executionHistory, setExecutionHistory] = useState<AgentResult[]>([]);
 
-  // Get page-specific configuration
+  // Get page-specific configuration (supports dashboard tabs via search params)
   const pageConfig: PageAgentConfig = useMemo(
-    () => getPageAgentConfig(location.pathname),
-    [location.pathname]
+    () => getPageAgentConfig(location.pathname, location.search),
+    [location.pathname, location.search]
   );
 
   // Available intents for current page

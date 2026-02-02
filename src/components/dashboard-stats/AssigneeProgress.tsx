@@ -17,7 +17,7 @@ export function AssigneeProgress({ assignees, isLoading }: AssigneeProgressProps
 
   const handleClick = (userId: string) => {
     if (userId === 'unassigned') return;
-    navigate(`/lijst?assignee=${userId}`);
+    navigate(`/dashboard?tab=lijst&assignee=${userId}`);
   };
 
   const getInitials = (name: string) => {

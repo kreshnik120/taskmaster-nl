@@ -112,7 +112,7 @@ export function UpcomingTasksList({ tasks, isLoading, maxItems = 5 }: UpcomingTa
         ))}
         {hasMore && (
           <button
-            onClick={() => navigate('/kalender')}
+            onClick={() => navigate('/dashboard?tab=kalender')}
             className="w-full text-center text-sm text-muted-foreground hover:text-primary transition-colors py-2"
           >
             +{tasks.length - maxItems} meer bekijken
