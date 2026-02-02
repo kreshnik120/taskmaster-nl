@@ -269,7 +269,7 @@ export default function UnifiedDashboard() {
 
         {/* Tab 1: Mijn Werk */}
         <TabsContent value="mijn-werk" className="mt-6">
-          <div className="glass-layer-1 glass-light-bleed p-6 rounded-2xl space-y-6">
+          <div className="glass-layer-1 glass-light-bleed shadow-float-indigo p-6 rounded-2xl space-y-6">
             <div className="grid gap-6 md:grid-cols-2">
               <TodayFocusCard />
               <UpcomingRemindersWidget />
