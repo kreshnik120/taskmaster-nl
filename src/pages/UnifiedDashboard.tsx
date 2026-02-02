@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { LayoutDashboard, User, Users, Briefcase, List, Calendar, TrendingUp } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
 import { useUserRole } from "@/hooks/useUserRole";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -34,15 +33,6 @@ interface Application {
   updated_at: string | null;
 }
 
-// Type for sub-views within "Mijn Werk" tab (null = default Focus content)
-type MijnWerkView = 'lijst' | 'kalender' | 'opvolging';
-
-const SUB_VIEWS: { value: MijnWerkView; label: string; icon: typeof List }[] = [
-  { value: 'lijst', label: 'Lijst', icon: List },
-  { value: 'kalender', label: 'Kalender', icon: Calendar },
-  { value: 'opvolging', label: 'Opvolging', icon: TrendingUp },
-];
-
 export default function UnifiedDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAdmin, isManager } = useUserRole();
@@ -67,33 +57,9 @@ export default function UnifiedDashboard() {
   const tabParam = searchParams.get('tab');
   const activeTab = tabParam || getDefaultTab();
 
-  // Get active view for "Mijn Werk" tab from URL (null = default Focus content)
-  const viewParam = searchParams.get('view') as MijnWerkView | null;
-  const mijnWerkView: MijnWerkView | null = 
-    viewParam && SUB_VIEWS.some(v => v.value === viewParam) 
-      ? viewParam 
-      : null;
-
   // Handle tab change - update URL
   const handleTabChange = (value: string) => {
-    // Preserve view param if switching to mijn-werk and a view is selected
-    if (value === 'mijn-werk' && mijnWerkView) {
-      setSearchParams({ tab: value, view: mijnWerkView });
-    } else {
-      setSearchParams({ tab: value });
-    }
-  };
-
-  // Handle view change within "Mijn Werk" tab
-  const handleViewChange = (view: MijnWerkView | null) => {
-    if (view === mijnWerkView) {
-      // Toggle off - terug naar standaard Focus content
-      setSearchParams({ tab: 'mijn-werk' });
-    } else if (view) {
-      setSearchParams({ tab: 'mijn-werk', view });
-    } else {
-      setSearchParams({ tab: 'mijn-werk' });
-    }
+    setSearchParams({ tab: value });
   };
 
   // Load urgency applications for Recruitment tab
@@ -161,88 +127,42 @@ export default function UnifiedDashboard() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <div className="flex flex-wrap items-center gap-4">
-          <TabsList className="grid grid-cols-3 lg:inline-grid lg:w-auto">
-            <TabsTrigger value="mijn-werk" className="gap-2">
-              <User className="h-4 w-4" />
-              <span className="hidden sm:inline">Mijn Werk</span>
-            </TabsTrigger>
-            <TabsTrigger value="team" className="gap-2">
-              <Users className="h-4 w-4" />
-              <span className="hidden sm:inline">Team Overzicht</span>
-            </TabsTrigger>
-            <TabsTrigger value="recruitment" className="gap-2">
-              <Briefcase className="h-4 w-4" />
-              <span className="hidden sm:inline">Recruitment</span>
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Sub-navigatie - alleen zichtbaar bij Mijn Werk */}
-          {activeTab === 'mijn-werk' && (
-            <div className="flex items-center gap-1 border-l border-border pl-4 ml-2">
-              {SUB_VIEWS.map((view) => (
-                <button
-                  key={view.value}
-                  onClick={() => handleViewChange(mijnWerkView === view.value ? null : view.value)}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md transition-colors",
-                    mijnWerkView === view.value
-                      ? "bg-primary/10 text-primary font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                  )}
-                >
-                  <view.icon className="h-4 w-4" />
-                  {view.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <TabsList className="grid grid-cols-3 md:grid-cols-6 w-full">
+          <TabsTrigger value="mijn-werk" className="gap-2">
+            <User className="h-4 w-4" />
+            <span className="hidden sm:inline">Mijn Werk</span>
+          </TabsTrigger>
+          <TabsTrigger value="team" className="gap-2">
+            <Users className="h-4 w-4" />
+            <span className="hidden sm:inline">Team</span>
+          </TabsTrigger>
+          <TabsTrigger value="recruitment" className="gap-2">
+            <Briefcase className="h-4 w-4" />
+            <span className="hidden sm:inline">Recruitment</span>
+          </TabsTrigger>
+          <TabsTrigger value="lijst" className="gap-2">
+            <List className="h-4 w-4" />
+            <span className="hidden sm:inline">Lijst</span>
+          </TabsTrigger>
+          <TabsTrigger value="kalender" className="gap-2">
+            <Calendar className="h-4 w-4" />
+            <span className="hidden sm:inline">Kalender</span>
+          </TabsTrigger>
+          <TabsTrigger value="opvolging" className="gap-2">
+            <TrendingUp className="h-4 w-4" />
+            <span className="hidden sm:inline">Opvolging</span>
+          </TabsTrigger>
+        </TabsList>
 
         {/* Tab 1: Mijn Werk */}
         <TabsContent value="mijn-werk" className="space-y-6 mt-6">
-          {/* Render default Focus content when no sub-view is selected */}
-          {!mijnWerkView && (
-            <>
-              <div className="grid gap-6 md:grid-cols-2">
-                <TodayFocusCard />
-                <UpcomingRemindersWidget />
-              </div>
-              
-              {/* Mijn Taken Kanban Flow */}
-              <MyTasksFlowSection />
-            </>
-          )}
-
-          {mijnWerkView === 'lijst' && (
-            <div className="p-8 border border-dashed border-muted-foreground/30 rounded-lg text-center">
-              <List className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-              <h3 className="font-medium text-lg mb-2">Lijstweergave</h3>
-              <p className="text-muted-foreground">
-                Wordt geïmplementeerd in Onderdeel 2
-              </p>
-            </div>
-          )}
-
-          {mijnWerkView === 'kalender' && (
-            <div className="p-8 border border-dashed border-muted-foreground/30 rounded-lg text-center">
-              <Calendar className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-              <h3 className="font-medium text-lg mb-2">Kalenderweergave</h3>
-              <p className="text-muted-foreground">
-                Wordt geïmplementeerd in Onderdeel 2
-              </p>
-            </div>
-          )}
-
-          {mijnWerkView === 'opvolging' && (
-            <div className="p-8 border border-dashed border-muted-foreground/30 rounded-lg text-center">
-              <TrendingUp className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-              <h3 className="font-medium text-lg mb-2">Opvolgingsweergave</h3>
-              <p className="text-muted-foreground">
-                Wordt geïmplementeerd in Onderdeel 2
-              </p>
-            </div>
-          )}
+          <div className="grid gap-6 md:grid-cols-2">
+            <TodayFocusCard />
+            <UpcomingRemindersWidget />
+          </div>
+          
+          {/* Mijn Taken Kanban Flow */}
+          <MyTasksFlowSection />
         </TabsContent>
 
         {/* Tab 2: Team Overzicht */}
@@ -294,6 +214,39 @@ export default function UnifiedDashboard() {
           {urgencyApplications.length > 0 && (
             <UrgencyActionPanel applications={urgencyApplications} />
           )}
+        </TabsContent>
+
+        {/* Tab 4: Lijst - Placeholder */}
+        <TabsContent value="lijst" className="space-y-6 mt-6">
+          <div className="p-8 border border-dashed border-muted-foreground/30 rounded-lg text-center">
+            <List className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+            <h3 className="font-medium text-lg mb-2">Lijstweergave</h3>
+            <p className="text-muted-foreground">
+              Wordt geïmplementeerd in Onderdeel 2
+            </p>
+          </div>
+        </TabsContent>
+
+        {/* Tab 5: Kalender - Placeholder */}
+        <TabsContent value="kalender" className="space-y-6 mt-6">
+          <div className="p-8 border border-dashed border-muted-foreground/30 rounded-lg text-center">
+            <Calendar className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+            <h3 className="font-medium text-lg mb-2">Kalenderweergave</h3>
+            <p className="text-muted-foreground">
+              Wordt geïmplementeerd in Onderdeel 2
+            </p>
+          </div>
+        </TabsContent>
+
+        {/* Tab 6: Opvolging - Placeholder */}
+        <TabsContent value="opvolging" className="space-y-6 mt-6">
+          <div className="p-8 border border-dashed border-muted-foreground/30 rounded-lg text-center">
+            <TrendingUp className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+            <h3 className="font-medium text-lg mb-2">Opvolgingsweergave</h3>
+            <p className="text-muted-foreground">
+              Wordt geïmplementeerd in Onderdeel 2
+            </p>
+          </div>
         </TabsContent>
       </Tabs>
 
