@@ -461,7 +461,7 @@ export function MyTasksFlowSection() {
         <div className="flex flex-col gap-3 mb-4">
           {/* Title row */}
           <div className="flex items-center gap-2">
-            <Kanban className="h-5 w-5 text-primary" />
+            <Kanban className="h-5 w-5 text-tab-mijn-werk-500" />
             <h2 className="text-lg font-semibold">Mijn Taken</h2>
             <Badge variant="secondary" className="ml-1">
               {totalTaskCount} {totalTaskCount === 1 ? "taak" : "taken"}
@@ -542,7 +542,7 @@ export function MyTasksFlowSection() {
             </div>
 
             <div className="flex items-center gap-2">
-              <Button onClick={() => setTaskDialogOpen(true)} size="sm" className="gap-2">
+              <Button onClick={() => setTaskDialogOpen(true)} size="sm" className="gap-2 bg-tab-mijn-werk-500 hover:bg-tab-mijn-werk-600 text-white">
                 <Plus className="h-4 w-4" />
                 Nieuwe taak
               </Button>

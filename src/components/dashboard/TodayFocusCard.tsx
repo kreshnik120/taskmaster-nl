@@ -60,7 +60,7 @@ export function TodayFocusCard() {
       <Card className="backdrop-blur-sm border-white/50 dark:border-white/10">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Target className="h-5 w-5 text-purple-500" />
+            <Target className="h-5 w-5 text-tab-mijn-werk-500" />
             Vandaag Focus
           </CardTitle>
         </CardHeader>
@@ -82,7 +82,7 @@ export function TodayFocusCard() {
 
   if (totalItems === 0) {
     return (
-      <Card className="backdrop-blur-sm border-white/50 dark:border-white/10 bg-gradient-to-br from-purple-50/80 to-white/60 dark:from-purple-950/30 dark:to-background/60">
+      <Card className="backdrop-blur-sm border-white/50 dark:border-white/10 bg-gradient-to-br from-tab-mijn-werk-50/80 to-white/60 dark:from-tab-mijn-werk-900/30 dark:to-background/60">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Target className="h-5 w-5 text-purple-500" />
@@ -100,10 +100,10 @@ export function TodayFocusCard() {
   }
 
   return (
-    <Card className="backdrop-blur-sm border-white/50 dark:border-white/10 bg-gradient-to-br from-purple-50/80 to-white/60 dark:from-purple-950/30 dark:to-background/60">
+    <Card className="backdrop-blur-sm border-white/50 dark:border-white/10 bg-gradient-to-br from-tab-mijn-werk-50/80 to-white/60 dark:from-tab-mijn-werk-900/30 dark:to-background/60">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Target className="h-5 w-5 text-purple-500" />
+          <Target className="h-5 w-5 text-tab-mijn-werk-500" />
           Vandaag Focus
           <Badge variant="secondary" className="ml-auto">
             {totalItems} item{totalItems !== 1 ? "s" : ""}
