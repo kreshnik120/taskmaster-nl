@@ -13,6 +13,7 @@ import {
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { TaskCard } from "@/components/TaskCard";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
+import { TaskDialog } from "@/components/TaskDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -49,7 +50,8 @@ import {
   ArrowDown,
   Calendar,
   AlertCircle,
-  Clock
+  Clock,
+  Plus
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -129,6 +131,7 @@ export function MyTasksFlowSection() {
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
 
   // Accessibility: status message for screen readers
   const [statusMessage, setStatusMessage] = useState("");
@@ -172,18 +175,22 @@ export function MyTasksFlowSection() {
     localStorage.setItem('mytasks-sort-direction', sortDirection);
   }, [sortBy, sortDirection]);
 
-  // Keyboard shortcut for search
+  // Keyboard shortcuts for search and new task
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.key === '/' && !detailModalOpen) {
+      if (e.key === '/' && !detailModalOpen && !taskDialogOpen) {
         e.preventDefault();
         searchInputRef.current?.focus();
+      }
+      if (e.key === 'n' && !detailModalOpen && !taskDialogOpen) {
+        e.preventDefault();
+        setTaskDialogOpen(true);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [detailModalOpen]);
+  }, [detailModalOpen, taskDialogOpen]);
 
   const loadData = async () => {
     if (!user) return;
@@ -492,12 +499,18 @@ export function MyTasksFlowSection() {
               />
             </div>
 
-            <Button variant="outline" size="sm" asChild>
-              <Link to="/kanban" className="gap-2">
-                Team overzicht
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button onClick={() => setTaskDialogOpen(true)} size="sm" className="gap-2">
+                <Plus className="h-4 w-4" />
+                Nieuwe taak
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/kanban" className="gap-2">
+                  Team overzicht
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -637,6 +650,13 @@ export function MyTasksFlowSection() {
           onTaskUpdated={handleTaskUpdated}
         />
       )}
+
+      {/* NEW TASK DIALOG */}
+      <TaskDialog
+        open={taskDialogOpen}
+        onOpenChange={setTaskDialogOpen}
+        onSuccess={loadData}
+      />
     </>
   );
 }
