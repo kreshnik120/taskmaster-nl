@@ -465,7 +465,7 @@ export function MyTasksFlowSection() {
           <div className="flex items-center gap-2">
             <Kanban className="h-5 w-5 text-tab-mijn-werk-500" />
             <h2 className="text-lg font-semibold">Mijn Taken</h2>
-            <Badge className="ml-1 bg-tab-mijn-werk-100 text-tab-mijn-werk-700 border border-tab-mijn-werk-200 dark:bg-tab-mijn-werk-900/40 dark:text-tab-mijn-werk-300 dark:border-tab-mijn-werk-700">
+            <Badge className="ml-1 glass-badge-indigo text-tab-mijn-werk-700 dark:text-tab-mijn-werk-300">
               {totalTaskCount} {totalTaskCount === 1 ? "taak" : "taken"}
             </Badge>
           </div>
@@ -475,7 +475,7 @@ export function MyTasksFlowSection() {
             {/* Sort controls */}
             <div className="flex items-center gap-2">
               <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
-                <SelectTrigger className="h-8 w-[140px] text-xs bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border-tab-mijn-werk-200/50 dark:border-tab-mijn-werk-700/50">
+                <SelectTrigger className="h-8 w-[140px] text-xs glass-select-trigger">
                   <div className="flex items-center gap-1.5">
                     {sortBy === 'due_at' && <Calendar className="h-3 w-3" />}
                     {sortBy === 'priority' && <AlertCircle className="h-3 w-3" />}
@@ -511,7 +511,7 @@ export function MyTasksFlowSection() {
                     variant="outline"
                     size="icon"
                     onClick={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
-                    className="h-8 w-8 p-0 hover:bg-muted/80"
+                    className="h-8 w-8 p-0 glass-icon-button"
                     aria-label={sortDirection === 'asc' ? 'Sorteer aflopend' : 'Sorteer oplopend'}
                   >
                     {sortDirection === 'asc' ? (
@@ -538,17 +538,21 @@ export function MyTasksFlowSection() {
                 placeholder="Zoek taken... (/)"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-8 pl-8 text-sm bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border-tab-mijn-werk-200/50 dark:border-tab-mijn-werk-700/50 focus:border-tab-mijn-werk-400"
+                className="h-8 pl-8 text-sm glass-search-input border-tab-mijn-werk-200/50 dark:border-tab-mijn-werk-700/50 focus:border-tab-mijn-werk-400"
                 aria-label="Zoek in mijn taken"
               />
             </div>
 
             <div className="flex items-center gap-2">
-              <Button onClick={() => setTaskDialogOpen(true)} size="sm" className="gap-2 bg-tab-mijn-werk-500 hover:bg-tab-mijn-werk-600 text-white">
+              <Button 
+                onClick={() => setTaskDialogOpen(true)} 
+                size="sm" 
+                className="gap-2 btn-premium-primary"
+              >
                 <Plus className="h-4 w-4" />
                 Nieuwe taak
               </Button>
-              <Button variant="outline" size="sm" asChild>
+              <Button variant="outline" size="sm" className="btn-glass-outline" asChild>
                 <Link to="/kanban" className="gap-2">
                   Team overzicht
                   <ArrowRight className="h-4 w-4" />
@@ -587,11 +591,11 @@ export function MyTasksFlowSection() {
 
                 return (
                   <DroppableColumn key={column.id} column={column}>
-                    <Card className="h-full min-h-[200px] glass-kanban-column border-t-2 border-t-tab-mijn-werk-400/80 dark:border-t-tab-mijn-werk-600/80 shadow-[0_4px_12px_hsla(234,45%,52%,0.08),0_12px_32px_hsla(234,45%,52%,0.06)]">
-                      <CardHeader className="pb-2 pt-3 px-3 bg-gradient-to-b from-white/40 to-transparent dark:from-white/5 dark:to-transparent border-b border-white/20 dark:border-white/10">
+                    <Card className="h-full min-h-[200px] glass-kanban-column-enhanced border-t-2 border-t-tab-mijn-werk-400/80 dark:border-t-tab-mijn-werk-600/80">
+                      <CardHeader className="pb-2 pt-3 px-3 bg-gradient-to-b from-white/60 to-transparent dark:from-slate-800/60 dark:to-transparent border-b border-white/30 dark:border-white/10 rounded-t-xl">
                         <CardTitle className="text-sm font-medium flex items-center justify-between">
                           <span className="truncate">{column.name}</span>
-                          <Badge variant="glass" className="ml-2 text-xs">
+                          <Badge variant="glass" className="ml-2 text-xs shadow-[0_1px_4px_hsla(234,45%,52%,0.08)] bg-white/70 dark:bg-slate-800/70">
                             {total}
                           </Badge>
                         </CardTitle>
@@ -603,8 +607,8 @@ export function MyTasksFlowSection() {
                             {visible.length === 0 ? (
                               /* EMPTY COLUMN STATE */
                               <div className="flex flex-col items-center justify-center py-8 text-center">
-                                <div className="p-3 rounded-xl glass-icon-bubble mb-2">
-                                  <Inbox className="h-6 w-6 text-tab-mijn-werk-400 dark:text-tab-mijn-werk-600" />
+                                <div className="p-4 rounded-2xl glass-icon-bubble-elevated mb-3">
+                                  <Inbox className="h-7 w-7 text-tab-mijn-werk-400/70 dark:text-tab-mijn-werk-500/70" />
                                 </div>
                                 <span className="text-xs text-muted-foreground/60 font-medium">
                                   Geen taken
