@@ -117,8 +117,8 @@ function DroppableColumn({
       ref={setNodeRef}
       role="region"
       aria-label={`Kolom ${column.name}`}
-      className={`flex-shrink-0 w-72 md:w-64 snap-start transition-colors duration-200 ${
-        isOver ? "bg-tab-mijn-werk-100/50 dark:bg-tab-mijn-werk-900/30 rounded-lg ring-2 ring-tab-mijn-werk-300/50" : ""
+      className={`flex-shrink-0 w-72 md:w-64 snap-start transition-all duration-200 ${
+        isOver ? "bg-tab-mijn-werk-100/60 dark:bg-tab-mijn-werk-900/40 backdrop-blur-xl rounded-xl ring-2 ring-tab-mijn-werk-400/60 shadow-lg shadow-tab-mijn-werk-500/10" : ""
       }`}
     >
       {children}
@@ -558,7 +558,7 @@ export function MyTasksFlowSection() {
 
         {/* EMPTY STATE */}
         {totalTaskCount === 0 ? (
-          <Card className="border-dashed">
+          <Card className="border-dashed glass-layer-1">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">
               <CheckCircle2 className="h-12 w-12 text-tab-mijn-werk-200 dark:text-tab-mijn-werk-800 mb-4" />
               <h3 className="text-lg font-medium text-muted-foreground">Geen taken toegewezen</h3>
@@ -585,7 +585,7 @@ export function MyTasksFlowSection() {
 
                 return (
                   <DroppableColumn key={column.id} column={column}>
-                    <Card className="h-full min-h-[200px] bg-muted/30 border-t-2 border-t-tab-mijn-werk-200 dark:border-t-tab-mijn-werk-800">
+                    <Card className="h-full min-h-[200px] glass-kanban-column border-t-2 border-t-tab-mijn-werk-300 dark:border-t-tab-mijn-werk-700">
                       <CardHeader className="pb-2 pt-3 px-3">
                         <CardTitle className="text-sm font-medium flex items-center justify-between">
                           <span className="truncate">{column.name}</span>

@@ -213,3 +213,33 @@ export function getTabColors(tabId: string) {
   return TAB_CONTEXT_COLORS[tabId as TabContextKey] 
     || TAB_CONTEXT_COLORS['mijn-werk'];
 }
+
+// ============================================
+// GLASSMORPHISM TOKENS - Apple visionOS Style
+// ============================================
+
+export const GLASS_TOKENS = {
+  layer1: {
+    class: 'glass-layer-1',
+    lightBleed: 'glass-light-bleed',
+    description: 'Lightest glass for containers',
+  },
+  layer2: {
+    class: 'glass-layer-2',
+    lightBleed: 'glass-light-bleed',
+    description: 'Medium glass for cards',
+  },
+  indigo: {
+    class: 'glass-card-indigo',
+    lightBleed: 'glass-light-bleed-indigo',
+    description: 'Indigo-tinted glass for Mijn Werk',
+  },
+  kanban: {
+    class: 'glass-kanban-column',
+    description: 'Subtle glass for kanban columns',
+  },
+  taskCard: {
+    class: 'glass-task-card',
+    description: 'Hover glass effect for task cards',
+  },
+} as const;

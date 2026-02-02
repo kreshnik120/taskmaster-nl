@@ -77,7 +77,7 @@ export function UpcomingRemindersWidget() {
   if (reminders.length === 0) return null;
 
   return (
-    <Card className="border-muted">
+    <Card className="glass-layer-2 glass-light-bleed border-tab-mijn-werk-200/30 dark:border-tab-mijn-werk-800/30">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger className="w-full">
           <div className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors">
@@ -104,7 +104,7 @@ export function UpcomingRemindersWidget() {
             {reminders.map((reminder) => (
               <div
                 key={reminder.id}
-                className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-tab-mijn-werk-50 dark:hover:bg-tab-mijn-werk-900/20 transition-colors group"
+                className="flex items-center justify-between p-3 rounded-lg bg-white/40 dark:bg-slate-800/40 backdrop-blur-sm hover:bg-tab-mijn-werk-50/60 dark:hover:bg-tab-mijn-werk-900/30 border border-transparent hover:border-tab-mijn-werk-200/50 dark:hover:border-tab-mijn-werk-700/30 transition-all duration-200 group"
               >
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">
