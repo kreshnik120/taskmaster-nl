@@ -1396,29 +1396,40 @@ All colors MUST be HSL.
 }
 
 /* ============================================
-   DRAG-AND-DROP PREMIUM EFFECTS - Phase 8
+   DRAG-AND-DROP PREMIUM EFFECTS - Phase 9
    ============================================ */
 
-/* Drag overlay - premium floating effect without cursor offset */
-.glass-drag-overlay {
+/* Drag overlay - premium floating effect WITHOUT ANY transforms */
+/* Uses only shadows for depth - no rotate/scale that cause cursor offset */
+.glass-drag-overlay-enhanced {
   position: relative;
   border-radius: 0.75rem;
+  /* Premium multi-layer shadow for maximum floating effect */
   box-shadow:
-    0 20px 40px -10px hsla(234, 45%, 52%, 0.25),
-    0 12px 24px -8px hsla(234, 45%, 52%, 0.15),
-    0 4px 8px hsla(234, 45%, 52%, 0.10),
-    inset 0 1px 2px rgba(255, 255, 255, 0.2);
-  /* No transition during drag for performance */
+    /* Ambient shadow - large, soft, colored */
+    0 25px 60px -15px hsla(234, 45%, 52%, 0.30),
+    /* Main shadow - medium distance */
+    0 15px 35px -10px hsla(234, 45%, 52%, 0.20),
+    /* Close shadow - sharp definition */
+    0 5px 15px -5px hsla(234, 45%, 52%, 0.15),
+    /* Inner highlight - top edge glow */
+    inset 0 1px 2px rgba(255, 255, 255, 0.25),
+    /* Subtle border glow */
+    0 0 0 1px hsla(234, 45%, 52%, 0.08);
+  /* NO rotate, NO scale - only shadows for floating effect */
   transition: none !important;
   will-change: transform;
+  /* Ensure card content also has no transforms */
+  transform: none !important;
 }
 
-.dark .glass-drag-overlay {
+.dark .glass-drag-overlay-enhanced {
   box-shadow:
-    0 20px 40px -10px hsla(234, 45%, 15%, 0.50),
-    0 12px 24px -8px hsla(234, 45%, 15%, 0.35),
-    0 4px 8px hsla(234, 45%, 15%, 0.25),
-    inset 0 1px 2px rgba(255, 255, 255, 0.08);
+    0 25px 60px -15px hsla(234, 45%, 15%, 0.55),
+    0 15px 35px -10px hsla(234, 45%, 15%, 0.40),
+    0 5px 15px -5px hsla(234, 45%, 15%, 0.30),
+    inset 0 1px 2px rgba(255, 255, 255, 0.10),
+    0 0 0 1px hsla(234, 45%, 52%, 0.15);
 }
 
 /* Enhanced droppable zone when dragging over */
