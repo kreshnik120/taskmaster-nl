@@ -263,7 +263,7 @@ export function ApplicationCard({ application, onClick, searchQuery = "", isSele
       <HoverCardTrigger asChild>
         <div ref={setNodeRef} style={style} className="group">
           <Card
-            className={`hover:scale-[1.01] hover:shadow-md active:scale-[0.99] transition-all duration-200 ease-out border-border/50 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-2 relative ${getCardBorder(completenessScore)}`}
+            className={`glass-hover-lift bg-white/75 dark:bg-slate-900/75 border-white/40 dark:border-white/12 shadow-[0_2px_6px_hsla(346,77%,50%,0.06),0_8px_24px_hsla(346,77%,50%,0.10)] focus:outline-none focus:ring-2 focus:ring-rose-500/30 focus:ring-offset-2 relative rounded-xl ${getCardBorder(completenessScore)}`}
           >
             <CardContent className="p-4 space-y-2">
               <div className="flex items-start gap-2">
@@ -378,12 +378,12 @@ export function ApplicationCard({ application, onClick, searchQuery = "", isSele
               </div>
             </CardContent>
 
-            {/* Quick Actions (Hover Only) */}
+            {/* Quick Actions (Hover Only) - Rose-themed glass buttons */}
             <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-7 w-7"
+                className="h-7 w-7 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md border border-white/40 dark:border-white/15 shadow-[0_2px_8px_hsla(346,77%,50%,0.10)] hover:bg-white/90 dark:hover:bg-slate-800/90 hover:shadow-[0_4px_12px_hsla(346,77%,50%,0.15)] transition-all duration-200"
                 onClick={handleCall}
                 title="Bel kandidaat"
               >
@@ -392,7 +392,7 @@ export function ApplicationCard({ application, onClick, searchQuery = "", isSele
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-7 w-7"
+                className="h-7 w-7 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md border border-white/40 dark:border-white/15 shadow-[0_2px_8px_hsla(346,77%,50%,0.10)] hover:bg-white/90 dark:hover:bg-slate-800/90 hover:shadow-[0_4px_12px_hsla(346,77%,50%,0.15)] transition-all duration-200"
                 onClick={handleScheduleInterview}
                 title="Plan interview"
               >
@@ -401,7 +401,7 @@ export function ApplicationCard({ application, onClick, searchQuery = "", isSele
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-7 w-7"
+                className="h-7 w-7 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md border border-white/40 dark:border-white/15 shadow-[0_2px_8px_hsla(346,77%,50%,0.10)] hover:bg-white/90 dark:hover:bg-slate-800/90 hover:shadow-[0_4px_12px_hsla(346,77%,50%,0.15)] transition-all duration-200"
                 onClick={handleEmail}
                 title="Stuur email"
               >
@@ -411,7 +411,7 @@ export function ApplicationCard({ application, onClick, searchQuery = "", isSele
           </Card>
         </div>
       </HoverCardTrigger>
-      <HoverCardContent className="w-80" side="right" align="start">
+      <HoverCardContent className="w-80 glass-layer-2 glass-light-bleed rounded-xl" side="right" align="start">
         <div className="space-y-3">
           <div>
             <h4 className="text-sm font-semibold">{candidateName}</h4>
