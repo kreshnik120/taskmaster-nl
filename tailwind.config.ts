@@ -263,6 +263,11 @@ export default {
         "spring-soft": "cubic-bezier(0.22, 1.2, 0.36, 1)",
         "out-expo": "cubic-bezier(0.16, 1, 0.3, 1)",
       },
+      backdropSaturate: {
+        '140': '1.4',
+        '150': '1.5',
+        '180': '1.8',
+      },
     },
   },
   plugins: [require("tailwindcss-animate")],
