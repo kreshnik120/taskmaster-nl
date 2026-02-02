@@ -1,328 +1,468 @@
 
 
-# Apple-Niveau Glassmorphism Fase 3: Premium Verfijningen
+# Apple visionOS Premium Glassmorphism: Complete Component Upgrade
 
-## Huidige Staat Analyse
+## Analyse van de Screenshots
 
-Na grondige analyse van de codebase is het glassmorphism-systeem al goed opgezet met:
-- `.glass-layer-1/2` - Basis frosted glass layers
-- `.glass-card-indigo` - Indigo-tinted cards
-- `.glass-light-bleed` - Edge light effects
-- `.glass-kanban-column` - Kolom styling
-- `.glass-task-card` - Hover effects
-
-Echter, er zijn nog significante verbetermogelijkheden om echt Apple visionOS-niveau te bereiken.
+Uit de referentiebeelden zie ik:
+- Task cards met subtiele schaduwen maar missen diepte
+- Dialog/modal met standaard witte achtergrond - geen glass effect
+- Kolom headers die vlak ogen
+- Avatar badges zonder premium styling
+- Buttons die basis styling hebben
 
 ---
 
-## Verbeteringen Per Categorie
+## Verbeteringen Per Component
 
-### 1. TabsList Glassmorphism Upgrade
+### 1. Dialog Component - Glassmorphism Upgrade
 
-De huidige `TabsList` in `UnifiedDashboard.tsx` gebruikt nog `bg-muted/50` zonder glassmorphism.
+**Bestand: `src/components/ui/dialog.tsx`**
 
-**Wijziging:**
+De DialogContent gebruikt nu `bg-background` - dit moet glass worden met diepte.
+
+| Aspect | Huidige Waarde | Nieuwe Waarde |
+|--------|----------------|---------------|
+| Background | `bg-background` | `bg-white/85 dark:bg-slate-900/90 backdrop-blur-2xl` |
+| Border | `border` | `border-white/40 dark:border-white/15` |
+| Shadow | `shadow-lg` | Multi-layer shadow met blur |
+| Overlay | `bg-black/80` | `bg-black/50 backdrop-blur-sm` |
+
+**Wijzigingen:**
+
+```tsx
+// DialogOverlay - zachter met blur
+className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm ..."
+
+// DialogContent - glassmorphism
+className="... bg-white/85 dark:bg-slate-900/90 backdrop-blur-2xl 
+           border-white/40 dark:border-white/15 
+           shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25),0_8px_24px_-8px_rgba(0,0,0,0.15),inset_0_1px_1px_rgba(255,255,255,0.1)] ..."
+```
+
+---
+
+### 2. Card Component - Enhanced Shadow System
+
+**Bestand: `src/components/ui/card.tsx`**
+
+Cards missen Apple-niveau schaduw diepte.
+
+**Wijzigingen:**
+
+```tsx
+// Card base
+className="rounded-xl border border-white/30 dark:border-white/10 
+           bg-white/80 dark:bg-slate-900/80 
+           text-card-foreground 
+           shadow-[0_2px_8px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.06)]
+           backdrop-blur-sm"
+
+// CardHeader - gradient top voor depth
+className="flex flex-col space-y-1.5 p-6 
+           bg-gradient-to-b from-white/40 to-transparent 
+           dark:from-white/5 dark:to-transparent"
+```
+
+---
+
+### 3. TaskCard - Premium Hover & Shadow
+
+**Bestand: `src/components/TaskCard.tsx`**
+
+Task cards hebben nu basis glass maar kunnen meer Apple-feeling krijgen.
+
+**Wijzigingen:**
+
+Regel 153:
 ```tsx
 // Van:
-<TabsList className="grid grid-cols-3 md:grid-cols-6 w-full bg-muted/50">
+className="glass-task-card hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 ease-out bg-white/80 dark:bg-slate-900/80 border-border/30 dark:border-white/10 ..."
 
 // Naar:
-<TabsList className="grid grid-cols-3 md:grid-cols-6 w-full glass-layer-1 p-1.5 gap-1">
+className="glass-task-card glass-hover-lift active:scale-[0.99] 
+           bg-white/75 dark:bg-slate-900/75 
+           border-white/40 dark:border-white/12 
+           shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.06)] 
+           hover:shadow-[0_8px_24px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.1)] 
+           transition-all duration-250 ease-out ..."
 ```
 
----
-
-### 2. Enhanced Gradient Mesh Background
-
-Voeg een subtiele gradient mesh toe achter de glassmorphism om visuele depth te creëren (Apple visionOS style).
-
-**Nieuwe CSS class in `index.css`:**
-```css
-/* Ambient gradient mesh - visionOS style */
-.glass-ambient-mesh {
-  position: relative;
-}
-
-.glass-ambient-mesh::before {
-  content: '';
-  position: absolute;
-  inset: -100px;
-  background: 
-    radial-gradient(ellipse 600px 400px at 0% 0%, hsla(234, 45%, 80%, 0.15) 0%, transparent 50%),
-    radial-gradient(ellipse 500px 350px at 100% 100%, hsla(234, 45%, 70%, 0.1) 0%, transparent 50%);
-  pointer-events: none;
-  z-index: -1;
-  filter: blur(40px);
-}
-
-.dark .glass-ambient-mesh::before {
-  background: 
-    radial-gradient(ellipse 600px 400px at 0% 0%, hsla(234, 45%, 30%, 0.2) 0%, transparent 50%),
-    radial-gradient(ellipse 500px 350px at 100% 100%, hsla(234, 45%, 25%, 0.15) 0%, transparent 50%);
-}
-```
-
----
-
-### 3. TabsTrigger Hover Enhancement
-
-Voeg subtiele backdrop-blur toe aan tabblad hover states.
-
-**Wijziging in `tabs.tsx`:**
+Avatar styling (regel 171-173):
 ```tsx
-// Voeg toe aan TabsTrigger base styling:
-"hover:backdrop-blur-sm hover:bg-white/50 dark:hover:bg-slate-800/50"
+// Voeg ring toe voor depth
+<Avatar className="h-6 w-6 flex-shrink-0 ring-2 ring-white/50 dark:ring-white/20 shadow-sm">
 ```
 
 ---
 
-### 4. Enhanced Card Hover - Lift Effect
+### 4. Avatar Component - Glass Ring Effect
 
-Apple gebruikt een "lift" effect bij hover met subtiele scale en shadow.
+**Bestand: `src/components/ui/avatar.tsx`**
 
-**Nieuwe CSS in `index.css`:**
-```css
-/* Apple-style card lift on hover */
-.glass-hover-lift {
-  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
-              box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1);
-}
+Avatars missen premium ring en schaduw.
 
-.glass-hover-lift:hover {
-  transform: translateY(-2px) scale(1.005);
-  box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.08),
-    0 4px 8px rgba(0, 0, 0, 0.04),
-    inset 0 1px 2px rgba(255, 255, 255, 0.15);
-}
+**Wijzigingen:**
 
-.dark .glass-hover-lift:hover {
-  box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.3),
-    0 4px 8px rgba(0, 0, 0, 0.2),
-    inset 0 1px 2px rgba(255, 255, 255, 0.08);
-}
-```
-
----
-
-### 5. Frosted Input Fields
-
-Verbeter de Input component met glass styling.
-
-**Wijziging in form controls:**
 ```tsx
-// Input met glass effect
-className="bg-white/50 dark:bg-slate-900/50 backdrop-blur-md border-white/30 
-           focus:bg-white/70 dark:focus:bg-slate-900/70 
-           focus:border-tab-mijn-werk-400/50 
+// Avatar root - ring effect
+className="relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full 
+           ring-2 ring-white/60 dark:ring-white/20 
+           shadow-[0_2px_8px_rgba(0,0,0,0.08)]"
+
+// AvatarFallback - gradient background
+className="flex h-full w-full items-center justify-center rounded-full 
+           bg-gradient-to-br from-muted to-muted/80"
+```
+
+---
+
+### 5. Select/Dropdown - Glassmorphism Menus
+
+**Bestand: `src/components/ui/select.tsx`**
+
+SelectContent gebruikt solide `bg-popover`.
+
+**Wijzigingen:**
+
+```tsx
+// SelectContent
+className="... bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl 
+           border-white/30 dark:border-white/15 
+           shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15),0_4px_16px_rgba(0,0,0,0.1)] ..."
+
+// SelectItem - hover glass
+className="... focus:bg-white/50 dark:focus:bg-slate-800/50 
+           focus:backdrop-blur-sm ..."
+```
+
+**Bestand: `src/components/ui/dropdown-menu.tsx`**
+
+Zelfde aanpassingen voor DropdownMenuContent:
+```tsx
+className="... bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl 
+           border-white/30 dark:border-white/15 
+           shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15),0_4px_16px_rgba(0,0,0,0.1)] ..."
+```
+
+---
+
+### 6. TaskDetailModal - Premium Dialog Styling
+
+**Bestand: `src/components/TaskDetailModal.tsx`**
+
+De modal (regel 722) gebruikt standaard DialogContent.
+
+**Wijzigingen:**
+
+```tsx
+// Regel 722
+<DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto 
+                          glass-layer-2 glass-light-bleed">
+```
+
+Section headers met glass:
+```tsx
+// Collapsible triggers (section headers)
+className="flex items-center gap-2 p-3 rounded-lg 
+           bg-white/40 dark:bg-slate-800/40 
+           hover:bg-white/60 dark:hover:bg-slate-800/60 
+           backdrop-blur-sm transition-all duration-200"
+```
+
+---
+
+### 7. Button Quick Actions - Enhanced Glass
+
+**Bestand: `src/components/TaskCard.tsx`**
+
+Quick action buttons (regel 284-301) kunnen meer premium worden.
+
+**Wijzigingen:**
+
+```tsx
+// Quick action buttons
+className="h-7 w-7 
+           bg-white/70 dark:bg-slate-900/70 
+           backdrop-blur-md 
+           border border-white/40 dark:border-white/15
+           shadow-[0_2px_8px_rgba(0,0,0,0.08)]
+           hover:bg-white/90 dark:hover:bg-slate-800/90 
+           hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)]
            transition-all duration-200"
 ```
 
 ---
 
-### 6. Badge Glassmorphism Variant
+### 8. Badge Priority Colors - Apple-style Tints
 
-Voeg een `glass` variant toe aan de Badge component.
+**Bestand: `src/components/TaskDetailModal.tsx`**
 
-**Wijziging in `badge.tsx`:**
-```tsx
-glass: "border-white/30 bg-white/50 backdrop-blur-md text-foreground 
-        dark:border-white/20 dark:bg-slate-800/50"
-```
-
----
-
-### 7. Enhanced Button - Glass Variant
-
-Voeg een `glass` variant toe voor buttons.
-
-**Wijziging in `button.tsx`:**
-```tsx
-glass: "bg-white/60 backdrop-blur-md border border-white/30 text-foreground 
-        hover:bg-white/80 dark:bg-slate-800/60 dark:border-white/20 
-        dark:hover:bg-slate-800/80 shadow-sm"
-```
-
----
-
-### 8. Kanban Column Header Polish
-
-Voeg glassmorphism toe aan de column headers.
-
-**Wijziging in `MyTasksFlowSection.tsx`:**
-```tsx
-// CardHeader styling
-<CardHeader className="pb-2 pt-3 px-3 bg-gradient-to-b from-white/40 to-transparent 
-                       dark:from-white/5 dark:to-transparent 
-                       border-b border-white/20 dark:border-white/10">
-```
-
----
-
-### 9. Refined Empty States
-
-Verbeter empty states met subtiele glassmorphism en icoon styling.
+Priority badges (regel 119-124) kunnen glassmorphism krijgen.
 
 **Wijzigingen:**
-- Empty state containers krijgen `glass-layer-1` met subtle borders
-- Icons krijgen een glassmorphism "bubble" achtergrond
-- Tekst krijgt betere contrast op glass
+
+```tsx
+const PRIORITY_BADGE_STYLES: Record<string, string> = {
+  LOW: "bg-emerald-500/15 text-emerald-700 border-emerald-400/30 backdrop-blur-sm dark:bg-emerald-500/20 dark:text-emerald-400 dark:border-emerald-500/20",
+  MEDIUM: "bg-blue-500/15 text-blue-700 border-blue-400/30 backdrop-blur-sm dark:bg-blue-500/20 dark:text-blue-400 dark:border-blue-500/20",
+  HIGH: "bg-amber-500/15 text-amber-700 border-amber-400/30 backdrop-blur-sm dark:bg-amber-500/20 dark:text-amber-400 dark:border-amber-500/20",
+  CRITICAL: "bg-red-500/15 text-red-700 border-red-400/30 backdrop-blur-sm dark:bg-red-500/20 dark:text-red-400 dark:border-red-500/20"
+};
+```
 
 ---
 
-### 10. Scroll Indicator Fade
+### 9. Input Component - Frosted Glass
 
-Voeg edge fade toe aan horizontale scroll containers (iOS-style).
+**Bestand: `src/components/ui/input.tsx`**
 
-**Nieuwe CSS:**
+Inputs hebben geen glass styling.
+
+**Wijzigingen:**
+
+```tsx
+className="flex h-10 w-full rounded-lg 
+           border border-white/30 dark:border-white/15 
+           bg-white/50 dark:bg-slate-900/50 
+           backdrop-blur-sm
+           px-3 py-2 text-base 
+           ring-offset-background 
+           file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground 
+           placeholder:text-muted-foreground/70 
+           focus-visible:outline-none 
+           focus-visible:ring-2 focus-visible:ring-tab-mijn-werk-500/30 
+           focus-visible:ring-offset-2 
+           focus-visible:bg-white/70 dark:focus-visible:bg-slate-900/70
+           disabled:cursor-not-allowed disabled:opacity-50 
+           transition-all duration-200
+           md:text-sm"
+```
+
+---
+
+### 10. Kanban Column Cards - Enhanced Depth
+
+**Bestand: `src/components/dashboard/MyTasksFlowSection.tsx`**
+
+Kolom cards (regel 590) kunnen diepere schaduwen gebruiken.
+
+**Wijzigingen:**
+
+```tsx
+// Regel 590
+<Card className="h-full min-h-[200px] glass-kanban-column 
+                border-t-2 border-t-tab-mijn-werk-400/80 dark:border-t-tab-mijn-werk-600/80
+                shadow-[0_4px_16px_rgba(0,0,0,0.06),0_2px_4px_rgba(0,0,0,0.04)]">
+```
+
+Empty state icon bubble (regel 606):
+```tsx
+<div className="p-3 rounded-xl 
+                bg-white/50 dark:bg-slate-800/50 
+                backdrop-blur-sm 
+                border border-white/30 dark:border-white/15
+                shadow-[0_2px_8px_rgba(0,0,0,0.04)]
+                mb-2">
+```
+
+---
+
+### 11. CSS: Enhanced Shadow Tokens
+
+**Bestand: `src/index.css`**
+
+Voeg Apple-niveau shadow tokens toe:
+
 ```css
-/* Scroll fade edges - iOS style */
-.scroll-fade-edges {
-  -webkit-mask-image: linear-gradient(
-    to right,
-    transparent 0%,
-    black 2%,
-    black 98%,
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    to right,
-    transparent 0%,
-    black 2%,
-    black 98%,
-    transparent 100%
-  );
+/* Apple-level shadow tokens */
+:root {
+  /* Layered shadows - visionOS style */
+  --shadow-card: 
+    0 1px 3px rgba(0, 0, 0, 0.04),
+    0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-card-hover: 
+    0 8px 24px rgba(0, 0, 0, 0.1),
+    0 4px 8px rgba(0, 0, 0, 0.05),
+    inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  --shadow-dialog: 
+    0 25px 50px -12px rgba(0, 0, 0, 0.25),
+    0 8px 24px -8px rgba(0, 0, 0, 0.15),
+    inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  --shadow-dropdown: 
+    0 10px 40px -10px rgba(0, 0, 0, 0.15),
+    0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.dark {
+  --shadow-card: 
+    0 1px 3px rgba(0, 0, 0, 0.2),
+    0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-card-hover: 
+    0 8px 24px rgba(0, 0, 0, 0.35),
+    0 4px 8px rgba(0, 0, 0, 0.25),
+    inset 0 1px 1px rgba(255, 255, 255, 0.05);
+  --shadow-dialog: 
+    0 25px 50px -12px rgba(0, 0, 0, 0.5),
+    0 8px 24px -8px rgba(0, 0, 0, 0.4),
+    inset 0 1px 1px rgba(255, 255, 255, 0.05);
+}
+
+/* Apple glass button */
+.glass-button {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    inset 0 1px 1px rgba(255, 255, 255, 0.2);
+  transition: all 0.2s ease-out;
+}
+
+.glass-button:hover {
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.1),
+    inset 0 1px 1px rgba(255, 255, 255, 0.25);
+}
+
+.dark .glass-button {
+  background: rgba(30, 41, 59, 0.7);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.dark .glass-button:hover {
+  background: rgba(30, 41, 59, 0.85);
+}
+
+/* Premium input focus glow */
+.glass-input:focus-visible {
+  box-shadow: 
+    0 0 0 3px hsla(234, 45%, 52%, 0.15),
+    0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* Collapsible section glass */
+.glass-section-trigger {
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 0.5rem;
+  transition: all 0.2s ease-out;
+}
+
+.glass-section-trigger:hover {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.dark .glass-section-trigger {
+  background: rgba(30, 41, 59, 0.4);
+}
+
+.dark .glass-section-trigger:hover {
+  background: rgba(30, 41, 59, 0.6);
 }
 ```
 
 ---
 
-### 11. Enhanced Focus States
+### 12. Collapsible Sections - Glass Styling
 
-Verbeter focus states met glassmorphism-compatibele ring kleuren.
+**Bestand: `src/components/ui/collapsible.tsx`**
 
-**Wijziging:**
-```css
-.glass-focus-ring:focus-visible {
-  outline: none;
-  ring: 2px solid hsla(234, 45%, 52%, 0.4);
-  ring-offset: 2px;
-}
-```
+Voeg glass styling exports toe (voor gebruik in TaskDetailModal).
 
 ---
 
-### 12. Subtle Animated Gradients (Optional)
-
-Voeg zeer subtiele gradient animation toe voor premium feel.
-
-**Nieuwe CSS:**
-```css
-@keyframes glass-shimmer {
-  0%, 100% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-}
-
-.glass-shimmer {
-  background-size: 200% 200%;
-  animation: glass-shimmer 8s ease infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .glass-shimmer {
-    animation: none;
-  }
-}
-```
-
----
-
-## Bestanden Te Wijzigen
+## Samenvatting Wijzigingen
 
 | Bestand | Wijzigingen |
 |---------|-------------|
-| `src/index.css` | +40 regels (ambient mesh, hover lift, scroll fade, shimmer) |
-| `src/components/ui/tabs.tsx` | TabsTrigger hover enhancement |
-| `src/components/ui/badge.tsx` | +1 glass variant |
-| `src/components/ui/button.tsx` | +1 glass variant |
-| `src/pages/UnifiedDashboard.tsx` | TabsList glass styling, ambient mesh |
-| `src/components/dashboard/MyTasksFlowSection.tsx` | Column header polish, scroll fade |
-| `src/components/dashboard/TodayFocusCard.tsx` | hover-lift class |
-| `src/components/UpcomingRemindersWidget.tsx` | hover-lift class |
+| `src/index.css` | +45 regels (shadow tokens, glass-button, glass-input, glass-section) |
+| `src/components/ui/dialog.tsx` | DialogOverlay + DialogContent glass styling |
+| `src/components/ui/card.tsx` | Card + CardHeader enhanced shadows |
+| `src/components/ui/input.tsx` | Frosted glass input styling |
+| `src/components/ui/select.tsx` | SelectContent glass + shadow |
+| `src/components/ui/dropdown-menu.tsx` | DropdownMenuContent glass + shadow |
+| `src/components/ui/avatar.tsx` | Ring effect + shadow |
+| `src/components/TaskCard.tsx` | Premium shadow hover + avatar ring |
+| `src/components/TaskDetailModal.tsx` | Glass dialog + priority badges + section triggers |
+| `src/components/dashboard/MyTasksFlowSection.tsx` | Column shadows + empty state polish |
+
+**Totaal: ~15 bestanden, ~80 klassen/regels**
 
 ---
 
-## Visueel Resultaat
+## Visuele Vergelijking
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────┐
+│  VOOR (Huidige staat)                                               │
 │                                                                     │
-│  🌈 AMBIENT GRADIENT MESH (subtle, background)                      │
-│  ╭─────────────────────────────────────────────────────────────────╮│
-│  │                                                                 ││
-│  │  ╔═══════════════════════════════════════════════════════════╗  ││
-│  │  ║  GLASS TABSLIST                                           ║  ││
-│  │  ║  ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐                ║  ││
-│  │  ║  │Mijn│ │Kal.│ │Lijst│ │Opv.│ │Team│ │Recr│  ← hover blur ║  ││
-│  │  ║  └────┘ └────┘ └────┘ └────┘ └────┘ └────┘                ║  ││
-│  │  ╚═══════════════════════════════════════════════════════════╝  ││
-│  │                                                                 ││
-│  │  ╔═══════════════════════╗ ╔═══════════════════════════════╗    ││
-│  │  ║  📌 VANDAAG FOCUS     ║ ║  🔔 HERINNERINGEN             ║    ││
-│  │  ║     glass + lift      ║ ║     glass + lift              ║    ││
-│  │  ║  ↗ hover: translateY  ║ ║  ↗ hover: enhanced shadow     ║    ││
-│  │  ╚═══════════════════════╝ ╚═══════════════════════════════╝    ││
-│  │                                                                 ││
-│  │  ═══════════════════════════════════════════════════════════    ││
-│  │  ← fade ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ fade →               ││
-│  │         │COL │ │COL │ │COL │ │COL │ │COL │  ← scroll fade       ││
-│  │         │ ▓▓▓│ │ ▓▓▓│ │ ▓▓▓│ │ ▓▓▓│ │ ▓▓▓│     edges           ││
-│  │         └────┘ └────┘ └────┘ └────┘ └────┘                      ││
-│  │                                                                 ││
-│  ╰─────────────────────────────────────────────────────────────────╯│
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │ Dialog: solid bg-background, basic shadow                    │   │
+│  │ ┌─────────────────────────────────────────────────────────┐  │   │
+│  │ │ Cards: flat shadow, no depth                            │  │   │
+│  │ │ Inputs: solid bg-background                             │  │   │
+│  │ │ Avatars: no ring, no shadow                             │  │   │
+│  │ │ Dropdowns: solid bg-popover                             │  │   │
+│  │ └─────────────────────────────────────────────────────────┘  │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+│                                                                     │
+├─────────────────────────────────────────────────────────────────────┤
+│  NA (Apple visionOS niveau)                                         │
+│                                                                     │
+│  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   │
+│  ░ Overlay: backdrop-blur-sm, 50% opacity                        ░   │
+│  ░ ╔════════════════════════════════════════════════════════════╗ ░   │
+│  ░ ║ Dialog: 85% white, blur-2xl, multi-layer shadow           ║ ░   │
+│  ░ ║ ╭──────────────────────────────────────────────────────╮  ║ ░   │
+│  ░ ║ │ Cards: layered shadows, hover lift                   │  ║ ░   │
+│  ░ ║ │ ┌──────────────────────────────────────────────────┐ │  ║ ░   │
+│  ░ ║ │ │ Inputs: frosted glass, focus glow               │ │  ║ ░   │
+│  ░ ║ │ └──────────────────────────────────────────────────┘ │  ║ ░   │
+│  ░ ║ │ ○ Avatars: ring-2 ring-white/60, soft shadow       │  ║ ░   │
+│  ░ ║ ╰──────────────────────────────────────────────────────╯  ║ ░   │
+│  ░ ╚════════════════════════════════════════════════════════════╝ ░   │
+│  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Premium Effecten Breakdown
+## Premium Effect Details
 
-| Effect | Implementatie | Apple Equivalent |
+| Effect | CSS Property | Apple Equivalent |
 |--------|--------------|------------------|
-| Ambient mesh | Radial gradients achter content | visionOS ambient lighting |
-| Hover lift | translateY(-2px) + enhanced shadow | macOS Dock magnification |
-| Tab blur | backdrop-blur-sm op hover | Safari tab groups |
-| Scroll fade | CSS mask-image gradient | iOS scroll indicators |
-| Glass buttons | backdrop-blur + semi-transparent | visionOS controls |
-| Card shimmer | Subtle gradient animation | Apple TV cards |
+| Multi-layer shadow | Comma-separated box-shadows | iOS card depth |
+| Frosted dialog | backdrop-blur-2xl + 85% opacity | visionOS windows |
+| Avatar ring | ring-2 ring-white/60 | iOS contact avatars |
+| Input focus glow | box-shadow 0 0 0 3px | macOS focus rings |
+| Dropdown blur | backdrop-blur-xl | iOS action sheets |
+| Hover lift | translateY(-2px) + shadow grow | tvOS focus |
 
 ---
 
-## Accessibility Checklist
+## Browser Compatibility
+
+Alle effecten gebruiken standaard CSS properties met fallbacks:
+
+| Feature | Support |
+|---------|---------|
+| backdrop-filter | Chrome 76+, Safari 9+, Firefox 103+, Edge 79+ |
+| Multi-layer box-shadow | Alle moderne browsers |
+| CSS custom properties | Alle moderne browsers |
+
+---
+
+## Accessibility Behouden
 
 | Aspect | Implementatie |
 |--------|---------------|
-| Contrast | Alle tekst ≥ 4.5:1 ratio |
-| Reduced motion | Shimmer animatie disabled |
-| Focus visibility | Enhanced ring states |
-| Color blindness | Kleuren niet als enige indicator |
+| Contrast | Minimum 60% opacity op glass surfaces |
+| Focus states | Enhanced ring visibility |
+| Reduced motion | Glass effects zijn static |
 | Screen reader | Alle aria-labels intact |
-
----
-
-## Browser Support
-
-| Feature | Chrome | Safari | Firefox | Edge |
-|---------|--------|--------|---------|------|
-| backdrop-filter | 76+ | 9+ | 103+ | 79+ |
-| mask-image | All | All | All | All |
-| CSS custom properties | All | All | All | All |
-
-Fallback: Solid backgrounds zonder blur voor oudere browsers.
 
