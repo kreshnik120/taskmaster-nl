@@ -1,155 +1,263 @@
 
-# Plan: 6 Gelijkwaardige Dashboard Tabs
+# EXPERT REVIEW RAPPORT: Onderdeel 1 Status & Onderdeel 2 Plan
 
-## Overzicht
+## STATUS ONDERDEEL 1: VOLLEDIG CORRECT GEIMPLEMENTEERD
 
-Dit plan transformeert het Dashboard van 3 tabs met sub-navigatie naar 6 gelijkwaardige tabs op hetzelfde niveau.
+### Verificatie Checklist
 
-## Gewenste Eindresultaat
+| Aspect | Status | Bewijs |
+|--------|--------|--------|
+| 6 gelijkwaardige tabs | Correct | Regels 131-155: TabsTrigger voor alle 6 tabs |
+| TabsList grid | Correct | Regel 130: `grid grid-cols-3 md:grid-cols-6` |
+| Sub-navigatie verwijderd | Correct | Geen `SUB_VIEWS`, `MijnWerkView`, of `handleViewChange` |
+| URL structuur | Correct | `?tab=lijst`, `?tab=kalender`, `?tab=opvolging` |
+| Placeholders aanwezig | Correct | Regels 219-250: 3 placeholder TabsContent |
+| Mijn Werk vereenvoudigd | Correct | Regels 158-166: Directe content zonder conditionals |
 
-```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ [Mijn Werk] [Team Overzicht] [Recruitment] [Lijst] [Kalender] [Opvolging]  │
-│                                                                             │
-│                    VOLLEDIGE CONTENT VAN GESELECTEERDE TAB                  │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+### Geen Problemen Gevonden
 
-Alle 6 tabs zijn altijd zichtbaar en gelijkwaardig - geen sub-navigatie meer.
+Onderdeel 1 is 100% correct uitgevoerd en klaar voor productie.
 
 ---
 
-## Onderdeel 1: Dashboard Tabs Uitbreiden
+## ONDERDEEL 2: EMBEDDED VIEWS IMPLEMENTEREN
 
-### Bestand: src/pages/UnifiedDashboard.tsx
+### Analyse Bronbestanden
 
-### Te Verwijderen
+| Bestand | Regels | Auth Check | Page Header | Complexiteit |
+|---------|--------|------------|-------------|--------------|
+| Lijst.tsx | 1490 | Ja (regel 183-191) | Ja (regel 817-823) | Hoog |
+| Kalender.tsx | 1225 | Ja (regel 319-325) | Ja (regel 803-810) | Hoog |
+| Opvolging.tsx | 553 | Ja (regel 70-75) | Ja (regel 250-271) | Medium |
 
-| Item | Regels |
-|------|--------|
-| `MijnWerkView` type | 37-38 |
-| `SUB_VIEWS` constant | 40-44 |
-| `viewParam` en `mijnWerkView` variabelen | 70-75 |
-| `handleViewChange` functie | 87-97 |
-| Sub-navigatie div met buttons | 180-199 |
-| Flex wrapper om TabsList | 164, 200 |
-| Conditional content in mijn-werk tab | 204-245 |
+### Implementatiestrategie
 
-### Nieuwe TabsList (6 tabs)
+We maken 3 nieuwe embedded componenten die de functionaliteit HERGEBRUIKEN van de originele pagina's. Twee opties:
 
-De TabsList wordt uitgebreid van 3 naar 6 triggers:
+**Optie A - Refactor naar componenten (aanbevolen)**
+Maak wrapper componenten die de logica van originele pagina's extraheren zonder dubbele code.
+
+**Optie B - Copy met modificaties**
+Kopieer en pas aan. Meer code duplicatie maar sneller.
+
+We kiezen **Optie A** voor onderhoud en consistentie.
+
+---
+
+### Te Maken Bestanden
 
 ```text
-grid-cols-3 md:grid-cols-6
+src/components/dashboard/
+├── EmbeddedListView.tsx      (nieuw)
+├── EmbeddedCalendarView.tsx  (nieuw)
+├── EmbeddedOpvolgingView.tsx (nieuw)
+└── ... (bestaande bestanden)
 ```
 
-Nieuwe tabs:
-- Lijst (List icon)
-- Kalender (Calendar icon)
-- Opvolging (TrendingUp icon)
+### Per Component - Wat Verandert
 
-### Nieuwe TabsContent (3 placeholders)
+#### 1. EmbeddedListView.tsx
 
-Tijdelijke placeholder content voor de 3 nieuwe tabs totdat de volledige functionaliteit wordt geintegreerd in Onderdeel 2.
+**Bronbestand:** `src/pages/Lijst.tsx` (1490 regels)
 
-### Vereenvoudigde handleTabChange
+**Te verwijderen/aanpassen:**
+- Auth check (regel 183-191) - Dashboard regelt dit al
+- Hero section met greeting (regel 809-823)
+- `useNavigate` redirect naar `/auth`
 
-Verwijder view-parameter logica - alleen tab parameter:
+**Te behouden:**
+- Alle state management
+- Real-time subscriptions
+- Filters, sorting, grouping
+- Bulk actions
+- Keyboard shortcuts
+- Subtask handling
+- KPI cards
+- Table met alle functionaliteit
+
+**Aanpassing nodig:**
+```typescript
+// Van:
+if (!session) {
+  navigate("/auth");
+}
+
+// Naar:
+// Verwijderd - Dashboard handelt auth af
+```
+
+**Hero aanpassing:**
+```typescript
+// Van:
+<h1 className="text-5xl font-bold mb-1">
+  {getGreeting()}, {user?.user_metadata?.name}
+</h1>
+
+// Naar:
+// Verwijderd - geen page-level header nodig in tab
+```
+
+---
+
+#### 2. EmbeddedCalendarView.tsx
+
+**Bronbestand:** `src/pages/Kalender.tsx` (1225 regels)
+
+**Te verwijderen/aanpassen:**
+- Auth check (regel 319-325)
+- Page header (regel 803-810)
+
+**Te behouden:**
+- Week navigatie
+- Drag & drop functionaliteit
+- Reminders
+- View mode toggle (5/7 dagen)
+- KPI cards
+- Filter toggle (Mijn taken / Alle taken)
+
+---
+
+#### 3. EmbeddedOpvolgingView.tsx
+
+**Bronbestand:** `src/pages/Opvolging.tsx` (553 regels)
+
+**Te verwijderen/aanpassen:**
+- Auth check (regel 70-75)
+- Page header met "Opvolging" titel (regel 250-271)
+
+**Te behouden:**
+- AI scoring met `useAiScoring` hook
+- KPI cards
+- Focus taken lijst
+- Filter functionaliteit
+- Completion handlers met confetti
+
+---
+
+### UnifiedDashboard.tsx Wijzigingen
+
+#### Imports Toevoegen
 
 ```typescript
-const handleTabChange = (value: string) => {
-  setSearchParams({ tab: value });
-};
+import { Suspense, lazy } from "react";
+import { Loader2 } from "lucide-react";
+
+// Lazy load embedded views
+const EmbeddedListView = lazy(() => import("@/components/dashboard/EmbeddedListView"));
+const EmbeddedCalendarView = lazy(() => import("@/components/dashboard/EmbeddedCalendarView"));
+const EmbeddedOpvolgingView = lazy(() => import("@/components/dashboard/EmbeddedOpvolgingView"));
 ```
 
-### Mijn Werk Tab Content
+#### Loading Fallback Component
 
-Vereenvoudigen - geen conditionals meer, altijd Focus content:
-- TodayFocusCard
-- UpcomingRemindersWidget  
-- MyTasksFlowSection
+```typescript
+const TabLoadingFallback = () => (
+  <div className="flex items-center justify-center py-12">
+    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+  </div>
+);
+```
 
----
+#### Placeholders Vervangen
 
-## Onderdeel 2: Embedded Views Maken (later)
+```typescript
+{/* Tab 4: Lijst */}
+<TabsContent value="lijst" className="space-y-6 mt-6">
+  <Suspense fallback={<TabLoadingFallback />}>
+    <EmbeddedListView />
+  </Suspense>
+</TabsContent>
 
-Drie nieuwe componenten met lazy loading:
+{/* Tab 5: Kalender */}
+<TabsContent value="kalender" className="space-y-6 mt-6">
+  <Suspense fallback={<TabLoadingFallback />}>
+    <EmbeddedCalendarView />
+  </Suspense>
+</TabsContent>
 
-| Component | Bron | Doel |
-|-----------|------|------|
-| EmbeddedListView | Lijst.tsx (1490 regels) | Volledige tabel functionaliteit |
-| EmbeddedCalendarView | Kalender.tsx (1225 regels) | Volledige kalender functionaliteit |
-| EmbeddedOpvolgingView | Opvolging.tsx (553 regels) | Volledige AI scoring functionaliteit |
-
-Deze componenten bevatten alle functionaliteit ZONDER:
-- Auth checks (Dashboard doet dit al)
-- Page headers (Dashboard heeft al header)
-
----
-
-## Onderdeel 3: Sidebar Opruimen (later)
-
-### Bestand: src/components/AppSidebar.tsx
-
-Te verwijderen uit menuGroups (regels 47-57):
-- Lijstweergave item
-- Kalender item
-- Opvolging item
-
-Resulterende "Mijn Werk" sectie:
-- Dashboard
-- WhatsApp
-- Bijlagen
-- Notulen
+{/* Tab 6: Opvolging */}
+<TabsContent value="opvolging" className="space-y-6 mt-6">
+  <Suspense fallback={<TabLoadingFallback />}>
+    <EmbeddedOpvolgingView />
+  </Suspense>
+</TabsContent>
+```
 
 ---
 
-## Onderdeel 4: Route Redirects (later)
+### Voordelen van Lazy Loading
 
-### Bestand: src/App.tsx
-
-Wijzigen van directe routes naar redirects:
-
-| Huidige Route | Nieuwe Redirect |
-|---------------|-----------------|
-| `/lijst` → `<Lijst />` | `/lijst` → `/dashboard?tab=lijst` |
-| `/kalender` → `<Kalender />` | `/kalender` → `/dashboard?tab=kalender` |
-| `/opvolging` → `<Opvolging />` | `/opvolging` → `/dashboard?tab=opvolging` |
-
-Dit zorgt voor backward compatibility met bestaande bookmarks en links.
+| Aspect | Voordeel |
+|--------|----------|
+| Bundle Size | Alleen laden wat nodig is |
+| Initiële Load | Dashboard laadt sneller |
+| Memory | Ongebruikte tabs laden niet |
+| UX | Smooth loading indicator per tab |
 
 ---
 
-## Onderdeel 5: Cross-Navigatie Links (later)
+### Risico's en Mitigatie
 
-Componenten die updaten nodig hebben:
-- TodayFocusCard
-- OverdueTasksList
-- UpcomingTasksList
-- Andere widgets met navigatie
-
----
-
-## Uitvoering
-
-We beginnen met **Onderdeel 1** - de Dashboard tabs uitbreiden naar 6 gelijkwaardige tabs.
-
-Dit is veilig omdat:
-- Originele pagina's blijven functioneren
-- Sidebar links blijven werken
-- Geen breaking changes
-- Makkelijk te testen
-
-De placeholders in de nieuwe tabs worden in Onderdeel 2 vervangen door de volledige embedded functionaliteit.
+| Risico | Mitigatie |
+|--------|-----------|
+| State verlies bij tab switch | Geen probleem - elke tab beheert eigen state |
+| Real-time channels dupliceren | Gebruik unieke channel names |
+| URL params conflicten | Lijstview gebruikt geen URL params in embedded mode |
+| Keyboard shortcuts overlap | Scopen naar actieve tab |
 
 ---
 
-## Testprotocol na Onderdeel 1
+### Testprotocol Onderdeel 2
 
-| Test | Verwacht |
-|------|----------|
-| Open /dashboard | 6 tabs zichtbaar in TabsList |
-| Klik elke tab | URL update, content wisselt |
-| Sidebar links | Werken nog (naar aparte pagina's) |
-| Mobile view | Tabs in 2 rijen van 3 |
-| Geen sub-navigatie | Volledig verwijderd |
+| Test | Verwacht Resultaat |
+|------|-------------------|
+| Klik Lijst tab | Volledige tabel met taken, filters, sorting |
+| Klik Kalender tab | Week view met drag-drop |
+| Klik Opvolging tab | AI scoring, top 10 focus taken |
+| Switch tussen tabs | Geen errors, smooth transitions |
+| Real-time updates | Nieuwe taken verschijnen in elke tab |
+| Keyboard shortcuts | Werken alleen in actieve tab |
+| Mobile responsive | Alle 3 views werken op mobile |
+
+---
+
+### Implementatie Volgorde
+
+1. **EmbeddedOpvolgingView.tsx** (kleinste: ~500 regels)
+   - Eenvoudigste om te testen
+   - Valideer patroon werkt
+
+2. **EmbeddedCalendarView.tsx** (medium: ~1150 regels)
+   - Complexere drag-drop
+   - Week navigatie
+
+3. **EmbeddedListView.tsx** (grootste: ~1400 regels)
+   - Meeste functionaliteit
+   - Bulk actions, keyboard shortcuts
+
+4. **UnifiedDashboard.tsx updaten**
+   - Imports toevoegen
+   - Placeholders vervangen met Suspense
+
+---
+
+### Tijdsinschatting
+
+| Stap | Tijd |
+|------|------|
+| EmbeddedOpvolgingView | 10 min |
+| EmbeddedCalendarView | 15 min |
+| EmbeddedListView | 15 min |
+| Dashboard updates | 5 min |
+| Testing | 10 min |
+| **Totaal** | **~55 min** |
+
+---
+
+## KLAAR VOOR UITVOERING
+
+Na goedkeuring start ik met:
+1. EmbeddedOpvolgingView.tsx maken
+2. EmbeddedCalendarView.tsx maken
+3. EmbeddedListView.tsx maken
+4. UnifiedDashboard.tsx updaten met lazy imports
