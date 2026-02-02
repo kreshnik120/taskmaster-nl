@@ -1,122 +1,134 @@
 
 
-# Fase 15: Final Glass Polish — UI Primitives & Toast Notifications
+# Fase 16: Design System Unificatie — Complete Glassmorphism Consistentie
 
 ## Executive Summary
 
-Na analyse van alle UI componenten zijn er nog **8 specifieke primitives** die geen glassmorphism hebben, terwijl vergelijkbare componenten (Dialog, DropdownMenu, Select, AlertDialog) al wel zijn geüpgraded. Dit plan brengt volledige visuele consistentie.
+Als specialist in enterprise UI/UX design heb ik een **grondige audit** uitgevoerd van alle 25+ UI primitives. Hoewel Fase 14-15 significante verbeteringen hebben gebracht, bestaan er nog **kritieke inconsistenties** die de visionOS-esthetiek ondermijnen. Dit plan unificeert het volledige design system naar één coherent glassmorphism framework.
 
 ---
 
-## Geïdentificeerde Gaps
+## Audit Resultaten: Consistentie Matrix
 
-| # | Component | Huidige Status | Probleem |
-|---|-----------|----------------|----------|
-| 1 | `sonner.tsx` (Toaster) | `bg-background shadow-lg` | Geen glass styling |
-| 2 | `popover.tsx` | `bg-popover shadow-md` | Geen glass/blur |
-| 3 | `context-menu.tsx` | `bg-popover shadow-md` | Geen glass styling |
-| 4 | `tooltip.tsx` | `bg-popover shadow-md` | Geen glass/blur |
-| 5 | `hover-card.tsx` | `bg-popover shadow-md` | Geen glass styling |
-| 6 | `sheet.tsx` | `bg-background` | Geen glass panel |
-| 7 | `skeleton.tsx` | `bg-muted` | Geen glass shimmer |
-| 8 | `TaskListEmptyState.tsx` | Geen container styling | Geen glass empty state |
+| Component | Container Glass | Item Glass | Separator | Focus State | Status |
+|-----------|-----------------|------------|-----------|-------------|--------|
+| **Dialog** | `bg-white/85 blur-2xl` | - | - | `rounded-sm` | Partial |
+| **AlertDialog** | `bg-white/90 blur-2xl` | - | - | - | OK |
+| **Sheet** | `bg-white/90 blur-xl` | - | - | - | OK |
+| **Select** | `bg-white/90 blur-xl` | Glass | `bg-muted` | Glass | Partial |
+| **DropdownMenu** | `bg-white/90 blur-xl` | Glass | `bg-muted` | Glass | Partial |
+| **ContextMenu** | `bg-white/90 blur-xl` | Glass | - | Glass | OK |
+| **Popover** | `bg-white/90 blur-xl` | - | - | - | OK |
+| **Tooltip** | `bg-white/95 blur-xl` | - | - | - | OK |
+| **HoverCard** | `bg-white/90 blur-xl` | - | - | - | OK |
+| **Menubar** | `bg-background` | Geen | `bg-muted` | `bg-accent` | FAIL |
+| **NavigationMenu** | `bg-popover` | - | - | `bg-accent` | FAIL |
+| **Accordion** | Geen | `border-b` | - | `underline` | FAIL |
+| **Separator** | - | - | `bg-border` | - | Partial |
 
 ---
 
-## Prioriteit 1: Sonner Toaster — Glass Toast Notifications
+## Geïdentificeerde Kritieke Gaps
 
-**Bestand:** `src/components/ui/sonner.tsx`
+### Categorie A: Volledig Ontbreken van Glass (Prioriteit 1)
 
-**Probleem:** Toast notifications gebruiken standaard `bg-background` zonder glassmorphism.
+| # | Component | Huidige Status | Impact |
+|---|-----------|----------------|--------|
+| 1 | **Menubar** (Root) | `bg-background border` | Hoog - geen blur |
+| 2 | **MenubarContent** | `bg-popover shadow-md` | Hoog - geen blur |
+| 3 | **MenubarItem** | `focus:bg-accent` | Medium - geen glass focus |
+| 4 | **NavigationMenuViewport** | `bg-popover shadow-lg` | Hoog - geen blur |
+| 5 | **NavigationMenuTrigger** | `bg-background` | Medium - geen glass hover |
 
-**Oplossing:** Voeg premium glass styling toe aan toast notifications.
+### Categorie B: Inconsistente Subcomponenten (Prioriteit 2)
 
-**Wijzigingen:**
+| # | Component | Huidige Status | Correctie |
+|---|-----------|----------------|-----------|
+| 6 | **DropdownMenuSubContent** | `bg-popover border` | Naar glass container |
+| 7 | **DropdownMenuSubTrigger** | `focus:bg-accent` | Naar glass focus |
+| 8 | **DropdownMenuCheckboxItem** | `focus:bg-accent` | Naar glass focus |
+| 9 | **DropdownMenuRadioItem** | `focus:bg-accent` | Naar glass focus |
+| 10 | **MenubarSubContent** | `bg-popover border` | Naar glass container |
+| 11 | **MenubarCheckboxItem** | `focus:bg-accent` | Naar glass focus |
+| 12 | **MenubarRadioItem** | `focus:bg-accent` | Naar glass focus |
+
+### Categorie C: Separator & Detail Inconsistenties (Prioriteit 3)
+
+| # | Component | Huidige Status | Correctie |
+|---|-----------|----------------|-----------|
+| 13 | **DropdownMenuSeparator** | `bg-muted` | Naar `bg-white/20` |
+| 14 | **SelectSeparator** | `bg-muted` | Naar `bg-white/20` |
+| 15 | **MenubarSeparator** | `bg-muted` | Naar `bg-white/20` |
+| 16 | **Separator** (global) | `bg-border` | Naar semi-transparent |
+| 17 | **DialogClose button** | `rounded-sm` | Naar `rounded-lg` + glass hover |
+| 18 | **AccordionItem** | `border-b` | Naar glass separator |
+| 19 | **AccordionTrigger** | `hover:underline` | Naar glass hover |
+
+---
+
+## Implementatieplan
+
+### Deel 1: Menubar — Complete Glass Upgrade
+
+**Bestand:** `src/components/ui/menubar.tsx`
+
+**1.1 Menubar Root (regels 17-26)**
 
 ```tsx
-const Toaster = ({ ...props }: ToasterProps) => {
-  return (
-    <Sonner
-      theme="light"
-      className="toaster group"
-      toastOptions={{
-        classNames: {
-          toast:
-            "group toast group-[.toaster]:bg-white/90 dark:group-[.toaster]:bg-slate-900/90 group-[.toaster]:backdrop-blur-xl group-[.toaster]:text-foreground group-[.toaster]:border-white/40 dark:group-[.toaster]:border-white/15 group-[.toaster]:shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15),0_4px_16px_rgba(0,0,0,0.1)] group-[.toaster]:rounded-xl",
-          description: "group-[.toast]:text-muted-foreground",
-          actionButton: "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground group-[.toast]:shadow-[0_2px_8px_hsla(221,83%,53%,0.25)]",
-          cancelButton: "group-[.toast]:bg-white/60 dark:group-[.toast]:bg-slate-800/60 group-[.toast]:backdrop-blur-sm group-[.toast]:text-muted-foreground group-[.toast]:border-white/30",
-          success: "group-[.toaster]:border-green-500/30 group-[.toaster]:shadow-[0_10px_40px_-10px_hsla(142,71%,45%,0.15),0_4px_16px_hsla(142,71%,45%,0.1)]",
-          error: "group-[.toaster]:border-destructive/30 group-[.toaster]:shadow-[0_10px_40px_-10px_hsla(0,84%,60%,0.15),0_4px_16px_hsla(0,84%,60%,0.1)]",
-          warning: "group-[.toaster]:border-orange-500/30 group-[.toaster]:shadow-[0_10px_40px_-10px_hsla(24,95%,53%,0.15),0_4px_16px_hsla(24,95%,53%,0.1)]",
-          info: "group-[.toaster]:border-primary/30 group-[.toaster]:shadow-[0_10px_40px_-10px_hsla(221,83%,53%,0.15),0_4px_16px_hsla(221,83%,53%,0.1)]",
-        },
-      }}
-      {...props}
-    />
-  );
-};
+const Menubar = React.forwardRef<...>(({ className, ...props }, ref) => (
+  <MenubarPrimitive.Root
+    ref={ref}
+    className={cn(
+      "flex h-10 items-center space-x-1 rounded-xl p-1",
+      "bg-white/60 dark:bg-slate-900/60 backdrop-blur-md",
+      "border border-white/30 dark:border-white/15",
+      "shadow-[0_2px_8px_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.1)]",
+      className
+    )}
+    {...props}
+  />
+));
 ```
 
----
-
-## Prioriteit 2: Popover — Glass Floating Panel
-
-**Bestand:** `src/components/ui/popover.tsx`
-
-**Probleem:** Popover content heeft standaard styling zonder glassmorphism.
-
-**Oplossing:** Voeg glass styling toe consistent met DropdownMenu.
-
-**Wijzigingen:**
+**1.2 MenubarTrigger (regels 29-41)**
 
 ```tsx
-<PopoverPrimitive.Content
-  ref={ref}
-  align={align}
-  sideOffset={sideOffset}
-  className={cn(
-    "z-50 w-72 rounded-xl p-4 text-popover-foreground outline-none",
-    "bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl",
-    "border border-white/30 dark:border-white/15",
-    "shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15),0_4px_16px_rgba(0,0,0,0.1)]",
-    "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
-    className,
-  )}
-  {...props}
-/>
+className={cn(
+  "flex cursor-default select-none items-center rounded-lg px-3 py-1.5 text-sm font-medium outline-none transition-all duration-200",
+  "data-[state=open]:bg-white/60 dark:data-[state=open]:bg-slate-800/60",
+  "focus:bg-white/50 dark:focus:bg-slate-800/50",
+  "hover:bg-white/40 dark:hover:bg-slate-800/40",
+  className,
+)}
 ```
 
----
-
-## Prioriteit 3: Context Menu — Glass Right-Click Menu
-
-**Bestand:** `src/components/ui/context-menu.tsx`
-
-**Probleem:** Context menu heeft standaard styling zonder glassmorphism.
-
-**Oplossing:** Voeg glass styling toe aan ContextMenuContent en ContextMenuSubContent.
-
-**Wijzigingen ContextMenuContent:**
+**1.3 MenubarContent (regels 80-97)**
 
 ```tsx
-<ContextMenuPrimitive.Content
-  ref={ref}
-  className={cn(
-    "z-50 min-w-[8rem] overflow-hidden rounded-xl p-1 text-popover-foreground",
-    "bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl",
-    "border border-white/30 dark:border-white/15",
-    "shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15),0_4px_16px_rgba(0,0,0,0.1)]",
-    "animate-in fade-in-80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
-    className,
-  )}
-  {...props}
-/>
+className={cn(
+  "z-50 min-w-[12rem] overflow-hidden rounded-xl p-1 text-popover-foreground",
+  "bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl",
+  "border border-white/30 dark:border-white/15",
+  "shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15),0_4px_16px_rgba(0,0,0,0.1)]",
+  "data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+  className,
+)}
 ```
 
-**Wijzigingen ContextMenuSubContent (zelfde styling).**
+**1.4 MenubarSubContent (regels 65-77)**
 
-**Wijzigingen ContextMenuItem:**
+```tsx
+className={cn(
+  "z-50 min-w-[8rem] overflow-hidden rounded-xl p-1 text-popover-foreground",
+  "bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl",
+  "border border-white/30 dark:border-white/15",
+  "shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15),0_4px_16px_rgba(0,0,0,0.1)]",
+  "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+  className,
+)}
+```
+
+**1.5 MenubarItem (regels 100-115)**
 
 ```tsx
 className={cn(
@@ -128,197 +140,261 @@ className={cn(
 )}
 ```
 
----
-
-## Prioriteit 4: Tooltip — Glass Tooltip
-
-**Bestand:** `src/components/ui/tooltip.tsx`
-
-**Probleem:** Tooltips hebben standaard styling zonder glassmorphism.
-
-**Oplossing:** Voeg subtiele glass styling toe.
-
-**Wijzigingen:**
-
-```tsx
-<TooltipPrimitive.Content
-  ref={ref}
-  sideOffset={sideOffset}
-  className={cn(
-    "z-50 overflow-hidden rounded-lg px-3 py-1.5 text-sm",
-    "bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl",
-    "text-popover-foreground",
-    "border border-white/30 dark:border-white/15",
-    "shadow-[0_4px_16px_rgba(0,0,0,0.1),0_2px_6px_rgba(0,0,0,0.06)]",
-    "animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
-    className,
-  )}
-  {...props}
-/>
-```
-
----
-
-## Prioriteit 5: HoverCard — Glass Hover Panel
-
-**Bestand:** `src/components/ui/hover-card.tsx`
-
-**Probleem:** HoverCard content heeft standaard styling.
-
-**Oplossing:** Voeg glass styling toe.
-
-**Wijzigingen:**
-
-```tsx
-<HoverCardPrimitive.Content
-  ref={ref}
-  align={align}
-  sideOffset={sideOffset}
-  className={cn(
-    "z-50 w-64 rounded-xl p-4 text-popover-foreground outline-none",
-    "bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl",
-    "border border-white/30 dark:border-white/15",
-    "shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15),0_4px_16px_rgba(0,0,0,0.1)]",
-    "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
-    className,
-  )}
-  {...props}
-/>
-```
-
----
-
-## Prioriteit 6: Sheet — Glass Side Panel
-
-**Bestand:** `src/components/ui/sheet.tsx`
-
-**Probleem:** Sheet overlay en content hebben geen glassmorphism.
-
-**Oplossing:** Voeg glass styling toe aan overlay en content.
-
-**Wijzigingen SheetOverlay:**
+**1.6 MenubarSubTrigger (regels 44-62)**
 
 ```tsx
 className={cn(
-  "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm",
-  "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+  "flex cursor-default select-none items-center rounded-lg px-2 py-1.5 text-sm outline-none transition-colors",
+  "data-[state=open]:bg-white/50 dark:data-[state=open]:bg-slate-800/50",
+  "focus:bg-white/50 dark:focus:bg-slate-800/50 focus:backdrop-blur-sm",
+  inset && "pl-8",
   className,
 )}
 ```
 
-**Wijzigingen sheetVariants:**
+**1.7 MenubarCheckboxItem (regels 118-138)**
 
 ```tsx
-const sheetVariants = cva(
-  "fixed z-50 gap-4 p-6 transition ease-in-out bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-white/40 dark:border-white/15 shadow-[0_0_60px_hsla(215,25%,48%,0.15),-10px_0_40px_hsla(215,25%,48%,0.08)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
-  {
-    variants: {
-      side: {
-        // ... zelfde als voorheen met border-t/b/l/r behouden
-      },
-    },
-    defaultVariants: {
-      side: "right",
-    },
-  },
+className={cn(
+  "relative flex cursor-default select-none items-center rounded-lg py-1.5 pl-8 pr-2 text-sm outline-none transition-colors",
+  "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+  "focus:bg-white/50 dark:focus:bg-slate-800/50 focus:backdrop-blur-sm",
+  className,
+)}
+```
+
+**1.8 MenubarRadioItem (regels 141-160)**
+
+```tsx
+className={cn(
+  "relative flex cursor-default select-none items-center rounded-lg py-1.5 pl-8 pr-2 text-sm outline-none transition-colors",
+  "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+  "focus:bg-white/50 dark:focus:bg-slate-800/50 focus:backdrop-blur-sm",
+  className,
+)}
+```
+
+**1.9 MenubarSeparator (regels 177-181)**
+
+```tsx
+className={cn("-mx-1 my-1 h-px bg-white/20 dark:bg-white/10", className)}
+```
+
+---
+
+### Deel 2: DropdownMenu — Subcomponent Glass Upgrade
+
+**Bestand:** `src/components/ui/dropdown-menu.tsx`
+
+**2.1 DropdownMenuSubContent (regels 40-52)**
+
+```tsx
+className={cn(
+  "z-50 min-w-[8rem] overflow-hidden rounded-xl p-1 text-popover-foreground",
+  "bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl",
+  "border border-white/30 dark:border-white/15",
+  "shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15),0_4px_16px_rgba(0,0,0,0.1)]",
+  "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+  className,
+)}
+```
+
+**2.2 DropdownMenuSubTrigger (regels 19-37)**
+
+```tsx
+className={cn(
+  "flex cursor-default select-none items-center rounded-lg px-2 py-1.5 text-sm outline-none transition-colors",
+  "data-[state=open]:bg-white/50 dark:data-[state=open]:bg-slate-800/50",
+  "focus:bg-white/50 dark:focus:bg-slate-800/50 focus:backdrop-blur-sm",
+  inset && "pl-8",
+  className,
+)}
+```
+
+**2.3 DropdownMenuCheckboxItem (regels 91-111)**
+
+```tsx
+className={cn(
+  "relative flex cursor-default select-none items-center rounded-lg py-1.5 pl-8 pr-2 text-sm outline-none transition-colors",
+  "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+  "focus:bg-white/50 dark:focus:bg-slate-800/50 focus:backdrop-blur-sm",
+  className,
+)}
+```
+
+**2.4 DropdownMenuRadioItem (regels 114-133)**
+
+```tsx
+className={cn(
+  "relative flex cursor-default select-none items-center rounded-lg py-1.5 pl-8 pr-2 text-sm outline-none transition-colors",
+  "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+  "focus:bg-white/50 dark:focus:bg-slate-800/50 focus:backdrop-blur-sm",
+  className,
+)}
+```
+
+**2.5 DropdownMenuSeparator (regels 150-155)**
+
+```tsx
+className={cn("-mx-1 my-1 h-px bg-white/20 dark:bg-white/10", className)}
+```
+
+---
+
+### Deel 3: NavigationMenu — Glass Upgrade
+
+**Bestand:** `src/components/ui/navigation-menu.tsx`
+
+**3.1 navigationMenuTriggerStyle (regels 37-39)**
+
+```tsx
+const navigationMenuTriggerStyle = cva(
+  "group inline-flex h-10 w-max items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 focus:outline-none disabled:pointer-events-none disabled:opacity-50",
+  "bg-transparent",
+  "hover:bg-white/50 dark:hover:bg-slate-800/50",
+  "focus:bg-white/50 dark:focus:bg-slate-800/50",
+  "data-[active]:bg-white/60 dark:data-[active]:bg-slate-800/60",
+  "data-[state=open]:bg-white/60 dark:data-[state=open]:bg-slate-800/60",
 );
 ```
 
----
-
-## Prioriteit 7: Skeleton — Glass Shimmer Effect
-
-**Bestand:** `src/components/ui/skeleton.tsx`
-
-**Probleem:** Skeleton heeft eenvoudige `bg-muted` zonder glass effect.
-
-**Oplossing:** Voeg glass shimmer toe.
-
-**Wijzigingen:**
+**3.2 NavigationMenuViewport (regels 76-90)**
 
 ```tsx
-function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div 
-      className={cn(
-        "animate-pulse rounded-md",
-        "bg-white/40 dark:bg-slate-800/40",
-        "backdrop-blur-sm",
-        "border border-white/20 dark:border-white/8",
-        className
-      )} 
-      {...props} 
-    />
-  );
-}
+className={cn(
+  "origin-top-center relative mt-1.5 h-[var(--radix-navigation-menu-viewport-height)] w-full overflow-hidden rounded-xl md:w-[var(--radix-navigation-menu-viewport-width)]",
+  "bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl",
+  "border border-white/30 dark:border-white/15",
+  "shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15),0_4px_16px_rgba(0,0,0,0.1)]",
+  "text-popover-foreground",
+  "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-90",
+  className,
+)}
 ```
 
 ---
 
-## Prioriteit 8: TaskListEmptyState — Glass Empty State
+### Deel 4: Select — Separator Fix
 
-**Bestand:** `src/components/TaskListView/TaskListEmptyState.tsx`
+**Bestand:** `src/components/ui/select.tsx`
 
-**Probleem:** Empty state heeft geen container styling.
-
-**Oplossing:** Voeg glass container toe.
-
-**Wijzigingen:**
+**4.1 SelectSeparator (regels 124-129)**
 
 ```tsx
-export function TaskListEmptyState({ filtered = false }: TaskListEmptyStateProps) {
-  return (
-    <div className={cn(
-      "flex flex-col items-center justify-center py-12 px-8 text-center",
-      "rounded-xl",
-      "bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm",
-      "border border-white/30 dark:border-white/12",
-      "shadow-[0_2px_8px_rgba(0,0,0,0.04)]"
-    )}>
-      {filtered ? (
-        <>
-          <div className="p-4 rounded-full bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm mb-4">
-            <Search className="h-8 w-8 text-muted-foreground/50" />
-          </div>
-          <h3 className="text-lg font-medium text-foreground mb-1">
-            Geen taken gevonden voor deze zoekopdracht
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            Probeer andere zoektermen of verwijder filters
-          </p>
-        </>
-      ) : (
-        <>
-          <div className="p-4 rounded-full bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm mb-4">
-            <ClipboardList className="h-8 w-8 text-muted-foreground/50" />
-          </div>
-          <h3 className="text-lg font-medium text-foreground mb-1">
-            Geen taken gevonden
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            Er zijn momenteel geen actieve taken
-          </p>
-        </>
-      )}
-    </div>
-  );
-}
+className={cn("-mx-1 my-1 h-px bg-white/20 dark:bg-white/10", className)}
 ```
 
 ---
 
-## Samenvatting Bestanden
+### Deel 5: Dialog — Close Button Upgrade
 
-| Bestand | Wijzigingen |
-|---------|-------------|
-| `src/components/ui/sonner.tsx` | Glass toast styling + context shadows |
-| `src/components/ui/popover.tsx` | Glass content panel |
-| `src/components/ui/context-menu.tsx` | Glass menu + items |
-| `src/components/ui/tooltip.tsx` | Glass tooltip |
-| `src/components/ui/hover-card.tsx` | Glass hover panel |
-| `src/components/ui/sheet.tsx` | Glass overlay + panel |
-| `src/components/ui/skeleton.tsx` | Glass shimmer effect |
-| `src/components/TaskListView/TaskListEmptyState.tsx` | Glass empty state container |
+**Bestand:** `src/components/ui/dialog.tsx`
+
+**5.1 DialogClose button (regel 45)**
+
+```tsx
+<DialogPrimitive.Close className="absolute right-4 top-4 rounded-lg p-1 opacity-70 ring-offset-background transition-all duration-200 hover:bg-white/50 dark:hover:bg-slate-800/50 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+```
+
+---
+
+### Deel 6: Separator — Global Glass Upgrade
+
+**Bestand:** `src/components/ui/separator.tsx`
+
+**6.1 Separator (regels 6-17)**
+
+```tsx
+className={cn(
+  "shrink-0",
+  "bg-white/20 dark:bg-white/10",
+  orientation === "horizontal" ? "h-[1px] w-full" : "h-full w-[1px]",
+  className
+)}
+```
+
+---
+
+### Deel 7: Accordion — Glass Treatment
+
+**Bestand:** `src/components/ui/accordion.tsx`
+
+**7.1 AccordionItem (regels 9-14)**
+
+```tsx
+className={cn(
+  "border-b border-white/20 dark:border-white/10",
+  className
+)}
+```
+
+**7.2 AccordionTrigger (regels 17-34)**
+
+```tsx
+className={cn(
+  "flex flex-1 items-center justify-between py-4 font-medium transition-all duration-200 [&[data-state=open]>svg]:rotate-180",
+  "rounded-lg px-2 -mx-2",
+  "hover:bg-white/40 dark:hover:bg-slate-800/40",
+  className,
+)}
+```
+
+---
+
+## Samenvatting Wijzigingen
+
+| Bestand | Componenten | Wijzigingen |
+|---------|-------------|-------------|
+| `menubar.tsx` | 9 componenten | Root, Content, SubContent, Trigger, SubTrigger, Item, CheckboxItem, RadioItem, Separator |
+| `dropdown-menu.tsx` | 5 componenten | SubContent, SubTrigger, CheckboxItem, RadioItem, Separator |
+| `navigation-menu.tsx` | 2 componenten | TriggerStyle, Viewport |
+| `select.tsx` | 1 component | Separator |
+| `dialog.tsx` | 1 component | Close button |
+| `separator.tsx` | 1 component | Root |
+| `accordion.tsx` | 2 componenten | Item, Trigger |
+
+**Totaal: 21 component upgrades**
+
+---
+
+## Design System Standaarden (Geünificeerd)
+
+### Glass Containers (Floating Elements)
+
+```css
+/* Standaard voor alle floating content */
+bg-white/90 dark:bg-slate-900/90 
+backdrop-blur-xl 
+border border-white/30 dark:border-white/15
+shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15),0_4px_16px_rgba(0,0,0,0.1)]
+rounded-xl
+```
+
+### Glass Focus States
+
+```css
+/* Standaard voor alle focusable items */
+focus:bg-white/50 dark:focus:bg-slate-800/50 
+focus:backdrop-blur-sm
+rounded-lg
+transition-colors
+```
+
+### Glass Separators
+
+```css
+/* Standaard voor alle separators */
+bg-white/20 dark:bg-white/10
+h-[1px]
+```
+
+### Glass Hover States (Non-DnD)
+
+```css
+/* Standaard voor hover states */
+hover:bg-white/40 dark:hover:bg-slate-800/40
+transition-all duration-200
+```
 
 ---
 
@@ -326,62 +402,75 @@ export function TaskListEmptyState({ filtered = false }: TaskListEmptyStateProps
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│  GLASS UI PRIMITIVES                                         │
+│  UNIFIED GLASSMORPHISM DESIGN SYSTEM                         │
 │                                                              │
 │  ┌─────────────────────────────────────────────────────────┐ │
-│  │  📢 TOAST NOTIFICATION                                  │ │
-│  │  ░░░ GLASS + CONTEXT SHADOW (green/red/blue) ░░░        │ │
-│  │  "Taak succesvol opgeslagen!"          [Ongedaan maken] │ │
+│  │  📋 MENUBAR (Glass Root)                                │ │
+│  │  ░░░ bg-white/60 backdrop-blur-md ░░░                   │ │
+│  │  [File ▼]  [Edit ▼]  [View ▼]  [Help ▼]                 │ │
+│  │                                                         │ │
+│  │  ┌───────────────┐                                      │ │
+│  │  │ Glass Dropdown│  (bg-white/90 blur-xl)               │ │
+│  │  │ ─────────────│   (separator: bg-white/20)           │ │
+│  │  │ ☑ Option A   │   (focus: bg-white/50)               │ │
+│  │  │ ○ Option B   │                                       │ │
+│  │  └───────────────┘                                      │ │
 │  └─────────────────────────────────────────────────────────┘ │
-│                                                              │
-│  ┌────────────────────┐    ┌────────────────────┐            │
-│  │  💬 TOOLTIP        │    │  🖱️ CONTEXT MENU   │            │
-│  │  ░░░ GLASS ░░░     │    │  ░░░ GLASS ░░░     │            │
-│  │  "Klik om te..."   │    │  ✏️ Bewerken       │            │
-│  └────────────────────┘    │  🗑️ Verwijderen    │            │
-│                            └────────────────────┘            │
 │                                                              │
 │  ┌─────────────────────────────────────────────────────────┐ │
-│  │  🔍 EMPTY STATE                                         │ │
-│  │  ░░░ GLASS CONTAINER ░░░                                │ │
-│  │                                                         │ │
-│  │         ┌──────────┐                                    │ │
-│  │         │ 📋 Icon  │ (glass circle)                     │ │
-│  │         └──────────┘                                    │ │
-│  │         Geen taken gevonden                             │ │
-│  │                                                         │ │
+│  │  🧭 NAVIGATION MENU                                     │ │
+│  │  [Products ▼] [Solutions ▼] [Resources ▼]               │ │
+│  │       │                                                 │ │
+│  │       ▼ Glass Viewport (bg-white/90 blur-xl)            │ │
+│  │  ┌────────────────────────────────────────┐             │ │
+│  │  │  ░░░ Premium content area ░░░          │             │ │
+│  │  └────────────────────────────────────────┘             │ │
 │  └─────────────────────────────────────────────────────────┘ │
 │                                                              │
-│  ┌──────────────────────────────────────────────────────┐    │
-│  │  ████████████████████████  SKELETON                  │    │
-│  │  ░░░ GLASS SHIMMER ░░░                               │    │
-│  └──────────────────────────────────────────────────────┘    │
+│  ┌─────────────────────────────────────────────────────────┐ │
+│  │  📂 ACCORDION                                           │ │
+│  │  ┌─────────────────────────────────────────────────────┐ │
+│  │  │  ▶ Section 1              (hover: bg-white/40)      │ │
+│  │  │────────────────────────── (border: bg-white/20)     │ │
+│  │  │  ▼ Section 2 (open)                                 │ │
+│  │  │    Content with glass hover                         │ │
+│  │  │────────────────────────── (glass separator)         │ │
+│  │  │  ▶ Section 3                                        │ │
+│  │  └─────────────────────────────────────────────────────┘ │
+│  └─────────────────────────────────────────────────────────┘ │
 │                                                              │
 └──────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Design Principes (Apple visionOS)
+## Acceptatiecriteria
 
-| Principe | Implementatie |
-|----------|---------------|
-| **Consistent Materials** | Alle floating elements gebruiken 90% opacity + blur-xl |
-| **Context Shadows** | Toast types erven HSL kleur (success=green, error=red) |
-| **Layered Depth** | Multi-layer shadows voor alle popovers |
-| **Subtle Borders** | `border-white/30` light, `border-white/15` dark |
-| **Dark Mode Ready** | Alle styling met `.dark` varianten |
+1. Menubar root heeft glass styling met `backdrop-blur-md`
+2. MenubarContent/SubContent hebben premium glass met `backdrop-blur-xl`
+3. Alle Menubar items hebben glass focus states
+4. NavigationMenuViewport heeft glass container
+5. NavigationMenuTrigger heeft glass hover/active states
+6. DropdownMenu subcomponenten (SubContent, SubTrigger, CheckboxItem, RadioItem) hebben glass styling
+7. Alle Separator componenten gebruiken `bg-white/20 dark:bg-white/10`
+8. Dialog close button heeft glass hover en `rounded-lg`
+9. Accordion items hebben glass borders en hover states
+10. Volledige dark mode compatibiliteit
+11. Alle animaties en transitions blijven intact
+12. Geen visuele regressies in bestaande componenten
 
 ---
 
-## Acceptatiecriteria
+## Expert Validatie Checklist
 
-1. Toast notifications hebben glassmorphism met context-gekleurde shadows
-2. Popover, HoverCard en Tooltip hebben glass styling
-3. Context menu heeft glass styling met glass item hovers
-4. Sheet overlay heeft blur en content heeft glass panel
-5. Skeleton heeft glass shimmer effect
-6. TaskListEmptyState heeft glass container met icon circle
-7. Alle componenten zijn dark mode compatibel
-8. Animaties en transitions blijven intact
+Na implementatie valideren:
+
+- [ ] Menubar dropdown menu's openen correct met glass styling
+- [ ] NavigationMenu viewport toont glass container
+- [ ] Checkbox/Radio items in dropdowns tonen glass focus
+- [ ] Separators zijn subtiel zichtbaar in light en dark mode
+- [ ] Dialog close button hover heeft glass effect
+- [ ] Accordion items hebben smooth hover transitions
+- [ ] Geen z-index conflicten tussen floating elements
+- [ ] Performance impact van extra blur effecten is acceptabel
 
