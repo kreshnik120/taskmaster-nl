@@ -2937,9 +2937,13 @@ async function createOnboardingTasks(supabase: any, action: any) {
       org_id: org_id,
       title: taskTemplate.title,
       category: taskTemplate.category,
-      priority: 'medium',
+      priority: 'MEDIUM',  // FIX: uppercase voor database consistentie
       status: 'pending',
-      description: `Onboarding taak voor professional ${action.input_data.professional_id}`
+      description: `Onboarding taak voor professional ${action.input_data.professional_id}`,
+      // EXPLICIETE DELEGATIE STATUS - taken staan in team-overzicht
+      assignee_id: null,
+      accepted_at: null,
+      accepted_by: null
     });
   }
 

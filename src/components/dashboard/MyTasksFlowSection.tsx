@@ -34,7 +34,8 @@ import {
   DropdownMenu, 
   DropdownMenuContent, 
   DropdownMenuItem, 
-  DropdownMenuLabel, 
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -86,6 +87,8 @@ interface Task {
   next_action: string | null;
   created_at: string;
   updated_at: string;
+  accepted_at: string | null;
+  accepted_by: string | null;
   profiles: { name: string | null; email: string | null } | null;
 }
 
@@ -214,6 +217,7 @@ export function MyTasksFlowSection() {
           due_at, completed_at, column_id, order_key,
           application_id, recruitment_action_type, start_at,
           next_action, created_at, updated_at,
+          accepted_at, accepted_by,
           profiles:profiles!tasks_assignee_id_fkey(name, email)
         `)
         .eq("assignee_id", user.id)
@@ -364,6 +368,34 @@ export function MyTasksFlowSection() {
 
     setStatusMessage(`Taak verplaatst naar ${targetColumn.name}`);
     toast.success(`Taak verplaatst naar ${targetColumn.name}`);
+  };
+
+  // Accept task handler (for delegated tasks)
+  const handleAcceptTask = async (taskId: string) => {
+    if (!user) return;
+    
+    const { error } = await supabase
+      .from("tasks")
+      .update({ 
+        accepted_by: user.id,
+        accepted_at: new Date().toISOString()
+      })
+      .eq("id", taskId);
+
+    if (error) {
+      toast.error("Fout bij accepteren");
+      return;
+    }
+
+    // Optimistic update
+    setTasks(prev => prev.map(t =>
+      t.id === taskId 
+        ? { ...t, accepted_by: user.id, accepted_at: new Date().toISOString() } 
+        : t
+    ));
+    
+    setStatusMessage("Taak geaccepteerd");
+    toast.success("Taak geaccepteerd");
   };
 
   // Task click handler
@@ -589,6 +621,19 @@ export function MyTasksFlowSection() {
                                           </Button>
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent align="end" className="bg-popover">
+                                          {/* Accept option for pending tasks */}
+                                          {!task.accepted_at && (
+                                            <>
+                                              <DropdownMenuItem
+                                                onClick={() => handleAcceptTask(task.id)}
+                                                className="text-primary"
+                                              >
+                                                <CheckCircle2 className="h-4 w-4 mr-2" />
+                                                Accepteren
+                                              </DropdownMenuItem>
+                                              <DropdownMenuSeparator />
+                                            </>
+                                          )}
                                           <DropdownMenuLabel>Verplaats naar</DropdownMenuLabel>
                                           {columns
                                             .filter(c => c.id !== task.column_id)

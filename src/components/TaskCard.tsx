@@ -1,7 +1,8 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent } from "@/components/ui/card";
-import { GripVertical, Edit, Calendar, ArrowRight, ListChecks, CheckCircle2, Circle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { GripVertical, Edit, Calendar, ArrowRight, ListChecks, CheckCircle2, Circle, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -31,6 +32,8 @@ interface Task {
   next_action: string | null;
   created_at: string;
   updated_at: string;
+  accepted_at?: string | null;
+  accepted_by?: string | null;
   profiles: {
     name: string | null;
     email: string | null;
@@ -42,6 +45,11 @@ interface Task {
     market_demand_factor: number | null;
   } | null;
 }
+
+// Helper: Check if task is pending acceptance (delegated but not yet accepted)
+const isPendingAcceptance = (task: Task): boolean => {
+  return !!(task.assignee_id && !task.accepted_at);
+};
 
 interface Subtask {
   id: string;
@@ -170,6 +178,14 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
                       {task.title}
                     </p>
                   </div>
+
+                  {/* Pending Acceptance Badge */}
+                  {isPendingAcceptance(task) && (
+                    <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800">
+                      <Clock className="h-3 w-3 mr-1" />
+                      Wacht op acceptatie
+                    </Badge>
+                  )}
 
                   {/* Description */}
                   {task.description && (
