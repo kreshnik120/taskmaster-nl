@@ -1,301 +1,227 @@
 
+# Console.log Cleanup - Gecorrigeerd Plan
 
-# Onderdeel 6: Realtime Standaardisatie & Fixes
+## Audit Resultaten
 
-## Samenvatting Audit
-
-Na grondige analyse zijn er **4 kritieke categorieën** van realtime problemen geïdentificeerd:
-
----
-
-## Categorie 1: Redundante Subscriptions (INEFFICIËNTIE)
-
-### Probleem
-Meerdere componenten openen **separate channels** voor dezelfde `tasks` tabel in plaats van de shared `useTasksQuery` hook te gebruiken:
-
-| Component | Channel Name | Tabel | Status |
-|-----------|--------------|-------|--------|
-| `useTasksQuery.ts` | `shared-tasks-realtime` | tasks | ✅ Goed (met debounce) |
-| `EmbeddedListView.tsx` | `embedded-lijst-tasks-changes` | tasks | ❌ Redundant |
-| `EmbeddedCalendarView.tsx` | `embedded-kalender-tasks-changes` | tasks | ❌ Redundant |
-| `AppSidebar.tsx` | `sidebar-tasks-count` | tasks | ❌ Redundant |
-
-**Impact**: 4 actieve WebSocket channels in plaats van 1. Dit verspilt bandbreedte en kan Supabase connection limits bereiken.
-
-### Oplossing
-- `EmbeddedListView` en `EmbeddedCalendarView` moeten migreren naar `useTasksQuery` hook
-- `AppSidebar` kan de shared cache invalidation volgen via `ACTIVE_TASKS_QUERY_KEY`
+Na grondige controle van alle bestanden zijn de **exacte locaties** geïdentificeerd:
 
 ---
 
-## Categorie 2: Ontbrekende Realtime (KRITIEK)
+## Bestanden en Correcte Lijnnummers
 
-### Probleem
-Twee kritieke views missen volledig realtime subscriptions:
+### 1. `src/pages/Bijlagen.tsx` (5 statements)
 
-| Component | Huidige Status | Impact |
-|-----------|----------------|--------|
-| `MyTasksFlowSection.tsx` | **Geen realtime** | Kanban ziet geen updates van andere views |
-| `Kanban.tsx` | Alleen subtasks | Mist task changes van andere gebruikers |
+| Lijn | Huidige Code | Actie |
+|------|--------------|-------|
+| 120 | `console.log('[Bijlagen] Realtime update:', ...)` | → `log.debug()` |
+| 128 | `console.log('[Bijlagen] Invalidating cache...')` | → `log.debug()` |
+| 135 | `console.log('[Bijlagen] Realtime channel subscribed')` | → `log.log()` |
+| 138 | `console.error('[Bijlagen] Realtime channel error')` | ✅ Behouden (error) |
+| 147 | `console.log('[Bijlagen] Unsubscribing...')` | → `log.debug()` |
 
-### Oplossing
-- `MyTasksFlowSection` moet migreren naar `useTasksQuery` of eigen subscription toevoegen
-- `Kanban.tsx` moet task subscription toevoegen
-
----
-
-## Categorie 3: Ontbrekende CHANNEL_ERROR Handling (HOOG)
-
-### Probleem
-8 van 11 subscriptions missen error handling. Als de verbinding faalt, blijft de UI "dood" zonder feedback:
-
-| Component | CHANNEL_ERROR | Reconnect |
-|-----------|---------------|-----------|
-| `useTasksQuery.ts` | ✅ Ja | ❌ Nee |
-| `EmbeddedListView.tsx` | ❌ Nee | ❌ Nee |
-| `EmbeddedCalendarView.tsx` | ❌ Nee | ❌ Nee |
-| `AppSidebar.tsx` | ❌ Nee | ❌ Nee |
-| `useMySubtasks.ts` | ❌ Nee | ❌ Nee |
-| `Kanban.tsx` | ❌ Nee | ❌ Nee |
-| `ChatWidget.tsx` | ❌ Nee | ❌ Nee |
-| `useWhatsAppMessages.ts` | ❌ Nee | ❌ Nee |
-
-### Oplossing
-Creëer een `useRealtimeChannel` utility hook met:
-- Automatische CHANNEL_ERROR logging
-- Optionele reconnect logic
-- Consistent cleanup
+**Toevoegen**: `import { logger } from '@/lib/logger'` + `const log = logger.create('Bijlagen')`
 
 ---
 
-## Categorie 4: Ontbrekende Debouncing (PERFORMANCE)
+### 2. `src/pages/VerwijderdeTaken.tsx` (2 statements)
 
-### Probleem
-Alleen `useTasksQuery.ts` heeft 200ms debounce. Alle andere subscriptions triggeren **immediate refetch** op elk event:
+| Lijn | Huidige Code | Actie |
+|------|--------------|-------|
+| 84 | `console.log('[VerwijderdeTaken] Realtime update:', ...)` | → `log.debug()` |
+| 125 | `console.error("Error fetching deleted tasks:", ...)` | ✅ Behouden (error) |
 
-```typescript
-// EmbeddedListView.tsx (line 146) - GEEN DEBOUNCE
-.on('postgres_changes', {...}, () => fetchTasks())
-```
-
-**Impact**: Bij bulk updates (bijv. 50 taken importeren) worden 50 network requests tegelijk getriggerd.
-
-### Oplossing
-Alle realtime callbacks moeten debouncing toepassen (200ms standaard).
+**Toevoegen**: `import { logger } from '@/lib/logger'` + `const log = logger.create('VerwijderdeTaken')`
 
 ---
 
-## Implementatie Plan
+### 3. `src/pages/AfgerondeTaken.tsx` (2 statements)
 
-### Stap 1: Creëer Utility Hook `useRealtimeChannel.ts` (NIEUW)
+| Lijn | Huidige Code | Actie |
+|------|--------------|-------|
+| 75 | `console.log('[AfgerondeTaken] Realtime update:', ...)` | → `log.debug()` |
+| 118 | `console.error("Error fetching completed tasks:", ...)` | ✅ Behouden (error) |
 
-**Bestand**: `src/hooks/useRealtimeChannel.ts`
-
-```typescript
-import { useEffect, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { logger } from '@/lib/logger';
-
-interface RealtimeConfig {
-  channelName: string;
-  table: string;
-  event?: '*' | 'INSERT' | 'UPDATE' | 'DELETE';
-  filter?: string;
-  onEvent: () => void;
-  debounceMs?: number;
-}
-
-/**
- * Standardized realtime subscription hook
- * Features:
- * - Automatic CHANNEL_ERROR handling with logging
- * - Configurable debounce (default 200ms)
- * - Proper cleanup on unmount
- */
-export function useRealtimeChannel({
-  channelName,
-  table,
-  event = '*',
-  filter,
-  onEvent,
-  debounceMs = 200
-}: RealtimeConfig) {
-  const log = logger.create(channelName);
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes',
-        { event, schema: 'public', table, filter },
-        () => {
-          if (debounceRef.current) clearTimeout(debounceRef.current);
-          debounceRef.current = setTimeout(onEvent, debounceMs);
-        }
-      )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          log.log('Channel subscribed');
-        }
-        if (status === 'CHANNEL_ERROR') {
-          log.error('Channel error - realtime may be unavailable');
-        }
-        if (status === 'TIMED_OUT') {
-          log.warn('Channel timed out');
-        }
-      });
-
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      supabase.removeChannel(channel);
-    };
-  }, [channelName, table, event, filter, onEvent, debounceMs]);
-}
-```
+**Toevoegen**: `import { logger } from '@/lib/logger'` + `const log = logger.create('AfgerondeTaken')`
 
 ---
 
-### Stap 2: Update `EmbeddedListView.tsx`
+### 4. `src/components/TaskListView/TaskListView.tsx` (5 statements - VERWIJDEREN)
 
-**Wijzigingen**:
-1. Verwijder eigen subscription (lines 136-152)
-2. Migreer naar `useTasksQuery` hook OF gebruik nieuwe `useRealtimeChannel`
-3. Filter data client-side uit shared cache
+| Lijn | Huidige Code | Actie |
+|------|--------------|-------|
+| 180 | `console.log('Bulk status change:', ...)` | ❌ Verwijderen (TODO) |
+| 186 | `console.log('Bulk priority change:', ...)` | ❌ Verwijderen (TODO) |
+| 192 | `console.log('Bulk delete:', ...)` | ❌ Verwijderen (TODO) |
+| 278 | `console.log('Edit task:', ...)` | ❌ Verwijderen (TODO) |
+| 282 | `console.log('Delete task:', ...)` | ❌ Verwijderen (TODO) |
 
-**Optie A: Gebruik useTasksQuery (aanbevolen)**
-```typescript
-// VAN: eigen fetchTasks() en subscription
-// NAAR:
-import { useTasksQuery } from '@/hooks/useTasksQuery';
-
-// In component:
-const { data: allTasks, isLoading } = useTasksQuery();
-
-// Filter client-side voor deze view
-const tasks = useMemo(() => {
-  if (!allTasks) return [];
-  return allTasks.filter(t => /* filters */);
-}, [allTasks, filters]);
-```
-
-**Optie B: Gebruik useRealtimeChannel (indien eigen fetch nodig)**
-```typescript
-// Vervang lines 136-152 met:
-useRealtimeChannel({
-  channelName: 'embedded-lijst-tasks',
-  table: 'tasks',
-  onEvent: fetchTasks,
-  debounceMs: 200
-});
-```
+**Actie**: Vervang alle 5 `console.log()` met `// Placeholder - will be replaced with actual implementation`
 
 ---
 
-### Stap 3: Update `EmbeddedCalendarView.tsx`
+### 5. `src/components/NewApplicationDialog.tsx` (1 statement)
 
-**Wijzigingen** (lines 271-286):
-```typescript
-// VAN:
-const tasksChannel = supabase
-  .channel('embedded-kalender-tasks-changes')
-  .on('postgres_changes', {...}, () => fetchTasks())
-  .subscribe();
+| Lijn | Huidige Code | Actie |
+|------|--------------|-------|
+| 428 | `console.log("🔍 CV Upload Check:", {...})` | → `log.debug()` |
 
-// NAAR:
-useRealtimeChannel({
-  channelName: 'embedded-kalender-tasks',
-  table: 'tasks',
-  onEvent: fetchTasks,
-  debounceMs: 200
-});
-
-useRealtimeChannel({
-  channelName: 'embedded-kalender-reminders',
-  table: 'reminders',
-  onEvent: fetchReminders,
-  debounceMs: 200
-});
-```
+**Noot**: Component heeft al `const log = logger.create('NewApplicationDialog')`, alleen console.log vervangen
 
 ---
 
-### Stap 4: Update `MyTasksFlowSection.tsx` (KRITIEK)
+### 6. `src/components/ActionTimeline.tsx` (1 statement)
 
-**Probleem**: Geen realtime - Kanban ziet geen updates
+| Lijn | Huidige Code | Actie |
+|------|--------------|-------|
+| 585 | `console.warn('Could not save filter state...', error)` | → `logger.warn()` |
 
-**Toevoegen na line 196**:
-```typescript
-// Realtime subscription voor task updates
-useRealtimeChannel({
-  channelName: 'mytasks-flow-realtime',
-  table: 'tasks',
-  filter: user ? `assignee_id=eq.${user.id}` : undefined,
-  onEvent: loadData,
-  debounceMs: 200
-});
-```
+**Toevoegen**: `import { logger } from '@/lib/logger'`
 
 ---
 
-### Stap 5: Update `AppSidebar.tsx`
+### 7. `src/hooks/whatsapp/useWhatsAppSendMessage.ts` (2 statements)
 
-**Wijzigingen** (lines 283-297):
-```typescript
-// VAN: eigen channel zonder error handling
-// NAAR:
-useRealtimeChannel({
-  channelName: 'sidebar-tasks-count',
-  table: 'tasks',
-  onEvent: () => queryClient.invalidateQueries({ queryKey: ['active-task-count'] }),
-  debounceMs: 200
-});
-```
+| Lijn | Huidige Code | Actie |
+|------|--------------|-------|
+| 32 | `console.log('[useWhatsAppSendMessage] Sending via MCP...')` | → `log.debug()` |
+| 58 | `console.log('[useWhatsAppSendMessage] Message sent successfully...')` | → `log.debug()` |
+
+**Behouden**: Lines 47, 54, 128 zijn `console.error()` - blijven staan
+
+**Toevoegen**: `import { logger } from '@/lib/logger'` + `const log = logger.create('useWhatsAppSendMessage')`
 
 ---
 
-### Stap 6: Update `useMySubtasks.ts`
+### 8. `src/hooks/whatsapp/useWhatsAppChats.ts` (2 statements)
 
-**Wijzigingen** (lines 71-94):
-```typescript
-// VAN: eigen subscription zonder error handling
-// NAAR:
-useRealtimeChannel({
-  channelName: 'my-subtasks-updates',
-  table: 'subtasks',
-  onEvent: loadSubtasks,
-  debounceMs: 200
-});
-```
+| Lijn | Huidige Code | Actie |
+|------|--------------|-------|
+| 88 | `console.error('[useWhatsAppChats] MCP proxy error:', ...)` | ✅ Behouden (error) |
+| 97 | `console.log('[useWhatsAppChats] Received X chats from MCP')` | → `log.debug()` |
+
+**Toevoegen**: `import { logger } from '@/lib/logger'` + `const log = logger.create('useWhatsAppChats')`
 
 ---
 
-### Stap 7: Update `Kanban.tsx` - Voeg Tasks Subscription Toe
+### 9. `src/hooks/whatsapp/useWhatsAppMessages.ts` (4 statements)
 
-**Wijzigingen** (na line 196):
-```typescript
-// TOEVOEGEN: Tasks subscription (naast bestaande subtasks)
-useRealtimeChannel({
-  channelName: 'kanban-tasks-realtime',
-  table: 'tasks',
-  onEvent: loadData,
-  debounceMs: 200
-});
-```
+| Lijn | Huidige Code | Actie |
+|------|--------------|-------|
+| 215 | `console.log('[useWhatsAppMessages] Skipping exact duplicate:', ...)` | → `log.debug()` |
+| 221 | `console.log('[useWhatsAppMessages] Replacing optimistic message...', ...)` | → `log.debug()` |
+| 281 | `console.log('[useWhatsAppMessages] Message status updated:', ...)` | → `log.debug()` |
+
+**Toevoegen**: `import { logger } from '@/lib/logger'` + `const log = logger.create('useWhatsAppMessages')`
 
 ---
 
-## Implementatie Volgorde
+### 10. `src/hooks/useVogVerificationNotifications.ts` (6 statements)
 
-| Stap | Bestand | Actie | Impact |
-|------|---------|-------|--------|
-| 1 | `useRealtimeChannel.ts` | Nieuw bestand | Utility foundation |
-| 2 | `EmbeddedListView.tsx` | Migreer subscription | Minder connections |
-| 3 | `EmbeddedCalendarView.tsx` | Migreer subscription | Minder connections |
-| 4 | `MyTasksFlowSection.tsx` | Voeg realtime toe | Live updates Kanban |
-| 5 | `AppSidebar.tsx` | Migreer subscription | Error handling |
-| 6 | `useMySubtasks.ts` | Migreer subscription | Error handling |
-| 7 | `Kanban.tsx` | Voeg tasks subscription toe | Complete realtime |
+| Lijn | Huidige Code | Actie |
+|------|--------------|-------|
+| 43 | `console.debug('[useVogVerificationNotifications] No auth session...')` | → `log.debug()` |
+| 47 | `console.log('[useVogVerificationNotifications] Setting up...')` | → `log.debug()` |
+| 61 | `console.log('[useVogVerificationNotifications] Received notification:', ...)` | → `log.debug()` |
+| 65 | `console.log('[useVogVerificationNotifications] Duplicate notification...')` | → `log.debug()` |
+| 101 | `console.log('[useVogVerificationNotifications] Subscription status:', ...)` | → `log.debug()` |
+| 109 | `console.log('[useVogVerificationNotifications] Cleaning up...')` | → `log.debug()` |
+
+**Toevoegen**: `import { logger } from '@/lib/logger'` + `const log = logger.create('VogVerification')`
+
+---
+
+### 11. `src/hooks/useDiplomaUpgradeNotifications.ts` (6 statements)
+
+| Lijn | Huidige Code | Actie |
+|------|--------------|-------|
+| 42 | `console.debug('[useDiplomaUpgradeNotifications] No auth session...')` | → `log.debug()` |
+| 46 | `console.log('[useDiplomaUpgradeNotifications] Setting up...')` | → `log.debug()` |
+| 60 | `console.log('[useDiplomaUpgradeNotifications] Received notification:', ...)` | → `log.debug()` |
+| 64 | `console.log('[useDiplomaUpgradeNotifications] Duplicate notification...')` | → `log.debug()` |
+| 95 | `console.log('[useDiplomaUpgradeNotifications] Subscription status:', ...)` | → `log.debug()` |
+| 103 | `console.log('[useDiplomaUpgradeNotifications] Cleaning up subscription')` | → `log.debug()` |
+
+**Toevoegen**: `import { logger } from '@/lib/logger'` + `const log = logger.create('DiplomaUpgrade')`
+
+---
+
+### 12. `src/hooks/useOAuthGuard.ts` (1 statement)
+
+| Lijn | Huidige Code | Actie |
+|------|--------------|-------|
+| 37 | `console.warn('OAuth user blocked - no profile found')` | → `logger.warn()` |
+
+**Behouden**: Line 35 `console.error('Error checking profile:', ...)` - blijft staan
+
+**Toevoegen**: `import { logger } from '@/lib/logger'`
+
+---
+
+### 13. `src/hooks/notulen/useDeleteMeetingMinute.ts` (2 statements)
+
+| Lijn | Huidige Code | Actie |
+|------|--------------|-------|
+| 59 | `console.warn('Could not update task:', ...)` | → `log.warn()` |
+| 81 | `console.warn('Could not delete linked task:', ...)` | → `log.warn()` |
+
+**Toevoegen**: `import { logger } from '@/lib/logger'` + `const log = logger.create('DeleteMeetingMinute')`
+
+---
+
+### 14. `src/hooks/notulen/useAIExtractMeeting.ts` (4 statements)
+
+| Lijn | Huidige Code | Actie |
+|------|--------------|-------|
+| 117 | `console.error('Edge function invoke error:', ...)` | ✅ Behouden (error) |
+| 122 | `console.error('Extraction error from edge function:', ...)` | ✅ Behouden (error) |
+| 129 | `console.error('No data returned from edge function')` | ✅ Behouden (error) |
+| 134 | `console.log('✅ Extraction successful via...')` | → `log.log()` |
+| 142 | `console.error('AI extraction error:', ...)` | ✅ Behouden (error) |
+
+**Toevoegen**: `import { logger } from '@/lib/logger'` + `const log = logger.create('AIExtractMeeting')`
+
+---
+
+## Samenvatting
+
+| Actie | Aantal | Beschrijving |
+|-------|--------|--------------|
+| Migreer naar `logger.debug()` | **24** | Realtime updates, subscriptions |
+| Migreer naar `logger.log()` | **2** | Success messages |
+| Migreer naar `logger.warn()` | **4** | Warning messages |
+| Volledig verwijderen | **5** | TODO placeholders in TaskListView |
+| **Behouden** | **12** | console.error() statements (blijven altijd actief) |
+| **Totaal gewijzigd** | **35** | |
+
+---
+
+## Bestanden per Batch
+
+**Batch 1 - Pages** (3 bestanden):
+- `src/pages/Bijlagen.tsx`
+- `src/pages/VerwijderdeTaken.tsx`
+- `src/pages/AfgerondeTaken.tsx`
+
+**Batch 2 - Components** (2 bestanden):
+- `src/components/TaskListView/TaskListView.tsx`
+- `src/components/ActionTimeline.tsx`
+
+**Batch 3 - WhatsApp hooks** (3 bestanden):
+- `src/hooks/whatsapp/useWhatsAppSendMessage.ts`
+- `src/hooks/whatsapp/useWhatsAppChats.ts`
+- `src/hooks/whatsapp/useWhatsAppMessages.ts`
+
+**Batch 4 - Notification hooks** (3 bestanden):
+- `src/hooks/useVogVerificationNotifications.ts`
+- `src/hooks/useDiplomaUpgradeNotifications.ts`
+- `src/hooks/useOAuthGuard.ts`
+
+**Batch 5 - Notulen hooks** (2 bestanden):
+- `src/hooks/notulen/useDeleteMeetingMinute.ts`
+- `src/hooks/notulen/useAIExtractMeeting.ts`
+
+**Batch 6 - Component (apart)**:
+- `src/components/NewApplicationDialog.tsx` (heeft al logger, alleen console.log vervangen)
 
 ---
 
@@ -303,35 +229,7 @@ useRealtimeChannel({
 
 | Test | Verwacht Resultaat |
 |------|-------------------|
-| Open Dashboard, wijzig taak in andere tab | MyTasksFlowSection ververst binnen 200ms |
-| Check console logs op CHANNEL_ERROR | Geen errors in normale werking |
-| Open Network tab, check WebSocket frames | Significant minder duplicate messages |
-| Bulk import 20 taken | 1 refetch na 200ms, niet 20 immediate |
-| Verbinding verliest WiFi | Console logt CHANNEL_ERROR |
-
----
-
-## Risico's en Mitigatie
-
-| Risico | Mitigatie |
-|--------|-----------|
-| Breaking change bij migratie | Stapsgewijze implementatie per component |
-| Performance regressie | Debounce voorkomt cascade updates |
-| Realtime stopt na error | Logging maakt debugging mogelijk |
-
----
-
-## Samenvatting Wijzigingen
-
-| Categorie | Bestanden | Regels Code |
-|-----------|-----------|-------------|
-| Nieuw utility bestand | 1 | ~50 |
-| Updates bestaande bestanden | 7 | ~100 |
-| **Totaal** | **8** | **~150** |
-
-**Resultaat**: Gestandaardiseerde, robuuste realtime implementatie met:
-- 1 central utility hook
-- Uniforme error handling
-- Consistent 200ms debouncing
-- Minder WebSocket connections
-
+| Build succesvol | Geen TypeScript errors |
+| Console in productie | Geen logs zichtbaar (behalve errors) |
+| `__enableDebug()` in browser console | Alle logs weer zichtbaar |
+| Error logging werkt | Errors blijven altijd in console |
