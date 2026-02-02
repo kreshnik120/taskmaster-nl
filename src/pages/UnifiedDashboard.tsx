@@ -4,6 +4,8 @@ import { LayoutDashboard, User, Users, Briefcase, List, Calendar, TrendingUp, Lo
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUserRole } from "@/hooks/useUserRole";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
+import { getTabColors } from "@/lib/constants/designTokens";
 
 // Tab 1: Mijn Werk - Components
 import { TodayFocusCard } from "@/components/dashboard/TodayFocusCard";
@@ -122,16 +124,26 @@ export default function UnifiedDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
+      {/* Page Header - Dynamic Color */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <LayoutDashboard className="h-6 w-6 text-primary" />
+          <div className={cn(
+            "p-2 rounded-lg transition-all duration-300 ease-out-expo",
+            getTabColors(activeTab).iconBg
+          )}>
+            <LayoutDashboard className={cn(
+              "h-6 w-6 transition-colors duration-300",
+              getTabColors(activeTab).accent
+            )} />
           </div>
           <div>
             <h1 className="text-2xl font-bold">Dashboard</h1>
-            <p className="text-sm text-muted-foreground">
-              Overzicht van taken, team en recruitment
+            <p className={cn(
+              "text-sm transition-colors duration-300",
+              getTabColors(activeTab).accent,
+              "opacity-80"
+            )}>
+              {getTabColors(activeTab).name}
             </p>
           </div>
         </div>
@@ -139,30 +151,119 @@ export default function UnifiedDashboard() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid grid-cols-3 md:grid-cols-6 w-full">
-          <TabsTrigger value="mijn-werk" className="gap-2">
+        <TabsList className="grid grid-cols-3 md:grid-cols-6 w-full bg-muted/50">
+          {/* Mijn Werk */}
+          <TabsTrigger 
+            value="mijn-werk" 
+            className={cn(
+              "gap-2 relative transition-all duration-300 ease-out-expo",
+              activeTab === "mijn-werk" && [
+                "bg-tab-mijn-werk-100 dark:bg-tab-mijn-werk-900/50",
+                "text-tab-mijn-werk-700 dark:text-tab-mijn-werk-300",
+                "shadow-tab-mijn-werk"
+              ]
+            )}
+          >
             <User className="h-4 w-4" />
             <span className="hidden sm:inline">Mijn Werk</span>
+            {activeTab === "mijn-werk" && (
+              <span className="absolute -bottom-[1px] left-2 right-2 h-0.5 rounded-full bg-tab-mijn-werk-500" />
+            )}
           </TabsTrigger>
-          <TabsTrigger value="kalender" className="gap-2">
+          
+          {/* Kalender */}
+          <TabsTrigger 
+            value="kalender" 
+            className={cn(
+              "gap-2 relative transition-all duration-300 ease-out-expo",
+              activeTab === "kalender" && [
+                "bg-tab-kalender-100 dark:bg-tab-kalender-900/50",
+                "text-tab-kalender-700 dark:text-tab-kalender-300",
+                "shadow-tab-kalender"
+              ]
+            )}
+          >
             <Calendar className="h-4 w-4" />
             <span className="hidden sm:inline">Kalender</span>
+            {activeTab === "kalender" && (
+              <span className="absolute -bottom-[1px] left-2 right-2 h-0.5 rounded-full bg-tab-kalender-500" />
+            )}
           </TabsTrigger>
-          <TabsTrigger value="lijst" className="gap-2">
+          
+          {/* Lijst */}
+          <TabsTrigger 
+            value="lijst" 
+            className={cn(
+              "gap-2 relative transition-all duration-300 ease-out-expo",
+              activeTab === "lijst" && [
+                "bg-tab-lijst-100 dark:bg-tab-lijst-900/50",
+                "text-tab-lijst-700 dark:text-tab-lijst-300",
+                "shadow-tab-lijst"
+              ]
+            )}
+          >
             <List className="h-4 w-4" />
             <span className="hidden sm:inline">Lijst</span>
+            {activeTab === "lijst" && (
+              <span className="absolute -bottom-[1px] left-2 right-2 h-0.5 rounded-full bg-tab-lijst-500" />
+            )}
           </TabsTrigger>
-          <TabsTrigger value="opvolging" className="gap-2">
+          
+          {/* Opvolging */}
+          <TabsTrigger 
+            value="opvolging" 
+            className={cn(
+              "gap-2 relative transition-all duration-300 ease-out-expo",
+              activeTab === "opvolging" && [
+                "bg-tab-opvolging-100 dark:bg-tab-opvolging-900/50",
+                "text-tab-opvolging-700 dark:text-tab-opvolging-300",
+                "shadow-tab-opvolging"
+              ]
+            )}
+          >
             <TrendingUp className="h-4 w-4" />
             <span className="hidden sm:inline">Opvolging</span>
+            {activeTab === "opvolging" && (
+              <span className="absolute -bottom-[1px] left-2 right-2 h-0.5 rounded-full bg-tab-opvolging-500" />
+            )}
           </TabsTrigger>
-          <TabsTrigger value="team" className="gap-2">
+          
+          {/* Team */}
+          <TabsTrigger 
+            value="team" 
+            className={cn(
+              "gap-2 relative transition-all duration-300 ease-out-expo",
+              activeTab === "team" && [
+                "bg-tab-team-100 dark:bg-tab-team-900/50",
+                "text-tab-team-700 dark:text-tab-team-300",
+                "shadow-tab-team"
+              ]
+            )}
+          >
             <Users className="h-4 w-4" />
             <span className="hidden sm:inline">Team</span>
+            {activeTab === "team" && (
+              <span className="absolute -bottom-[1px] left-2 right-2 h-0.5 rounded-full bg-tab-team-500" />
+            )}
           </TabsTrigger>
-          <TabsTrigger value="recruitment" className="gap-2">
+          
+          {/* Recruitment */}
+          <TabsTrigger 
+            value="recruitment" 
+            className={cn(
+              "gap-2 relative transition-all duration-300 ease-out-expo",
+              activeTab === "recruitment" && [
+                "bg-tab-recruitment-100 dark:bg-tab-recruitment-900/50",
+                "text-tab-recruitment-700 dark:text-tab-recruitment-300",
+                "shadow-tab-recruitment"
+              ]
+            )}
+          >
             <Briefcase className="h-4 w-4" />
             <span className="hidden sm:inline">Recruitment</span>
+            {activeTab === "recruitment" && (
+              <span className="absolute -bottom-[1px] left-2 right-2 h-0.5 rounded-full bg-tab-recruitment-500" />
+            )}
           </TabsTrigger>
         </TabsList>
 

@@ -98,9 +98,98 @@ All colors MUST be HSL.
     --sidebar-border: 220 13% 91%;
 
     --sidebar-ring: 217.2 91.2% 59.8%;
+    
+    /* ============================================
+       TAB CONTEXT COLORS - Enterprise Premium
+       ============================================ */
+
+    /* Mijn Werk - Indigo (Focus, Personal) */
+    --tab-mijn-werk-50: 234 45% 97%;
+    --tab-mijn-werk-100: 234 45% 94%;
+    --tab-mijn-werk-200: 234 45% 88%;
+    --tab-mijn-werk-300: 234 45% 78%;
+    --tab-mijn-werk-400: 234 45% 66%;
+    --tab-mijn-werk-500: 234 45% 52%;
+    --tab-mijn-werk-600: 234 45% 44%;
+    --tab-mijn-werk-700: 234 45% 38%;
+    --tab-mijn-werk-800: 234 45% 32%;
+    --tab-mijn-werk-900: 234 45% 26%;
+
+    /* Kalender - Teal (Time, Planning) */
+    --tab-kalender-50: 174 42% 97%;
+    --tab-kalender-100: 174 42% 93%;
+    --tab-kalender-200: 174 42% 85%;
+    --tab-kalender-300: 174 42% 73%;
+    --tab-kalender-400: 174 42% 58%;
+    --tab-kalender-500: 174 42% 43%;
+    --tab-kalender-600: 174 42% 36%;
+    --tab-kalender-700: 174 42% 30%;
+    --tab-kalender-800: 174 42% 24%;
+    --tab-kalender-900: 174 42% 18%;
+
+    /* Lijst - Slate (Data, Neutral) */
+    --tab-lijst-50: 215 25% 97%;
+    --tab-lijst-100: 215 25% 94%;
+    --tab-lijst-200: 215 25% 88%;
+    --tab-lijst-300: 215 25% 78%;
+    --tab-lijst-400: 215 25% 62%;
+    --tab-lijst-500: 215 25% 48%;
+    --tab-lijst-600: 215 25% 40%;
+    --tab-lijst-700: 215 25% 34%;
+    --tab-lijst-800: 215 25% 28%;
+    --tab-lijst-900: 215 25% 22%;
+
+    /* Opvolging - Amber (Urgency, AI-driven) */
+    --tab-opvolging-50: 38 55% 97%;
+    --tab-opvolging-100: 38 55% 93%;
+    --tab-opvolging-200: 38 55% 85%;
+    --tab-opvolging-300: 38 55% 74%;
+    --tab-opvolging-400: 38 55% 62%;
+    --tab-opvolging-500: 38 55% 50%;
+    --tab-opvolging-600: 38 55% 42%;
+    --tab-opvolging-700: 38 55% 36%;
+    --tab-opvolging-800: 38 55% 30%;
+    --tab-opvolging-900: 38 55% 24%;
+
+    /* Team - Violet (Collaboration) */
+    --tab-team-50: 270 45% 97%;
+    --tab-team-100: 270 45% 93%;
+    --tab-team-200: 270 45% 86%;
+    --tab-team-300: 270 45% 76%;
+    --tab-team-400: 270 45% 65%;
+    --tab-team-500: 270 45% 55%;
+    --tab-team-600: 270 45% 47%;
+    --tab-team-700: 270 45% 40%;
+    --tab-team-800: 270 45% 34%;
+    --tab-team-900: 270 45% 28%;
+
+    /* Recruitment - Rose (Growth, People) */
+    --tab-recruitment-50: 345 48% 97%;
+    --tab-recruitment-100: 345 48% 93%;
+    --tab-recruitment-200: 345 48% 86%;
+    --tab-recruitment-300: 345 48% 75%;
+    --tab-recruitment-400: 345 48% 63%;
+    --tab-recruitment-500: 345 48% 52%;
+    --tab-recruitment-600: 345 48% 44%;
+    --tab-recruitment-700: 345 48% 38%;
+    --tab-recruitment-800: 345 48% 32%;
+    --tab-recruitment-900: 345 48% 26%;
+
+    /* Spring Physics Transitions */
+    --ease-spring-soft: cubic-bezier(0.22, 1.2, 0.36, 1);
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    --duration-normal: 250ms;
+    --duration-slow: 400ms;
   }
 
   .dark {
+    /* Tab colors - Dark mode (lighter primaries) */
+    --tab-mijn-werk-300: 234 45% 72%;
+    --tab-kalender-300: 174 42% 68%;
+    --tab-lijst-300: 215 25% 72%;
+    --tab-opvolging-300: 38 55% 68%;
+    --tab-team-300: 270 45% 70%;
+    --tab-recruitment-300: 345 48% 70%;
     --background: 222 47% 11%;
     --foreground: 210 40% 98%;
 
@@ -175,6 +264,24 @@ All colors MUST be HSL.
   .sidebar-menu-item-active::before {
     content: '';
     @apply absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r;
+  }
+
+  /* Glassmorphism Panel */
+  .glass-panel {
+    @apply bg-white/72 dark:bg-slate-900/72;
+    backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid hsla(220, 15%, 90%, 0.6);
+  }
+
+  .dark .glass-panel {
+    border-color: hsla(220, 15%, 20%, 0.6);
+  }
+
+  /* Tab Content Transition */
+  .tab-content-transition {
+    @apply transition-all;
+    transition-duration: 400ms;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   }
 }
 
