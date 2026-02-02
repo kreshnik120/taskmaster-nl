@@ -1,126 +1,291 @@
 
-# Onderdeel 4: Routes Opruimen
+# Onderdeel 5: Fix Agent & Navigatie Koppelingen
 
-## Overzicht
+## Samenvatting
 
-De routes `/lijst`, `/kalender` en `/opvolging` zijn niet meer nodig als standalone pagina's omdat:
-1. De functionaliteit is geintegreerd in Dashboard tabs (Onderdeel 2)
-2. De sidebar links zijn verwijderd (Onderdeel 3)
+Na grondige analyse zijn er **3 kritieke categorieën** van vergeten koppelingen geïdentificeerd die moeten worden opgelost voordat de migratie compleet is.
 
-Nu verwijderen we de routes en redirecten bezoekers naar de juiste Dashboard tab.
+---
 
-## Wijzigingen
+## Categorie 1: AI Agent Context Detectie (KRITIEK)
 
-### Bestand: src/App.tsx
+### Probleem
+De AI agents en ChatWidget gebruiken `location.pathname` voor context-detectie. Door de redirects is het pathname nu altijd `/dashboard` in plaats van `/kalender`, `/lijst`, of `/opvolging`. Dit breekt:
+- Schedule Agent quick actions op kalender tab
+- Lijst-specifieke AI suggesties
+- Opvolging context voor de ChatWidget
 
-#### 1. Imports verwijderen (regels 16-17, 19)
+### Betrokken Bestanden
 
-Verwijder deze 3 imports:
+| Bestand | Regel | Huidige Code | Probleem |
+|---------|-------|--------------|----------|
+| `src/lib/agentIntents.ts` | 216-287 | `PAGE_AGENT_CONFIG["/kalender"]` | Matched niet meer |
+| `src/lib/agentIntents.ts` | 303-317 | `getPageAgentConfig(pathname)` | Krijgt altijd `/dashboard` |
+| `src/components/AIAssistant/ChatWidget.tsx` | 113-131 | `PAGE_CONTEXTS["/kalender"]` | Matched niet meer |
+| `src/components/AIAssistant/ChatWidget.tsx` | 239-250 | `currentPageContext` useMemo | Fallback naar default |
+| `src/hooks/useAgentRouter.ts` | 35-37 | `getPageAgentConfig(location.pathname)` | Krijgt altijd `/dashboard` |
+
+### Oplossing
+Update de context-detectie logica om ook query parameters te lezen:
 
 ```typescript
-// VERWIJDEREN:
-import Lijst from "./pages/Lijst";      // regel 16
-import Kalender from "./pages/Kalender"; // regel 17
-import Opvolging from "./pages/Opvolging"; // regel 19
+// Nieuwe helper functie
+function getEffectivePath(location: Location): string {
+  const { pathname, search } = location;
+  const params = new URLSearchParams(search);
+  const tab = params.get('tab');
+  
+  // Dashboard met tab parameter → map naar virtueel path
+  if (pathname === '/dashboard' && tab) {
+    const tabMapping: Record<string, string> = {
+      'lijst': '/lijst',
+      'kalender': '/kalender',
+      'opvolging': '/opvolging',
+      'mijn-werk': '/',
+      'team': '/dashboard',
+      'recruitment': '/sollicitaties',
+    };
+    return tabMapping[tab] || pathname;
+  }
+  
+  return pathname;
+}
 ```
 
-#### 2. Routes vervangen door redirects (regels 93-96)
+### Wijzigingen per Bestand
 
-Van standalone routes naar Dashboard tab redirects:
+#### 1. `src/lib/agentIntents.ts`
+- Voeg helper functie `getEffectivePathFromURL(pathname: string, search: string)` toe
+- Update `getPageAgentConfig` om search parameter te accepteren
 
-| Oude Route | Nieuwe Redirect |
-|------------|-----------------|
-| `/lijst` | `/dashboard?tab=lijst` |
-| `/kalender` | `/dashboard?tab=kalender` |
-| `/opvolging` | `/dashboard?tab=opvolging` |
+#### 2. `src/components/AIAssistant/ChatWidget.tsx`
+- Update `currentPageContext` useMemo om `location.search` te gebruiken
+- Map dashboard tabs naar juiste PAGE_CONTEXTS entries
 
-**Code wijziging:**
+#### 3. `src/hooks/useAgentRouter.ts`  
+- Update `pageConfig` useMemo om `location.search` mee te nemen
 
+---
+
+## Categorie 2: Interne Navigatie Links (HOOG)
+
+### Probleem
+6 componenten gebruiken nog oude URL paths die nu redirecten in plaats van direct navigeren.
+
+### Overzicht Wijzigingen
+
+| Component | Regel | Huidige URL | Nieuwe URL |
+|-----------|-------|-------------|------------|
+| `NotificationBell.tsx` | 32 | `/lijst?task=${taskId}` | `/dashboard?tab=lijst&taskId=${taskId}` |
+| `AssigneeProgress.tsx` | 20 | `/lijst?assignee=${userId}` | `/dashboard?tab=lijst&assignee=${userId}` |
+| `TodayFocusCard.tsx` | 144 | `/lijst` | `/dashboard?tab=lijst` |
+| `OverdueTasksList.tsx` | 107 | `/lijst?filter=overdue` | `/dashboard?tab=lijst&filter=overdue` |
+| `UpcomingTasksList.tsx` | 115 | `/kalender` | `/dashboard?tab=kalender` |
+| `ApplicationDetailModal.tsx` | 2047 | `/lijst?task=${task.id}` | `/dashboard?tab=lijst&taskId=${task.id}` |
+
+### Gedetailleerde Wijzigingen
+
+#### `src/components/notifications/NotificationBell.tsx` (regel 32)
 ```typescript
 // VAN:
-<Route path="/lijst" element={<Lijst />} />
-<Route path="/kalender" element={<Kalender />} />
-<Route path="/opvolging" element={<Opvolging />} />
+navigate(`/lijst?task=${taskId}&highlight=subtask`);
 
 // NAAR:
-<Route path="/lijst" element={<Navigate to="/dashboard?tab=lijst" replace />} />
-<Route path="/kalender" element={<Navigate to="/dashboard?tab=kalender" replace />} />
-<Route path="/opvolging" element={<Navigate to="/dashboard?tab=opvolging" replace />} />
+navigate(`/dashboard?tab=lijst&taskId=${taskId}&highlight=subtask`);
 ```
 
-## Resultaat na wijziging
+#### `src/components/dashboard-stats/AssigneeProgress.tsx` (regel 20)
+```typescript
+// VAN:
+navigate(`/lijst?assignee=${userId}`);
 
-### App.tsx Imports (van 22 naar 19)
-
-```text
-Behouden:
-- UnifiedDashboard, Auth, Bijlagen, Notulen
-- Kanban, Tijdregistratie, VerwijderdeTaken, AfgerondeTaken
-- AiTraining, Professionals, Sollicitaties, SollicitatiesArchief
-- Klanten, Plaatsingen, Gebruikers, NotFound, WhatsApp
-
-Verwijderd:
-- Lijst       ✗
-- Kalender    ✗
-- Opvolging   ✗
+// NAAR:
+navigate(`/dashboard?tab=lijst&assignee=${userId}`);
 ```
 
-### Route Gedrag
+#### `src/components/dashboard/TodayFocusCard.tsx` (regel 144)
+```typescript
+// VAN:
+onClick={() => navigate("/lijst")}
 
-| URL | Actie |
-|-----|-------|
-| `/lijst` | Redirect naar `/dashboard?tab=lijst` |
-| `/kalender` | Redirect naar `/dashboard?tab=kalender` |
-| `/opvolging` | Redirect naar `/dashboard?tab=opvolging` |
-| Bookmarks | Blijven werken via redirect |
-| Externe links | Blijven werken via redirect |
+// NAAR:
+onClick={() => navigate("/dashboard?tab=lijst")}
+```
+
+#### `src/components/dashboard-stats/OverdueTasksList.tsx` (regel 107)
+```typescript
+// VAN:
+onClick={() => navigate('/lijst?filter=overdue')}
+
+// NAAR:
+onClick={() => navigate('/dashboard?tab=lijst&filter=overdue')}
+```
+
+#### `src/components/dashboard-stats/UpcomingTasksList.tsx` (regel 115)
+```typescript
+// VAN:
+onClick={() => navigate('/kalender')}
+
+// NAAR:
+onClick={() => navigate('/dashboard?tab=kalender')}
+```
+
+#### `src/components/ApplicationDetailModal.tsx` (regel 2047)
+```typescript
+// VAN:
+window.location.href = `/lijst?task=${task.id}`;
+
+// NAAR:
+window.location.href = `/dashboard?tab=lijst&taskId=${task.id}`;
+```
+
+---
+
+## Categorie 3: Legacy Bestanden Verwijderen (OPRUIMING)
+
+### Probleem
+De volgende bestanden zijn niet meer nodig maar nemen ~4300+ regels in beslag:
+
+| Bestand | Regels | Status |
+|---------|--------|--------|
+| `src/pages/Lijst.tsx` | ~1490 | Vervangen door EmbeddedListView |
+| `src/pages/Kalender.tsx` | ~1225 | Vervangen door EmbeddedCalendarView |
+| `src/pages/Opvolging.tsx` | ~553 | Vervangen door EmbeddedFollowupView |
+| `src/pages/Dashboard.tsx` | ~960 | Vervangen door UnifiedDashboard |
+| `src/pages/DashboardStats.tsx` | ~63 | Vervangen door MijnWerkTab |
+
+**Totaal: ~4291 regels te verwijderen**
+
+### Actie
+Verwijder alle 5 bestanden na bevestiging dat alles werkt.
+
+---
+
+## Implementatie Volgorde
+
+| Stap | Onderdeel | Bestanden | Impact |
+|------|-----------|-----------|--------|
+| 1 | Agent Context Fix | agentIntents.ts, ChatWidget.tsx, useAgentRouter.ts | AI krijgt juiste context |
+| 2 | Navigatie Links | 6 componenten | Direct navigatie zonder redirect |
+| 3 | Legacy Cleanup | 5 pagina bestanden | Codebase opschoning |
+
+---
 
 ## Technische Details
 
-| Actie | Regel | Impact |
-|-------|-------|--------|
-| Remove Lijst import | 16 | Geen runtime impact |
-| Remove Kalender import | 17 | Geen runtime impact |
-| Remove Opvolging import | 19 | Geen runtime impact |
-| Replace /lijst route | 93 | Redirect naar dashboard tab |
-| Replace /kalender route | 94 | Redirect naar dashboard tab |
-| Replace /opvolging route | 96 | Redirect naar dashboard tab |
+### Stap 1: Agent Context Fix
 
-## Waarom Redirects ipv Verwijderen?
+**`src/lib/agentIntents.ts`** - Nieuwe functie toevoegen:
 
-- **Bookmarks**: Gebruikers met oude bookmarks worden correct doorgestuurd
-- **Externe links**: Links in emails of documenten blijven werken
-- **SEO**: Zoekmachines volgen de redirect naar nieuwe locatie
-- **Gradual migration**: Veilige overgang zonder broken links
+```typescript
+/**
+ * Get effective path considering dashboard tabs
+ */
+export function getEffectivePath(pathname: string, search: string): string {
+  const params = new URLSearchParams(search);
+  const tab = params.get('tab');
+  
+  if (pathname === '/dashboard' && tab) {
+    const tabMapping: Record<string, string> = {
+      'lijst': '/lijst',
+      'kalender': '/kalender',
+      'opvolging': '/opvolging',
+      'mijn-werk': '/',
+    };
+    return tabMapping[tab] || pathname;
+  }
+  
+  return pathname;
+}
+```
 
-## Fase 2 (Later - Niet Nu)
+**`src/lib/agentIntents.ts`** - Update getPageAgentConfig:
 
-Na bevestiging dat alles werkt, kunnen de page bestanden verwijderd worden:
-- `src/pages/Lijst.tsx` (1490 regels)
-- `src/pages/Kalender.tsx` (1225 regels)  
-- `src/pages/Opvolging.tsx` (553 regels)
+```typescript
+export function getPageAgentConfig(pathname: string, search: string = ''): PageAgentConfig {
+  const effectivePath = getEffectivePath(pathname, search);
+  
+  // Exact match first
+  if (PAGE_AGENT_CONFIG[effectivePath]) {
+    return PAGE_AGENT_CONFIG[effectivePath];
+  }
+  // ... rest unchanged
+}
+```
 
-**Totaal: ~3268 regels legacy code te verwijderen**
+**`src/components/AIAssistant/ChatWidget.tsx`** - Update context detection:
 
-Dit doen we NIET in deze stap om rollback mogelijk te houden.
+```typescript
+const currentPageContext = useMemo(() => {
+  const params = new URLSearchParams(location.search);
+  const tab = params.get('tab');
+  
+  // Handle dashboard tabs
+  if (currentPath === '/dashboard' && tab) {
+    const tabMapping: Record<string, string> = {
+      'lijst': '/lijst',
+      'kalender': '/kalender',
+      'opvolging': '/opvolging',
+    };
+    const mappedPath = tabMapping[tab];
+    if (mappedPath && PAGE_CONTEXTS[mappedPath]) {
+      return PAGE_CONTEXTS[mappedPath];
+    }
+  }
+  
+  // Existing logic...
+  if (PAGE_CONTEXTS[currentPath]) {
+    return PAGE_CONTEXTS[currentPath];
+  }
+  const basePath = '/' + currentPath.split('/')[1];
+  if (PAGE_CONTEXTS[basePath]) {
+    return PAGE_CONTEXTS[basePath];
+  }
+  return DEFAULT_PAGE_CONTEXT;
+}, [currentPath, location.search]);
+```
 
-## Verificatie na implementatie
+**`src/hooks/useAgentRouter.ts`** - Update pageConfig:
+
+```typescript
+const pageConfig: PageAgentConfig = useMemo(
+  () => getPageAgentConfig(location.pathname, location.search),
+  [location.pathname, location.search]
+);
+```
+
+### Stap 2: Navigatie Links Update
+
+Alle 6 componenten worden bijgewerkt met de nieuwe URL structuur zoals hierboven beschreven.
+
+### Stap 3: Legacy Cleanup
+
+Verwijder de volgende bestanden:
+- `src/pages/Lijst.tsx`
+- `src/pages/Kalender.tsx`
+- `src/pages/Opvolging.tsx`
+- `src/pages/Dashboard.tsx`
+- `src/pages/DashboardStats.tsx`
+
+---
+
+## Verificatie Checklist
 
 | Test | Verwacht Resultaat |
 |------|-------------------|
-| Bezoek `/lijst` | Redirect naar `/dashboard?tab=lijst` |
-| Bezoek `/kalender` | Redirect naar `/dashboard?tab=kalender` |
-| Bezoek `/opvolging` | Redirect naar `/dashboard?tab=opvolging` |
-| Dashboard tabs | Alle 6 tabs functioneel |
-| Console | Geen import errors |
-| TypeScript | Compileert zonder warnings |
+| Open `/dashboard?tab=kalender`, check ChatWidget quick actions | Toont "Afspraken vandaag", "Deze week", "Planning optimaliseren" |
+| Open `/dashboard?tab=lijst`, check ChatWidget context | Label toont "Lijstweergave" |
+| Klik op notificatie voor subtask | Navigeert naar `/dashboard?tab=lijst&taskId=...` |
+| Klik "meer bekijken" in UpcomingTasksList | Navigeert naar `/dashboard?tab=kalender` |
+| Klik op medewerker in AssigneeProgress | Navigeert naar `/dashboard?tab=lijst&assignee=...` |
+| Check codebase size | ~4291 regels minder |
 
-## Bonus: AppSidebar Cleanup
+---
 
-In dezelfde stap ruimen we ook de ongebruikte imports op in `AppSidebar.tsx`:
+## Risico's en Mitigatie
 
-```typescript
-// VERWIJDEREN uit regel 1:
-- Home    // niet gebruikt
-- Kanban  // niet gebruikt
-```
+| Risico | Mitigatie |
+|--------|-----------|
+| AI context breekt | Fallback naar DEFAULT_PAGE_CONTEXT blijft werken |
+| Navigatie parameters niet gelezen | UnifiedDashboard leest al `taskId` uit URL |
+| Legacy files nodig voor rollback | Verwijderen als laatste stap na volledige verificatie |
