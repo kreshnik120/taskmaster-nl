@@ -269,7 +269,10 @@ export default function UnifiedDashboard() {
 
         {/* Tab 1: Mijn Werk */}
         <TabsContent value="mijn-werk" className="mt-6">
-          <div className="glass-layer-1 glass-light-bleed shadow-float-indigo p-6 rounded-2xl space-y-6">
+          <div className={cn(
+            "glass-layer-1 glass-light-bleed p-6 rounded-2xl space-y-6",
+            getTabColors('mijn-werk').shadowClass
+          )}>
             <div className="grid gap-6 md:grid-cols-2">
               <TodayFocusCard />
               <UpcomingRemindersWidget />
@@ -281,75 +284,100 @@ export default function UnifiedDashboard() {
         </TabsContent>
 
         {/* Tab 2: Team Overzicht */}
-        <TabsContent value="team" className="space-y-6 mt-6">
-          <DashboardHeader isLoading={statsLoading} />
-          
-          {statsError ? (
-            <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive">
-              Er is een fout opgetreden bij het laden van de statistieken.
-            </div>
-          ) : (
-            <>
-              <StatCards 
-                totalTasks={stats?.totalTasks ?? 0}
-                openTasks={stats?.openTasks ?? 0}
-                completedTasks={stats?.completedTasks ?? 0}
-                overdueTasks={stats?.overdueTasks ?? 0}
-                isLoading={statsLoading} 
-              />
-              
-              <div className="grid gap-6 md:grid-cols-2">
-                <AssigneeProgress 
-                  assignees={stats?.byAssignee ?? []} 
-                  isLoading={statsLoading} 
-                />
-                <SourceProgress 
-                  sources={stats?.bySource ?? []} 
-                  isLoading={statsLoading} 
-                />
+        <TabsContent value="team" className="mt-6">
+          <div className={cn(
+            "glass-layer-1 glass-light-bleed p-6 rounded-2xl space-y-6",
+            getTabColors('team').shadowClass
+          )}>
+            <DashboardHeader isLoading={statsLoading} />
+            
+            {statsError ? (
+              <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive">
+                Er is een fout opgetreden bij het laden van de statistieken.
               </div>
-              
-              <div className="grid gap-6 md:grid-cols-2">
-                <OverdueTasksList 
-                  tasks={stats?.overdueTasksList ?? []} 
+            ) : (
+              <>
+                <StatCards 
+                  totalTasks={stats?.totalTasks ?? 0}
+                  openTasks={stats?.openTasks ?? 0}
+                  completedTasks={stats?.completedTasks ?? 0}
+                  overdueTasks={stats?.overdueTasks ?? 0}
                   isLoading={statsLoading} 
                 />
-                <UpcomingTasksList 
-                  tasks={stats?.upcomingTasks ?? []} 
-                  isLoading={statsLoading} 
-                />
-              </div>
-            </>
-          )}
+                
+                <div className="grid gap-6 md:grid-cols-2">
+                  <AssigneeProgress 
+                    assignees={stats?.byAssignee ?? []} 
+                    isLoading={statsLoading} 
+                  />
+                  <SourceProgress 
+                    sources={stats?.bySource ?? []} 
+                    isLoading={statsLoading} 
+                  />
+                </div>
+                
+                <div className="grid gap-6 md:grid-cols-2">
+                  <OverdueTasksList 
+                    tasks={stats?.overdueTasksList ?? []} 
+                    isLoading={statsLoading} 
+                  />
+                  <UpcomingTasksList 
+                    tasks={stats?.upcomingTasks ?? []} 
+                    isLoading={statsLoading} 
+                  />
+                </div>
+              </>
+            )}
+          </div>
         </TabsContent>
 
         {/* Tab 3: Recruitment */}
-        <TabsContent value="recruitment" className="space-y-6 mt-6">
-          <RecruitmentKPIs />
-          {urgencyApplications.length > 0 && (
-            <UrgencyActionPanel applications={urgencyApplications} />
-          )}
+        <TabsContent value="recruitment" className="mt-6">
+          <div className={cn(
+            "glass-layer-1 glass-light-bleed p-6 rounded-2xl space-y-6",
+            getTabColors('recruitment').shadowClass
+          )}>
+            <RecruitmentKPIs />
+            {urgencyApplications.length > 0 && (
+              <UrgencyActionPanel applications={urgencyApplications} />
+            )}
+          </div>
         </TabsContent>
 
         {/* Tab 4: Lijst */}
-        <TabsContent value="lijst" className="space-y-6 mt-6">
-          <Suspense fallback={<TabLoadingFallback />}>
-            <EmbeddedListView />
-          </Suspense>
+        <TabsContent value="lijst" className="mt-6">
+          <div className={cn(
+            "glass-layer-1 glass-light-bleed p-6 rounded-2xl",
+            getTabColors('lijst').shadowClass
+          )}>
+            <Suspense fallback={<TabLoadingFallback />}>
+              <EmbeddedListView />
+            </Suspense>
+          </div>
         </TabsContent>
 
         {/* Tab 5: Kalender */}
-        <TabsContent value="kalender" className="space-y-6 mt-6">
-          <Suspense fallback={<TabLoadingFallback />}>
-            <EmbeddedCalendarView />
-          </Suspense>
+        <TabsContent value="kalender" className="mt-6">
+          <div className={cn(
+            "glass-layer-1 glass-light-bleed p-6 rounded-2xl",
+            getTabColors('kalender').shadowClass
+          )}>
+            <Suspense fallback={<TabLoadingFallback />}>
+              <EmbeddedCalendarView />
+            </Suspense>
+          </div>
         </TabsContent>
 
         {/* Tab 6: Opvolging */}
-        <TabsContent value="opvolging" className="space-y-6 mt-6">
-          <Suspense fallback={<TabLoadingFallback />}>
-            <EmbeddedOpvolgingView />
-          </Suspense>
+        <TabsContent value="opvolging" className="mt-6">
+          <div className={cn(
+            "glass-layer-1 glass-light-bleed p-6 rounded-2xl",
+            getTabColors('opvolging').shadowClass
+          )}>
+            <Suspense fallback={<TabLoadingFallback />}>
+              <EmbeddedOpvolgingView />
+            </Suspense>
+          </div>
         </TabsContent>
       </Tabs>
 

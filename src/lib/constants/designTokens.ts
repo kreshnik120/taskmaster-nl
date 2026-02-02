@@ -154,6 +154,10 @@ export const TAB_CONTEXT_COLORS = {
     shadow: 'shadow-tab-mijn-werk',
     border: 'border-tab-mijn-werk-200 dark:border-tab-mijn-werk-800',
     hoverBorder: 'hover:border-tab-mijn-werk-300',
+    // Phase 5: Glass & Shadow classes
+    glassClass: 'glass-card-indigo',
+    shadowClass: 'shadow-float-indigo',
+    hue: 234,
   },
   'kalender': {
     name: 'Kalender',
@@ -164,6 +168,9 @@ export const TAB_CONTEXT_COLORS = {
     shadow: 'shadow-tab-kalender',
     border: 'border-tab-kalender-200 dark:border-tab-kalender-800',
     hoverBorder: 'hover:border-tab-kalender-300',
+    glassClass: 'glass-card-teal',
+    shadowClass: 'shadow-float-teal',
+    hue: 174,
   },
   'lijst': {
     name: 'Lijst',
@@ -174,6 +181,9 @@ export const TAB_CONTEXT_COLORS = {
     shadow: 'shadow-tab-lijst',
     border: 'border-tab-lijst-200 dark:border-tab-lijst-800',
     hoverBorder: 'hover:border-tab-lijst-300',
+    glassClass: 'glass-layer-1',
+    shadowClass: 'shadow-float-slate',
+    hue: 215,
   },
   'opvolging': {
     name: 'Opvolging',
@@ -184,6 +194,9 @@ export const TAB_CONTEXT_COLORS = {
     shadow: 'shadow-tab-opvolging',
     border: 'border-tab-opvolging-200 dark:border-tab-opvolging-800',
     hoverBorder: 'hover:border-tab-opvolging-300',
+    glassClass: 'glass-card-amber',
+    shadowClass: 'shadow-float-amber',
+    hue: 38,
   },
   'team': {
     name: 'Team',
@@ -194,6 +207,9 @@ export const TAB_CONTEXT_COLORS = {
     shadow: 'shadow-tab-team',
     border: 'border-tab-team-200 dark:border-tab-team-800',
     hoverBorder: 'hover:border-tab-team-300',
+    glassClass: 'glass-card-violet',
+    shadowClass: 'shadow-float-violet',
+    hue: 270,
   },
   'recruitment': {
     name: 'Recruitment',
@@ -204,6 +220,9 @@ export const TAB_CONTEXT_COLORS = {
     shadow: 'shadow-tab-recruitment',
     border: 'border-tab-recruitment-200 dark:border-tab-recruitment-800',
     hoverBorder: 'hover:border-tab-recruitment-300',
+    glassClass: 'glass-card-rose',
+    shadowClass: 'shadow-float-rose',
+    hue: 345,
   },
 } as const;
 
