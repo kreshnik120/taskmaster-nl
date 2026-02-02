@@ -104,7 +104,7 @@ export function OverdueTasksList({ tasks, isLoading, maxItems = 5 }: OverdueTask
         ))}
         {hasMore && (
           <button
-            onClick={() => navigate('/lijst?filter=overdue')}
+            onClick={() => navigate('/dashboard?tab=lijst&filter=overdue')}
             className="w-full text-center text-sm text-muted-foreground hover:text-primary transition-colors py-2"
           >
             +{tasks.length - maxItems} meer bekijken

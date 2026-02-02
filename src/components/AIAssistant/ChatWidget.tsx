@@ -235,8 +235,24 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
   const location = useLocation();
   const currentPath = location.pathname;
   
-  // Get page context based on current route
+  // Get page context based on current route (supports dashboard tabs)
   const currentPageContext = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get('tab');
+    
+    // Handle dashboard tabs - map to virtual paths
+    if (currentPath === '/dashboard' && tab) {
+      const tabMapping: Record<string, string> = {
+        'lijst': '/lijst',
+        'kalender': '/kalender',
+        'opvolging': '/opvolging',
+      };
+      const mappedPath = tabMapping[tab];
+      if (mappedPath && PAGE_CONTEXTS[mappedPath]) {
+        return PAGE_CONTEXTS[mappedPath];
+      }
+    }
+    
     // Check for exact match first
     if (PAGE_CONTEXTS[currentPath]) {
       return PAGE_CONTEXTS[currentPath];
@@ -247,7 +263,7 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
       return PAGE_CONTEXTS[basePath];
     }
     return DEFAULT_PAGE_CONTEXT;
-  }, [currentPath]);
+  }, [currentPath, location.search]);
   
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);

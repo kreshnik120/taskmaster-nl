@@ -29,7 +29,7 @@ export function NotificationBell({ onNotificationClick }: NotificationBellProps)
     
     // Handle subtask assignment - navigate to task list with task highlight
     if (notification.notification_type === 'subtask_assignment' && taskId) {
-      navigate(`/lijst?task=${taskId}&highlight=subtask`);
+      navigate(`/dashboard?tab=lijst&taskId=${taskId}&highlight=subtask`);
       return;
     }
     

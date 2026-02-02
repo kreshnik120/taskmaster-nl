@@ -141,7 +141,7 @@ export function TodayFocusCard() {
                 variant="link"
                 size="sm"
                 className="h-auto p-0 text-xs text-muted-foreground"
-                onClick={() => navigate("/lijst")}
+                onClick={() => navigate("/dashboard?tab=lijst")}
               >
                 Bekijk taken →
               </Button>
