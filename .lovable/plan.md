@@ -1,312 +1,354 @@
 
+# Stapsgewijs Implementatieplan: Navigatie Herstructurering
 
-# Verbeteringsplan "Mijn Taken" - Implementatie Status & Volgende Stappen
-
-## ✅ Wat is AL Geïmplementeerd (TaskDialog.tsx)
-
-De laatste diff bevestigt dat de **basis auto-assign/auto-accept** al werkt:
-
-```typescript
-// GEÏMPLEMENTEERD in TaskDialog.tsx (regel 211-257)
-- Haalt huidige user op bij submit
-- Auto-assign naar huidige user als geen assignee geselecteerd
-- Auto-accept: accepted_at + accepted_by worden gezet bij self-assignment
-- Bij delegatie naar ander: accepted_at/accepted_by = null
-```
-
-**Status**: ✅ Kernfunctionaliteit werkt
+## Expert Panel Validatie
+Dit plan is opgesteld door een multi-disciplinair expert panel:
+- **UX Architect** - Navigatiepatronen en gebruikerservaring
+- **Frontend Engineer** - Component architectuur en state management
+- **QA Specialist** - Testprotocollen en regressiepreventie
+- **Performance Engineer** - Bundle optimalisatie en lazy loading
 
 ---
 
-## ❌ Wat nog ONTBREEKT (4 Prioriteiten)
+## Overzicht: 5 Gefaseerde Onderdelen
 
-### P1-KRITIEK: TaskCard.tsx - Visuele Acceptatie-Indicator
+| Onderdeel | Beschrijving | Risico | Afhankelijkheden |
+|-----------|--------------|--------|------------------|
+| **1** | Sub-view switcher toevoegen aan Dashboard | Laag | Geen |
+| **2** | Embedded views maken (Lijst, Kalender, Opvolging) | Medium | Onderdeel 1 |
+| **3** | Sidebar vereenvoudigen | Laag | Onderdeel 2 |
+| **4** | Route redirects implementeren | Laag | Onderdeel 3 |
+| **5** | Cross-navigatie links updaten | Laag | Onderdeel 4 |
 
-**Probleem**: TaskCard toont NIET of een taak wacht op acceptatie
-
-**Huidige code (regel 18-44)**:
-```typescript
-interface Task {
-  id: string;
-  // ... andere velden
-  // ❌ ONTBREEKT: accepted_at, accepted_by
-}
-```
-
-**Te implementeren**:
-- Voeg `accepted_at?: string | null` toe aan interface
-- Voeg "Wacht op acceptatie" badge toe voor gedelegeerde taken
+**Regel:** Elk onderdeel wordt volledig afgerond en getest voordat het volgende begint.
 
 ---
 
-### P1-KRITIEK: MyTasksFlowSection.tsx - Accepteer-Functionaliteit
+# ONDERDEEL 1: Sub-View Switcher in Dashboard
 
-**Probleem**: Dashboard mist de "Accepteren" knop die wel in Lijst.tsx bestaat
+## 1.1 Doel
+Een view-switcher toevoegen in de "Mijn Werk" tab waarmee gebruikers kunnen schakelen tussen:
+- **Focus** (huidige content)
+- **Lijst** (later embedded)
+- **Kalender** (later embedded)  
+- **Opvolging** (later embedded)
 
-**Huidige query (regel 210-222)** - selecteert NIET accepted_at/accepted_by:
-```typescript
-.select(`
-  id, title, description, priority, assignee_id,
-  due_at, completed_at, column_id, order_key,
-  application_id, recruitment_action_type, start_at,
-  next_action, created_at, updated_at,
-  profiles:profiles!tasks_assignee_id_fkey(name, email)
-`)
-// ❌ ONTBREEKT: accepted_at, accepted_by
-```
-
-**Huidige dropdown (regel 591-604)** - alleen "Verplaats naar":
-```typescript
-<DropdownMenuContent>
-  <DropdownMenuLabel>Verplaats naar</DropdownMenuLabel>
-  {columns.filter(...).map(...)}
-  // ❌ ONTBREEKT: "Accepteren" optie
-</DropdownMenuContent>
-```
-
-**Te implementeren**:
-- Query uitbreiden met `accepted_at, accepted_by`
-- `handleAcceptTask()` functie toevoegen
-- "Accepteren" optie in dropdown menu
-
----
-
-### P2-HOOG: useCreateTasksFromItems.ts - Notulen Auto-Accept
-
-**Probleem**: Taken uit notulen worden NIET auto-accepted bij self-assignment
-
-**Huidige code (regel 257-286)**:
-```typescript
-const tasksToInsert = processedItems.map(({ item, assigneeMatch }) => ({
-  org_id: userOrg.org_id,
-  assignee_id: assigneeMatch.userId,
-  // ❌ ONTBREEKT: accepted_at, accepted_by
-}));
-```
-
-**Te implementeren**:
-- Haal huidige user op
-- Check of `assigneeMatch.userId === user?.id`
-- Indien ja: voeg `accepted_at` en `accepted_by` toe
-
----
-
-### P2-HOOG: AI Orchestrator - Expliciete NULL Waarden
-
-**Probleem**: AI-gegenereerde taken zetten geen expliciet `accepted_at/accepted_by`
-
-**Huidige code (regel 2935-2944)**:
-```typescript
-await supabase.from('tasks').insert({
-  org_id: org_id,
-  title: taskTemplate.title,
-  priority: 'medium',  // ⚠️ Moet 'MEDIUM' zijn (uppercase)
-  // ❌ ONTBREEKT: accepted_at: null, accepted_by: null
-});
-```
-
-**Te implementeren**:
-- Fix priority case naar 'MEDIUM' (uppercase)
-- Voeg expliciete `accepted_at: null, accepted_by: null` toe
-- Dit zorgt ervoor dat AI-taken bewust in "te accepteren" status staan
-
----
-
-## Implementatieplan per Fase
-
-### Fase 1: UI Verbeteringen (Niet-Breaking)
+## 1.2 Te Wijzigen Bestanden
 
 | Bestand | Wijziging | Regels |
 |---------|-----------|--------|
-| `TaskCard.tsx` | Interface + badge | 18-44, +10 regels |
-| `MyTasksFlowSection.tsx` | Query + handler + dropdown | 73-90, 210-222, 591-604 |
+| `src/pages/UnifiedDashboard.tsx` | View state + ToggleGroup UI | +40 regels |
 
-**TaskCard.tsx wijzigingen**:
-```typescript
-// Interface uitbreiden (regel 18-44)
-interface Task {
-  // bestaande velden...
-  accepted_at?: string | null;  // NIEUW
-  accepted_by?: string | null;  // NIEUW
-}
+## 1.3 Technische Specificaties
 
-// Helper functie toevoegen
-const isPendingAcceptance = (task: Task) => {
-  return task.assignee_id && !task.accepted_at;
-};
-
-// Badge toevoegen in CardContent (na description, ~regel 179)
-{isPendingAcceptance(task) && (
-  <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-200">
-    <Clock className="h-3 w-3 mr-1" />
-    Wacht op acceptatie
-  </Badge>
-)}
+**Nieuwe state variabele:**
+```text
+mijnWerkView: 'focus' | 'lijst' | 'kalender' | 'opvolging'
 ```
 
-**MyTasksFlowSection.tsx wijzigingen**:
-```typescript
-// 1. Interface uitbreiden (regel 73-90)
-interface Task {
-  // bestaande velden...
-  accepted_at?: string | null;
-  accepted_by?: string | null;
-}
-
-// 2. Query uitbreiden (regel 210-222)
-.select(`
-  id, title, description, priority, assignee_id,
-  due_at, completed_at, column_id, order_key,
-  application_id, recruitment_action_type, start_at,
-  next_action, created_at, updated_at,
-  accepted_at, accepted_by,  // NIEUW
-  profiles:profiles!tasks_assignee_id_fkey(name, email)
-`)
-
-// 3. Handler toevoegen (na moveTaskToColumn, ~regel 368)
-const handleAcceptTask = async (taskId: string) => {
-  if (!user) return;
-  
-  const { error } = await supabase
-    .from("tasks")
-    .update({ 
-      accepted_by: user.id,
-      accepted_at: new Date().toISOString()
-    })
-    .eq("id", taskId);
-
-  if (error) {
-    toast.error("Fout bij accepteren");
-    return;
-  }
-
-  // Optimistic update
-  setTasks(prev => prev.map(t =>
-    t.id === taskId 
-      ? { ...t, accepted_by: user.id, accepted_at: new Date().toISOString() } 
-      : t
-  ));
-  
-  setStatusMessage("Taak geaccepteerd");
-  toast.success("Taak geaccepteerd");
-};
-
-// 4. Dropdown menu uitbreiden (regel 591-604)
-<DropdownMenuContent align="end" className="bg-popover">
-  {/* Accepteer optie voor niet-geaccepteerde taken */}
-  {!task.accepted_at && (
-    <>
-      <DropdownMenuItem
-        onClick={() => handleAcceptTask(task.id)}
-        className="text-primary"
-      >
-        <CheckCircle2 className="h-4 w-4 mr-2" />
-        Accepteren
-      </DropdownMenuItem>
-      <DropdownMenuSeparator />
-    </>
-  )}
-  <DropdownMenuLabel>Verplaats naar</DropdownMenuLabel>
-  {columns.filter(...).map(...)}
-</DropdownMenuContent>
+**URL parameter ondersteuning:**
+```text
+/dashboard?tab=mijn-werk&view=lijst
 ```
+
+**UI Component:**
+- Desktop: `ToggleGroup` (4 knoppen naast elkaar)
+- Mobile: `Select` dropdown (voorkomt overflow)
+
+## 1.4 Koppelingen Checklist
+
+| Koppeling | Status | Impact |
+|-----------|--------|--------|
+| URL params (`searchParams`) | Al aanwezig | Uitbreiden met `view` |
+| Tab state | Al aanwezig | Geen wijziging |
+| Realtime subscriptions | Bestaande blijven | Geen impact |
+| Keyboard shortcuts | Nieuwe `/` en `n` | Alleen in focus view |
+
+## 1.5 Testprotocol Onderdeel 1
+
+| Test | Verwacht Resultaat |
+|------|-------------------|
+| Open `/dashboard?tab=mijn-werk` | Focus view getoond |
+| Open `/dashboard?tab=mijn-werk&view=lijst` | Lijst placeholder getoond |
+| Klik op Kalender toggle | View wisselt, URL update |
+| Refresh pagina | Geselecteerde view blijft |
+| Mobile viewport (375px) | Dropdown i.p.v. buttons |
+
+## 1.6 Rollback Procedure
+Verwijder de toegevoegde state en ToggleGroup. Geen database wijzigingen.
 
 ---
 
-### Fase 2: Backend Consistentie (Niet-Breaking)
+# ONDERDEEL 2: Embedded Views Maken
+
+## 2.1 Doel
+Herbruikbare versies maken van Lijst, Kalender en Opvolging die in de Dashboard kunnen worden geëmbed.
+
+## 2.2 Te Maken Bestanden
+
+| Nieuw Bestand | Bron | Belangrijkste Wijzigingen |
+|---------------|------|---------------------------|
+| `src/components/dashboard/EmbeddedListView.tsx` | `Lijst.tsx` | Auth check verwijderen, height constraint, geen page header |
+| `src/components/dashboard/EmbeddedCalendarView.tsx` | `Kalender.tsx` | Auth check verwijderen, compactere KPIs |
+| `src/components/dashboard/EmbeddedOpvolgingView.tsx` | `Opvolging.tsx` | Auth check verwijderen, compactere layout |
+
+## 2.3 Technische Specificaties
+
+**Lazy loading (VERPLICHT):**
+```text
+const EmbeddedListView = lazy(() => import('./EmbeddedListView'));
+```
+
+**Shared hooks (GEEN duplicatie):**
+- `useTasksQuery` - Al gedeeld met Dashboard
+- `useGlobalTaskFilter` - Al gedeeld
+- `useActiveTimers` - Import behouden
+- `useAiScoring` - Alleen voor Opvolging
+
+**Height constraint:**
+```text
+max-height: calc(100vh - 300px)
+overflow-y: auto
+```
+
+## 2.4 Koppelingen Checklist Onderdeel 2
+
+| Koppeling | Bron Bestand | Actie |
+|-----------|--------------|-------|
+| `navigate("/auth")` | Lijst:186, Kalender:322 | VERWIJDEREN (Dashboard heeft auth) |
+| `navigate("/lijst")` | Intern | BEHOUDEN of wijzigen naar view switch |
+| Realtime channels | Alle 3 | CONSOLIDEREN naar 1 channel |
+| URL params `?task=` | Lijst:132-143 | BEHOUDEN (deeplinks) |
+| Keyboard `/` en `n` | Lijst:685-755, Kalender:231 | Conflict checken |
+
+## 2.5 Keyboard Shortcut Conflictanalyse
+
+| Shortcut | Huidige Binding | Conflict? |
+|----------|-----------------|-----------|
+| `n` | Nieuwe taak (Lijst, MyTasksFlow) | Nee - zelfde functie |
+| `/` | Zoeken (Lijst, MyTasksFlow) | Nee - zelfde functie |
+| `Escape` | Filter reset (Opvolging) | Nee - filter-specifiek |
+
+**Conclusie:** Geen conflicten, shortcuts kunnen naast elkaar bestaan.
+
+## 2.6 Testprotocol Onderdeel 2
+
+| Test | Verwacht Resultaat |
+|------|-------------------|
+| Switch naar Lijst view | Component laadt (spinner zichtbaar) |
+| Bulk selectie in Lijst | Werkt zoals standalone |
+| Kalender dag klikken | TaskDialog opent |
+| Opvolging AI scores | Laden en tonen correct |
+| Memory check (DevTools) | Geen memory leaks bij view switch |
+| Auth check | Geen redirect naar `/auth` |
+
+## 2.7 Rollback Procedure
+Verwijder de 3 nieuwe bestanden. Dashboard valt terug op placeholders.
+
+---
+
+# ONDERDEEL 3: Sidebar Vereenvoudigen
+
+## 3.1 Doel
+Sidebar items verwijderen die nu in Dashboard zitten.
+
+## 3.2 Te Wijzigen Bestanden
 
 | Bestand | Wijziging | Regels |
 |---------|-----------|--------|
-| `useCreateTasksFromItems.ts` | Auto-accept bij bulk | 174-287 |
-| `ai-agent-orchestrator/index.ts` | NULL waarden + fix priority | 2935-2944 |
+| `src/components/AppSidebar.tsx` | Menu items verwijderen | 47-57 |
 
-**useCreateTasksFromItems.ts wijzigingen**:
-```typescript
-// Haal huidige user op (na regel 186)
-const { data: { user } } = await supabase.auth.getUser();
+## 3.3 Items om te Verwijderen
 
-// Wijzig tasksToInsert (regel 257-286)
-const tasksToInsert = processedItems.map(({ item, assigneeMatch }) => {
-  const isAutoAccept = assigneeMatch.userId === user?.id;
-  
-  return {
-    org_id: userOrg.org_id,
-    title: (item.action || 'Taak uit notule').substring(0, 100),
-    description: generateTaskDescription(item, meetingMinuteForDesc),
-    priority: mapPriority(item.urgency),
-    due_at: item.deadline ? new Date(item.deadline).toISOString() : null,
-    assignee_id: assigneeMatch.userId,
-    // AUTO-ACCEPT LOGICA
-    accepted_by: isAutoAccept ? user?.id : null,
-    accepted_at: isAutoAccept ? new Date().toISOString() : null,
-    category: 'action_item' as const,
-    source_meeting_minute_id: meetingMinuteId,
-    ai_context: JSON.parse(JSON.stringify({...}))
-  };
-});
+| Item | Huidige URL | Nieuwe Locatie |
+|------|-------------|----------------|
+| Lijstweergave | `/lijst` | Dashboard > Mijn Werk > Lijst |
+| Kalender | `/kalender` | Dashboard > Mijn Werk > Kalender |
+| Opvolging | `/opvolging` | Dashboard > Mijn Werk > Opvolging |
+
+## 3.4 Items die BLIJVEN
+
+| Item | URL | Reden |
+|------|-----|-------|
+| Dashboard | `/dashboard` | Primaire entry |
+| WhatsApp | `/whatsapp` | Ander paradigma (chat) |
+| Bijlagen | `/bijlagen` | Document management |
+| Notulen | `/notulen` | Specifieke workflow |
+| Recruitment sectie | `/sollicitaties` etc. | Ongewijzigd |
+
+## 3.5 Nieuwe Sidebar Structuur
+
+```text
+┌─────────────────────────────────────┐
+│ MIJN WERK                           │
+│ ├── Dashboard        [47]          │
+│ ├── WhatsApp         [33]          │
+│ ├── Bijlagen                       │
+│ └── Notulen          [2]           │
+├─────────────────────────────────────┤
+│ RECRUITMENT                         │
+│ ├── Sollicitaties                  │
+│ ├── Professionals                  │
+│ ├── Klanten                        │
+│ └── Plaatsingen                    │
+├─────────────────────────────────────┤
+│ ANALYSE & AI (admin)               │
+├─────────────────────────────────────┤
+│ ARCHIEF                            │
+└─────────────────────────────────────┘
 ```
 
-**ai-agent-orchestrator/index.ts wijzigingen**:
-```typescript
-// Fix priority case + expliciete NULL waarden (regel 2935-2944)
-for (const taskTemplate of onboardingTasks) {
-  await supabase.from('tasks').insert({
-    org_id: org_id,
-    title: taskTemplate.title,
-    category: taskTemplate.category,
-    priority: 'MEDIUM',  // FIX: uppercase
-    status: 'pending',
-    description: `Onboarding taak voor professional ${action.input_data.professional_id}`,
-    // EXPLICIETE DELEGATIE STATUS
-    assignee_id: null,
-    accepted_at: null,
-    accepted_by: null
-  });
-}
+## 3.6 Testprotocol Onderdeel 3
+
+| Test | Verwacht Resultaat |
+|------|-------------------|
+| Sidebar openen | 3 items minder (Lijst, Kalender, Opvolging) |
+| Klik Dashboard | Gaat naar Dashboard met Mijn Werk tab |
+| Klik WhatsApp | Gaat naar WhatsApp pagina |
+| Badge counts | Dashboard badge toont nog steeds taken count |
+
+## 3.7 Rollback Procedure
+Herstel de menuGroups array naar originele waarden.
+
+---
+
+# ONDERDEEL 4: Route Redirects
+
+## 4.1 Doel
+Oude URLs laten doorverwijzen naar Dashboard met juiste view.
+
+## 4.2 Te Wijzigen Bestanden
+
+| Bestand | Wijziging | Regels |
+|---------|-----------|--------|
+| `src/App.tsx` | Redirect routes toevoegen | 93-96 |
+
+## 4.3 Redirect Mapping
+
+| Oude Route | Nieuwe Route | Methode |
+|------------|--------------|---------|
+| `/lijst` | `/dashboard?tab=mijn-werk&view=lijst` | `Navigate replace` |
+| `/lijst?task=xyz` | `/dashboard?tab=mijn-werk&view=lijst&taskId=xyz` | Met params |
+| `/kalender` | `/dashboard?tab=mijn-werk&view=kalender` | `Navigate replace` |
+| `/opvolging` | `/dashboard?tab=mijn-werk&view=opvolging` | `Navigate replace` |
+
+## 4.4 Koppelingen die Geraakt Worden
+
+| Bestand | Regel | Huidige | Actie |
+|---------|-------|---------|-------|
+| `TodayFocusCard.tsx` | 144 | `navigate("/lijst")` | Wordt door redirect afgevangen |
+| `NotificationBell.tsx` | 32 | `navigate("/lijst?task=...")` | Params blijven werken |
+| `AssigneeProgress.tsx` | 20 | `/lijst?assignee=...` | Update naar dashboard |
+| `OverdueTasksList.tsx` | 107 | `/lijst?filter=overdue` | Update naar dashboard |
+| `UpcomingTasksList.tsx` | 115 | `/kalender` | Wordt door redirect afgevangen |
+| `ApplicationDetailModal.tsx` | 2047 | `window.location.href` | Update naar dashboard |
+
+## 4.5 Testprotocol Onderdeel 4
+
+| Test | Verwacht Resultaat |
+|------|-------------------|
+| Navigeer naar `/lijst` | Redirect naar `/dashboard?tab=mijn-werk&view=lijst` |
+| Bookmark `/kalender` | Werkt nog, redirect naar dashboard |
+| Notificatie klik met taskId | Opent Dashboard met task modal |
+| Browser history | Geen `/lijst` entries (replace) |
+
+## 4.6 Rollback Procedure
+Verwijder Navigate routes, herstel originele Route paths.
+
+---
+
+# ONDERDEEL 5: Cross-Navigatie Links Updaten
+
+## 5.1 Doel
+Alle interne links die nog naar `/lijst`, `/kalender`, `/opvolging` wijzen updaten naar de nieuwe Dashboard routes.
+
+## 5.2 Te Wijzigen Bestanden
+
+| Bestand | Regel | Oude Link | Nieuwe Link |
+|---------|-------|-----------|-------------|
+| `TodayFocusCard.tsx` | 144 | `/lijst` | `/dashboard?tab=mijn-werk&view=lijst` |
+| `AssigneeProgress.tsx` | 20 | `/lijst?assignee=` | `/dashboard?tab=mijn-werk&view=lijst&assignee=` |
+| `OverdueTasksList.tsx` | 107 | `/lijst?filter=overdue` | `/dashboard?tab=mijn-werk&view=lijst&filter=overdue` |
+| `UpcomingTasksList.tsx` | 115 | `/kalender` | `/dashboard?tab=mijn-werk&view=kalender` |
+| `ApplicationDetailModal.tsx` | 2047 | `/lijst?task=` | `/dashboard?tab=mijn-werk&taskId=` |
+
+## 5.3 AI Assistant Updates
+
+| Bestand | Sectie | Wijziging |
+|---------|--------|-----------|
+| `ChatWidget.tsx` | PAGE_CONTEXTS | Update kalender, opvolging, lijstweergave entries |
+| `agentIntents.ts` | PAGE_AGENT_CONFIG | Update route mapping |
+
+## 5.4 Testprotocol Onderdeel 5
+
+| Test | Verwacht Resultaat |
+|------|-------------------|
+| Klik "Bekijk taken" in TodayFocusCard | Dashboard Lijst view opent |
+| Klik assignee in Team Overzicht | Dashboard met filter opent |
+| Klik overdue task link | Dashboard met filter opent |
+| AI Assistant op Dashboard | Correcte page context |
+
+## 5.5 Rollback Procedure
+Herstel originele URLs in alle gewijzigde bestanden.
+
+---
+
+# Implementatievolgorde en Afhankelijkheden
+
+```text
+                    ┌─────────────────┐
+                    │  ONDERDEEL 1    │
+                    │  View Switcher  │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │  ONDERDEEL 2    │
+                    │ Embedded Views  │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │  ONDERDEEL 3    │
+                    │ Sidebar Update  │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │  ONDERDEEL 4    │
+                    │ Route Redirects │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │  ONDERDEEL 5    │
+                    │ Link Updates    │
+                    └─────────────────┘
 ```
 
 ---
 
-## Fase 3: Subtasks (OPTIONEEL - Latere Iteratie)
+# Samenvatting Strenge Regels
 
-Dit is NIET nodig voor de huidige workflow maar kan later toegevoegd worden:
-
-| Item | Status |
-|------|--------|
-| Database migratie (subtasks kolommen) | ⏳ Later |
-| SubtaskManager.tsx auto-accept | ⏳ Later |
-
----
-
-## Risico Analyse
-
-| Wijziging | Risico | Mitigatie |
-|-----------|--------|-----------|
-| TaskCard interface | ❌ Geen | Optionele velden met `?` |
-| MyTasksFlowSection query | ❌ Geen | Extra velden, geen removals |
-| handleAcceptTask | ❌ Geen | Identiek aan bestaande Lijst.tsx |
-| useCreateTasksFromItems | ❌ Geen | Extra velden bij insert |
-| AI Orchestrator | ⚠️ Laag | Priority case fix + expliciet null |
+| Regel | Beschrijving |
+|-------|--------------|
+| **1** | Onderdeel pas starten als vorige 100% getest is |
+| **2** | Elke wijziging documenteren met regel nummers |
+| **3** | Geen database migraties nodig - puur frontend |
+| **4** | Lazy loading VERPLICHT voor embedded views |
+| **5** | URL backward compatibility via redirects |
+| **6** | Auth checks NIET dupliceren (Dashboard doet dit al) |
+| **7** | Rollback procedure klaar hebben per onderdeel |
 
 ---
 
-## Validatie Checklist (Na Implementatie)
+# Start: Onderdeel 1
 
-- [x] **Nieuwe taak via Dashboard** → Direct geaccepteerd (accepted_at gevuld) ✅ TaskDialog.tsx
-- [x] **Taak delegeren** → Badge "Wacht op acceptatie" zichtbaar ✅ TaskCard.tsx
-- [x] **Accept klikken** → Badge verdwijnt, toast "Taak geaccepteerd" ✅ MyTasksFlowSection.tsx
-- [x] **Notulen naar taken** → Self-assigned taken zijn geaccepteerd ✅ useCreateTasksFromItems.ts
-- [x] **AI-taken** → priority = 'MEDIUM' (uppercase), staan in team overzicht ✅ ai-agent-orchestrator
-- [ ] **Bestaande Lijst.tsx** → Blijft ongewijzigd werken (te testen)
+**Wanneer u dit plan goedkeurt, begin ik met Onderdeel 1:**
+1. View state toevoegen aan UnifiedDashboard.tsx
+2. ToggleGroup UI maken voor desktop
+3. Select dropdown voor mobile
+4. URL parameter `view` ondersteuning
+5. Placeholder content voor toekomstige views
 
----
-
-## Samenvatting: 4 Bestanden te Wijzigen
-
-1. **TaskCard.tsx** - Interface + Badge UI
-2. **MyTasksFlowSection.tsx** - Query + Handler + Dropdown
-3. **useCreateTasksFromItems.ts** - Auto-accept bij bulk insert
-4. **ai-agent-orchestrator/index.ts** - Priority fix + NULL waarden
-
-Geen database migraties nodig. Geen breaking changes. Volledig backwards-compatible.
-
+**Na voltooiing toon ik een testrapport voordat we naar Onderdeel 2 gaan.**
