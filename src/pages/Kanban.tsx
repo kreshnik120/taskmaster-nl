@@ -337,11 +337,15 @@ const Kanban = () => {
   };
 
   const handleDragStart = (event: DragStartEvent) => {
+    // Add dragging class to freeze hover transforms globally
+    document.documentElement.classList.add('dnd-dragging');
     const task = tasks.find((t) => t.id === event.active.id);
     if (task) setActiveTask(task);
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
+    // Remove dragging class to restore hover effects
+    document.documentElement.classList.remove('dnd-dragging');
     const { active, over } = event;
     setActiveTask(null);
 
