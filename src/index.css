@@ -1154,3 +1154,244 @@ All colors MUST be HSL.
   background-image: radial-gradient(circle, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
 }
 
+/* ============================================
+   PHASE 7: ENHANCED FLOATING UTILITIES
+   ============================================ */
+
+/* Floating search input with indigo context */
+.glass-search-input {
+  background: rgba(255, 255, 255, 0.60);
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 
+    0 2px 8px hsla(234, 45%, 52%, 0.06),
+    inset 0 1px 1px rgba(255, 255, 255, 0.25);
+  transition: all 0.2s ease-out;
+}
+
+.glass-search-input:focus {
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 
+    0 4px 16px hsla(234, 45%, 52%, 0.15),
+    0 0 0 3px hsla(234, 45%, 52%, 0.08),
+    inset 0 1px 2px rgba(255, 255, 255, 0.3);
+}
+
+.dark .glass-search-input {
+  background: rgba(30, 41, 59, 0.60);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.dark .glass-search-input:focus {
+  background: rgba(30, 41, 59, 0.75);
+}
+
+/* Premium primary button with gradient + glow */
+.btn-premium-primary {
+  background: linear-gradient(180deg, hsl(234, 45%, 52%) 0%, hsl(234, 45%, 46%) 100%);
+  color: white;
+  box-shadow: 
+    0 2px 8px hsla(234, 45%, 52%, 0.30),
+    inset 0 1px 1px rgba(255, 255, 255, 0.20);
+  transition: all 0.2s ease-out;
+}
+
+.btn-premium-primary:hover {
+  background: linear-gradient(180deg, hsl(234, 45%, 54%) 0%, hsl(234, 45%, 48%) 100%);
+  box-shadow: 
+    0 4px 16px hsla(234, 45%, 52%, 0.40),
+    inset 0 1px 2px rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+.btn-premium-primary:active {
+  box-shadow: 
+    0 1px 4px hsla(234, 45%, 52%, 0.20);
+  transform: translateY(0);
+}
+
+/* Glass outline button */
+.btn-glass-outline {
+  background: rgba(255, 255, 255, 0.50);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.40);
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.04),
+    inset 0 1px 1px rgba(255, 255, 255, 0.20);
+  transition: all 0.2s ease-out;
+}
+
+.btn-glass-outline:hover {
+  background: rgba(255, 255, 255, 0.70);
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.08),
+    inset 0 1px 2px rgba(255, 255, 255, 0.25);
+}
+
+.dark .btn-glass-outline {
+  background: rgba(30, 41, 59, 0.50);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.dark .btn-glass-outline:hover {
+  background: rgba(30, 41, 59, 0.70);
+}
+
+/* Floating badge with colored shadow */
+.glass-badge-indigo {
+  background: hsla(234, 45%, 97%, 0.70);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid hsla(234, 45%, 88%, 0.50);
+  box-shadow: 
+    0 2px 8px hsla(234, 45%, 52%, 0.10),
+    inset 0 1px 1px rgba(255, 255, 255, 0.3);
+}
+
+.dark .glass-badge-indigo {
+  background: hsla(234, 45%, 26%, 0.50);
+  border-color: hsla(234, 45%, 40%, 0.35);
+  box-shadow: 
+    0 2px 8px hsla(234, 45%, 15%, 0.25),
+    inset 0 1px 1px hsla(234, 45%, 52%, 0.1);
+}
+
+/* Enhanced empty state bubble with indigo glow */
+.glass-empty-bubble {
+  background: rgba(255, 255, 255, 0.60);
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.40);
+  box-shadow: 
+    0 4px 16px hsla(234, 45%, 52%, 0.10),
+    0 8px 32px hsla(234, 45%, 52%, 0.06),
+    inset 0 1px 2px rgba(255, 255, 255, 0.30);
+}
+
+.dark .glass-empty-bubble {
+  background: rgba(30, 41, 59, 0.60);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 
+    0 4px 16px hsla(234, 45%, 15%, 0.25),
+    0 8px 32px hsla(234, 45%, 10%, 0.20),
+    inset 0 1px 2px hsla(234, 45%, 52%, 0.1);
+}
+
+/* Kanban column enhanced floating */
+.glass-kanban-column-enhanced {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 
+    0 4px 12px hsla(234, 45%, 52%, 0.08),
+    0 12px 32px hsla(234, 45%, 52%, 0.06),
+    0 24px 64px hsla(234, 45%, 52%, 0.04),
+    inset 0 1px 1px rgba(255, 255, 255, 0.15);
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.glass-kanban-column-enhanced:hover {
+  box-shadow: 
+    0 8px 24px hsla(234, 45%, 52%, 0.12),
+    0 16px 48px hsla(234, 45%, 52%, 0.08),
+    0 32px 80px hsla(234, 45%, 52%, 0.04),
+    inset 0 1px 2px rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.dark .glass-kanban-column-enhanced {
+  background: rgba(30, 41, 59, 0.55);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 
+    0 4px 12px hsla(234, 45%, 15%, 0.25),
+    0 12px 32px hsla(234, 45%, 10%, 0.20),
+    0 24px 64px hsla(234, 45%, 8%, 0.15),
+    inset 0 1px 1px rgba(255, 255, 255, 0.05);
+}
+
+.dark .glass-kanban-column-enhanced:hover {
+  box-shadow: 
+    0 8px 24px hsla(234, 45%, 15%, 0.35),
+    0 16px 48px hsla(234, 45%, 10%, 0.25),
+    inset 0 1px 2px rgba(255, 255, 255, 0.08);
+}
+
+/* Glass icon button */
+.glass-icon-button {
+  background: rgba(255, 255, 255, 0.50);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease-out;
+}
+
+.glass-icon-button:hover {
+  background: rgba(255, 255, 255, 0.70);
+  box-shadow: 0 4px 12px hsla(234, 45%, 52%, 0.08);
+}
+
+.dark .glass-icon-button {
+  background: rgba(30, 41, 59, 0.50);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.dark .glass-icon-button:hover {
+  background: rgba(30, 41, 59, 0.70);
+}
+
+/* Glass select trigger with indigo context */
+.glass-select-trigger {
+  background: rgba(255, 255, 255, 0.60);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid hsla(234, 45%, 88%, 0.50);
+  box-shadow: 
+    0 2px 8px hsla(234, 45%, 52%, 0.06),
+    inset 0 1px 1px rgba(255, 255, 255, 0.15);
+  transition: all 0.2s ease-out;
+}
+
+.glass-select-trigger:hover {
+  box-shadow: 0 4px 12px hsla(234, 45%, 52%, 0.10);
+}
+
+.glass-select-trigger:focus {
+  box-shadow: 
+    0 4px 16px hsla(234, 45%, 52%, 0.15),
+    0 0 0 2px hsla(234, 45%, 52%, 0.1);
+}
+
+.dark .glass-select-trigger {
+  background: rgba(30, 41, 59, 0.60);
+  border-color: hsla(234, 45%, 40%, 0.35);
+}
+
+/* Enhanced icon bubble with elevation */
+.glass-icon-bubble-elevated {
+  background: rgba(255, 255, 255, 0.60);
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.40);
+  box-shadow: 
+    0 4px 16px hsla(234, 45%, 52%, 0.10),
+    0 8px 32px hsla(234, 45%, 52%, 0.06),
+    inset 0 1px 2px rgba(255, 255, 255, 0.30);
+  border-radius: 1rem;
+}
+
+.dark .glass-icon-bubble-elevated {
+  background: rgba(30, 41, 59, 0.60);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 
+    0 4px 16px hsla(234, 45%, 15%, 0.25),
+    0 8px 32px hsla(234, 45%, 10%, 0.20),
+    inset 0 1px 2px hsla(234, 45%, 52%, 0.1);
+}
+
