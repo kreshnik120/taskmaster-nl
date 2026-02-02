@@ -150,7 +150,7 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
     <HoverCard openDelay={500}>
       <HoverCardTrigger asChild>
         <div ref={setNodeRef} style={style} className="group">
-          <Card className="glass-task-card glass-hover-lift active:scale-[0.99] bg-white/75 dark:bg-slate-900/75 border-white/40 dark:border-white/12 shadow-[0_2px_6px_hsla(234,45%,52%,0.06),0_8px_24px_hsla(234,45%,52%,0.10)] hover:shadow-[0_12px_32px_hsla(234,45%,52%,0.14),0_24px_64px_hsla(234,45%,52%,0.08),inset_0_1px_1px_rgba(255,255,255,0.15)] transition-all duration-250 ease-out focus:outline-none focus:ring-2 focus:ring-tab-mijn-werk-500/30 focus:ring-offset-2 relative rounded-xl">
+          <Card className="glass-task-card glass-hover-lift bg-white/75 dark:bg-slate-900/75 border-white/40 dark:border-white/12 shadow-[0_2px_6px_hsla(234,45%,52%,0.06),0_8px_24px_hsla(234,45%,52%,0.10)] focus:outline-none focus:ring-2 focus:ring-tab-mijn-werk-500/30 focus:ring-offset-2 relative rounded-xl">
             <CardContent className="p-4 space-y-2">
               <div className="flex items-start gap-2">
                 {/* Drag Handle */}
