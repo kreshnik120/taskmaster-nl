@@ -117,7 +117,7 @@ export function TaskListSidePanel({
           animate={{ x: 0 }}
           exit={{ x: '100%' }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="fixed right-0 top-0 z-50 h-full w-full max-w-md bg-background border-l shadow-xl outline-none"
+          className="fixed right-0 top-0 z-50 h-full w-full max-w-md bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-l border-white/40 dark:border-white/12 shadow-[0_0_60px_hsla(215,25%,48%,0.15),-10px_0_40px_hsla(215,25%,48%,0.08)] outline-none"
           tabIndex={-1}
           role="complementary"
           aria-label="Taak details"

@@ -3,6 +3,7 @@ import { nl } from 'date-fns/locale';
 import { AlertTriangle, Calendar, User } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import { generateTaskAriaLabel } from './utils/accessibility';
 import type { TaskListTask } from './types';
 
@@ -54,9 +55,15 @@ export function TaskListCards({ tasks, onTaskSelect }: TaskListCardsProps) {
             key={task.id}
             role="listitem"
             aria-label={generateTaskAriaLabel(task)}
-            className={`cursor-pointer hover:bg-muted/50 transition-colors ${
-              overdue ? 'border-destructive/50' : ''
-            }`}
+            className={cn(
+              "cursor-pointer transition-all duration-200",
+              "bg-white/75 dark:bg-slate-900/75 backdrop-blur-sm",
+              "border-white/40 dark:border-white/12",
+              "shadow-[0_2px_6px_hsla(215,25%,48%,0.06)]",
+              "hover:bg-white/90 dark:hover:bg-slate-800/90",
+              "hover:shadow-[0_4px_12px_hsla(215,25%,48%,0.12)]",
+              overdue && "border-destructive/50"
+            )}
             onClick={() => onTaskSelect?.(task)}
           >
             <CardContent className="p-4">

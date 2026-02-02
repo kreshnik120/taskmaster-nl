@@ -1766,3 +1766,62 @@ All colors MUST be HSL.
 .status-dot-glow-subtle {
   box-shadow: 0 0 3px currentColor;
 }
+
+/* ============================================
+   PHASE 14: ADDITIONAL GLASS UTILITIES
+   ============================================ */
+
+/* Slate-tinted glass card for Lijst/Klanten context */
+.glass-card-slate {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  background: linear-gradient(135deg, hsla(215, 25%, 97%, 0.75) 0%, hsla(215, 25%, 97%, 0.45) 100%);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid hsla(215, 25%, 88%, 0.5);
+  box-shadow: 0 4px 12px hsla(215, 25%, 48%, 0.08), 0 8px 32px hsla(215, 25%, 48%, 0.12);
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dark .glass-card-slate {
+  background: linear-gradient(135deg, hsla(215, 25%, 26%, 0.55) 0%, hsla(215, 25%, 20%, 0.35) 100%);
+  border-color: hsla(215, 25%, 40%, 0.35);
+  box-shadow: 0 4px 12px hsla(215, 25%, 15%, 0.25), 0 8px 32px hsla(215, 25%, 10%, 0.35);
+}
+
+/* Glass search input */
+.glass-search-input {
+  background: rgba(255, 255, 255, 0.60);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.40);
+  transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.glass-search-input:focus {
+  background: rgba(255, 255, 255, 0.80);
+  border-color: rgba(255, 255, 255, 0.50);
+}
+
+.dark .glass-search-input {
+  background: rgba(30, 41, 59, 0.60);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.dark .glass-search-input:focus {
+  background: rgba(30, 41, 59, 0.80);
+}
+
+/* Glass panel shadow for side panels */
+.glass-panel-shadow {
+  box-shadow: 
+    0 0 60px hsla(215, 25%, 48%, 0.15),
+    -10px 0 40px hsla(215, 25%, 48%, 0.08);
+}
+
+.dark .glass-panel-shadow {
+  box-shadow: 
+    0 0 60px hsla(215, 25%, 15%, 0.40),
+    -10px 0 40px hsla(215, 25%, 10%, 0.25);
+}

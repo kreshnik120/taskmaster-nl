@@ -54,7 +54,7 @@ export function SourceProgress({ sources, isLoading }: SourceProgressProps) {
   }
 
   return (
-    <Card>
+    <Card className="glass-card-violet">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-lg">
           <FileText className="h-5 w-5" />
@@ -73,12 +73,15 @@ export function SourceProgress({ sources, isLoading }: SourceProgressProps) {
               key={source.sourceId || 'manual'}
               onClick={() => handleClick(source.sourceId)}
               className={cn(
-                "p-3 rounded-lg border transition-colors",
-                isClickable && "cursor-pointer hover:bg-muted/50"
+                "p-3 rounded-xl transition-all duration-200",
+                "bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm",
+                "border border-white/30 dark:border-white/12",
+                "shadow-[0_2px_6px_hsla(270,45%,55%,0.06)]",
+                isClickable && "cursor-pointer hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_12px_hsla(270,45%,55%,0.12)]"
               )}
             >
               <div className="flex items-center gap-3 mb-2">
-                <div className="p-2 rounded-full bg-muted">
+                <div className="p-2 rounded-full bg-white/40 dark:bg-slate-800/40 backdrop-blur-sm">
                   {source.sourceId ? (
                     <FileText className="h-4 w-4 text-muted-foreground" />
                   ) : (
