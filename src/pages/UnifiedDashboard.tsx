@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense, lazy } from "react";
 import { useSearchParams } from "react-router-dom";
-import { LayoutDashboard, User, Users, Briefcase, List, Calendar, TrendingUp } from "lucide-react";
+import { LayoutDashboard, User, Users, Briefcase, List, Calendar, TrendingUp, Loader2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUserRole } from "@/hooks/useUserRole";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,6 +25,18 @@ import {
 // Tab 3: Recruitment - Components
 import { RecruitmentKPIs } from "@/components/dashboard/RecruitmentKPIs";
 import { UrgencyActionPanel } from "@/components/recruitment/UrgencyActionPanel";
+
+// Lazy load embedded views for performance
+const EmbeddedListView = lazy(() => import("@/components/dashboard/EmbeddedListView"));
+const EmbeddedCalendarView = lazy(() => import("@/components/dashboard/EmbeddedCalendarView"));
+const EmbeddedOpvolgingView = lazy(() => import("@/components/dashboard/EmbeddedOpvolgingView"));
+
+// Loading fallback component
+const TabLoadingFallback = () => (
+  <div className="flex items-center justify-center py-12">
+    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+  </div>
+);
 
 interface Application {
   id: string;
@@ -216,37 +228,25 @@ export default function UnifiedDashboard() {
           )}
         </TabsContent>
 
-        {/* Tab 4: Lijst - Placeholder */}
+        {/* Tab 4: Lijst */}
         <TabsContent value="lijst" className="space-y-6 mt-6">
-          <div className="p-8 border border-dashed border-muted-foreground/30 rounded-lg text-center">
-            <List className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-            <h3 className="font-medium text-lg mb-2">Lijstweergave</h3>
-            <p className="text-muted-foreground">
-              Wordt geïmplementeerd in Onderdeel 2
-            </p>
-          </div>
+          <Suspense fallback={<TabLoadingFallback />}>
+            <EmbeddedListView />
+          </Suspense>
         </TabsContent>
 
-        {/* Tab 5: Kalender - Placeholder */}
+        {/* Tab 5: Kalender */}
         <TabsContent value="kalender" className="space-y-6 mt-6">
-          <div className="p-8 border border-dashed border-muted-foreground/30 rounded-lg text-center">
-            <Calendar className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-            <h3 className="font-medium text-lg mb-2">Kalenderweergave</h3>
-            <p className="text-muted-foreground">
-              Wordt geïmplementeerd in Onderdeel 2
-            </p>
-          </div>
+          <Suspense fallback={<TabLoadingFallback />}>
+            <EmbeddedCalendarView />
+          </Suspense>
         </TabsContent>
 
-        {/* Tab 6: Opvolging - Placeholder */}
+        {/* Tab 6: Opvolging */}
         <TabsContent value="opvolging" className="space-y-6 mt-6">
-          <div className="p-8 border border-dashed border-muted-foreground/30 rounded-lg text-center">
-            <TrendingUp className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-            <h3 className="font-medium text-lg mb-2">Opvolgingsweergave</h3>
-            <p className="text-muted-foreground">
-              Wordt geïmplementeerd in Onderdeel 2
-            </p>
-          </div>
+          <Suspense fallback={<TabLoadingFallback />}>
+            <EmbeddedOpvolgingView />
+          </Suspense>
         </TabsContent>
       </Tabs>
 
