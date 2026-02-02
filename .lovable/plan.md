@@ -1,271 +1,301 @@
 
-# Onderdeel 5: Fix Agent & Navigatie Koppelingen
 
-## Samenvatting
+# Onderdeel 6: Realtime Standaardisatie & Fixes
 
-Na grondige analyse zijn er **3 kritieke categorieën** van vergeten koppelingen geïdentificeerd die moeten worden opgelost voordat de migratie compleet is.
+## Samenvatting Audit
+
+Na grondige analyse zijn er **4 kritieke categorieën** van realtime problemen geïdentificeerd:
 
 ---
 
-## Categorie 1: AI Agent Context Detectie (KRITIEK)
+## Categorie 1: Redundante Subscriptions (INEFFICIËNTIE)
 
 ### Probleem
-De AI agents en ChatWidget gebruiken `location.pathname` voor context-detectie. Door de redirects is het pathname nu altijd `/dashboard` in plaats van `/kalender`, `/lijst`, of `/opvolging`. Dit breekt:
-- Schedule Agent quick actions op kalender tab
-- Lijst-specifieke AI suggesties
-- Opvolging context voor de ChatWidget
+Meerdere componenten openen **separate channels** voor dezelfde `tasks` tabel in plaats van de shared `useTasksQuery` hook te gebruiken:
 
-### Betrokken Bestanden
+| Component | Channel Name | Tabel | Status |
+|-----------|--------------|-------|--------|
+| `useTasksQuery.ts` | `shared-tasks-realtime` | tasks | ✅ Goed (met debounce) |
+| `EmbeddedListView.tsx` | `embedded-lijst-tasks-changes` | tasks | ❌ Redundant |
+| `EmbeddedCalendarView.tsx` | `embedded-kalender-tasks-changes` | tasks | ❌ Redundant |
+| `AppSidebar.tsx` | `sidebar-tasks-count` | tasks | ❌ Redundant |
 
-| Bestand | Regel | Huidige Code | Probleem |
-|---------|-------|--------------|----------|
-| `src/lib/agentIntents.ts` | 216-287 | `PAGE_AGENT_CONFIG["/kalender"]` | Matched niet meer |
-| `src/lib/agentIntents.ts` | 303-317 | `getPageAgentConfig(pathname)` | Krijgt altijd `/dashboard` |
-| `src/components/AIAssistant/ChatWidget.tsx` | 113-131 | `PAGE_CONTEXTS["/kalender"]` | Matched niet meer |
-| `src/components/AIAssistant/ChatWidget.tsx` | 239-250 | `currentPageContext` useMemo | Fallback naar default |
-| `src/hooks/useAgentRouter.ts` | 35-37 | `getPageAgentConfig(location.pathname)` | Krijgt altijd `/dashboard` |
+**Impact**: 4 actieve WebSocket channels in plaats van 1. Dit verspilt bandbreedte en kan Supabase connection limits bereiken.
 
 ### Oplossing
-Update de context-detectie logica om ook query parameters te lezen:
+- `EmbeddedListView` en `EmbeddedCalendarView` moeten migreren naar `useTasksQuery` hook
+- `AppSidebar` kan de shared cache invalidation volgen via `ACTIVE_TASKS_QUERY_KEY`
+
+---
+
+## Categorie 2: Ontbrekende Realtime (KRITIEK)
+
+### Probleem
+Twee kritieke views missen volledig realtime subscriptions:
+
+| Component | Huidige Status | Impact |
+|-----------|----------------|--------|
+| `MyTasksFlowSection.tsx` | **Geen realtime** | Kanban ziet geen updates van andere views |
+| `Kanban.tsx` | Alleen subtasks | Mist task changes van andere gebruikers |
+
+### Oplossing
+- `MyTasksFlowSection` moet migreren naar `useTasksQuery` of eigen subscription toevoegen
+- `Kanban.tsx` moet task subscription toevoegen
+
+---
+
+## Categorie 3: Ontbrekende CHANNEL_ERROR Handling (HOOG)
+
+### Probleem
+8 van 11 subscriptions missen error handling. Als de verbinding faalt, blijft de UI "dood" zonder feedback:
+
+| Component | CHANNEL_ERROR | Reconnect |
+|-----------|---------------|-----------|
+| `useTasksQuery.ts` | ✅ Ja | ❌ Nee |
+| `EmbeddedListView.tsx` | ❌ Nee | ❌ Nee |
+| `EmbeddedCalendarView.tsx` | ❌ Nee | ❌ Nee |
+| `AppSidebar.tsx` | ❌ Nee | ❌ Nee |
+| `useMySubtasks.ts` | ❌ Nee | ❌ Nee |
+| `Kanban.tsx` | ❌ Nee | ❌ Nee |
+| `ChatWidget.tsx` | ❌ Nee | ❌ Nee |
+| `useWhatsAppMessages.ts` | ❌ Nee | ❌ Nee |
+
+### Oplossing
+Creëer een `useRealtimeChannel` utility hook met:
+- Automatische CHANNEL_ERROR logging
+- Optionele reconnect logic
+- Consistent cleanup
+
+---
+
+## Categorie 4: Ontbrekende Debouncing (PERFORMANCE)
+
+### Probleem
+Alleen `useTasksQuery.ts` heeft 200ms debounce. Alle andere subscriptions triggeren **immediate refetch** op elk event:
 
 ```typescript
-// Nieuwe helper functie
-function getEffectivePath(location: Location): string {
-  const { pathname, search } = location;
-  const params = new URLSearchParams(search);
-  const tab = params.get('tab');
-  
-  // Dashboard met tab parameter → map naar virtueel path
-  if (pathname === '/dashboard' && tab) {
-    const tabMapping: Record<string, string> = {
-      'lijst': '/lijst',
-      'kalender': '/kalender',
-      'opvolging': '/opvolging',
-      'mijn-werk': '/',
-      'team': '/dashboard',
-      'recruitment': '/sollicitaties',
+// EmbeddedListView.tsx (line 146) - GEEN DEBOUNCE
+.on('postgres_changes', {...}, () => fetchTasks())
+```
+
+**Impact**: Bij bulk updates (bijv. 50 taken importeren) worden 50 network requests tegelijk getriggerd.
+
+### Oplossing
+Alle realtime callbacks moeten debouncing toepassen (200ms standaard).
+
+---
+
+## Implementatie Plan
+
+### Stap 1: Creëer Utility Hook `useRealtimeChannel.ts` (NIEUW)
+
+**Bestand**: `src/hooks/useRealtimeChannel.ts`
+
+```typescript
+import { useEffect, useRef } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
+
+interface RealtimeConfig {
+  channelName: string;
+  table: string;
+  event?: '*' | 'INSERT' | 'UPDATE' | 'DELETE';
+  filter?: string;
+  onEvent: () => void;
+  debounceMs?: number;
+}
+
+/**
+ * Standardized realtime subscription hook
+ * Features:
+ * - Automatic CHANNEL_ERROR handling with logging
+ * - Configurable debounce (default 200ms)
+ * - Proper cleanup on unmount
+ */
+export function useRealtimeChannel({
+  channelName,
+  table,
+  event = '*',
+  filter,
+  onEvent,
+  debounceMs = 200
+}: RealtimeConfig) {
+  const log = logger.create(channelName);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        { event, schema: 'public', table, filter },
+        () => {
+          if (debounceRef.current) clearTimeout(debounceRef.current);
+          debounceRef.current = setTimeout(onEvent, debounceMs);
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          log.log('Channel subscribed');
+        }
+        if (status === 'CHANNEL_ERROR') {
+          log.error('Channel error - realtime may be unavailable');
+        }
+        if (status === 'TIMED_OUT') {
+          log.warn('Channel timed out');
+        }
+      });
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      supabase.removeChannel(channel);
     };
-    return tabMapping[tab] || pathname;
-  }
-  
-  return pathname;
+  }, [channelName, table, event, filter, onEvent, debounceMs]);
 }
 ```
 
-### Wijzigingen per Bestand
-
-#### 1. `src/lib/agentIntents.ts`
-- Voeg helper functie `getEffectivePathFromURL(pathname: string, search: string)` toe
-- Update `getPageAgentConfig` om search parameter te accepteren
-
-#### 2. `src/components/AIAssistant/ChatWidget.tsx`
-- Update `currentPageContext` useMemo om `location.search` te gebruiken
-- Map dashboard tabs naar juiste PAGE_CONTEXTS entries
-
-#### 3. `src/hooks/useAgentRouter.ts`  
-- Update `pageConfig` useMemo om `location.search` mee te nemen
-
 ---
 
-## Categorie 2: Interne Navigatie Links (HOOG)
+### Stap 2: Update `EmbeddedListView.tsx`
 
-### Probleem
-6 componenten gebruiken nog oude URL paths die nu redirecten in plaats van direct navigeren.
+**Wijzigingen**:
+1. Verwijder eigen subscription (lines 136-152)
+2. Migreer naar `useTasksQuery` hook OF gebruik nieuwe `useRealtimeChannel`
+3. Filter data client-side uit shared cache
 
-### Overzicht Wijzigingen
-
-| Component | Regel | Huidige URL | Nieuwe URL |
-|-----------|-------|-------------|------------|
-| `NotificationBell.tsx` | 32 | `/lijst?task=${taskId}` | `/dashboard?tab=lijst&taskId=${taskId}` |
-| `AssigneeProgress.tsx` | 20 | `/lijst?assignee=${userId}` | `/dashboard?tab=lijst&assignee=${userId}` |
-| `TodayFocusCard.tsx` | 144 | `/lijst` | `/dashboard?tab=lijst` |
-| `OverdueTasksList.tsx` | 107 | `/lijst?filter=overdue` | `/dashboard?tab=lijst&filter=overdue` |
-| `UpcomingTasksList.tsx` | 115 | `/kalender` | `/dashboard?tab=kalender` |
-| `ApplicationDetailModal.tsx` | 2047 | `/lijst?task=${task.id}` | `/dashboard?tab=lijst&taskId=${task.id}` |
-
-### Gedetailleerde Wijzigingen
-
-#### `src/components/notifications/NotificationBell.tsx` (regel 32)
+**Optie A: Gebruik useTasksQuery (aanbevolen)**
 ```typescript
-// VAN:
-navigate(`/lijst?task=${taskId}&highlight=subtask`);
-
+// VAN: eigen fetchTasks() en subscription
 // NAAR:
-navigate(`/dashboard?tab=lijst&taskId=${taskId}&highlight=subtask`);
+import { useTasksQuery } from '@/hooks/useTasksQuery';
+
+// In component:
+const { data: allTasks, isLoading } = useTasksQuery();
+
+// Filter client-side voor deze view
+const tasks = useMemo(() => {
+  if (!allTasks) return [];
+  return allTasks.filter(t => /* filters */);
+}, [allTasks, filters]);
 ```
 
-#### `src/components/dashboard-stats/AssigneeProgress.tsx` (regel 20)
+**Optie B: Gebruik useRealtimeChannel (indien eigen fetch nodig)**
 ```typescript
-// VAN:
-navigate(`/lijst?assignee=${userId}`);
-
-// NAAR:
-navigate(`/dashboard?tab=lijst&assignee=${userId}`);
-```
-
-#### `src/components/dashboard/TodayFocusCard.tsx` (regel 144)
-```typescript
-// VAN:
-onClick={() => navigate("/lijst")}
-
-// NAAR:
-onClick={() => navigate("/dashboard?tab=lijst")}
-```
-
-#### `src/components/dashboard-stats/OverdueTasksList.tsx` (regel 107)
-```typescript
-// VAN:
-onClick={() => navigate('/lijst?filter=overdue')}
-
-// NAAR:
-onClick={() => navigate('/dashboard?tab=lijst&filter=overdue')}
-```
-
-#### `src/components/dashboard-stats/UpcomingTasksList.tsx` (regel 115)
-```typescript
-// VAN:
-onClick={() => navigate('/kalender')}
-
-// NAAR:
-onClick={() => navigate('/dashboard?tab=kalender')}
-```
-
-#### `src/components/ApplicationDetailModal.tsx` (regel 2047)
-```typescript
-// VAN:
-window.location.href = `/lijst?task=${task.id}`;
-
-// NAAR:
-window.location.href = `/dashboard?tab=lijst&taskId=${task.id}`;
+// Vervang lines 136-152 met:
+useRealtimeChannel({
+  channelName: 'embedded-lijst-tasks',
+  table: 'tasks',
+  onEvent: fetchTasks,
+  debounceMs: 200
+});
 ```
 
 ---
 
-## Categorie 3: Legacy Bestanden Verwijderen (OPRUIMING)
+### Stap 3: Update `EmbeddedCalendarView.tsx`
 
-### Probleem
-De volgende bestanden zijn niet meer nodig maar nemen ~4300+ regels in beslag:
+**Wijzigingen** (lines 271-286):
+```typescript
+// VAN:
+const tasksChannel = supabase
+  .channel('embedded-kalender-tasks-changes')
+  .on('postgres_changes', {...}, () => fetchTasks())
+  .subscribe();
 
-| Bestand | Regels | Status |
-|---------|--------|--------|
-| `src/pages/Lijst.tsx` | ~1490 | Vervangen door EmbeddedListView |
-| `src/pages/Kalender.tsx` | ~1225 | Vervangen door EmbeddedCalendarView |
-| `src/pages/Opvolging.tsx` | ~553 | Vervangen door EmbeddedFollowupView |
-| `src/pages/Dashboard.tsx` | ~960 | Vervangen door UnifiedDashboard |
-| `src/pages/DashboardStats.tsx` | ~63 | Vervangen door MijnWerkTab |
+// NAAR:
+useRealtimeChannel({
+  channelName: 'embedded-kalender-tasks',
+  table: 'tasks',
+  onEvent: fetchTasks,
+  debounceMs: 200
+});
 
-**Totaal: ~4291 regels te verwijderen**
+useRealtimeChannel({
+  channelName: 'embedded-kalender-reminders',
+  table: 'reminders',
+  onEvent: fetchReminders,
+  debounceMs: 200
+});
+```
 
-### Actie
-Verwijder alle 5 bestanden na bevestiging dat alles werkt.
+---
+
+### Stap 4: Update `MyTasksFlowSection.tsx` (KRITIEK)
+
+**Probleem**: Geen realtime - Kanban ziet geen updates
+
+**Toevoegen na line 196**:
+```typescript
+// Realtime subscription voor task updates
+useRealtimeChannel({
+  channelName: 'mytasks-flow-realtime',
+  table: 'tasks',
+  filter: user ? `assignee_id=eq.${user.id}` : undefined,
+  onEvent: loadData,
+  debounceMs: 200
+});
+```
+
+---
+
+### Stap 5: Update `AppSidebar.tsx`
+
+**Wijzigingen** (lines 283-297):
+```typescript
+// VAN: eigen channel zonder error handling
+// NAAR:
+useRealtimeChannel({
+  channelName: 'sidebar-tasks-count',
+  table: 'tasks',
+  onEvent: () => queryClient.invalidateQueries({ queryKey: ['active-task-count'] }),
+  debounceMs: 200
+});
+```
+
+---
+
+### Stap 6: Update `useMySubtasks.ts`
+
+**Wijzigingen** (lines 71-94):
+```typescript
+// VAN: eigen subscription zonder error handling
+// NAAR:
+useRealtimeChannel({
+  channelName: 'my-subtasks-updates',
+  table: 'subtasks',
+  onEvent: loadSubtasks,
+  debounceMs: 200
+});
+```
+
+---
+
+### Stap 7: Update `Kanban.tsx` - Voeg Tasks Subscription Toe
+
+**Wijzigingen** (na line 196):
+```typescript
+// TOEVOEGEN: Tasks subscription (naast bestaande subtasks)
+useRealtimeChannel({
+  channelName: 'kanban-tasks-realtime',
+  table: 'tasks',
+  onEvent: loadData,
+  debounceMs: 200
+});
+```
 
 ---
 
 ## Implementatie Volgorde
 
-| Stap | Onderdeel | Bestanden | Impact |
-|------|-----------|-----------|--------|
-| 1 | Agent Context Fix | agentIntents.ts, ChatWidget.tsx, useAgentRouter.ts | AI krijgt juiste context |
-| 2 | Navigatie Links | 6 componenten | Direct navigatie zonder redirect |
-| 3 | Legacy Cleanup | 5 pagina bestanden | Codebase opschoning |
-
----
-
-## Technische Details
-
-### Stap 1: Agent Context Fix
-
-**`src/lib/agentIntents.ts`** - Nieuwe functie toevoegen:
-
-```typescript
-/**
- * Get effective path considering dashboard tabs
- */
-export function getEffectivePath(pathname: string, search: string): string {
-  const params = new URLSearchParams(search);
-  const tab = params.get('tab');
-  
-  if (pathname === '/dashboard' && tab) {
-    const tabMapping: Record<string, string> = {
-      'lijst': '/lijst',
-      'kalender': '/kalender',
-      'opvolging': '/opvolging',
-      'mijn-werk': '/',
-    };
-    return tabMapping[tab] || pathname;
-  }
-  
-  return pathname;
-}
-```
-
-**`src/lib/agentIntents.ts`** - Update getPageAgentConfig:
-
-```typescript
-export function getPageAgentConfig(pathname: string, search: string = ''): PageAgentConfig {
-  const effectivePath = getEffectivePath(pathname, search);
-  
-  // Exact match first
-  if (PAGE_AGENT_CONFIG[effectivePath]) {
-    return PAGE_AGENT_CONFIG[effectivePath];
-  }
-  // ... rest unchanged
-}
-```
-
-**`src/components/AIAssistant/ChatWidget.tsx`** - Update context detection:
-
-```typescript
-const currentPageContext = useMemo(() => {
-  const params = new URLSearchParams(location.search);
-  const tab = params.get('tab');
-  
-  // Handle dashboard tabs
-  if (currentPath === '/dashboard' && tab) {
-    const tabMapping: Record<string, string> = {
-      'lijst': '/lijst',
-      'kalender': '/kalender',
-      'opvolging': '/opvolging',
-    };
-    const mappedPath = tabMapping[tab];
-    if (mappedPath && PAGE_CONTEXTS[mappedPath]) {
-      return PAGE_CONTEXTS[mappedPath];
-    }
-  }
-  
-  // Existing logic...
-  if (PAGE_CONTEXTS[currentPath]) {
-    return PAGE_CONTEXTS[currentPath];
-  }
-  const basePath = '/' + currentPath.split('/')[1];
-  if (PAGE_CONTEXTS[basePath]) {
-    return PAGE_CONTEXTS[basePath];
-  }
-  return DEFAULT_PAGE_CONTEXT;
-}, [currentPath, location.search]);
-```
-
-**`src/hooks/useAgentRouter.ts`** - Update pageConfig:
-
-```typescript
-const pageConfig: PageAgentConfig = useMemo(
-  () => getPageAgentConfig(location.pathname, location.search),
-  [location.pathname, location.search]
-);
-```
-
-### Stap 2: Navigatie Links Update
-
-Alle 6 componenten worden bijgewerkt met de nieuwe URL structuur zoals hierboven beschreven.
-
-### Stap 3: Legacy Cleanup
-
-Verwijder de volgende bestanden:
-- `src/pages/Lijst.tsx`
-- `src/pages/Kalender.tsx`
-- `src/pages/Opvolging.tsx`
-- `src/pages/Dashboard.tsx`
-- `src/pages/DashboardStats.tsx`
+| Stap | Bestand | Actie | Impact |
+|------|---------|-------|--------|
+| 1 | `useRealtimeChannel.ts` | Nieuw bestand | Utility foundation |
+| 2 | `EmbeddedListView.tsx` | Migreer subscription | Minder connections |
+| 3 | `EmbeddedCalendarView.tsx` | Migreer subscription | Minder connections |
+| 4 | `MyTasksFlowSection.tsx` | Voeg realtime toe | Live updates Kanban |
+| 5 | `AppSidebar.tsx` | Migreer subscription | Error handling |
+| 6 | `useMySubtasks.ts` | Migreer subscription | Error handling |
+| 7 | `Kanban.tsx` | Voeg tasks subscription toe | Complete realtime |
 
 ---
 
@@ -273,12 +303,11 @@ Verwijder de volgende bestanden:
 
 | Test | Verwacht Resultaat |
 |------|-------------------|
-| Open `/dashboard?tab=kalender`, check ChatWidget quick actions | Toont "Afspraken vandaag", "Deze week", "Planning optimaliseren" |
-| Open `/dashboard?tab=lijst`, check ChatWidget context | Label toont "Lijstweergave" |
-| Klik op notificatie voor subtask | Navigeert naar `/dashboard?tab=lijst&taskId=...` |
-| Klik "meer bekijken" in UpcomingTasksList | Navigeert naar `/dashboard?tab=kalender` |
-| Klik op medewerker in AssigneeProgress | Navigeert naar `/dashboard?tab=lijst&assignee=...` |
-| Check codebase size | ~4291 regels minder |
+| Open Dashboard, wijzig taak in andere tab | MyTasksFlowSection ververst binnen 200ms |
+| Check console logs op CHANNEL_ERROR | Geen errors in normale werking |
+| Open Network tab, check WebSocket frames | Significant minder duplicate messages |
+| Bulk import 20 taken | 1 refetch na 200ms, niet 20 immediate |
+| Verbinding verliest WiFi | Console logt CHANNEL_ERROR |
 
 ---
 
@@ -286,6 +315,23 @@ Verwijder de volgende bestanden:
 
 | Risico | Mitigatie |
 |--------|-----------|
-| AI context breekt | Fallback naar DEFAULT_PAGE_CONTEXT blijft werken |
-| Navigatie parameters niet gelezen | UnifiedDashboard leest al `taskId` uit URL |
-| Legacy files nodig voor rollback | Verwijderen als laatste stap na volledige verificatie |
+| Breaking change bij migratie | Stapsgewijze implementatie per component |
+| Performance regressie | Debounce voorkomt cascade updates |
+| Realtime stopt na error | Logging maakt debugging mogelijk |
+
+---
+
+## Samenvatting Wijzigingen
+
+| Categorie | Bestanden | Regels Code |
+|-----------|-----------|-------------|
+| Nieuw utility bestand | 1 | ~50 |
+| Updates bestaande bestanden | 7 | ~100 |
+| **Totaal** | **8** | **~150** |
+
+**Resultaat**: Gestandaardiseerde, robuuste realtime implementatie met:
+- 1 central utility hook
+- Uniforme error handling
+- Consistent 200ms debouncing
+- Minder WebSocket connections
+
