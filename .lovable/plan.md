@@ -1,257 +1,312 @@
 
 
-# Analyse: Impact van Auto-Assign & Acceptatie Workflow
+# Verbeteringsplan "Mijn Taken" - Implementatie Status & Volgende Stappen
 
-## Samenvatting Bevindingen
+## ✅ Wat is AL Geïmplementeerd (TaskDialog.tsx)
 
-Na uitgebreid onderzoek van de codebase blijkt dat de voorgestelde wijzigingen **VEILIG** zijn, maar er zijn enkele belangrijke technische overwegingen.
-
----
-
-## Huidige Database Status
-
-| Tabel | accepted_at | accepted_by | created_by |
-|-------|-------------|-------------|------------|
-| `tasks` | ✅ Bestaat | ✅ Bestaat | ❌ Ontbreekt |
-| `subtasks` | ❌ Ontbreekt | ❌ Ontbreekt | ❌ Ontbreekt |
-
-**Conclusie**: De `tasks` tabel heeft al de benodigde kolommen, maar subtasks mist deze nog.
-
----
-
-## Bestaande Acceptatie-Logica (Lijst.tsx)
-
-De Lijst-view heeft al werkende acceptatie-logica:
+De laatste diff bevestigt dat de **basis auto-assign/auto-accept** al werkt:
 
 ```typescript
-// handleAcceptTask (regel 333-354)
-const handleAcceptTask = async (taskId: string) => {
-  await supabase.from("tasks").update({ 
-    accepted_by: currentUserId,
-    accepted_at: new Date().toISOString(),
-    assignee_id: currentUserId
-  }).eq("id", taskId);
-};
+// GEÏMPLEMENTEERD in TaskDialog.tsx (regel 211-257)
+- Haalt huidige user op bij submit
+- Auto-assign naar huidige user als geen assignee geselecteerd
+- Auto-accept: accepted_at + accepted_by worden gezet bij self-assignment
+- Bij delegatie naar ander: accepted_at/accepted_by = null
+```
 
-// handleUpdateAssignee (regel 356-386)
-// Auto-accept bij self-assignment
-if (assigneeId === currentUserId) {
-  updates.accepted_by = currentUserId;
-  updates.accepted_at = new Date().toISOString();
+**Status**: ✅ Kernfunctionaliteit werkt
+
+---
+
+## ❌ Wat nog ONTBREEKT (4 Prioriteiten)
+
+### P1-KRITIEK: TaskCard.tsx - Visuele Acceptatie-Indicator
+
+**Probleem**: TaskCard toont NIET of een taak wacht op acceptatie
+
+**Huidige code (regel 18-44)**:
+```typescript
+interface Task {
+  id: string;
+  // ... andere velden
+  // ❌ ONTBREEKT: accepted_at, accepted_by
 }
 ```
 
-**Status**: Dit werkt correct en hoeft NIET gewijzigd te worden.
+**Te implementeren**:
+- Voeg `accepted_at?: string | null` toe aan interface
+- Voeg "Wacht op acceptatie" badge toe voor gedelegeerde taken
 
 ---
 
-## Probleem in TaskDialog.tsx
+### P1-KRITIEK: MyTasksFlowSection.tsx - Accepteer-Functionaliteit
 
-De `TaskDialog` component (regel 233-243) zet **GEEN** acceptatie-velden bij nieuwe taken:
+**Probleem**: Dashboard mist de "Accepteren" knop die wel in Lijst.tsx bestaat
 
+**Huidige query (regel 210-222)** - selecteert NIET accepted_at/accepted_by:
 ```typescript
-const taskData = {
-  title: values.title,
-  // ... andere velden
-  assignee_id: values.assignee_id,
-  // ONTBREEKT: accepted_at, accepted_by
-};
+.select(`
+  id, title, description, priority, assignee_id,
+  due_at, completed_at, column_id, order_key,
+  application_id, recruitment_action_type, start_at,
+  next_action, created_at, updated_at,
+  profiles:profiles!tasks_assignee_id_fkey(name, email)
+`)
+// ❌ ONTBREEKT: accepted_at, accepted_by
 ```
 
-**Impact**: 
-- Nieuwe taken aangemaakt via "Mijn Taken" worden WEL toegewezen aan de gebruiker
-- Maar ze zijn NIET geaccepteerd (accepted_at = null)
-- Dit veroorzaakt inconsistentie met de Lijst-view logica
+**Huidige dropdown (regel 591-604)** - alleen "Verplaats naar":
+```typescript
+<DropdownMenuContent>
+  <DropdownMenuLabel>Verplaats naar</DropdownMenuLabel>
+  {columns.filter(...).map(...)}
+  // ❌ ONTBREEKT: "Accepteren" optie
+</DropdownMenuContent>
+```
+
+**Te implementeren**:
+- Query uitbreiden met `accepted_at, accepted_by`
+- `handleAcceptTask()` functie toevoegen
+- "Accepteren" optie in dropdown menu
+
+---
+
+### P2-HOOG: useCreateTasksFromItems.ts - Notulen Auto-Accept
+
+**Probleem**: Taken uit notulen worden NIET auto-accepted bij self-assignment
+
+**Huidige code (regel 257-286)**:
+```typescript
+const tasksToInsert = processedItems.map(({ item, assigneeMatch }) => ({
+  org_id: userOrg.org_id,
+  assignee_id: assigneeMatch.userId,
+  // ❌ ONTBREEKT: accepted_at, accepted_by
+}));
+```
+
+**Te implementeren**:
+- Haal huidige user op
+- Check of `assigneeMatch.userId === user?.id`
+- Indien ja: voeg `accepted_at` en `accepted_by` toe
+
+---
+
+### P2-HOOG: AI Orchestrator - Expliciete NULL Waarden
+
+**Probleem**: AI-gegenereerde taken zetten geen expliciet `accepted_at/accepted_by`
+
+**Huidige code (regel 2935-2944)**:
+```typescript
+await supabase.from('tasks').insert({
+  org_id: org_id,
+  title: taskTemplate.title,
+  priority: 'medium',  // ⚠️ Moet 'MEDIUM' zijn (uppercase)
+  // ❌ ONTBREEKT: accepted_at: null, accepted_by: null
+});
+```
+
+**Te implementeren**:
+- Fix priority case naar 'MEDIUM' (uppercase)
+- Voeg expliciete `accepted_at: null, accepted_by: null` toe
+- Dit zorgt ervoor dat AI-taken bewust in "te accepteren" status staan
+
+---
+
+## Implementatieplan per Fase
+
+### Fase 1: UI Verbeteringen (Niet-Breaking)
+
+| Bestand | Wijziging | Regels |
+|---------|-----------|--------|
+| `TaskCard.tsx` | Interface + badge | 18-44, +10 regels |
+| `MyTasksFlowSection.tsx` | Query + handler + dropdown | 73-90, 210-222, 591-604 |
+
+**TaskCard.tsx wijzigingen**:
+```typescript
+// Interface uitbreiden (regel 18-44)
+interface Task {
+  // bestaande velden...
+  accepted_at?: string | null;  // NIEUW
+  accepted_by?: string | null;  // NIEUW
+}
+
+// Helper functie toevoegen
+const isPendingAcceptance = (task: Task) => {
+  return task.assignee_id && !task.accepted_at;
+};
+
+// Badge toevoegen in CardContent (na description, ~regel 179)
+{isPendingAcceptance(task) && (
+  <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-200">
+    <Clock className="h-3 w-3 mr-1" />
+    Wacht op acceptatie
+  </Badge>
+)}
+```
+
+**MyTasksFlowSection.tsx wijzigingen**:
+```typescript
+// 1. Interface uitbreiden (regel 73-90)
+interface Task {
+  // bestaande velden...
+  accepted_at?: string | null;
+  accepted_by?: string | null;
+}
+
+// 2. Query uitbreiden (regel 210-222)
+.select(`
+  id, title, description, priority, assignee_id,
+  due_at, completed_at, column_id, order_key,
+  application_id, recruitment_action_type, start_at,
+  next_action, created_at, updated_at,
+  accepted_at, accepted_by,  // NIEUW
+  profiles:profiles!tasks_assignee_id_fkey(name, email)
+`)
+
+// 3. Handler toevoegen (na moveTaskToColumn, ~regel 368)
+const handleAcceptTask = async (taskId: string) => {
+  if (!user) return;
+  
+  const { error } = await supabase
+    .from("tasks")
+    .update({ 
+      accepted_by: user.id,
+      accepted_at: new Date().toISOString()
+    })
+    .eq("id", taskId);
+
+  if (error) {
+    toast.error("Fout bij accepteren");
+    return;
+  }
+
+  // Optimistic update
+  setTasks(prev => prev.map(t =>
+    t.id === taskId 
+      ? { ...t, accepted_by: user.id, accepted_at: new Date().toISOString() } 
+      : t
+  ));
+  
+  setStatusMessage("Taak geaccepteerd");
+  toast.success("Taak geaccepteerd");
+};
+
+// 4. Dropdown menu uitbreiden (regel 591-604)
+<DropdownMenuContent align="end" className="bg-popover">
+  {/* Accepteer optie voor niet-geaccepteerde taken */}
+  {!task.accepted_at && (
+    <>
+      <DropdownMenuItem
+        onClick={() => handleAcceptTask(task.id)}
+        className="text-primary"
+      >
+        <CheckCircle2 className="h-4 w-4 mr-2" />
+        Accepteren
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+    </>
+  )}
+  <DropdownMenuLabel>Verplaats naar</DropdownMenuLabel>
+  {columns.filter(...).map(...)}
+</DropdownMenuContent>
+```
+
+---
+
+### Fase 2: Backend Consistentie (Niet-Breaking)
+
+| Bestand | Wijziging | Regels |
+|---------|-----------|--------|
+| `useCreateTasksFromItems.ts` | Auto-accept bij bulk | 174-287 |
+| `ai-agent-orchestrator/index.ts` | NULL waarden + fix priority | 2935-2944 |
+
+**useCreateTasksFromItems.ts wijzigingen**:
+```typescript
+// Haal huidige user op (na regel 186)
+const { data: { user } } = await supabase.auth.getUser();
+
+// Wijzig tasksToInsert (regel 257-286)
+const tasksToInsert = processedItems.map(({ item, assigneeMatch }) => {
+  const isAutoAccept = assigneeMatch.userId === user?.id;
+  
+  return {
+    org_id: userOrg.org_id,
+    title: (item.action || 'Taak uit notule').substring(0, 100),
+    description: generateTaskDescription(item, meetingMinuteForDesc),
+    priority: mapPriority(item.urgency),
+    due_at: item.deadline ? new Date(item.deadline).toISOString() : null,
+    assignee_id: assigneeMatch.userId,
+    // AUTO-ACCEPT LOGICA
+    accepted_by: isAutoAccept ? user?.id : null,
+    accepted_at: isAutoAccept ? new Date().toISOString() : null,
+    category: 'action_item' as const,
+    source_meeting_minute_id: meetingMinuteId,
+    ai_context: JSON.parse(JSON.stringify({...}))
+  };
+});
+```
+
+**ai-agent-orchestrator/index.ts wijzigingen**:
+```typescript
+// Fix priority case + expliciete NULL waarden (regel 2935-2944)
+for (const taskTemplate of onboardingTasks) {
+  await supabase.from('tasks').insert({
+    org_id: org_id,
+    title: taskTemplate.title,
+    category: taskTemplate.category,
+    priority: 'MEDIUM',  // FIX: uppercase
+    status: 'pending',
+    description: `Onboarding taak voor professional ${action.input_data.professional_id}`,
+    // EXPLICIETE DELEGATIE STATUS
+    assignee_id: null,
+    accepted_at: null,
+    accepted_by: null
+  });
+}
+```
+
+---
+
+## Fase 3: Subtasks (OPTIONEEL - Latere Iteratie)
+
+Dit is NIET nodig voor de huidige workflow maar kan later toegevoegd worden:
+
+| Item | Status |
+|------|--------|
+| Database migratie (subtasks kolommen) | ⏳ Later |
+| SubtaskManager.tsx auto-accept | ⏳ Later |
 
 ---
 
 ## Risico Analyse
 
-### Wat kan BREKEN?
-
-| Scenario | Risico | Toelichting |
-|----------|--------|-------------|
-| Lijst.tsx acceptatie | ❌ Geen | Blijft ongewijzigd |
-| Bulk assign | ❌ Geen | Blijft ongewijzigd |
-| TaskDetailModal | ⚠️ Laag | Toont taak maar geen acceptatie UI |
-| MyTasksFlowSection | ⚠️ Medium | Toont taken die auto-assigned maar niet geaccepteerd zijn |
-| Subtask delegatie | ⚠️ Medium | Database-migratie nodig |
-
-### Wat werkt al correct?
-
-- `Lijst.tsx`: handleAcceptTask, handleUpdateAssignee
-- Bulk assign met auto-reset van accepted_by/accepted_at
-- UI voor "Accepteren" knop in Lijst-view
+| Wijziging | Risico | Mitigatie |
+|-----------|--------|-----------|
+| TaskCard interface | ❌ Geen | Optionele velden met `?` |
+| MyTasksFlowSection query | ❌ Geen | Extra velden, geen removals |
+| handleAcceptTask | ❌ Geen | Identiek aan bestaande Lijst.tsx |
+| useCreateTasksFromItems | ❌ Geen | Extra velden bij insert |
+| AI Orchestrator | ⚠️ Laag | Priority case fix + expliciet null |
 
 ---
 
-## Minimale Fix (Aanbevolen)
+## Validatie Checklist (Na Implementatie)
 
-In plaats van de complexe workflow uit het eerdere plan, stel ik een **minimale, niet-breaking fix** voor:
-
-### Stap 1: TaskDialog.tsx aanpassen
-
-Voeg auto-assign EN auto-accept toe bij nieuwe taken:
-
-```typescript
-// Haal current user op
-const { data: { user } } = await supabase.auth.getUser();
-
-const taskData = {
-  ...bestaandeVelden,
-  assignee_id: user?.id,           // AUTO-ASSIGN
-  accepted_by: user?.id,           // AUTO-ACCEPT  
-  accepted_at: new Date().toISOString(),
-};
-```
-
-**Impact**: 
-- Nieuwe taken zijn direct geaccepteerd
-- Verschijnen correct in "Mijn Taken"
-- Geen breaking changes
-
-### Stap 2: Subtasks migratie (OPTIONEEL)
-
-De subtasks tabel heeft nog GEEN acceptatie-kolommen. Dit kan later toegevoegd worden zonder breaking changes:
-
-```sql
-ALTER TABLE public.subtasks 
-  ADD COLUMN IF NOT EXISTS accepted_at timestamptz,
-  ADD COLUMN IF NOT EXISTS accepted_by uuid REFERENCES auth.users(id),
-  ADD COLUMN IF NOT EXISTS created_by uuid REFERENCES auth.users(id);
-```
-
-**Dit hoeft NIET nu** - het huidige systeem werkt correct zonder.
+- [ ] **Nieuwe taak via Dashboard** → Direct geaccepteerd (accepted_at gevuld)
+- [ ] **Taak delegeren** → Badge "Wacht op acceptatie" zichtbaar
+- [ ] **Accept klikken** → Badge verdwijnt, toast "Taak geaccepteerd"
+- [ ] **Notulen naar taken** → Self-assigned taken zijn geaccepteerd
+- [ ] **AI-taken** → priority = 'MEDIUM' (uppercase), staan in team overzicht
+- [ ] **Bestaande Lijst.tsx** → Blijft ongewijzigd werken
 
 ---
 
-## Wijzigingen per Bestand
+## Samenvatting: 4 Bestanden te Wijzigen
 
-| Bestand | Wijziging | Breaking? |
-|---------|-----------|-----------|
-| `TaskDialog.tsx` | Auto-assign + auto-accept bij nieuwe taak | ❌ Nee |
-| `Lijst.tsx` | Geen wijziging nodig | N/A |
-| `MyTasksFlowSection.tsx` | Geen wijziging nodig | N/A |
-| `SubtaskManager.tsx` | Geen wijziging nodig (later uit te breiden) | N/A |
-| Database migratie | Subtasks kolommen (optioneel, later) | ❌ Nee |
+1. **TaskCard.tsx** - Interface + Badge UI
+2. **MyTasksFlowSection.tsx** - Query + Handler + Dropdown
+3. **useCreateTasksFromItems.ts** - Auto-accept bij bulk insert
+4. **ai-agent-orchestrator/index.ts** - Priority fix + NULL waarden
 
----
-
-## Implementatie Detail
-
-### TaskDialog.tsx - Wijziging
-
-**Huidige code (regel 205-256):**
-```typescript
-const onSubmit = async (values: TaskFormData) => {
-  // ...
-  const taskData = {
-    title: values.title,
-    description: values.description || null,
-    priority: values.priority,
-    assignee_id: values.assignee_id && values.assignee_id !== "unassigned" ? values.assignee_id : null,
-    start_at: startAtISO,
-    due_at: dueAtISO,
-    next_action: values.next_action || null,
-    org_id: defaultOrgId,
-    column_id: columnId || defaultBacklogColumnId,
-  };
-  
-  if (taskId) {
-    // Update existing task
-  } else {
-    // Create new task - PROBLEEM: geen auto-accept
-    const { data, error } = await supabase.from("tasks").insert(taskData).select('id').single();
-  }
-};
-```
-
-**Nieuwe code:**
-```typescript
-const onSubmit = async (values: TaskFormData) => {
-  // Haal huidige user op
-  const { data: { user: currentUser } } = await supabase.auth.getUser();
-  
-  // Bepaal assignee en acceptatie
-  const assigneeId = values.assignee_id && values.assignee_id !== "unassigned" 
-    ? values.assignee_id 
-    : currentUser?.id || null; // DEFAULT naar huidige user
-  
-  // Auto-accept als aan jezelf toegewezen
-  const isAutoAccept = assigneeId === currentUser?.id;
-  
-  const taskData = {
-    title: values.title,
-    description: values.description || null,
-    priority: values.priority,
-    assignee_id: assigneeId,
-    start_at: startAtISO,
-    due_at: dueAtISO,
-    next_action: values.next_action || null,
-    org_id: defaultOrgId,
-    column_id: columnId || defaultBacklogColumnId,
-    // AUTO-ACCEPT logica
-    accepted_by: isAutoAccept ? currentUser?.id : null,
-    accepted_at: isAutoAccept ? new Date().toISOString() : null,
-  };
-  
-  // Rest blijft hetzelfde...
-};
-```
-
----
-
-## Visuele Flow (Na Implementatie)
-
-```text
-SCENARIO 1: Nieuwe taak in "Mijn Taken"
-┌─────────────────────────────────────────┐
-│  Klik "+ Nieuwe taak"                   │
-│          ↓                              │
-│  TaskDialog opent                       │
-│          ↓                              │
-│  Gebruiker vult formulier in            │
-│          ↓                              │
-│  Opslaan                                │
-│          ↓                              │
-│  ┌─────────────────────────────────┐    │
-│  │ assignee_id = huidige user      │    │
-│  │ accepted_by = huidige user      │    │
-│  │ accepted_at = NOW()             │    │
-│  └─────────────────────────────────┘    │
-│          ↓                              │
-│  Taak verschijnt in "Mijn Taken" ✅     │
-└─────────────────────────────────────────┘
-
-SCENARIO 2: Taak delegeren via Lijst
-┌─────────────────────────────────────────┐
-│  Wijzig assignee naar collega           │
-│          ↓                              │
-│  handleUpdateAssignee() activeert       │
-│          ↓                              │
-│  ┌─────────────────────────────────┐    │
-│  │ assignee_id = collega           │    │
-│  │ accepted_by = NULL (reset)      │    │
-│  │ accepted_at = NULL (reset)      │    │
-│  └─────────────────────────────────┘    │
-│          ↓                              │
-│  Collega ziet [Accepteren] knop         │
-│  (bestaande Lijst.tsx logica) ✅        │
-└─────────────────────────────────────────┘
-```
-
----
-
-## Conclusie
-
-De **minimale fix** is:
-
-1. **TaskDialog.tsx**: Auto-assign aan huidige user + auto-accept
-2. **Geen andere bestanden wijzigen**
-3. **Geen database migratie nodig** (subtasks later)
-
-Dit zorgt ervoor dat:
-- Nieuwe taken direct zichtbaar zijn in "Mijn Taken"
-- Bestaande delegatie-flow in Lijst.tsx blijft werken
-- Geen breaking changes in andere componenten
+Geen database migraties nodig. Geen breaking changes. Volledig backwards-compatible.
 
