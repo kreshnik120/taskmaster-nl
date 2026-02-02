@@ -470,6 +470,7 @@ export default function EmbeddedCalendarView() {
   // ===== Drag & Drop Handlers =====
   
   const handleDragStart = (event: DragStartEvent) => {
+    document.documentElement.classList.add('dnd-dragging');
     const { active } = event;
     const activeData = active.data.current;
     
@@ -481,6 +482,7 @@ export default function EmbeddedCalendarView() {
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
+    document.documentElement.classList.remove('dnd-dragging');
     const { active, over } = event;
     setActiveItem(null);
 
@@ -898,16 +900,18 @@ export default function EmbeddedCalendarView() {
           })}
         </div>
         
-        {/* Drag Overlay */}
-        <DragOverlay>
+        {/* Drag Overlay - Teal themed glass */}
+        <DragOverlay dropAnimation={null}>
           {activeItem && (
-            <div className="p-2 rounded-lg bg-background border shadow-lg opacity-90">
-              <p className="text-xs font-medium">
-                {activeItem.type === 'task' 
-                  ? (activeItem.data as Task).title 
-                  : (activeItem.data as SubtaskFromHook).title
-                }
-              </p>
+            <div className="cursor-grabbing">
+              <div className="glass-drag-overlay-teal p-2 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-white/40 dark:border-white/15">
+                <p className="text-xs font-medium">
+                  {activeItem.type === 'task' 
+                    ? (activeItem.data as Task).title 
+                    : (activeItem.data as SubtaskFromHook).title
+                  }
+                </p>
+              </div>
             </div>
           )}
         </DragOverlay>

@@ -279,11 +279,13 @@ const Sollicitaties = () => {
   }, [searchParams, applications, loading, setSearchParams]);
 
   const handleDragStart = (event: DragStartEvent) => {
+    document.documentElement.classList.add('dnd-dragging');
     const application = applications.find((a) => a.id === event.active.id);
     if (application) setActiveApplication(application);
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
+    document.documentElement.classList.remove('dnd-dragging');
     const { active, over } = event;
     setActiveApplication(null);
 
@@ -1273,13 +1275,15 @@ const Sollicitaties = () => {
                 ))}
               </div>
 
-              <DragOverlay>
+              <DragOverlay dropAnimation={null}>
                 {activeApplication ? (
-                  <div className="rotate-2">
-                    <ApplicationCard
-                      application={activeApplication}
-                      onClick={() => {}}
-                    />
+                  <div className="cursor-grabbing">
+                    <div className="glass-drag-overlay-rose">
+                      <ApplicationCard
+                        application={activeApplication}
+                        onClick={() => {}}
+                      />
+                    </div>
                   </div>
                 ) : null}
               </DragOverlay>
