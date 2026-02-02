@@ -82,8 +82,8 @@ export function UpcomingRemindersWidget() {
         <CollapsibleTrigger className="w-full">
           <div className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Bell className="h-4 w-4 text-primary" />
+              <div className="p-2 rounded-lg bg-tab-mijn-werk-100 dark:bg-tab-mijn-werk-900/40">
+                <Bell className="h-4 w-4 text-tab-mijn-werk-500" />
               </div>
               <div className="text-left">
                 <h3 className="font-medium text-sm">Aankomende herinneringen</h3>
@@ -112,7 +112,7 @@ export function UpcomingRemindersWidget() {
                   </p>
                   <Badge
                     variant="outline"
-                    className="mt-1 text-xs bg-primary/10 text-primary border-primary"
+                    className="mt-1 text-xs bg-tab-mijn-werk-100 text-tab-mijn-werk-700 border-tab-mijn-werk-300 dark:bg-tab-mijn-werk-900/40 dark:text-tab-mijn-werk-300 dark:border-tab-mijn-werk-700"
                   >
                     <Bell className="h-3 w-3 mr-1" />
                     {formatDistanceToNow(new Date(reminder.at), {
