@@ -1,371 +1,307 @@
 
 
-# Fase 14: Expert Polish — Final Refinements
+# Fase 15: Final Glass Polish — UI Primitives & Toast Notifications
 
 ## Executive Summary
 
-Na grondige analyse van de gehele codebase heb ik de volgende **9 specifieke verbeterpunten** geïdentificeerd die de Apple visionOS esthetiek nog verder zullen verfijnen. Deze gaps breken momenteel de visuele consistentie van het design system.
+Na analyse van alle UI componenten zijn er nog **8 specifieke primitives** die geen glassmorphism hebben, terwijl vergelijkbare componenten (Dialog, DropdownMenu, Select, AlertDialog) al wel zijn geüpgraded. Dit plan brengt volledige visuele consistentie.
 
 ---
 
-## Geïdentificeerde Gaps (Expert Analyse)
+## Geïdentificeerde Gaps
 
 | # | Component | Huidige Status | Probleem |
 |---|-----------|----------------|----------|
-| 1 | `UpcomingTasksList.tsx` | Geen glass styling | Inconsistent met `OverdueTasksList` |
-| 2 | `SourceProgress.tsx` | Geen glass styling | Inconsistent met `AssigneeProgress` |
-| 3 | `TaskListSidePanel.tsx` | `bg-background border-l` | Geen glass behandeling |
-| 4 | `TaskListCards.tsx` | `hover:bg-muted/50` | Simpele hover, geen glass |
-| 5 | `TaskListTable.tsx` | `hover:bg-muted/50` | Geen glass row styling |
-| 6 | `TaskListToolbar.tsx` | Basis Input styling | Geen glass search input |
-| 7 | `Layout.tsx` main header | Geen styling | Header bar zonder glass |
-| 8 | `AppSidebar.tsx` footer | Basis styling | User card zonder glass |
-| 9 | `TaskListFilterPills.tsx` | Basis buttons | Geen glass pill styling |
+| 1 | `sonner.tsx` (Toaster) | `bg-background shadow-lg` | Geen glass styling |
+| 2 | `popover.tsx` | `bg-popover shadow-md` | Geen glass/blur |
+| 3 | `context-menu.tsx` | `bg-popover shadow-md` | Geen glass styling |
+| 4 | `tooltip.tsx` | `bg-popover shadow-md` | Geen glass/blur |
+| 5 | `hover-card.tsx` | `bg-popover shadow-md` | Geen glass styling |
+| 6 | `sheet.tsx` | `bg-background` | Geen glass panel |
+| 7 | `skeleton.tsx` | `bg-muted` | Geen glass shimmer |
+| 8 | `TaskListEmptyState.tsx` | Geen container styling | Geen glass empty state |
 
 ---
 
-## Prioriteit 1: UpcomingTasksList — Slate Glass Styling
+## Prioriteit 1: Sonner Toaster — Glass Toast Notifications
 
-**Bestand:** `src/components/dashboard-stats/UpcomingTasksList.tsx`
+**Bestand:** `src/components/ui/sonner.tsx`
 
-**Probleem:** De `UpcomingTasksList` gebruikt `p-3 rounded-lg border` terwijl `OverdueTasksList` glassmorphism heeft.
+**Probleem:** Toast notifications gebruiken standaard `bg-background` zonder glassmorphism.
 
-**Oplossing:** Voeg slate-tinted glass styling toe (consistent met Lijst tab context).
+**Oplossing:** Voeg premium glass styling toe aan toast notifications.
 
-**Wijzigingen (regels 72-89):**
+**Wijzigingen:**
 
 ```tsx
-// Card container upgrade
-<Card className="glass-card-slate">
-  ...
-</Card>
+const Toaster = ({ ...props }: ToasterProps) => {
+  return (
+    <Sonner
+      theme="light"
+      className="toaster group"
+      toastOptions={{
+        classNames: {
+          toast:
+            "group toast group-[.toaster]:bg-white/90 dark:group-[.toaster]:bg-slate-900/90 group-[.toaster]:backdrop-blur-xl group-[.toaster]:text-foreground group-[.toaster]:border-white/40 dark:group-[.toaster]:border-white/15 group-[.toaster]:shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15),0_4px_16px_rgba(0,0,0,0.1)] group-[.toaster]:rounded-xl",
+          description: "group-[.toast]:text-muted-foreground",
+          actionButton: "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground group-[.toast]:shadow-[0_2px_8px_hsla(221,83%,53%,0.25)]",
+          cancelButton: "group-[.toast]:bg-white/60 dark:group-[.toast]:bg-slate-800/60 group-[.toast]:backdrop-blur-sm group-[.toast]:text-muted-foreground group-[.toast]:border-white/30",
+          success: "group-[.toaster]:border-green-500/30 group-[.toaster]:shadow-[0_10px_40px_-10px_hsla(142,71%,45%,0.15),0_4px_16px_hsla(142,71%,45%,0.1)]",
+          error: "group-[.toaster]:border-destructive/30 group-[.toaster]:shadow-[0_10px_40px_-10px_hsla(0,84%,60%,0.15),0_4px_16px_hsla(0,84%,60%,0.1)]",
+          warning: "group-[.toaster]:border-orange-500/30 group-[.toaster]:shadow-[0_10px_40px_-10px_hsla(24,95%,53%,0.15),0_4px_16px_hsla(24,95%,53%,0.1)]",
+          info: "group-[.toaster]:border-primary/30 group-[.toaster]:shadow-[0_10px_40px_-10px_hsla(221,83%,53%,0.15),0_4px_16px_hsla(221,83%,53%,0.1)]",
+        },
+      }}
+      {...props}
+    />
+  );
+};
+```
 
-// Task item upgrade (regel 88)
-<div
-  key={task.id}
-  onClick={() => handleClick(task.id)}
+---
+
+## Prioriteit 2: Popover — Glass Floating Panel
+
+**Bestand:** `src/components/ui/popover.tsx`
+
+**Probleem:** Popover content heeft standaard styling zonder glassmorphism.
+
+**Oplossing:** Voeg glass styling toe consistent met DropdownMenu.
+
+**Wijzigingen:**
+
+```tsx
+<PopoverPrimitive.Content
+  ref={ref}
+  align={align}
+  sideOffset={sideOffset}
   className={cn(
-    "p-3 rounded-xl transition-all duration-200 cursor-pointer group",
-    "bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm",
-    "border border-white/30 dark:border-white/12",
-    "shadow-[0_2px_6px_hsla(215,25%,48%,0.06)]",
-    "hover:bg-white/80 dark:hover:bg-slate-800/80",
-    "hover:shadow-[0_4px_12px_hsla(215,25%,48%,0.12)]"
+    "z-50 w-72 rounded-xl p-4 text-popover-foreground outline-none",
+    "bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl",
+    "border border-white/30 dark:border-white/15",
+    "shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15),0_4px_16px_rgba(0,0,0,0.1)]",
+    "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+    className,
   )}
->
-```
-
----
-
-## Prioriteit 2: SourceProgress — Violet Glass Styling
-
-**Bestand:** `src/components/dashboard-stats/SourceProgress.tsx`
-
-**Probleem:** De `SourceProgress` component heeft geen glassmorphism terwijl `AssigneeProgress` dat wel heeft.
-
-**Oplossing:** Voeg violet-tinted glass styling toe (Team tab context).
-
-**Wijzigingen (regels 56-79):**
-
-```tsx
-// Card container upgrade
-<Card className="glass-card-violet">
-  ...
-</Card>
-
-// Source item upgrade (regel 75)
-<div
-  key={source.sourceId || 'manual'}
-  onClick={() => handleClick(source.sourceId)}
-  className={cn(
-    "p-3 rounded-xl transition-all duration-200",
-    "bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm",
-    "border border-white/30 dark:border-white/12",
-    "shadow-[0_2px_6px_hsla(270,45%,55%,0.06)]",
-    isClickable && "cursor-pointer hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_12px_hsla(270,45%,55%,0.12)]"
-  )}
->
-
-// Icon container upgrade (regel 81)
-<div className="p-2 rounded-full bg-white/40 dark:bg-slate-800/40 backdrop-blur-sm">
-```
-
----
-
-## Prioriteit 3: TaskListSidePanel — Premium Glass Panel
-
-**Bestand:** `src/components/TaskListView/TaskListSidePanel.tsx`
-
-**Probleem:** De side panel gebruikt `bg-background border-l shadow-xl` zonder glassmorphism.
-
-**Oplossing:** Voeg premium glass styling toe met slate-tinted blur.
-
-**Wijzigingen (regel 120):**
-
-```tsx
-// Panel wrapper upgrade
-className="fixed right-0 top-0 z-50 h-full w-full max-w-md 
-  bg-white/90 dark:bg-slate-900/90 
-  backdrop-blur-xl 
-  border-l border-white/40 dark:border-white/12 
-  shadow-[0_0_60px_hsla(215,25%,48%,0.15),-10px_0_40px_hsla(215,25%,48%,0.08)]
-  outline-none"
-```
-
----
-
-## Prioriteit 4: TaskListCards — Glass Mobile Cards
-
-**Bestand:** `src/components/TaskListView/TaskListCards.tsx`
-
-**Probleem:** Mobile cards gebruiken `hover:bg-muted/50` zonder glassmorphism.
-
-**Oplossing:** Voeg slate glass styling toe voor mobiele weergave.
-
-**Wijzigingen (regels 53-60):**
-
-```tsx
-// Card upgrade
-<Card
-  key={task.id}
-  role="listitem"
-  aria-label={generateTaskAriaLabel(task)}
-  className={cn(
-    "cursor-pointer transition-all duration-200",
-    "bg-white/75 dark:bg-slate-900/75 backdrop-blur-sm",
-    "border-white/40 dark:border-white/12",
-    "shadow-[0_2px_6px_hsla(215,25%,48%,0.06)]",
-    "hover:bg-white/90 dark:hover:bg-slate-800/90",
-    "hover:shadow-[0_4px_12px_hsla(215,25%,48%,0.12)]",
-    overdue && "border-destructive/50"
-  )}
-  onClick={() => onTaskSelect?.(task)}
->
-```
-
----
-
-## Prioriteit 5: TaskListTable — Glass Row Hover
-
-**Bestand:** `src/components/TaskListView/TaskListTable.tsx`
-
-**Probleem:** Table rows gebruiken `hover:bg-muted/50` zonder glass effect.
-
-**Oplossing:** Voeg subtiele glass hover toe aan table rows.
-
-**Wijzigingen (regels 139-143):**
-
-```tsx
-// TableRow upgrade
-className={cn(
-  'cursor-pointer transition-all duration-150',
-  isSelected && 'bg-accent/50',
-  isFocused && 'ring-2 ring-primary ring-inset',
-  !isSelected && !isFocused && 'hover:bg-white/60 dark:hover:bg-slate-800/60'
-)}
-```
-
-**Table container upgrade (regel 103):**
-
-```tsx
-<div className="rounded-xl border border-white/40 dark:border-white/12 overflow-hidden bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm">
-```
-
----
-
-## Prioriteit 6: TaskListToolbar — Glass Search Input
-
-**Bestand:** `src/components/TaskListView/TaskListToolbar.tsx`
-
-**Probleem:** Search input heeft basis styling zonder glass treatment.
-
-**Oplossing:** Voeg glass styling toe aan search input.
-
-**Wijzigingen (regels 66-73):**
-
-```tsx
-// Input upgrade
-<Input
-  ref={searchInputRef}
-  type="text"
-  placeholder="Zoek taken... (druk / om te zoeken)"
-  value={searchInput}
-  onChange={(e) => setSearchInput(e.target.value)}
-  className="pl-9 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border-white/40 dark:border-white/12 focus:bg-white/80 dark:focus:bg-slate-800/80 transition-all duration-200"
+  {...props}
 />
 ```
 
-**Sort buttons upgrade (regels 79-97):**
-
-```tsx
-// Sort button upgrade
-<Button 
-  variant="outline" 
-  size="sm" 
-  className="gap-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border-white/40 dark:border-white/12 hover:bg-white/80 dark:hover:bg-slate-800/80"
->
-```
-
 ---
 
-## Prioriteit 7: Layout Header — Glass Header Bar
+## Prioriteit 3: Context Menu — Glass Right-Click Menu
 
-**Bestand:** `src/components/Layout.tsx`
+**Bestand:** `src/components/ui/context-menu.tsx`
 
-**Probleem:** Header bar met SidebarTrigger en NotificationBell heeft geen styling.
+**Probleem:** Context menu heeft standaard styling zonder glassmorphism.
 
-**Oplossing:** Voeg subtiele glass header styling toe.
+**Oplossing:** Voeg glass styling toe aan ContextMenuContent en ContextMenuSubContent.
 
-**Wijzigingen (regels 66-73):**
-
-```tsx
-// Header bar upgrade
-<div className="mb-4 flex items-center justify-between p-3 -mx-3 rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10">
-  <SidebarTrigger />
-  <div className="flex items-center gap-2">
-    <SecurityAlertBell />
-    <NotificationBell onNotificationClick={handleNotificationClick} />
-  </div>
-</div>
-```
-
----
-
-## Prioriteit 8: AppSidebar Footer — Glass User Card
-
-**Bestand:** `src/components/AppSidebar.tsx`
-
-**Probleem:** User card in sidebar footer heeft basis styling.
-
-**Oplossing:** Voeg subtiele glass behandeling toe.
-
-**Wijzigingen (regels 358-371):**
+**Wijzigingen ContextMenuContent:**
 
 ```tsx
-// User button upgrade
-<Button 
-  variant="ghost" 
-  className="w-full justify-start gap-3 px-3 py-2 h-auto 
-    hover:bg-white/60 dark:hover:bg-slate-800/60 
-    rounded-xl transition-all duration-200
-    bg-white/30 dark:bg-slate-900/30
-    border border-white/20 dark:border-white/8"
->
-  <Avatar className="h-8 w-8 ring-2 ring-white/20 dark:ring-white/10">
-    <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-  </Avatar>
-  ...
-</Button>
-```
-
----
-
-## Prioriteit 9: TaskListFilterPills — Glass Pills
-
-**Bestand:** `src/components/TaskListView/TaskListFilterPills.tsx`
-
-**Probleem:** Filter pills gebruiken standaard Button styling zonder glass.
-
-**Oplossing:** Voeg glass pill styling toe.
-
-**Wijzigingen (regels 28-36 en 41-51):**
-
-```tsx
-// "Alle" button upgrade
-<Button
-  variant={hasActiveFilters ? 'outline' : 'default'}
-  size="sm"
-  onClick={onClearAll}
+<ContextMenuPrimitive.Content
+  ref={ref}
   className={cn(
-    'shrink-0 rounded-full text-xs font-medium transition-all duration-200',
-    !hasActiveFilters 
-      ? 'bg-primary text-primary-foreground shadow-[0_2px_6px_hsla(221,83%,53%,0.2)]' 
-      : 'bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border-white/40 dark:border-white/12 hover:bg-white/80'
+    "z-50 min-w-[8rem] overflow-hidden rounded-xl p-1 text-popover-foreground",
+    "bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl",
+    "border border-white/30 dark:border-white/15",
+    "shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15),0_4px_16px_rgba(0,0,0,0.1)]",
+    "animate-in fade-in-80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+    className,
   )}
->
+  {...props}
+/>
+```
 
-// Filter pill buttons upgrade
-<Button
-  key={filter}
-  variant={isActive ? 'default' : 'outline'}
-  size="sm"
-  onClick={() => onToggleFilter(filter)}
-  className={cn(
-    'shrink-0 rounded-full text-xs font-medium transition-all duration-200',
-    !isActive && 'bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border-white/40 dark:border-white/12 hover:bg-white/80',
-    isActive && 'shadow-[0_2px_6px_hsla(221,83%,53%,0.2)]',
-    filter === 'critical' && isActive && 'bg-destructive shadow-[0_2px_6px_hsla(0,84%,60%,0.2)]',
-    filter === 'due_today' && isActive && 'bg-orange-500 shadow-[0_2px_6px_hsla(24,95%,53%,0.2)]'
-  )}
->
+**Wijzigingen ContextMenuSubContent (zelfde styling).**
+
+**Wijzigingen ContextMenuItem:**
+
+```tsx
+className={cn(
+  "relative flex cursor-default select-none items-center rounded-lg px-2 py-1.5 text-sm outline-none transition-colors",
+  "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+  "focus:bg-white/50 dark:focus:bg-slate-800/50 focus:backdrop-blur-sm",
+  inset && "pl-8",
+  className,
+)}
 ```
 
 ---
 
-## CSS Toevoegingen
+## Prioriteit 4: Tooltip — Glass Tooltip
 
-**Bestand:** `src/index.css`
+**Bestand:** `src/components/ui/tooltip.tsx`
 
-Voeg de volgende utility classes toe:
+**Probleem:** Tooltips hebben standaard styling zonder glassmorphism.
 
-```css
-/* ============================================
-   PHASE 14: ADDITIONAL GLASS UTILITIES
-   ============================================ */
+**Oplossing:** Voeg subtiele glass styling toe.
 
-/* Slate-tinted glass card for Lijst/Klanten context */
-.glass-card-slate {
-  position: relative;
-  overflow: hidden;
-  border-radius: 0.75rem;
-  background: linear-gradient(135deg, hsla(215, 25%, 97%, 0.75) 0%, hsla(215, 25%, 97%, 0.45) 100%);
-  backdrop-filter: blur(20px) saturate(150%);
-  -webkit-backdrop-filter: blur(20px) saturate(150%);
-  border: 1px solid hsla(215, 25%, 88%, 0.5);
-  box-shadow: 0 4px 12px hsla(215, 25%, 48%, 0.08), 0 8px 32px hsla(215, 25%, 48%, 0.12);
-  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+**Wijzigingen:**
+
+```tsx
+<TooltipPrimitive.Content
+  ref={ref}
+  sideOffset={sideOffset}
+  className={cn(
+    "z-50 overflow-hidden rounded-lg px-3 py-1.5 text-sm",
+    "bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl",
+    "text-popover-foreground",
+    "border border-white/30 dark:border-white/15",
+    "shadow-[0_4px_16px_rgba(0,0,0,0.1),0_2px_6px_rgba(0,0,0,0.06)]",
+    "animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+    className,
+  )}
+  {...props}
+/>
+```
+
+---
+
+## Prioriteit 5: HoverCard — Glass Hover Panel
+
+**Bestand:** `src/components/ui/hover-card.tsx`
+
+**Probleem:** HoverCard content heeft standaard styling.
+
+**Oplossing:** Voeg glass styling toe.
+
+**Wijzigingen:**
+
+```tsx
+<HoverCardPrimitive.Content
+  ref={ref}
+  align={align}
+  sideOffset={sideOffset}
+  className={cn(
+    "z-50 w-64 rounded-xl p-4 text-popover-foreground outline-none",
+    "bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl",
+    "border border-white/30 dark:border-white/15",
+    "shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15),0_4px_16px_rgba(0,0,0,0.1)]",
+    "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+    className,
+  )}
+  {...props}
+/>
+```
+
+---
+
+## Prioriteit 6: Sheet — Glass Side Panel
+
+**Bestand:** `src/components/ui/sheet.tsx`
+
+**Probleem:** Sheet overlay en content hebben geen glassmorphism.
+
+**Oplossing:** Voeg glass styling toe aan overlay en content.
+
+**Wijzigingen SheetOverlay:**
+
+```tsx
+className={cn(
+  "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm",
+  "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+  className,
+)}
+```
+
+**Wijzigingen sheetVariants:**
+
+```tsx
+const sheetVariants = cva(
+  "fixed z-50 gap-4 p-6 transition ease-in-out bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-white/40 dark:border-white/15 shadow-[0_0_60px_hsla(215,25%,48%,0.15),-10px_0_40px_hsla(215,25%,48%,0.08)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
+  {
+    variants: {
+      side: {
+        // ... zelfde als voorheen met border-t/b/l/r behouden
+      },
+    },
+    defaultVariants: {
+      side: "right",
+    },
+  },
+);
+```
+
+---
+
+## Prioriteit 7: Skeleton — Glass Shimmer Effect
+
+**Bestand:** `src/components/ui/skeleton.tsx`
+
+**Probleem:** Skeleton heeft eenvoudige `bg-muted` zonder glass effect.
+
+**Oplossing:** Voeg glass shimmer toe.
+
+**Wijzigingen:**
+
+```tsx
+function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div 
+      className={cn(
+        "animate-pulse rounded-md",
+        "bg-white/40 dark:bg-slate-800/40",
+        "backdrop-blur-sm",
+        "border border-white/20 dark:border-white/8",
+        className
+      )} 
+      {...props} 
+    />
+  );
 }
+```
 
-.dark .glass-card-slate {
-  background: linear-gradient(135deg, hsla(215, 25%, 26%, 0.55) 0%, hsla(215, 25%, 20%, 0.35) 100%);
-  border-color: hsla(215, 25%, 40%, 0.35);
-  box-shadow: 0 4px 12px hsla(215, 25%, 15%, 0.25), 0 8px 32px hsla(215, 25%, 10%, 0.35);
-}
+---
 
-/* Glass search input */
-.glass-search-input {
-  background: rgba(255, 255, 255, 0.60);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.40);
-  transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
-}
+## Prioriteit 8: TaskListEmptyState — Glass Empty State
 
-.glass-search-input:focus {
-  background: rgba(255, 255, 255, 0.80);
-  border-color: rgba(255, 255, 255, 0.50);
-}
+**Bestand:** `src/components/TaskListView/TaskListEmptyState.tsx`
 
-.dark .glass-search-input {
-  background: rgba(30, 41, 59, 0.60);
-  border-color: rgba(255, 255, 255, 0.12);
-}
+**Probleem:** Empty state heeft geen container styling.
 
-.dark .glass-search-input:focus {
-  background: rgba(30, 41, 59, 0.80);
-}
+**Oplossing:** Voeg glass container toe.
 
-/* Glass panel shadow for side panels */
-.glass-panel-shadow {
-  box-shadow: 
-    0 0 60px hsla(215, 25%, 48%, 0.15),
-    -10px 0 40px hsla(215, 25%, 48%, 0.08);
-}
+**Wijzigingen:**
 
-.dark .glass-panel-shadow {
-  box-shadow: 
-    0 0 60px hsla(215, 25%, 15%, 0.40),
-    -10px 0 40px hsla(215, 25%, 10%, 0.25);
+```tsx
+export function TaskListEmptyState({ filtered = false }: TaskListEmptyStateProps) {
+  return (
+    <div className={cn(
+      "flex flex-col items-center justify-center py-12 px-8 text-center",
+      "rounded-xl",
+      "bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm",
+      "border border-white/30 dark:border-white/12",
+      "shadow-[0_2px_8px_rgba(0,0,0,0.04)]"
+    )}>
+      {filtered ? (
+        <>
+          <div className="p-4 rounded-full bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm mb-4">
+            <Search className="h-8 w-8 text-muted-foreground/50" />
+          </div>
+          <h3 className="text-lg font-medium text-foreground mb-1">
+            Geen taken gevonden voor deze zoekopdracht
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Probeer andere zoektermen of verwijder filters
+          </p>
+        </>
+      ) : (
+        <>
+          <div className="p-4 rounded-full bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm mb-4">
+            <ClipboardList className="h-8 w-8 text-muted-foreground/50" />
+          </div>
+          <h3 className="text-lg font-medium text-foreground mb-1">
+            Geen taken gevonden
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Er zijn momenteel geen actieve taken
+          </p>
+        </>
+      )}
+    </div>
+  );
 }
 ```
 
@@ -375,16 +311,14 @@ Voeg de volgende utility classes toe:
 
 | Bestand | Wijzigingen |
 |---------|-------------|
-| `src/components/dashboard-stats/UpcomingTasksList.tsx` | Glass card + items |
-| `src/components/dashboard-stats/SourceProgress.tsx` | Glass card + items |
-| `src/components/TaskListView/TaskListSidePanel.tsx` | Glass panel |
-| `src/components/TaskListView/TaskListCards.tsx` | Glass mobile cards |
-| `src/components/TaskListView/TaskListTable.tsx` | Glass table container + rows |
-| `src/components/TaskListView/TaskListToolbar.tsx` | Glass search + buttons |
-| `src/components/Layout.tsx` | Glass header bar |
-| `src/components/AppSidebar.tsx` | Glass user card |
-| `src/components/TaskListView/TaskListFilterPills.tsx` | Glass filter pills |
-| `src/index.css` | +40 regels utilities |
+| `src/components/ui/sonner.tsx` | Glass toast styling + context shadows |
+| `src/components/ui/popover.tsx` | Glass content panel |
+| `src/components/ui/context-menu.tsx` | Glass menu + items |
+| `src/components/ui/tooltip.tsx` | Glass tooltip |
+| `src/components/ui/hover-card.tsx` | Glass hover panel |
+| `src/components/ui/sheet.tsx` | Glass overlay + panel |
+| `src/components/ui/skeleton.tsx` | Glass shimmer effect |
+| `src/components/TaskListView/TaskListEmptyState.tsx` | Glass empty state container |
 
 ---
 
@@ -392,34 +326,36 @@ Voeg de volgende utility classes toe:
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│  DASHBOARD — LIJST TAB (Slate Context)                       │
+│  GLASS UI PRIMITIVES                                         │
 │                                                              │
 │  ┌─────────────────────────────────────────────────────────┐ │
-│  │  🔍 [Glass Search Input]        [Sort ▼] [↕]            │ │
-│  │  ░░░ GLASS SEARCH BAR ░░░                               │ │
+│  │  📢 TOAST NOTIFICATION                                  │ │
+│  │  ░░░ GLASS + CONTEXT SHADOW (green/red/blue) ░░░        │ │
+│  │  "Taak succesvol opgeslagen!"          [Ongedaan maken] │ │
 │  └─────────────────────────────────────────────────────────┘ │
 │                                                              │
-│  [Alle] [Open] [In Progress] [Review] [Kritiek] [Vandaag]   │
-│   ░░░ GLASS FILTER PILLS ░░░                                │
+│  ┌────────────────────┐    ┌────────────────────┐            │
+│  │  💬 TOOLTIP        │    │  🖱️ CONTEXT MENU   │            │
+│  │  ░░░ GLASS ░░░     │    │  ░░░ GLASS ░░░     │            │
+│  │  "Klik om te..."   │    │  ✏️ Bewerken       │            │
+│  └────────────────────┘    │  🗑️ Verwijderen    │            │
+│                            └────────────────────┘            │
 │                                                              │
 │  ┌─────────────────────────────────────────────────────────┐ │
-│  │  ░░░ GLASS TABLE CONTAINER ░░░                          │ │
-│  │  ┌───────────────────────────────────────────────────┐  │ │
-│  │  │  ☐ │ Taak Titel         │ Eigenaar │ Prio │ Date │  │ │
-│  │  ├───────────────────────────────────────────────────┤  │ │
-│  │  │  ☐ │ Intake gesprek...  │ 👤 Jan   │ Hoog │ 5 feb│  │ │
-│  │  │      ░░░ GLASS ROW HOVER ░░░                      │  │ │
-│  │  └───────────────────────────────────────────────────┘  │ │
+│  │  🔍 EMPTY STATE                                         │ │
+│  │  ░░░ GLASS CONTAINER ░░░                                │ │
+│  │                                                         │ │
+│  │         ┌──────────┐                                    │ │
+│  │         │ 📋 Icon  │ (glass circle)                     │ │
+│  │         └──────────┘                                    │ │
+│  │         Geen taken gevonden                             │ │
+│  │                                                         │ │
 │  └─────────────────────────────────────────────────────────┘ │
 │                                                              │
-│  ┌──────────────────────────────────────────┐                │
-│  │  📅 KOMENDE WEEK                         │                │
-│  │  ░░░ GLASS CARD (slate) ░░░              │                │
-│  │  ┌────────────────────────────────────┐  │                │
-│  │  │  📋 Review sollicitant             │  │                │
-│  │  │      ░░░ GLASS LIST ITEM ░░░       │  │                │
-│  │  └────────────────────────────────────┘  │                │
-│  └──────────────────────────────────────────┘                │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │  ████████████████████████  SKELETON                  │    │
+│  │  ░░░ GLASS SHIMMER ░░░                               │    │
+│  └──────────────────────────────────────────────────────┘    │
 │                                                              │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -430,25 +366,22 @@ Voeg de volgende utility classes toe:
 
 | Principe | Implementatie |
 |----------|---------------|
-| **Layered Materials** | Geneste blur niveaus (8px input, 20px panels) |
-| **Context Shadows** | Elke component erft tab-specifieke HSL kleur |
-| **Subtle Depth** | Multi-layer shadows simuleren omgevingslicht |
-| **Interactive Feedback** | Hover met verhoogde opacity en shadow |
-| **No Transforms** | Shadow-only hover (DnD compatibel) |
-| **Dark Mode Ready** | Alle HSL-based styling met `.dark` varianten |
+| **Consistent Materials** | Alle floating elements gebruiken 90% opacity + blur-xl |
+| **Context Shadows** | Toast types erven HSL kleur (success=green, error=red) |
+| **Layered Depth** | Multi-layer shadows voor alle popovers |
+| **Subtle Borders** | `border-white/30` light, `border-white/15` dark |
+| **Dark Mode Ready** | Alle styling met `.dark` varianten |
 
 ---
 
 ## Acceptatiecriteria
 
-1. `UpcomingTasksList` heeft slate glassmorphism consistent met `OverdueTasksList`
-2. `SourceProgress` heeft violet glassmorphism consistent met `AssigneeProgress`
-3. `TaskListSidePanel` heeft premium glass backdrop met blur
-4. Mobile `TaskListCards` hebben glass styling
-5. `TaskListTable` heeft glass container en row hovers
-6. Search input en sort buttons hebben glass styling
-7. Layout header heeft subtiele glass behandeling
-8. Sidebar user card heeft glass styling
-9. Filter pills hebben glass styling met context shadows
-10. Alle componenten zijn dark mode compatibel
+1. Toast notifications hebben glassmorphism met context-gekleurde shadows
+2. Popover, HoverCard en Tooltip hebben glass styling
+3. Context menu heeft glass styling met glass item hovers
+4. Sheet overlay heeft blur en content heeft glass panel
+5. Skeleton heeft glass shimmer effect
+6. TaskListEmptyState heeft glass container met icon circle
+7. Alle componenten zijn dark mode compatibel
+8. Animaties en transitions blijven intact
 
