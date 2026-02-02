@@ -82,7 +82,7 @@ export function TodayFocusCard() {
 
   if (totalItems === 0) {
     return (
-      <Card className="glass-card-indigo glass-light-bleed-indigo">
+      <Card className="glass-card-indigo glass-light-bleed-indigo glass-hover-lift">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Target className="h-5 w-5 text-tab-mijn-werk-500" />
@@ -91,8 +91,10 @@ export function TodayFocusCard() {
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-2 text-tab-mijn-werk-600 dark:text-tab-mijn-werk-400">
-            <TrendingUp className="h-4 w-4" />
-            <p className="text-sm">Alles loopt op schema! 🎉</p>
+            <div className="p-1.5 rounded-lg bg-tab-mijn-werk-100/50 dark:bg-tab-mijn-werk-900/30">
+              <TrendingUp className="h-4 w-4" />
+            </div>
+            <p className="text-sm font-medium">Alles loopt op schema! 🎉</p>
           </div>
         </CardContent>
       </Card>
@@ -100,7 +102,7 @@ export function TodayFocusCard() {
   }
 
   return (
-    <Card className="glass-card-indigo glass-light-bleed-indigo">
+    <Card className="glass-card-indigo glass-light-bleed-indigo glass-hover-lift">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Target className="h-5 w-5 text-tab-mijn-werk-500" />
