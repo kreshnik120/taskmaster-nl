@@ -139,3 +139,77 @@ export function getStatusColor(status: string): string {
       return STATUS_COLORS.niet_beschikbaar;
   }
 }
+
+// ============================================
+// TAB CONTEXT COLORS - Enterprise Premium
+// ============================================
+
+export const TAB_CONTEXT_COLORS = {
+  'mijn-werk': {
+    name: 'Mijn Werk',
+    accent: 'text-tab-mijn-werk-700 dark:text-tab-mijn-werk-300',
+    background: 'bg-tab-mijn-werk-100 dark:bg-tab-mijn-werk-900/50',
+    indicator: 'bg-tab-mijn-werk-500',
+    iconBg: 'bg-tab-mijn-werk-100/80 dark:bg-tab-mijn-werk-900/40',
+    shadow: 'shadow-tab-mijn-werk',
+    border: 'border-tab-mijn-werk-200 dark:border-tab-mijn-werk-800',
+    hoverBorder: 'hover:border-tab-mijn-werk-300',
+  },
+  'kalender': {
+    name: 'Kalender',
+    accent: 'text-tab-kalender-700 dark:text-tab-kalender-300',
+    background: 'bg-tab-kalender-100 dark:bg-tab-kalender-900/50',
+    indicator: 'bg-tab-kalender-500',
+    iconBg: 'bg-tab-kalender-100/80 dark:bg-tab-kalender-900/40',
+    shadow: 'shadow-tab-kalender',
+    border: 'border-tab-kalender-200 dark:border-tab-kalender-800',
+    hoverBorder: 'hover:border-tab-kalender-300',
+  },
+  'lijst': {
+    name: 'Lijst',
+    accent: 'text-tab-lijst-700 dark:text-tab-lijst-300',
+    background: 'bg-tab-lijst-100 dark:bg-tab-lijst-900/50',
+    indicator: 'bg-tab-lijst-500',
+    iconBg: 'bg-tab-lijst-100/80 dark:bg-tab-lijst-900/40',
+    shadow: 'shadow-tab-lijst',
+    border: 'border-tab-lijst-200 dark:border-tab-lijst-800',
+    hoverBorder: 'hover:border-tab-lijst-300',
+  },
+  'opvolging': {
+    name: 'Opvolging',
+    accent: 'text-tab-opvolging-700 dark:text-tab-opvolging-300',
+    background: 'bg-tab-opvolging-100 dark:bg-tab-opvolging-900/50',
+    indicator: 'bg-tab-opvolging-500',
+    iconBg: 'bg-tab-opvolging-100/80 dark:bg-tab-opvolging-900/40',
+    shadow: 'shadow-tab-opvolging',
+    border: 'border-tab-opvolging-200 dark:border-tab-opvolging-800',
+    hoverBorder: 'hover:border-tab-opvolging-300',
+  },
+  'team': {
+    name: 'Team',
+    accent: 'text-tab-team-700 dark:text-tab-team-300',
+    background: 'bg-tab-team-100 dark:bg-tab-team-900/50',
+    indicator: 'bg-tab-team-500',
+    iconBg: 'bg-tab-team-100/80 dark:bg-tab-team-900/40',
+    shadow: 'shadow-tab-team',
+    border: 'border-tab-team-200 dark:border-tab-team-800',
+    hoverBorder: 'hover:border-tab-team-300',
+  },
+  'recruitment': {
+    name: 'Recruitment',
+    accent: 'text-tab-recruitment-700 dark:text-tab-recruitment-300',
+    background: 'bg-tab-recruitment-100 dark:bg-tab-recruitment-900/50',
+    indicator: 'bg-tab-recruitment-500',
+    iconBg: 'bg-tab-recruitment-100/80 dark:bg-tab-recruitment-900/40',
+    shadow: 'shadow-tab-recruitment',
+    border: 'border-tab-recruitment-200 dark:border-tab-recruitment-800',
+    hoverBorder: 'hover:border-tab-recruitment-300',
+  },
+} as const;
+
+export type TabContextKey = keyof typeof TAB_CONTEXT_COLORS;
+
+export function getTabColors(tabId: string) {
+  return TAB_CONTEXT_COLORS[tabId as TabContextKey] 
+    || TAB_CONTEXT_COLORS['mijn-werk'];
+}
