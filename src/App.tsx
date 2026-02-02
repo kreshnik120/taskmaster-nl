@@ -13,10 +13,7 @@ import Notulen from "./pages/Notulen";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Layout } from "./components/Layout";
 import Kanban from "./pages/Kanban";
-import Lijst from "./pages/Lijst";
-import Kalender from "./pages/Kalender";
 import Tijdregistratie from "./pages/Tijdregistratie";
-import Opvolging from "./pages/Opvolging";
 import VerwijderdeTaken from "./pages/VerwijderdeTaken";
 import AfgerondeTaken from "./pages/AfgerondeTaken";
 import AiTraining from "./pages/AiTraining";
@@ -90,10 +87,10 @@ const App = () => (
             <Route path="/whatsapp" element={<WhatsApp />} />
             <Route path="/whatsapp/chat/:chatId" element={<WhatsApp />} />
             <Route path="/kanban/:taskId?" element={<Kanban />} />
-            <Route path="/lijst" element={<Lijst />} />
-            <Route path="/kalender" element={<Kalender />} />
+            <Route path="/lijst" element={<Navigate to="/dashboard?tab=lijst" replace />} />
+            <Route path="/kalender" element={<Navigate to="/dashboard?tab=kalender" replace />} />
             <Route path="/tijdregistratie" element={<Tijdregistratie />} />
-            <Route path="/opvolging" element={<Opvolging />} />
+            <Route path="/opvolging" element={<Navigate to="/dashboard?tab=opvolging" replace />} />
             <Route path="/verwijderd" element={<VerwijderdeTaken />} />
             <Route path="/afgerond" element={<AfgerondeTaken />} />
             <Route path="/ai-training" element={<AiTraining />} />
