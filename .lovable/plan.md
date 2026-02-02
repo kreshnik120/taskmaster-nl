@@ -1,126 +1,140 @@
 
 
-# Expert Analyse: "Mijn Werk" Tab Kleurverfijning
+# Verdere Verfijning "Mijn Werk" Pagina - Fase 2
 
-## Huidige Situatie (Screenshot Analyse)
+## Gevonden Issues uit Vorige Implementatie
 
-Op de screenshot zie ik dat de volgende elementen **WEL** al Indigo-gestyled zijn:
-- ✅ Dashboard header icon (Indigo achtergrond + kleur)
-- ✅ "Mijn Werk" subtitle onder Dashboard
-- ✅ "Mijn Werk" tab (Indigo achtergrond + indicator)
+Bij analyse van de code zie ik **1 gemiste wijziging** en **meerdere nieuwe verfijningsmogelijkheden**:
 
-Maar de volgende elementen zijn nog **NIET** in de Indigo context-kleur:
-
-| Element | Huidige Kleur | Moet Worden |
-|---------|---------------|-------------|
-| "Vandaag Focus" icon | Purple (hardcoded) | Indigo (tab-mijn-werk-500) |
-| "Vandaag Focus" card gradient | Purple gradient | Indigo gradient |
-| "Mijn Taken" Kanban icon | Primary (blue) | Indigo |
-| "+ Nieuwe taak" button | Primary (blue) | Indigo accent |
-| Reminders bell icon bg | Primary/10 | Indigo |
+### Gemiste Wijziging (Kritiek)
+| Locatie | Regel | Issue |
+|---------|-------|-------|
+| `TodayFocusCard.tsx` | 88 | Target icon nog `text-purple-500` in empty state |
 
 ---
 
-## Visuele Vergelijking
+## Nieuwe Verfijningsmogelijkheden
+
+### Visuele Hiërarchie Analyse
 
 ```text
-HUIDIGE SITUATIE                       NA VERFIJNING
-┌──────────────────────────────────┐   ┌──────────────────────────────────┐
-│  [🔵] Dashboard                  │   │  [🟣] Dashboard                  │
-│       Mijn Werk                  │   │       Mijn Werk                  │
-├──────────────────────────────────┤   ├──────────────────────────────────┤
-│  ╔═══════════════╗               │   │  ╔═══════════════╗               │
-│  ║ Mijn Werk ✓   ║  Kalender     │   │  ║ Mijn Werk ✓   ║  Kalender     │
-│  ╚═══════════════╝               │   │  ╚═══════════════╝               │
-├──────────────────────────────────┤   ├──────────────────────────────────┤
-│  ┌─── 🟣 purple ───────────────┐ │   │  ┌─── 🟣 INDIGO ────────────────┐ │
-│  │ ⊙ Vandaag Focus    3 items  │ │   │  │ ⊙ Vandaag Focus    3 items  │ │
-│  │   (purple gradient bg)      │ │   │  │   (indigo gradient bg)      │ │
-│  └─────────────────────────────┘ │   │  └─────────────────────────────┘ │
-│                                  │   │                                  │
-│  ┌─── 🔵 blue ─────────────────┐ │   │  ┌─── 🟣 INDIGO ────────────────┐ │
-│  │ ⍁ Mijn Taken    5 taken     │ │   │  │ ⍁ Mijn Taken    5 taken     │ │
-│  │   [+ Nieuwe taak] ← blue    │ │   │  │   [+ Nieuwe taak] ← INDIGO  │ │
-│  └─────────────────────────────┘ │   │  └─────────────────────────────┘ │
-│                                  │   │                                  │
-└──────────────────────────────────┘   └──────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│  MIJN WERK TAB - VERFIJNING FASE 2                              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─── TodayFocusCard ─────────────────────────────────────────┐ │
+│  │  ⊙ Vandaag Focus                                           │ │
+│  │     └─ Target icon: ✅ (regel 63, 106)                     │ │
+│  │     └─ Target icon empty: ❌ nog purple (regel 88)         │ │
+│  │     └─ Card gradient: ✅                                   │ │
+│  │     └─ Badge: nog "secondary" → Indigo variant?            │ │
+│  │     └─ Links "Bekijk..." → Indigo accent?                  │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│  ┌─── MyTasksFlowSection ─────────────────────────────────────┐ │
+│  │  ⍁ Mijn Taken                                              │ │
+│  │     └─ Kanban icon: ✅                                     │ │
+│  │     └─ "+ Nieuwe taak" button: ✅                          │ │
+│  │     └─ Badge "X taken": nog "secondary"                    │ │
+│  │     └─ Kolom headers: neutrale styling → border-top?       │ │
+│  │     └─ Empty state icon: nog muted → Indigo-200?           │ │
+│  │     └─ Drag overlay: primary/5 → indigo/5?                 │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│  ┌─── UpcomingRemindersWidget ────────────────────────────────┐ │
+│  │  🔔 Aankomende herinneringen                               │ │
+│  │     └─ Bell icon: ✅                                       │ │
+│  │     └─ Badge: ✅                                           │ │
+│  │     └─ Card hover items: neutrale muted → subtiel indigo?  │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Wijzigingen Per Component
 
-### 1. TodayFocusCard.tsx
+### 1. TodayFocusCard.tsx - Kritieke Fix + Verfijning
 
-**Locatie:** `src/components/dashboard/TodayFocusCard.tsx`
-
-**Huidige code (regels 63, 85-86, 103, 106):**
+**Fix: Gemiste Target icon (regel 88)**
 ```tsx
+// Huidig (FOUT):
 <Target className="h-5 w-5 text-purple-500" />
-// ...
-className="bg-gradient-to-br from-purple-50/80 to-white/60 dark:from-purple-950/30"
-```
 
-**Nieuwe code:**
-```tsx
+// Nieuw:
 <Target className="h-5 w-5 text-tab-mijn-werk-500" />
-// ...
-className="bg-gradient-to-br from-tab-mijn-werk-50/80 to-white/60 dark:from-tab-mijn-werk-900/30"
 ```
 
-### 2. MyTasksFlowSection.tsx
-
-**Locatie:** `src/components/dashboard/MyTasksFlowSection.tsx`
-
-**Huidige code (regel 464):**
+**Verfijning: Badge styling (regel 108-110)**
 ```tsx
-<Kanban className="h-5 w-5 text-primary" />
+// Huidig:
+<Badge variant="secondary" className="ml-auto">
+
+// Nieuw - subtiele Indigo accent:
+<Badge className="ml-auto bg-tab-mijn-werk-100 text-tab-mijn-werk-700 border-tab-mijn-werk-200 dark:bg-tab-mijn-werk-900/40 dark:text-tab-mijn-werk-300">
 ```
 
-**Nieuwe code:**
+**Verfijning: Link buttons (regels 121-128, 140-147, 159-166)**
 ```tsx
-<Kanban className="h-5 w-5 text-tab-mijn-werk-500" />
+// Huidig:
+<Button variant="link" size="sm" className="h-auto p-0 text-xs text-muted-foreground">
+
+// Nieuw - Indigo link kleur:
+<Button variant="link" size="sm" className="h-auto p-0 text-xs text-tab-mijn-werk-600 hover:text-tab-mijn-werk-700 dark:text-tab-mijn-werk-400 dark:hover:text-tab-mijn-werk-300">
 ```
 
-**Huidige code (regel 545):**
+---
+
+### 2. MyTasksFlowSection.tsx - Premium Touches
+
+**Verfijning: Task count badge (regel 466-468)**
 ```tsx
-<Button onClick={() => setTaskDialogOpen(true)} size="sm" className="gap-2">
+// Huidig:
+<Badge variant="secondary" className="ml-1">
+
+// Nieuw:
+<Badge className="ml-1 bg-tab-mijn-werk-100 text-tab-mijn-werk-700 border-tab-mijn-werk-200 dark:bg-tab-mijn-werk-900/40 dark:text-tab-mijn-werk-300">
 ```
 
-**Nieuwe code:**
+**Verfijning: Drag-over highlight (regel 121)**
 ```tsx
-<Button 
-  onClick={() => setTaskDialogOpen(true)} 
-  size="sm" 
-  className="gap-2 bg-tab-mijn-werk-500 hover:bg-tab-mijn-werk-600 text-white"
->
+// Huidig:
+isOver ? "bg-primary/5 rounded-lg" : ""
+
+// Nieuw:
+isOver ? "bg-tab-mijn-werk-100/50 dark:bg-tab-mijn-werk-900/30 rounded-lg ring-2 ring-tab-mijn-werk-300/50" : ""
 ```
 
-### 3. UpcomingRemindersWidget.tsx
-
-**Locatie:** `src/components/UpcomingRemindersWidget.tsx`
-
-**Huidige code (regel 85):**
+**Verfijning: Empty state icon (regel 563)**
 ```tsx
-<div className="p-2 rounded-lg bg-primary/10">
-  <Bell className="h-4 w-4 text-primary" />
-</div>
+// Huidig:
+<CheckCircle2 className="h-12 w-12 text-muted-foreground/30 mb-4" />
+
+// Nieuw:
+<CheckCircle2 className="h-12 w-12 text-tab-mijn-werk-200 dark:text-tab-mijn-werk-800 mb-4" />
 ```
 
-**Nieuwe code:**
+**Verfijning: Kolom card border-top (regel 588)**
 ```tsx
-<div className="p-2 rounded-lg bg-tab-mijn-werk-100 dark:bg-tab-mijn-werk-900/40">
-  <Bell className="h-4 w-4 text-tab-mijn-werk-500" />
-</div>
+// Huidig:
+<Card className="h-full min-h-[200px] bg-muted/30">
+
+// Nieuw - subtiele Indigo accent:
+<Card className="h-full min-h-[200px] bg-muted/30 border-t-2 border-t-tab-mijn-werk-200 dark:border-t-tab-mijn-werk-800">
 ```
 
-**Badge (regels 113-116):**
-```tsx
-// Huidige:
-className="bg-primary/10 text-primary border-primary"
+---
 
-// Nieuwe:
-className="bg-tab-mijn-werk-100 text-tab-mijn-werk-700 border-tab-mijn-werk-300 dark:bg-tab-mijn-werk-900/40 dark:text-tab-mijn-werk-300 dark:border-tab-mijn-werk-700"
+### 3. UpcomingRemindersWidget.tsx - Hover States
+
+**Verfijning: Reminder item hover (regel 107)**
+```tsx
+// Huidig:
+className="... bg-muted/30 hover:bg-muted/50 ..."
+
+// Nieuw - subtiele Indigo hover:
+className="... bg-muted/30 hover:bg-tab-mijn-werk-50 dark:hover:bg-tab-mijn-werk-900/20 ..."
 ```
 
 ---
@@ -129,32 +143,14 @@ className="bg-tab-mijn-werk-100 text-tab-mijn-werk-700 border-tab-mijn-werk-300 
 
 | Element | Voor | Na |
 |---------|------|-----|
-| Vandaag Focus icon | `text-purple-500` | `text-tab-mijn-werk-500` |
-| Vandaag Focus gradient | `from-purple-50/80` | `from-tab-mijn-werk-50/80` |
-| Mijn Taken icon | `text-primary` | `text-tab-mijn-werk-500` |
-| Nieuwe taak button | `bg-primary` | `bg-tab-mijn-werk-500` |
-| Reminders icon | `text-primary` | `text-tab-mijn-werk-500` |
-| Reminders badge | `text-primary` | `text-tab-mijn-werk-700` |
-
----
-
-## Premium Touch: Extra Verfijningen
-
-### A. Kolom Headers (Optioneel)
-
-De Kanban kolom headers kunnen een subtiele Indigo border-top krijgen:
-
-```tsx
-// In MyTasksFlowSection.tsx - DroppableColumn Card
-<Card className="h-full min-h-[200px] bg-muted/30 border-t-2 border-t-tab-mijn-werk-200">
-```
-
-### B. Empty State Icon (Optioneel)
-
-```tsx
-// Regel 563
-<CheckCircle2 className="h-12 w-12 text-tab-mijn-werk-200 mb-4" />
-```
+| TodayFocus empty icon | `text-purple-500` | `text-tab-mijn-werk-500` |
+| TodayFocus badge | `variant="secondary"` | Custom Indigo |
+| TodayFocus links | `text-muted-foreground` | `text-tab-mijn-werk-600` |
+| Mijn Taken badge | `variant="secondary"` | Custom Indigo |
+| Drag-over effect | `bg-primary/5` | `bg-tab-mijn-werk-100/50` |
+| Empty state icon | `text-muted-foreground/30` | `text-tab-mijn-werk-200` |
+| Kolom headers | Geen border-top | Indigo border-top |
+| Reminder hover | `hover:bg-muted/50` | `hover:bg-tab-mijn-werk-50` |
 
 ---
 
@@ -162,12 +158,15 @@ De Kanban kolom headers kunnen een subtiele Indigo border-top krijgen:
 
 | Test | Verwacht |
 |------|----------|
-| Vandaag Focus | Indigo icon + gradient |
-| Mijn Taken header | Indigo Kanban icon |
-| Nieuwe taak button | Indigo achtergrond |
-| Reminders widget | Indigo bell + badges |
-| Dark mode | Kleuren correct lichter |
-| Consistentie | Alle elementen matchen |
+| TodayFocus empty state | Target icon is Indigo |
+| TodayFocus badge | Indigo accent styling |
+| TodayFocus links | Indigo link kleur |
+| Mijn Taken badge | Indigo accent styling |
+| Drag-drop hover | Indigo glow effect |
+| Empty kanban | Indigo-200 icon |
+| Kolom headers | Subtiele Indigo top border |
+| Reminder hover | Warme Indigo hover |
+| Dark mode | Alle kleuren correct |
 
 ---
 
@@ -175,9 +174,9 @@ De Kanban kolom headers kunnen een subtiele Indigo border-top krijgen:
 
 | Bestand | Wijzigingen |
 |---------|-------------|
-| `src/components/dashboard/TodayFocusCard.tsx` | Icon + gradient kleuren |
-| `src/components/dashboard/MyTasksFlowSection.tsx` | Kanban icon + button |
-| `src/components/UpcomingRemindersWidget.tsx` | Bell icon + badge kleuren |
+| `src/components/dashboard/TodayFocusCard.tsx` | 4 wijzigingen (icon fix + badge + 3x links) |
+| `src/components/dashboard/MyTasksFlowSection.tsx` | 4 wijzigingen (badge + dragover + empty + border) |
+| `src/components/UpcomingRemindersWidget.tsx` | 1 wijziging (hover state) |
 
-**Totaal: ~15 regels code wijzigingen**
+**Totaal: ~9 regels code wijzigingen**
 
