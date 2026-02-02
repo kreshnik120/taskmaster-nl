@@ -3,6 +3,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { MEETING_MINUTES_QUERY_KEY } from "@/hooks/useMeetingMinutes";
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('DeleteMeetingMinute');
 
 export function useDeleteMeetingMinute() {
   const queryClient = useQueryClient();
@@ -56,7 +59,7 @@ Verwijderd door: ${deletedBy}`;
             .eq('id', task.id);
 
           if (updateError) {
-            console.warn(`Could not update task ${task.id}:`, updateError.message);
+            log.warn(`Could not update task ${task.id}:`, updateError.message);
           }
         }
       }
@@ -78,7 +81,7 @@ Verwijderd door: ${deletedBy}`;
           .eq('category', 'meeting');
 
         if (taskError) {
-          console.warn('Could not delete linked task:', taskError.message);
+          log.warn('Could not delete linked task:', taskError.message);
         }
       }
 

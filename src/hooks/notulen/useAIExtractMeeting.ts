@@ -1,6 +1,9 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('AIExtractMeeting');
 
 export interface ExtractedMeetingData {
   title: string | null;
@@ -188,7 +191,7 @@ export function useAIExtractMeeting(): UseAIExtractMeetingReturn {
         return null;
       }
 
-      console.log(`✅ Extraction successful via ${data.extraction_method || 'unknown'}`);
+      log.log(`Extraction successful via ${data.extraction_method || 'unknown'}`);
       setExtractedData(data.data);
       return data.data;
     } catch (err) {

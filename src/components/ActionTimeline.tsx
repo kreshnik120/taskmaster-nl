@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -582,7 +583,7 @@ export function ActionTimeline({
     try {
       localStorage.setItem(`${FILTER_STORAGE_KEY}_${taskId}`, JSON.stringify(filterState));
     } catch (error) {
-      console.warn('Could not save filter state to localStorage:', error);
+      logger.warn('Could not save filter state to localStorage:', error);
     }
   }, [taskId, showFilters, searchQuery, dateFilter, userFilter, sortOrder]);
 

@@ -425,7 +425,7 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
       }
 
       // 🆕 Upload CV bestand naar Storage (consistent met email flow)
-      console.log("🔍 CV Upload Check:", {
+      log.debug("CV Upload Check:", {
         hasCvFile: !!cvFile,
         cvFileName: cvFile?.name,
         cvFileSize: cvFile?.size,

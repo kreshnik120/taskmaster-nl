@@ -4,6 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { format, isToday, isYesterday, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import type { WhatsAppMessage, MessageGroup } from "@/types/whatsapp";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('WhatsAppMessages');
 
 const PAGE_SIZE = 50;
 
@@ -212,13 +215,13 @@ const offset = pageParam as number;
             
             // Skip exact duplicates
             if (exactDuplicate) {
-              console.log('[useWhatsAppMessages] Skipping exact duplicate:', newMessage.id);
+              log.debug('Skipping exact duplicate:', newMessage.id);
               return old;
             }
             
             // Replace optimistic message with real data
             if (optimisticFound) {
-              console.log('[useWhatsAppMessages] Replacing optimistic message with real data:', newMessage.id);
+              log.debug('Replacing optimistic message with real data:', newMessage.id);
               const updatedPages = old.pages.map(page => ({
                 ...page,
                 messages: page.messages.map(msg => {
@@ -278,7 +281,7 @@ const offset = pageParam as number;
           }
         );
         
-        console.log('[useWhatsAppMessages] Message status updated:', updatedMessage.id, '->', updatedMessage.status);
+        log.debug('Message status updated:', updatedMessage.id, '->', updatedMessage.status);
       })
       .subscribe();
 

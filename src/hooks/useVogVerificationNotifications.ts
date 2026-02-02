@@ -2,6 +2,9 @@ import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('VogVerification');
 
 interface VogVerificationNotification {
   id: string;
@@ -40,11 +43,11 @@ export function useVogVerificationNotifications(
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
-        console.debug('[useVogVerificationNotifications] No auth session, skipping subscription');
+        log.debug('No auth session, skipping subscription');
         return;
       }
       
-      console.log('[useVogVerificationNotifications] Setting up realtime subscription');
+      log.debug('Setting up realtime subscription');
       
       channel = supabase
         .channel('vog-verification-notifications')
@@ -58,11 +61,11 @@ export function useVogVerificationNotifications(
           },
           async (payload) => {
             const notification = payload.new as VogVerificationNotification;
-            console.log('[useVogVerificationNotifications] Received notification:', notification);
+            log.debug('Received notification:', notification);
             
             // Prevent duplicate notifications in same session
             if (notifiedIds.current.has(notification.id)) {
-              console.log('[useVogVerificationNotifications] Duplicate notification, skipping');
+              log.debug('Duplicate notification, skipping');
               return;
             }
             notifiedIds.current.add(notification.id);
@@ -98,7 +101,7 @@ export function useVogVerificationNotifications(
           }
         )
         .subscribe((status) => {
-          console.log('[useVogVerificationNotifications] Subscription status:', status);
+          log.debug('Subscription status:', status);
         });
     };
     
@@ -106,7 +109,7 @@ export function useVogVerificationNotifications(
 
     return () => {
       if (channel) {
-        console.log('[useVogVerificationNotifications] Cleaning up subscription');
+        log.debug('Cleaning up subscription');
         supabase.removeChannel(channel);
       }
     };

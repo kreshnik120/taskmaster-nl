@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { logger } from "@/lib/logger";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
@@ -42,6 +43,8 @@ import { format, formatDistanceToNow, isToday, isThisWeek, isThisMonth } from "d
 import { nl } from "date-fns/locale";
 import { getFileCategory, getFileCategoryLabel, getFileCategoryColor, canPreview, formatFileSize, FileCategory } from "@/lib/fileHelpers";
 import { cn } from "@/lib/utils";
+
+const log = logger.create('Bijlagen');
 
 interface AttachmentWithTask {
   id: string;
@@ -117,7 +120,7 @@ export default function Bijlagen() {
           table: 'attachments',
         },
         (payload) => {
-          console.log('[Bijlagen] Realtime update:', payload.eventType, payload.new);
+          log.debug('Realtime update:', payload.eventType, payload.new);
           
           // Debounce invalidation to 200ms (match useTasksQuery pattern)
           if (debounceTimer) {
@@ -125,14 +128,14 @@ export default function Bijlagen() {
           }
           
           debounceTimer = setTimeout(() => {
-            console.log('[Bijlagen] Invalidating cache after debounce');
+            log.debug('Invalidating cache after debounce');
             queryClient.invalidateQueries({ queryKey: ['all-attachments'] });
           }, 200);
         }
       )
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
-          console.log('[Bijlagen] Realtime channel subscribed');
+          log.log('Realtime channel subscribed');
         }
         if (status === 'CHANNEL_ERROR') {
           console.error('[Bijlagen] Realtime channel error');
@@ -144,7 +147,7 @@ export default function Bijlagen() {
       if (debounceTimer) {
         clearTimeout(debounceTimer);
       }
-      console.log('[Bijlagen] Unsubscribing realtime channel');
+      log.debug('Unsubscribing realtime channel');
       supabase.removeChannel(channel);
     };
   }, [queryClient]);
