@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, ArrowDown, Minus, ArrowUp, AlertCircle, CalendarIcon, Paperclip } from "lucide-react";
 import { SubtaskManager } from "./SubtaskManager";
@@ -210,6 +211,9 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, de
 
     setLoading(true);
     try {
+      // Haal huidige gebruiker op voor auto-assign/accept logica
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      
       // Combine date and time for start_at and due_at
       let startAtISO: string | null = null;
       if (values.start_at) {
@@ -230,27 +234,60 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, de
       // Default to Backlog column if no columnId provided
       const defaultBacklogColumnId = '770e8400-e29b-41d4-a716-446655440001';
       
-      const taskData = {
-        title: values.title,
-        description: values.description || null,
-        priority: values.priority,
-        assignee_id: values.assignee_id && values.assignee_id !== "unassigned" ? values.assignee_id : null,
-        start_at: startAtISO,
-        due_at: dueAtISO,
-        next_action: values.next_action || null,
-        org_id: defaultOrgId,
-        column_id: columnId || defaultBacklogColumnId,
-      };
-
+      // Bepaal assignee: gebruik geselecteerde waarde of default naar huidige user bij nieuwe taken
+      const selectedAssigneeId = values.assignee_id && values.assignee_id !== "unassigned" 
+        ? values.assignee_id 
+        : null;
+      
+      // Voor nieuwe taken: auto-assign aan huidige user als geen assignee geselecteerd
+      const assigneeId = taskId 
+        ? selectedAssigneeId  // Bij update: gebruik geselecteerde waarde
+        : (selectedAssigneeId || currentUser?.id || null);  // Bij nieuw: default naar huidige user
+      
+      // Auto-accept logica: accepteer automatisch als aan jezelf toegewezen
+      const isAutoAccept = !taskId && assigneeId === currentUser?.id;
+      
+      // Bepaal auto-accept velden
+      const acceptedBy = (!taskId && isAutoAccept) ? currentUser?.id : 
+                         (!taskId && assigneeId && assigneeId !== currentUser?.id) ? null : 
+                         undefined;
+      const acceptedAt = (!taskId && isAutoAccept) ? new Date().toISOString() : 
+                         (!taskId && assigneeId && assigneeId !== currentUser?.id) ? null : 
+                         undefined;
+      
       let savedTaskId = taskId;
       
       if (taskId) {
         // Update existing task
-        const { error } = await supabase.from("tasks").update(taskData).eq("id", taskId);
+        const { error } = await supabase.from("tasks").update({
+          title: values.title,
+          description: values.description || null,
+          priority: values.priority,
+          assignee_id: assigneeId,
+          start_at: startAtISO,
+          due_at: dueAtISO,
+          next_action: values.next_action || null,
+          org_id: defaultOrgId,
+          column_id: columnId || defaultBacklogColumnId,
+        }).eq("id", taskId);
         if (error) throw error;
       } else {
-        // Create new task
-        const { data, error } = await supabase.from("tasks").insert(taskData).select('id').single();
+        // Create new task met auto-assign en auto-accept
+        const insertData: Database['public']['Tables']['tasks']['Insert'] = {
+          title: values.title,
+          description: values.description || null,
+          priority: values.priority,
+          assignee_id: assigneeId,
+          start_at: startAtISO,
+          due_at: dueAtISO,
+          next_action: values.next_action || null,
+          org_id: defaultOrgId,
+          column_id: columnId || defaultBacklogColumnId,
+          accepted_by: acceptedBy ?? null,
+          accepted_at: acceptedAt ?? null,
+        };
+        
+        const { data, error } = await supabase.from("tasks").insert(insertData).select('id').single();
         if (error) throw error;
         savedTaskId = data.id;
       }
