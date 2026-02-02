@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { User } from "@supabase/supabase-js";
 import { usePendingMinutesCount } from "@/hooks/notulen/usePendingMinutesCount";
 import { useWhatsAppUnreadCount } from "@/hooks/whatsapp/useWhatsAppUnreadCount";
+import { useRealtimeChannel } from "@/hooks/useRealtimeChannel";
 
 interface MenuItem {
   title: string;
@@ -279,22 +280,13 @@ export function AppSidebar() {
     refetchIntervalInBackground: false,
   });
 
-  // 🔄 REAL-TIME: Listen for task changes
-  useEffect(() => {
-    const channel = supabase.channel('sidebar-tasks-count').on('postgres_changes', {
-      event: '*',
-      schema: 'public',
-      table: 'tasks'
-    }, () => {
-      // Invalidate query to trigger instant refetch
-      queryClient.invalidateQueries({
-        queryKey: ['active-task-count']
-      });
-    }).subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
+  // 🔄 REAL-TIME: Listen for task changes via standardized hook
+  useRealtimeChannel({
+    channelName: 'sidebar-tasks-count',
+    table: 'tasks',
+    onEvent: () => queryClient.invalidateQueries({ queryKey: ['active-task-count'] }),
+    debounceMs: 200
+  });
   const handleLogout = async () => {
     try {
       await supabase.auth.signOut();
