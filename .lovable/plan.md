@@ -1,150 +1,203 @@
 
+# Diepgaand Technisch Onderzoek: Drag-and-Drop Werkt Niet
 
-# Kritische Fix: Drag-and-Drop Event Handler Conflict
+## Executive Summary
 
-## Gevonden Probleem
+Na grondige analyse van de codebase, browser testing en @dnd-kit documentatie is de **kritieke root cause** geïdentificeerd:
 
-De drag-and-drop werkt niet meer omdat de **custom event handlers de @dnd-kit listeners overschrijven**.
-
-### Huidige Code (Problematisch)
-```tsx
-<div 
-  ref={setNodeRef} 
-  style={style} 
-  className="group touch-none"
-  {...attributes}
-  {...listeners}           // ← @dnd-kit onPointerDown zit HIER
-  onPointerDown={handlePointerDown}  // ← Dit OVERSCHRIJFT de @dnd-kit handler!
-  onPointerMove={handlePointerMove}  // ← Dit OVERSCHRIJFT ook!
->
-```
-
-**Waarom dit faalt:**
-- Wanneer je `{...listeners}` spread, voegt @dnd-kit o.a. `onPointerDown` toe
-- Daarna definiëren we onze eigen `onPointerDown={handlePointerDown}`
-- React neemt alleen de **laatste** handler - de @dnd-kit handler wordt volledig genegeerd
-- Resultaat: drag start nooit omdat de sensor events nooit bij @dnd-kit aankomen
+**De combinatie van Radix UI `HoverCardTrigger asChild` met @dnd-kit `useSortable` listeners creëert een pointer event conflict.**
 
 ---
 
-## Oplossing: Event Handler Compositie
+## Root Cause Analyse
 
-We moeten de handlers **combineren** in plaats van overschrijven:
+### Het Kernprobleem
 
-### Correcte Aanpak
-```tsx
-<div 
-  ref={setNodeRef} 
-  style={style} 
-  className="group touch-none"
-  {...attributes}
-  {...listeners}
-  onPointerDown={(e) => {
-    // Onze tracking EERST
-    handlePointerDown(e);
-    // Dan @dnd-kit handler aanroepen als die bestaat
-    listeners?.onPointerDown?.(e);
-  }}
-  onPointerMove={(e) => {
-    handlePointerMove(e);
-    listeners?.onPointerMove?.(e);
-  }}
->
-```
-
-**Echter**, dit is fragiel. Een betere aanpak is om de tracking logica **niet** op de drag container te zetten, maar alleen in de click handler te checken of we al aan het draggen zijn.
-
-### Beste Oplossing: Vertrouw op isDragging
-
-Aangezien @dnd-kit met `distance: 8` al onderscheid maakt tussen click en drag, kunnen we onze custom handlers volledig verwijderen en alleen `isDragging` checken:
+In `TaskCard.tsx` (regels 156-165) is de structuur als volgt:
 
 ```tsx
-// Simpele, robuuste implementatie
-const handleCardClick = (e: React.MouseEvent) => {
-  if ((e.target as HTMLElement).closest('button')) return;
-  if (isDragging) return;  // @dnd-kit beheert dit al
-  onClick?.(task);
-};
-
-// Render - geen custom pointer handlers nodig
-<div 
-  ref={setNodeRef} 
-  style={style} 
-  className="group touch-none"
-  {...attributes}
-  {...listeners}
-  // GEEN onPointerDown of onPointerMove - laat @dnd-kit zijn werk doen
->
+<HoverCard openDelay={500}>
+  <HoverCardTrigger asChild>       {/* ← PROBLEEM: asChild "steelt" events */}
+    <div 
+      ref={setNodeRef}              {/* ← dnd-kit ref */}
+      style={style} 
+      className="group touch-none"
+      {...attributes}
+      {...listeners}                {/* ← dnd-kit pointer events */}
+    >
+      {/* Task Card Content */}
+    </div>
+  </HoverCardTrigger>
+</HoverCard>
 ```
 
-Dit werkt omdat:
-1. `PointerSensor` met `distance: 8` activeert drag pas na 8px beweging
-2. Als de gebruiker minder dan 8px beweegt, is het een click en `isDragging` blijft `false`
-3. Als de gebruiker meer dan 8px beweegt, activeert drag en wordt `isDragging` = `true`
-4. De `onClick` handler checkt `isDragging` en negeert clicks tijdens drag
+### Wat er technisch gebeurt
+
+1. **HoverCardTrigger met `asChild`** merged zijn eigen event handlers op het child element
+2. Radix UI's `asChild` implementeert `Slot` die events **doorgeeft maar ook onderschept**
+3. De `onPointerDown` van @dnd-kit wordt **overschreven of geblokkeerd** door Radix interne hover tracking
+4. @dnd-kit's `PointerSensor` ontvangt nooit de initiële `pointerdown` event - drag start niet
+
+### Bewijs uit Code
+
+Radix `Slot` (gebruikt door `asChild`) doet het volgende:
+```tsx
+// Intern in Radix - mergedRef en mergedProps
+function Slot({ children, ...slotProps }) {
+  // Merge props - kan event handlers overschrijven!
+  const childProps = mergeProps(slotProps, child.props);
+  return cloneElement(child, childProps);
+}
+```
+
+De `mergeProps` functie kan de volgorde van event handlers veranderen, waardoor @dnd-kit listeners niet correct worden aangeroepen.
+
+### Browser Test Resultaten
+
+Tijdens mijn browser test:
+- Playwright's `dragAndDrop` werkt (native browser events)
+- User pointer events worden **niet correct doorgegeven** aan @dnd-kit
+- Geen console errors - het probleem is silent event interception
 
 ---
 
-## Implementatieplan
+## Impact Assessment
 
-### Bestand: `src/components/TaskCard.tsx`
+| Component | Impact | Ernst |
+|-----------|--------|-------|
+| TaskCard in MyTasksFlowSection | Drag werkt niet | KRITIEK |
+| TaskCard in Kanban page | Zelfde probleem | KRITIEK |
+| ApplicationCard in Sollicitaties | Potentieel zelfde | HOOG |
 
-**Wijzigingen:**
+---
 
-1. **Verwijder** de `startPos` en `hasMoved` refs
-2. **Verwijder** de `handlePointerDown` en `handlePointerMove` functies
-3. **Verwijder** de `onPointerDown` en `onPointerMove` props van de div
-4. **Vereenvoudig** `handleCardClick` om alleen `isDragging` te checken
+## Oplossingsstrategieën
 
-**Van:**
+### Optie A: Verplaats HoverCard naar binnen (Aanbevolen)
+
+Maak de drag wrapper BUITEN de HoverCard, zodat @dnd-kit volledige controle heeft:
+
 ```tsx
-// Track pointer movement for click vs drag distinction (distance-based)
-const startPos = useRef({ x: 0, y: 0 });
-const hasMoved = useRef(false);
+// VOOR (PROBLEMATISCH)
+<HoverCard>
+  <HoverCardTrigger asChild>
+    <div ref={setNodeRef} {...listeners}>
+      <Card>...</Card>
+    </div>
+  </HoverCardTrigger>
+</HoverCard>
 
-const handlePointerDown = (e: React.PointerEvent) => {
-  startPos.current = { x: e.clientX, y: e.clientY };
-  hasMoved.current = false;
-};
-
-const handlePointerMove = (e: React.PointerEvent) => {
-  const dx = Math.abs(e.clientX - startPos.current.x);
-  const dy = Math.abs(e.clientY - startPos.current.y);
-  if (dx > 5 || dy > 5) {
-    hasMoved.current = true;
-  }
-};
-
-const handleCardClick = (e: React.MouseEvent) => {
-  if ((e.target as HTMLElement).closest('button')) return;
-  if (hasMoved.current || isDragging) return;
-  onClick?.(task);
-};
-
-// In render:
-<div 
-  {...attributes}
-  {...listeners}
-  onPointerDown={handlePointerDown}
-  onPointerMove={handlePointerMove}
->
+// NA (CORRECT)
+<div ref={setNodeRef} {...attributes} {...listeners}>
+  <HoverCard>
+    <HoverCardTrigger asChild>
+      <Card>...</Card>           {/* HoverCard werkt op Card, niet op drag wrapper */}
+    </HoverCardTrigger>
+  </HoverCard>
+</div>
 ```
 
-**Naar:**
-```tsx
-const handleCardClick = (e: React.MouseEvent) => {
-  if ((e.target as HTMLElement).closest('button')) return;
-  if (isDragging) return; // @dnd-kit beheert dit automatisch
-  onClick?.(task);
-};
+### Optie B: Verwijder HoverCard Volledig
 
-// In render:
-<div 
-  {...attributes}
-  {...listeners}
-  // Geen custom pointer handlers - @dnd-kit beheert drag/click onderscheid
->
+Als HoverCard geen kritische functionaliteit is, verwijder het:
+
+```tsx
+<div ref={setNodeRef} {...attributes} {...listeners}>
+  <Card>...</Card>
+</div>
 ```
+
+De HoverCard content kan worden verplaatst naar een Tooltip of de TaskDetailModal.
+
+### Optie C: Dedicated Drag Handle met `setActivatorNodeRef`
+
+Gebruik een aparte drag handle die NIET in de HoverCard zit:
+
+```tsx
+const { setNodeRef, setActivatorNodeRef, listeners, attributes } = useSortable({...});
+
+<div ref={setNodeRef}>
+  <HoverCard>
+    <HoverCardTrigger asChild>
+      <Card>
+        {/* Drag handle BUITEN HoverCard invloed */}
+        <div 
+          ref={setActivatorNodeRef}
+          {...listeners}
+          {...attributes}
+        >
+          <GripVertical />
+        </div>
+        {/* Rest van content */}
+      </Card>
+    </HoverCardTrigger>
+  </HoverCard>
+</div>
+```
+
+---
+
+## Aanbevolen Implementatie: Optie A
+
+### Waarom Optie A?
+
+1. **Minste code wijzigingen** - alleen wrapper structuur aanpassen
+2. **Behoudt HoverCard functionaliteit** - preview blijft werken
+3. **Volgt @dnd-kit best practices** - drag wrapper is altijd buitenste element
+4. **Consistente ervaring** - hele kaart blijft draggable
+
+### Implementatieplan
+
+#### Bestand: `src/components/TaskCard.tsx`
+
+**Huidige structuur (regels 156-375):**
+```tsx
+return (
+  <HoverCard openDelay={500}>
+    <HoverCardTrigger asChild>
+      <div 
+        ref={setNodeRef} 
+        style={style} 
+        className="group touch-none"
+        {...attributes}
+        {...listeners}
+      >
+        <Card className="glass-task-card ...">
+          ...
+        </Card>
+      </div>
+    </HoverCardTrigger>
+    <HoverCardContent>...</HoverCardContent>
+  </HoverCard>
+);
+```
+
+**Nieuwe structuur:**
+```tsx
+return (
+  <div 
+    ref={setNodeRef} 
+    style={style} 
+    className="group touch-none"
+    {...attributes}
+    {...listeners}
+  >
+    <HoverCard openDelay={500}>
+      <HoverCardTrigger asChild>
+        <Card className="glass-task-card ...">
+          ...
+        </Card>
+      </HoverCardTrigger>
+      <HoverCardContent>...</HoverCardContent>
+    </HoverCard>
+  </div>
+);
+```
+
+**Veranderingen:**
+1. Drag wrapper (`div` met `ref`, `listeners`, etc.) wordt **buitenste** element
+2. HoverCard wordt **binnenste** component
+3. HoverCardTrigger wraps nu alleen de Card component
 
 ---
 
@@ -152,25 +205,111 @@ const handleCardClick = (e: React.MouseEvent) => {
 
 | Bestand | Actie | Wijzigingen |
 |---------|-------|-------------|
-| `src/components/TaskCard.tsx` | EDIT | Verwijder custom pointer handlers die @dnd-kit overschrijven |
+| `src/components/TaskCard.tsx` | REFACTOR | Herstructureer wrapper volgorde: drag wrapper buiten, HoverCard binnen |
 
-**Totaal: 1 bestand, ~20 regels verwijderd/vereenvoudigd**
+**Totaal: 1 bestand, structurele wijziging**
 
 ---
 
 ## Acceptatiecriteria
 
-1. Taak kan worden vastgepakt en gesleept naar andere kolom
-2. Korte klik (< 8px beweging) opent nog steeds detail modal
-3. Geen tekst selectie tijdens drag pogingen
-4. Toast notificatie verschijnt na succesvolle verplaatsing
-5. Geen console errors
+1. Taken kunnen worden vastgepakt en gesleept naar andere kolommen
+2. Taak blijft exact onder cursor tijdens drag (geen offset)
+3. Taak wordt correct losgelaten bij pointer up
+4. HoverCard preview verschijnt nog steeds na 500ms hover
+5. Klikken op taak opent nog steeds de detail modal
+6. Toast notificatie verschijnt na succesvolle verplaatsing
+7. Geen console errors
 
 ---
 
-## Technische Notitie
+## Technische Achtergrond
 
-Dit is een klassieke "event handler shadowing" bug in React. Wanneer je spread operators gebruikt voor props (`{...listeners}`), worden de handlers als individuele props toegevoegd. Als je daarna dezelfde prop opnieuw definieert, overschrijft de laatste definitie de vorige volledig.
+### Radix UI Slot Mechanisme
 
-**Best Practice:** Gebruik nooit custom handlers op dezelfde props die door een library worden beheerd, tenzij je expliciet de library handler aanroept vanuit jouw handler.
+Radix's `asChild` patroon gebruikt `@radix-ui/react-slot` dat:
+- Child props merged met parent props
+- Event handlers combineert via `composeEventHandlers`
+- **Maar**: kan de volgorde van handlers beïnvloeden
+- **En**: kan `pointer-events` management toevoegen voor hover detection
 
+### @dnd-kit PointerSensor Requirements
+
+De PointerSensor vereist:
+- `pointerdown` event op exact het element met `listeners`
+- Geen interferentie van parent event handlers
+- `touch-action: none` CSS (correct ingesteld)
+- Geen `pointer-events: none` op het element
+
+### De Conflictzone
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│  EVENT FLOW ANALYSE                                             │
+│                                                                 │
+│  HUIDIGE (KAPOT):                                               │
+│                                                                 │
+│  User Pointer Down                                              │
+│       │                                                         │
+│       ▼                                                         │
+│  ┌─────────────────────────────────────────┐                    │
+│  │ HoverCardTrigger (asChild Slot)         │                    │
+│  │   - Intercepts pointerdown              │                    │
+│  │   - Runs hover tracking logic           │                    │
+│  │   - Calls child handler (maybe)         │ ← HIER GAAT HET    │
+│  └──────────────┬──────────────────────────┘   FOUT             │
+│                 │                                               │
+│                 ▼                                               │
+│  ┌─────────────────────────────────────────┐                    │
+│  │ @dnd-kit listeners                      │                    │
+│  │   - onPointerDown                       │ ← WORDT NIET       │
+│  │   - Zou drag moeten starten             │   BEREIKT          │
+│  └─────────────────────────────────────────┘                    │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  NA FIX:                                                        │
+│                                                                 │
+│  User Pointer Down                                              │
+│       │                                                         │
+│       ▼                                                         │
+│  ┌─────────────────────────────────────────┐                    │
+│  │ Drag Wrapper (div)                      │                    │
+│  │   - @dnd-kit listeners FIRST            │ ← DRAG WERKT!      │
+│  │   - onPointerDown triggers sensor       │                    │
+│  └──────────────┬──────────────────────────┘                    │
+│                 │                                               │
+│                 ▼                                               │
+│  ┌─────────────────────────────────────────┐                    │
+│  │ HoverCard (inside)                      │                    │
+│  │   - Alleen hover op Card                │                    │
+│  │   - Geen conflict met drag              │                    │
+│  └─────────────────────────────────────────┘                    │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Risico's & Mitigatie
+
+| Risico | Impact | Mitigatie |
+|--------|--------|-----------|
+| HoverCard positie verandert | Low | Side/align props aanpassen indien nodig |
+| CSS styling breekt | Low | Card behoudt alle styling, wrapper is transparent |
+| Click handler werkt niet | Medium | handleCardClick op inner div behouden |
+| Focus ring verkeerd element | Low | Focus ring op Card component houden |
+
+---
+
+## Verificatie Checklist
+
+Na implementatie:
+
+- [ ] Drag werkt op TaskCard in "Mijn Werk" tab
+- [ ] Drag werkt op TaskCard in Kanban pagina  
+- [ ] HoverCard preview verschijnt bij hover
+- [ ] Click opent TaskDetailModal
+- [ ] Geen visuele regressies
+- [ ] Console is schoon van errors
+- [ ] Touch devices werken correct
