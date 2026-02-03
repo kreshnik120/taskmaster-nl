@@ -31,7 +31,7 @@ export interface PageAgentConfig {
 
 // All available intents across the system
 export const ALL_INTENTS: Record<string, IntentDefinition> = {
-  // Task Agent
+  // Task Agent - Core Operations
   create_task: {
     id: "create_task",
     label: "Taak aanmaken",
@@ -62,6 +62,34 @@ export const ALL_INTENTS: Record<string, IntentDefinition> = {
     icon: "👤",
     agent: "task_agent",
     requiresPayload: ["task_id"],
+  },
+
+  // Task Agent - Flow Operations (Mijn Werk)
+  move_task: {
+    id: "move_task",
+    label: "Taak verplaatsen",
+    description: "Verplaats een taak naar een andere kolom",
+    icon: "➡️",
+    agent: "task_agent",
+    requiresPayload: ["task_id", "target_column"],
+    examples: ["Zet deze taak op doing", "Verplaats naar review"],
+  },
+  bulk_move_tasks: {
+    id: "bulk_move_tasks",
+    label: "Taken bulk verplaatsen",
+    description: "Verplaats meerdere taken tegelijk",
+    icon: "📦",
+    agent: "task_agent",
+    requiresPayload: ["filter_criteria", "target_column"],
+    examples: ["Alle urgente taken naar doing", "Verplaats mijn blocked taken"],
+  },
+  suggest_task_flow: {
+    id: "suggest_task_flow",
+    label: "Flow optimalisatie",
+    description: "Krijg AI-suggesties voor taakverplaatsingen",
+    icon: "💡",
+    agent: "task_agent",
+    examples: ["Optimaliseer mijn workflow", "Welke taken kan ik afronden?"],
   },
 
   // Schedule Agent
@@ -284,16 +312,26 @@ export const PAGE_AGENT_CONFIG: Record<string, PageAgentConfig> = {
     ],
     contextFields: ["conversation_id", "contact_jid", "last_message"],
   },
-  // Dashboard Tab: Mijn Werk (Personal Focus)
+  // Dashboard Tab: Mijn Werk (Personal Focus with Flow Operations)
   "/mijn-werk": {
     primaryAgent: "task_agent",
     intents: [
       ALL_INTENTS.create_task,
       ALL_INTENTS.update_task,
       ALL_INTENTS.prioritize,
+      ALL_INTENTS.move_task,
+      ALL_INTENTS.bulk_move_tasks,
+      ALL_INTENTS.suggest_task_flow,
       ALL_INTENTS.schedule_meeting,
     ],
-    contextFields: ["user_id", "selected_task_id"],
+    contextFields: [
+      "user_id",
+      "selected_task_id",
+      "active_column_id",
+      "dragging_task_id",
+      "visible_task_ids",
+      "column_task_counts",
+    ],
   },
   // Dashboard Tab: Lijst (Full Task List)
   "/lijst": {
@@ -356,20 +394,28 @@ export const DEFAULT_PAGE_CONFIG: PageAgentConfig = {
  * Get effective path considering dashboard tabs
  * Maps /dashboard?tab=lijst to /lijst for agent context detection
  */
+/**
+ * Tab to path mapping for dashboard agent context
+ */
+const DASHBOARD_TAB_MAPPING: Record<string, string> = {
+  'mijn-werk': '/mijn-werk',
+  'kalender': '/kalender',
+  'lijst': '/lijst',
+  'opvolging': '/opvolging',
+  'team': '/team',
+  'recruitment': '/recruitment',
+};
+
+/**
+ * Get effective path considering dashboard tabs
+ * Maps /dashboard?tab=lijst to /lijst for agent context detection
+ */
 export function getEffectivePath(pathname: string, search: string): string {
   const params = new URLSearchParams(search);
   const tab = params.get('tab');
   
   if (pathname === '/dashboard' && tab) {
-    const tabMapping: Record<string, string> = {
-      'mijn-werk': '/mijn-werk',
-      'kalender': '/kalender',
-      'lijst': '/lijst',
-      'opvolging': '/opvolging',
-      'team': '/team',
-      'recruitment': '/recruitment',
-    };
-    return tabMapping[tab] || pathname;
+    return DASHBOARD_TAB_MAPPING[tab] || pathname;
   }
   
   return pathname;
