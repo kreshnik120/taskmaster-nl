@@ -1,189 +1,210 @@
 
 
-# Fix: Agent Router 404 Foutmelding Bij Drag-and-Drop
+# M6 Facturatie Module - Implementatieplan
 
-## Probleemanalyse
+## Overzicht
 
-De drag-and-drop werkt correct (taak wordt verplaatst), maar elke keer verschijnt er een storende foutmelding:
+Dit plan implementeert een complete facturatiemodule met database tabellen, triggers, RLS policies, TypeScript types en React hooks.
 
-**"Agent kon actie niet uitvoeren - Agent Router error: 404"**
+---
 
-### Root Cause
+## Fase 1: Database Schema
+
+### 1.1 Nieuwe Tabellen
+
+| Tabel | Doel |
+|-------|------|
+| `factuur` | Hoofdtabel voor facturen met status workflow |
+| `factuur_regel` | Factuurregels met automatische totaalberekening |
+| `betaling` | Betalingsregistraties |
+| `factuur_herinnering` | Herinneringslogs |
+| `factuur_nummer_sequence` | Thread-safe factuurnummering per tenant/jaar |
+
+### 1.2 Belangrijke Foreign Keys
+
+- `factuur.tenant_id` → `organizations.id`
+- `factuur.opdrachtgever_id` → `client_organizations.id`
+- `factuur.flexwerker_id` → `professionals.id`
+
+### 1.3 Features
+
+- **Automatische factuurnummering**: Format `{ORG}-{JAAR}-{NUMMER}` (bijv. ABC-2026-000001)
+- **Generated columns**: Subtotaal, BTW en totaal automatisch berekend op regelsniveau
+- **Advisory locks**: Race condition preventie bij gelijktijdige inserts
+- **Soft deletes**: `deleted_at` kolom voor archivering
+
+---
+
+## Fase 2: Database Triggers
+
+### 2.1 Trigger: Auto-generatie Factuurnummer
+
+Genereert uniek factuurnummer bij INSERT:
+- Haalt organisatie code op (eerste 3 letters)
+- Gebruikt advisory lock voor thread safety
+- Format: `{ORG}-{JAAR}-{VOLGNUMMER}`
+
+### 2.2 Trigger: Auto-update Factuur Bedragen
+
+Herberekent factuur totalen bij wijzigingen in `factuur_regel`:
+- SUM van alle regels → `factuur.subtotaal`, `btw_bedrag`, `totaal`
+- Berekent `openstaand_bedrag` op basis van betalingen
+
+### 2.3 Trigger: Auto-update Status bij Betaling
+
+Bij nieuwe betaling:
+- Update `betaald_bedrag` en `openstaand_bedrag`
+- Zet status automatisch naar `BETAALD` als openstaand ≤ 0
+
+---
+
+## Fase 3: Row Level Security (RLS)
+
+### 3.1 Beveiligingsmodel
+
+Alle tabellen gebruiken organisatie-gebaseerde toegangscontrole via `user_organizations`:
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│  FLOW BIJ DRAG                                                  │
-│                                                                 │
-│  handleDragStart                                                │
-│       │                                                         │
-│       ├─── setActiveTask ✅                                     │
-│       │                                                         │
-│       └─── executeIntent('suggest_task_flow')                   │
-│                   │                                             │
-│                   ▼                                             │
-│            agent-router-proxy                                   │
-│                   │                                             │
-│                   ▼                                             │
-│            VPS:3002/api/v1/execute                              │
-│                   │                                             │
-│                   ▼                                             │
-│            ❌ 404 Not Found (service niet actief)               │
-│                   │                                             │
-│                   ▼                                             │
-│            toast.error() ← ONGEWENST                            │
-│                                                                 │
-├─────────────────────────────────────────────────────────────────┤
-│  handleDragEnd                                                  │
-│       │                                                         │
-│       ├─── supabase.update(column_id) ✅                        │
-│       │                                                         │
-│       └─── toast.success() ✅                                   │
-└─────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│  RLS FLOW                                                      │
+│                                                                │
+│  User Request                                                  │
+│       │                                                        │
+│       ▼                                                        │
+│  auth.uid() → user_organizations.user_id                       │
+│       │                                                        │
+│       ▼                                                        │
+│  user_organizations.org_id = factuur.tenant_id?                │
+│       │                                                        │
+│       ├─── JA → Toegang verleend                               │
+│       │                                                        │
+│       └─── NEE → Toegang geweigerd                             │
+└────────────────────────────────────────────────────────────────┘
 ```
 
-### De VPS Agent Router Status (uit memory)
+### 3.2 Speciale Restricties
 
-De VPS Agent Router is in "definition-only" state:
-- Frontend code bestaat (`useAgentRouter`, `agentIntents.ts`)
-- Edge function `agent-router-proxy` bestaat
-- **MAAR: de VPS service op poort 3002 draait niet**
-- De `CLAWDBOT_VPS_URL` secret wijst naar de WhatsApp Relay (poort 58438), niet naar Agent Router
-
----
-
-## Oplossingsstrategieën
-
-### Optie A: Silent Mode voor Non-Critical Intents (Aanbevolen)
-
-Voeg een `silent: true` parameter toe aan de `executeIntent` call voor non-critical operaties zoals `suggest_task_flow`. Dit onderdrukt de toast foutmeldingen.
-
-**Voordelen:**
-- Minimale code wijziging
-- Houdt de Agent Router infrastructuur intact voor toekomstig gebruik
-- Andere (kritische) intents tonen nog steeds fouten
-
-### Optie B: Disable Agent Router Volledig in Drag Context
-
-Verwijder de `executeIntent` aanroep volledig uit `handleDragStart`. De AI-suggestie feature is toch niet operationeel.
-
-**Voordelen:**
-- Geen onnodige API calls
-- Eenvoudiger code
-
-**Nadelen:**
-- Moet later weer toegevoegd worden wanneer VPS actief is
-
-### Optie C: Environment-Based Feature Flag
-
-Voeg een check toe die alleen calls maakt als de Agent Router daadwerkelijk geconfigureerd is.
+| Tabel | INSERT | UPDATE | DELETE |
+|-------|--------|--------|--------|
+| `factuur` | Alleen status=CONCEPT | Altijd (org members) | Alleen CONCEPT |
+| `factuur_regel` | Alleen bij CONCEPT factuur | Alleen bij CONCEPT factuur | Alleen bij CONCEPT factuur |
+| `betaling` | Niet bij CONCEPT/AFGEBOEKT | Altijd (org members) | Altijd (org members) |
 
 ---
 
-## Implementatieplan: Optie A (Silent Mode)
+## Fase 4: TypeScript Types
 
-### Stap 1: Uitbreid `executeIntent` met `silent` optie
+### 4.1 Nieuw Bestand: `src/types/facturatie.ts`
 
-**Bestand:** `src/hooks/useAgentRouter.ts`
+Bevat:
+- Enums: `FactuurStatus`, `FactuurType`, `BetalingMethode`, `HerinneringNiveau`, `BtwPercentage`
+- Interfaces: `Factuur`, `FactuurRegel`, `Betaling`, `FactuurHerinnering`
+- Form input types: `CreateFactuurInput`, `UpdateFactuurInput`, `CreateBetalingInput`
+- Filter types: `FactuurFilters`
+- Response types: `FactuurWithDetails`, `FactuurListItem`, `FactuurStats`
+- UI constants: Labels, kleuren voor statussen
 
-Voeg een optionele `silent` parameter toe die toast notificaties onderdrukt:
+### 4.2 Correctie op Specificatie
+
+De professionals tabel heeft WEL een `email` kolom, dus de `FactuurWithDetails.flexwerker` type wordt uitgebreid:
 
 ```typescript
-const executeIntent = useCallback(
-  async (
-    intentId: string,
-    payload: Record<string, unknown> = {},
-    message?: string,
-    options?: { silent?: boolean }  // NIEUWE PARAMETER
-  ): Promise<AgentResult> => {
-    // ...existing code...
-    
-    if (result.success) {
-      if (!options?.silent) {
-        options.onSuccess?.(result);
-        toast.success(...);
-      }
-    } else {
-      if (!options?.silent) {
-        options.onError?.(result.error);
-        toast.error("Agent kon actie niet uitvoeren", ...);
-      }
-    }
-    // ...
-  }
-);
-```
-
-### Stap 2: Gebruik `silent: true` voor suggest_task_flow
-
-**Bestand:** `src/components/dashboard/MyTasksFlowSection.tsx`
-
-```typescript
-// Non-blocking, silent AI suggestion request during drag
-executeIntent('suggest_task_flow', {
-  dragging_task_id: task.id,
-  source_column: task.column_id,
-  task_priority: task.priority,
-  task_due_at: task.due_at,
-}, undefined, { silent: true })  // SILENT MODE
-.then(result => {
-  if (result.suggestions?.length && dragContext) {
-    dragContext.setAISuggestion(result.suggestions[0]);
-  }
-}).catch(() => {
-  // Silent fail - AI suggestions are non-critical
-});
+flexwerker: {
+  id: string;
+  full_name: string;
+  email: string | null;  // Toegevoegd - bestaat in database
+} | null;
 ```
 
 ---
 
-## Bestanden Overzicht
+## Fase 5: React Hooks
 
-| Bestand | Actie | Wijzigingen |
-|---------|-------|-------------|
-| `src/hooks/useAgentRouter.ts` | EDIT | Voeg `silent` optie toe aan executeIntent |
-| `src/components/dashboard/MyTasksFlowSection.tsx` | EDIT | Gebruik `silent: true` voor suggest_task_flow |
+### 5.1 Nieuwe Map: `src/hooks/facturatie/`
 
----
+| Bestand | Doel |
+|---------|------|
+| `constants.ts` | Query keys, stale times, debounce constants |
+| `useFacturen.ts` | Query hook voor lijst met filtering, paginatie, realtime |
+| `useFactuur.ts` | Query hook voor single factuur met details |
+| `useCreateFactuur.ts` | Mutation hook voor aanmaken |
+| `useUpdateFactuur.ts` | Mutation hook voor bijwerken + status wijzigen |
+| `useDeleteFactuur.ts` | Mutation hook voor soft delete |
+| `useCreateBetaling.ts` | Mutation hook voor betalingen |
+| `useFactuurStats.ts` | Query hook voor dashboard statistieken |
+| `index.ts` | Barrel export |
 
-## Acceptatiecriteria
+### 5.2 Architectuur Patronen (Conform Bestaande Code)
 
-1. Drag-and-drop werkt zonder foutmeldingen
-2. Toast "Taak verplaatst naar [kolom]" verschijnt nog steeds
-3. Geen "Agent kon actie niet uitvoeren" foutmelding
-4. Console logs tonen nog steeds de 404 (voor debugging)
-5. Andere (kritieke) agent intents tonen nog steeds fouten indien ze falen
-
----
-
-## Technische Notities
-
-### Waarom Silent Mode?
-
-De `suggest_task_flow` intent is een **enhancement feature** die:
-- AI-suggesties geeft tijdens drag operaties
-- Optioneel is - de app werkt perfect zonder
-- Momenteel niet operationeel is (VPS niet actief)
-- Geen impact heeft op de kernfunctionaliteit
-
-Door silent mode te gebruiken in plaats van de functie te verwijderen:
-1. Behouden we de code voor wanneer VPS wel actief is
-2. Vermijden we storende UX voor de eindgebruiker
-3. Kunnen we via logs nog steeds zien dat de service niet beschikbaar is
-
-### Toekomstige Activatie
-
-Wanneer de VPS Agent Router operationeel wordt:
-1. Deploy de service op `srv1304497.hstgr.cloud:3002`
-2. Voeg dedicated `AGENT_ROUTER_VPS_URL` secret toe
-3. Verwijder `silent: true` parameter om toasts weer te activeren
+- TanStack Query met 5 minuten staleTime
+- Realtime subscriptions met 200ms debounce
+- Toast notificaties voor succes/fout
+- Automatische cache invalidatie
+- User organization check voor tenant_id
 
 ---
 
-## Risico's & Mitigatie
+## Fase 6: Realtime Subscriptions
 
-| Risico | Impact | Mitigatie |
-|--------|--------|-----------|
-| Silent mode verbergt echte fouten | Low | Alleen voor suggest_task_flow, andere intents behouden toasts |
-| VPS komt nooit online | None | Silent mode is permanente oplossing |
-| Ontwikkelaars missen de logs | Low | Console logs blijven actief |
+Enable realtime voor `factuur` tabel:
+
+```sql
+ALTER PUBLICATION supabase_realtime ADD TABLE public.factuur;
+```
+
+---
+
+## Technische Details
+
+### Database Migratie Volgorde
+
+1. Tabellen aanmaken
+2. Indexen aanmaken
+3. Triggers aanmaken
+4. RLS enablen
+5. RLS policies aanmaken
+6. Realtime enablen
+
+### Bestanden Overzicht
+
+| Bestand | Actie |
+|---------|-------|
+| Database migration | CREATE: 5 tabellen, 3 triggers, indexen, RLS |
+| `src/types/facturatie.ts` | CREATE: TypeScript types |
+| `src/hooks/facturatie/constants.ts` | CREATE |
+| `src/hooks/facturatie/useFacturen.ts` | CREATE |
+| `src/hooks/facturatie/useFactuur.ts` | CREATE |
+| `src/hooks/facturatie/useCreateFactuur.ts` | CREATE |
+| `src/hooks/facturatie/useUpdateFactuur.ts` | CREATE |
+| `src/hooks/facturatie/useDeleteFactuur.ts` | CREATE |
+| `src/hooks/facturatie/useCreateBetaling.ts` | CREATE |
+| `src/hooks/facturatie/useFactuurStats.ts` | CREATE |
+| `src/hooks/facturatie/index.ts` | CREATE |
+
+**Totaal: 1 database migratie + 11 nieuwe TypeScript bestanden**
+
+---
+
+## Verificatie Checklist
+
+Na implementatie:
+- [ ] Alle 5 tabellen bestaan in database
+- [ ] RLS is actief op alle tabellen (`FORCE ROW LEVEL SECURITY`)
+- [ ] Factuurnummer wordt automatisch gegenereerd bij insert
+- [ ] Bedragen worden automatisch herberekend bij regel wijzigingen
+- [ ] Status wordt automatisch BETAALD bij volledige betaling
+- [ ] TypeScript compileert zonder fouten
+- [ ] `useFacturen()` haalt facturen op
+- [ ] `useCreateFactuur()` maakt factuur aan met regels
+- [ ] `useCreateBetaling()` registreert betaling
+- [ ] Realtime updates werken
+
+---
+
+## Toekomstige Uitbreidingen (Niet in Scope)
+
+- Facturatie pagina (`/facturatie`) en UI componenten
+- PDF generatie
+- E-mail verzending
+- Automatische herinneringen
 
