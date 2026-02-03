@@ -11,6 +11,8 @@ import Auth from "./pages/Auth";
 import Bijlagen from "./pages/Bijlagen";
 import Notulen from "./pages/Notulen";
 import Facturatie from "./pages/Facturatie";
+import FactuurDetail from "./pages/FactuurDetail";
+import FactuurAanmaken from "./pages/FactuurAanmaken";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Layout } from "./components/Layout";
 import Kanban from "./pages/Kanban";
@@ -104,6 +106,8 @@ const App = () => (
             <Route path="/bijlagen" element={<Bijlagen />} />
             <Route path="/notulen" element={<Notulen />} />
             <Route path="/facturatie" element={<Facturatie />} />
+            <Route path="/facturatie/nieuw" element={<FactuurAanmaken />} />
+            <Route path="/facturatie/:id" element={<FactuurDetail />} />
           </Route>
           
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
