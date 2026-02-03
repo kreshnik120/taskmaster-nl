@@ -49,7 +49,7 @@ export function PageHero({
                 "p-2 rounded-xl",
                 "bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm",
                 "border border-white/40 dark:border-white/10",
-                "shadow-sm"
+                "glass-inner-glow-3layer"
               )}>
                 <Icon className={cn("h-5 w-5", iconColorClass)} />
               </div>
