@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,6 +16,9 @@ import { SUBTASK_TOKENS, ACTION_TOKENS } from "@/lib/constants/designTokens";
 import { cn } from "@/lib/utils";
 
 const log = logger.create('TaskCard');
+
+// Delay threshold for distinguishing click vs drag (in ms)
+const DRAG_DELAY_THRESHOLD = 150;
 
 interface Task {
   id: string;
@@ -117,12 +121,25 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
     id: task.id,
   });
 
+  // Track pointer down time for click vs drag distinction
+  const pointerDownTime = useRef<number>(0);
+
+  const handlePointerDown = () => {
+    pointerDownTime.current = Date.now();
+  };
+
   const handleCardClick = (e: React.MouseEvent) => {
-    // Don't trigger if clicking on drag handle or quick actions
-    if ((e.target as HTMLElement).closest('[data-drag-handle]') || 
-        (e.target as HTMLElement).closest('button')) {
+    // Don't trigger if clicking on quick action buttons
+    if ((e.target as HTMLElement).closest('button')) {
       return;
     }
+    
+    // Skip if it was a drag (pressed longer than threshold) or currently dragging
+    const pressDuration = Date.now() - pointerDownTime.current;
+    if (pressDuration > DRAG_DELAY_THRESHOLD || isDragging) {
+      return;
+    }
+    
     onClick?.(task);
   };
 
@@ -149,16 +166,21 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
   return (
     <HoverCard openDelay={500}>
       <HoverCardTrigger asChild>
-        <div ref={setNodeRef} style={style} className="group">
-          <Card className="glass-task-card glass-hover-lift bg-white/75 dark:bg-slate-900/75 border-white/40 dark:border-white/12 shadow-[0_2px_6px_hsla(234,45%,52%,0.06),0_8px_24px_hsla(234,45%,52%,0.10)] focus:outline-none focus:ring-2 focus:ring-tab-mijn-werk-500/30 focus:ring-offset-2 relative rounded-xl">
+        <div 
+          ref={setNodeRef} 
+          style={style} 
+          className="group touch-none"
+          {...attributes}
+          {...listeners}
+          onPointerDown={handlePointerDown}
+        >
+          <Card className="glass-task-card glass-hover-lift bg-white/75 dark:bg-slate-900/75 border-white/40 dark:border-white/12 shadow-[0_2px_6px_hsla(234,45%,52%,0.06),0_8px_24px_hsla(234,45%,52%,0.10)] focus:outline-none focus:ring-2 focus:ring-tab-mijn-werk-500/30 focus:ring-offset-2 relative rounded-xl cursor-grab active:cursor-grabbing">
             <CardContent className="p-4 space-y-2">
               <div className="flex items-start gap-2">
-                {/* Drag Handle */}
+                {/* Drag Handle - Visual indicator only */}
                 <div
-                  {...attributes}
-                  {...listeners}
                   data-drag-handle
-                  className="flex-shrink-0 pt-1 cursor-grab active:cursor-grabbing opacity-40 hover:opacity-80 transition-opacity"
+                  className="flex-shrink-0 pt-1 opacity-40 group-hover:opacity-80 transition-opacity"
                 >
                   <GripVertical className="h-4 w-4 text-muted-foreground" />
                 </div>
