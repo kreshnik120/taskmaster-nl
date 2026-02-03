@@ -41,7 +41,11 @@ import {
   ChevronRight,
   FileText,
   Settings,
+  Download,
 } from "lucide-react";
+
+// Facturatie Components
+import { FactuurExportDialog } from "@/components/facturatie";
 
 // Hooks & Types
 import { useFacturen } from "@/hooks/facturatie/useFacturen";
@@ -115,6 +119,7 @@ export default function Facturatie() {
 
   // Local state for search input
   const [localSearch, setLocalSearch] = useState(searchQuery);
+  const [showExportDialog, setShowExportDialog] = useState(false);
   const debouncedSearch = useDebouncedValue(localSearch, 300);
 
   // Update URL when debounced search changes
@@ -245,6 +250,13 @@ export default function Facturatie() {
           >
             <Settings className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">Instellingen</span>
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setShowExportDialog(true)}
+          >
+            <Download className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Exporteren</span>
           </Button>
           <Button onClick={() => navigate("/facturatie/nieuw")}>
             <Plus className="mr-2 h-4 w-4" />
@@ -587,6 +599,18 @@ export default function Facturatie() {
           </div>
         </div>
       )}
+
+      {/* Export Dialog */}
+      <FactuurExportDialog
+        open={showExportDialog}
+        onOpenChange={setShowExportDialog}
+        filters={{
+          status: statusFilter !== "all" ? statusFilter as any : undefined,
+          type: typeFilter !== "all" ? typeFilter as any : undefined,
+          search: debouncedSearch || undefined,
+        }}
+        totalCount={count || 0}
+      />
     </div>
   );
 }
