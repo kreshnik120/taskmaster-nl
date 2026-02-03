@@ -224,3 +224,29 @@ export const FACTUUR_STATUS_COLORS: Record<FactuurStatus, string> = {
   BETAALD: 'green',
   AFGEBOEKT: 'gray',
 };
+
+// Herinnering niveau constants
+export const HERINNERING_NIVEAUS: HerinneringNiveau[] = [1, 2, 3];
+
+export const HERINNERING_NIVEAU_LABELS: Record<HerinneringNiveau, string> = {
+  1: 'Eerste herinnering',
+  2: 'Tweede herinnering',
+  3: 'Laatste herinnering',
+};
+
+export const HERINNERING_NIVEAU_COLORS: Record<HerinneringNiveau, string> = {
+  1: 'yellow',
+  2: 'orange',
+  3: 'red',
+};
+
+// Payment summary for dashboard
+export interface BetalingSummary {
+  factuur_id: string;
+  factuur_nummer: string;
+  totaal_bedrag: number;
+  betaald_bedrag: number;
+  openstaand_bedrag: number;
+  aantal_betalingen: number;
+  laatste_betaling_datum: string | null;
+}
