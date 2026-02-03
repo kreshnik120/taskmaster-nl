@@ -175,6 +175,18 @@ All colors MUST be HSL.
     --tab-recruitment-800: 345 48% 32%;
     --tab-recruitment-900: 345 48% 26%;
 
+    /* Facturatie - Emerald (Finance, Money) */
+    --tab-facturatie-50: 142 55% 97%;
+    --tab-facturatie-100: 142 55% 93%;
+    --tab-facturatie-200: 142 55% 85%;
+    --tab-facturatie-300: 142 55% 73%;
+    --tab-facturatie-400: 142 55% 58%;
+    --tab-facturatie-500: 142 55% 45%;
+    --tab-facturatie-600: 142 55% 38%;
+    --tab-facturatie-700: 142 55% 32%;
+    --tab-facturatie-800: 142 55% 26%;
+    --tab-facturatie-900: 142 55% 20%;
+
     /* Spring Physics Transitions */
     --ease-spring-soft: cubic-bezier(0.22, 1.2, 0.36, 1);
     --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
@@ -377,6 +389,132 @@ All colors MUST be HSL.
       0 8px 24px hsla(234, 45%, 15%, 0.35),
       0 16px 48px hsla(234, 45%, 10%, 0.45),
       inset 0 1px 2px hsla(234, 45%, 52%, 0.2);
+  }
+
+  /* Emerald-tinted glass for Facturatie - FLOATING EFFECT */
+  .glass-card-emerald {
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.75rem;
+    background: linear-gradient(
+      135deg,
+      hsla(142, 55%, 97%, 0.78) 0%,
+      hsla(142, 55%, 97%, 0.50) 100%
+    );
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    border: 1px solid hsla(142, 55%, 85%, 0.5);
+    /* EMERALD FLOATING SHADOW - visionOS premium */
+    box-shadow:
+      0 4px 12px hsla(142, 55%, 45%, 0.08),
+      0 8px 32px hsla(142, 55%, 45%, 0.12),
+      inset 0 1px 1px hsla(142, 55%, 97%, 0.4);
+    transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .glass-card-emerald:hover {
+    box-shadow:
+      0 8px 24px hsla(142, 55%, 45%, 0.12),
+      0 16px 48px hsla(142, 55%, 45%, 0.16),
+      inset 0 1px 2px hsla(142, 55%, 97%, 0.5);
+  }
+
+  .dark .glass-card-emerald {
+    background: linear-gradient(
+      135deg,
+      hsla(142, 55%, 20%, 0.55) 0%,
+      hsla(142, 55%, 15%, 0.35) 100%
+    );
+    border-color: hsla(142, 55%, 35%, 0.35);
+    box-shadow:
+      0 4px 12px hsla(142, 55%, 10%, 0.25),
+      0 8px 32px hsla(142, 55%, 8%, 0.35),
+      inset 0 1px 1px hsla(142, 55%, 45%, 0.15);
+  }
+
+  .dark .glass-card-emerald:hover {
+    box-shadow:
+      0 8px 24px hsla(142, 55%, 10%, 0.35),
+      0 16px 48px hsla(142, 55%, 8%, 0.45),
+      inset 0 1px 2px hsla(142, 55%, 45%, 0.2);
+  }
+
+  /* Floating shadow - emerald tint */
+  .shadow-float-emerald {
+    box-shadow:
+      0 4px 16px hsla(142, 55%, 45%, 0.06),
+      0 12px 40px hsla(142, 55%, 45%, 0.10),
+      0 2px 8px rgba(0, 0, 0, 0.04);
+    transition: box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .shadow-float-emerald-hover:hover {
+    box-shadow:
+      0 8px 24px hsla(142, 55%, 45%, 0.10),
+      0 20px 60px hsla(142, 55%, 45%, 0.14),
+      0 4px 12px rgba(0, 0, 0, 0.06);
+  }
+
+  .dark .shadow-float-emerald {
+    box-shadow:
+      0 4px 16px hsla(142, 55%, 15%, 0.20),
+      0 12px 40px hsla(142, 55%, 10%, 0.25),
+      0 2px 8px rgba(0, 0, 0, 0.15);
+  }
+
+  .dark .shadow-float-emerald-hover:hover {
+    box-shadow:
+      0 8px 24px hsla(142, 55%, 15%, 0.30),
+      0 20px 60px hsla(142, 55%, 10%, 0.35),
+      0 4px 12px rgba(0, 0, 0, 0.20);
+  }
+
+  /* Ambient mesh - emerald glow for Facturatie */
+  .glass-ambient-mesh-emerald {
+    position: relative;
+    overflow: visible;
+  }
+
+  .glass-ambient-mesh-emerald::before {
+    content: '';
+    position: absolute;
+    inset: -150px;
+    background: 
+      radial-gradient(ellipse 700px 500px at 0% 0%, hsla(142, 55%, 70%, 0.15) 0%, transparent 50%),
+      radial-gradient(ellipse 600px 400px at 100% 100%, hsla(142, 55%, 60%, 0.10) 0%, transparent 50%),
+      radial-gradient(ellipse 400px 300px at 50% 50%, hsla(142, 55%, 75%, 0.06) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: -1;
+    filter: blur(50px);
+  }
+
+  .dark .glass-ambient-mesh-emerald::before {
+    background: 
+      radial-gradient(ellipse 700px 500px at 0% 0%, hsla(142, 55%, 30%, 0.12) 0%, transparent 50%),
+      radial-gradient(ellipse 600px 400px at 100% 100%, hsla(142, 55%, 25%, 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse 400px 300px at 50% 50%, hsla(142, 55%, 35%, 0.05) 0%, transparent 60%);
+  }
+
+  /* Emerald light bleed variant */
+  .glass-light-bleed-emerald::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      135deg,
+      hsla(142, 55%, 85%, 0.5) 0%,
+      hsla(142, 55%, 85%, 0.2) 50%,
+      transparent 100%
+    );
+    -webkit-mask: 
+      linear-gradient(#fff 0 0) content-box, 
+      linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    -webkit-mask-composite: xor;
+    pointer-events: none;
+    z-index: 1;
   }
 
   /* Light Bleed Effect - visionOS style */
