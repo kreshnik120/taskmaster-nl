@@ -240,7 +240,7 @@ export default function Facturatie() {
   };
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-6 glass-ambient-mesh-emerald">
       {/* Page Header */}
       <PageHero title="Facturatie" subtitle="Beheer facturen, betalingen en herinneringen">
         <div className="flex items-center gap-2">
@@ -266,14 +266,14 @@ export default function Facturatie() {
       </PageHero>
 
       {/* KPI Dashboard */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 glass-layer-1 p-4 shadow-float-emerald">
         <KPICard
           icon={Euro}
           title="Openstaand"
           value={statsLoading ? 0 : stats?.totaal_openstaand || 0}
           suffix=""
           subtitle={formatCurrency(stats?.totaal_openstaand || 0)}
-          variant="count"
+          variant="facturatie"
           onClick={() => setFilter("status", "VERZONDEN")}
           isActive={statusFilter === "VERZONDEN"}
         />
@@ -301,13 +301,13 @@ export default function Facturatie() {
           value={statsLoading ? 0 : Math.round((stats?.totaal_dit_kwartaal || 0) / 1000)}
           suffix="K"
           subtitle={formatCurrency(stats?.totaal_dit_kwartaal || 0)}
-          variant="personal"
+          variant="facturatie"
         />
       </div>
 
       {/* Filters */}
-      <Card>
-        <CardContent className="p-4">
+      <Card className="glass-card-emerald glass-light-bleed-emerald">
+        <CardContent className="p-4 relative">
           <div className="flex flex-wrap items-center gap-4">
             {/* Search */}
             <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -404,8 +404,8 @@ export default function Facturatie() {
       </Card>
 
       {/* Facturen Table */}
-      <Card>
-        <CardContent className="p-0">
+      <Card className="glass-card-emerald shadow-float-emerald">
+        <CardContent className="p-0 relative">
           {isLoading ? (
             <Table>
               <TableHeader>
@@ -477,7 +477,7 @@ export default function Facturatie() {
                   return (
                     <TableRow
                       key={factuur.id}
-                      className="cursor-pointer hover:bg-muted/50"
+                      className="cursor-pointer hover:bg-tab-facturatie-50/50 dark:hover:bg-tab-facturatie-900/30 transition-colors duration-200"
                       onClick={() => navigate(`/facturatie/${factuur.id}`)}
                     >
                       <TableCell className="font-medium">

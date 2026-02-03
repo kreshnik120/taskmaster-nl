@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { useCountUp } from "@/hooks/useCountUp";
 import { LucideIcon } from "lucide-react";
 
-type KPIVariant = "count" | "success" | "time" | "urgent" | "personal" | "minimal";
+type KPIVariant = "count" | "success" | "time" | "urgent" | "personal" | "minimal" | "facturatie";
 
 interface KPICardProps {
   icon: LucideIcon;
@@ -79,6 +79,15 @@ const variantConfig: Record<KPIVariant, {
     shadowColor: "hover:shadow-md",
     ringColor: "ring-primary",
     accentDot: "bg-primary",
+  },
+  facturatie: {
+    gradient: "from-tab-facturatie-50/80 to-white/60 dark:from-tab-facturatie-900/30 dark:to-background/60",
+    borderColor: "border-t-tab-facturatie-400/60",
+    textColor: "text-tab-facturatie-600 dark:text-tab-facturatie-400",
+    iconColor: "text-tab-facturatie-500",
+    shadowColor: "shadow-float-emerald shadow-float-emerald-hover",
+    ringColor: "ring-tab-facturatie-500",
+    accentDot: "bg-tab-facturatie-500",
   },
 };
 
