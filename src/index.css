@@ -2732,3 +2732,253 @@ All colors MUST be HSL.
 .kpi-card-hover:hover::after {
   opacity: 1;
 }
+
+/* ============================================
+   APPLE LIQUID GLASS - PHASE 2 PREMIUM
+   ============================================ */
+
+/* 1. Multi-Layer Specular Highlight System */
+.glass-specular-premium {
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-specular-premium::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  
+  /* 3-laags specular - simuleert licht op gebogen glas */
+  background: 
+    /* Laag 1: Scherpe top-edge highlight */
+    linear-gradient(180deg, 
+      rgba(255,255,255,0.55) 0%, 
+      rgba(255,255,255,0.18) 2.5%, 
+      transparent 22%
+    ),
+    /* Laag 2: Diffuse center glow */
+    radial-gradient(ellipse 75% 55% at 50% -8%, 
+      rgba(255,255,255,0.22) 0%, 
+      transparent 65%
+    ),
+    /* Laag 3: Side-edge highlights */
+    linear-gradient(90deg,
+      rgba(255,255,255,0.08) 0%,
+      transparent 15%,
+      transparent 85%,
+      rgba(255,255,255,0.08) 100%
+    );
+  
+  /* Inner shadows voor diepte */
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.65),
+    inset 0 2px 4px rgba(255,255,255,0.12),
+    inset 0 -1px 0 rgba(0,0,0,0.03);
+  
+  pointer-events: none;
+  z-index: 1;
+}
+
+.dark .glass-specular-premium::before {
+  background: 
+    linear-gradient(180deg, 
+      rgba(255,255,255,0.22) 0%, 
+      rgba(255,255,255,0.06) 2.5%, 
+      transparent 22%
+    ),
+    radial-gradient(ellipse 75% 55% at 50% -8%, 
+      rgba(255,255,255,0.10) 0%, 
+      transparent 65%
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.22),
+    inset 0 2px 4px rgba(255,255,255,0.04);
+}
+
+/* 2. Micro-Texture Noise Overlay */
+.glass-noise-texture {
+  position: relative;
+}
+
+.glass-noise-texture::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  opacity: 0.025;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.dark .glass-noise-texture::after {
+  opacity: 0.03;
+  mix-blend-mode: soft-light;
+}
+
+/* 3. Enhanced 3-Layer Inner Glow System */
+.glass-inner-glow-3layer {
+  box-shadow:
+    /* Layer 1: Context-gekleurde ambient glow */
+    0 8px 32px hsla(234, 45%, 50%, 0.10),
+    0 2px 8px rgba(0,0,0,0.04),
+    /* Layer 2: Top edge inner highlight */
+    inset 0 1px 0 rgba(255,255,255,0.55),
+    inset 0 2.5px 5px rgba(255,255,255,0.10),
+    /* Layer 3: Bottom edge subtle shadow */
+    inset 0 -1px 0 rgba(0,0,0,0.025),
+    inset 0 -2px 4px rgba(0,0,0,0.015);
+}
+
+.dark .glass-inner-glow-3layer {
+  box-shadow:
+    0 8px 32px hsla(234, 45%, 20%, 0.25),
+    0 2px 8px rgba(0,0,0,0.15),
+    inset 0 1px 0 rgba(255,255,255,0.15),
+    inset 0 2.5px 5px rgba(255,255,255,0.03),
+    inset 0 -1px 0 rgba(0,0,0,0.08),
+    inset 0 -2px 4px rgba(0,0,0,0.05);
+}
+
+/* 4. Premium Border Glow */
+.glass-border-glow-premium {
+  position: relative;
+}
+
+.glass-border-glow-premium::after {
+  content: '';
+  position: absolute;
+  inset: -1.5px;
+  border-radius: calc(0.75rem + 1.5px);
+  background: linear-gradient(
+    145deg,
+    rgba(255,255,255,0.65) 0%,
+    rgba(255,255,255,0.25) 25%,
+    rgba(255,255,255,0.12) 55%,
+    transparent 100%
+  );
+  -webkit-mask: 
+    linear-gradient(#fff 0 0) content-box, 
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+  padding: 1.5px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.dark .glass-border-glow-premium::after {
+  background: linear-gradient(
+    145deg,
+    rgba(255,255,255,0.25) 0%,
+    rgba(255,255,255,0.10) 25%,
+    rgba(255,255,255,0.04) 55%,
+    transparent 100%
+  );
+}
+
+/* 5. Animated Light Sweep */
+@keyframes liquid-glass-sweep {
+  0%, 100% {
+    transform: translateX(-100%) rotate(35deg);
+    opacity: 0;
+  }
+  15%, 85% {
+    opacity: 0.4;
+  }
+  50% {
+    transform: translateX(100%) rotate(35deg);
+    opacity: 0.4;
+  }
+}
+
+.glass-light-sweep {
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-light-sweep::before {
+  content: '';
+  position: absolute;
+  top: -60%;
+  left: -60%;
+  width: 220%;
+  height: 220%;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    transparent 40%,
+    rgba(255,255,255,0.08) 45%,
+    rgba(255,255,255,0.15) 50%,
+    rgba(255,255,255,0.08) 55%,
+    transparent 60%,
+    transparent 100%
+  );
+  transform: translateX(-100%) rotate(35deg);
+  animation: liquid-glass-sweep 15s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-light-sweep::before {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* 6. Combined Premium Glass Utility - ONE-CLICK APPLICATION */
+.glass-liquid-premium {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.62);
+  backdrop-filter: blur(28px) saturate(185%);
+  -webkit-backdrop-filter: blur(28px) saturate(185%);
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  box-shadow:
+    0 8px 32px hsla(234, 45%, 50%, 0.10),
+    0 2px 8px rgba(0,0,0,0.04),
+    inset 0 1px 0 rgba(255,255,255,0.55),
+    inset 0 2.5px 5px rgba(255,255,255,0.10),
+    inset 0 -1px 0 rgba(0,0,0,0.025);
+}
+
+.dark .glass-liquid-premium {
+  background: rgba(15, 23, 42, 0.68);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255,255,255,0.12),
+    inset 0 2.5px 5px rgba(255,255,255,0.03),
+    inset 0 -1px 0 rgba(0,0,0,0.1);
+}
+
+/* 7. Indigo Ambient Mesh for Dashboard/Mijn Werk */
+.glass-ambient-mesh-indigo {
+  position: relative;
+  overflow: visible;
+}
+
+.glass-ambient-mesh-indigo::before {
+  content: '';
+  position: absolute;
+  inset: -150px;
+  background: 
+    radial-gradient(ellipse 700px 500px at 0% 0%, hsla(234, 45%, 70%, 0.15) 0%, transparent 50%),
+    radial-gradient(ellipse 600px 400px at 100% 100%, hsla(234, 45%, 60%, 0.10) 0%, transparent 50%),
+    radial-gradient(ellipse 400px 300px at 50% 50%, hsla(234, 45%, 75%, 0.06) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: -1;
+  filter: blur(50px);
+}
+
+.dark .glass-ambient-mesh-indigo::before {
+  background: 
+    radial-gradient(ellipse 700px 500px at 0% 0%, hsla(234, 45%, 30%, 0.12) 0%, transparent 50%),
+    radial-gradient(ellipse 600px 400px at 100% 100%, hsla(234, 45%, 25%, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse 400px 300px at 50% 50%, hsla(234, 45%, 35%, 0.05) 0%, transparent 60%);
+}

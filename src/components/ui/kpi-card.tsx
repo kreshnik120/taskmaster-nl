@@ -179,6 +179,7 @@ export function KPICard({
         isMinimal 
           ? "border-0 bg-background shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)]"
           : cn(
+              "glass-specular-premium glass-noise-texture",
               "bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm",
               "border border-white/50 dark:border-white/10",
               config.borderColor,

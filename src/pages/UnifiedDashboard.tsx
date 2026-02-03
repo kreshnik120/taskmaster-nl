@@ -128,7 +128,8 @@ export default function UnifiedDashboard() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className={cn(
-            "p-2 rounded-lg transition-all duration-300 ease-out-expo",
+            "p-2 rounded-xl transition-all duration-300 ease-out-expo",
+            "glass-inner-glow-3layer",
             getTabColors(activeTab).iconBg
           )}>
             <LayoutDashboard className={cn(
@@ -151,7 +152,7 @@ export default function UnifiedDashboard() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid grid-cols-3 md:grid-cols-6 w-full glass-layer-1 p-1.5 gap-1">
+        <TabsList className="grid grid-cols-3 md:grid-cols-6 w-full glass-liquid-premium glass-specular-premium p-1.5 gap-1">
           {/* Mijn Werk */}
           <TabsTrigger 
             value="mijn-werk" 
@@ -270,7 +271,7 @@ export default function UnifiedDashboard() {
         {/* Tab 1: Mijn Werk */}
         <TabsContent value="mijn-werk" className="mt-6">
           <div className={cn(
-            "glass-layer-1 glass-light-bleed p-6 rounded-2xl space-y-6",
+            "glass-liquid-premium glass-specular-premium p-6 rounded-2xl space-y-6",
             getTabColors('mijn-werk').shadowClass
           )}>
             <div className="grid gap-6 md:grid-cols-2">
@@ -286,7 +287,7 @@ export default function UnifiedDashboard() {
         {/* Tab 2: Team Overzicht */}
         <TabsContent value="team" className="mt-6">
           <div className={cn(
-            "glass-layer-1 glass-light-bleed p-6 rounded-2xl space-y-6",
+            "glass-liquid-premium glass-specular-premium p-6 rounded-2xl space-y-6",
             getTabColors('team').shadowClass
           )}>
             <DashboardHeader isLoading={statsLoading} />
@@ -334,7 +335,7 @@ export default function UnifiedDashboard() {
         {/* Tab 3: Recruitment */}
         <TabsContent value="recruitment" className="mt-6">
           <div className={cn(
-            "glass-layer-1 glass-light-bleed p-6 rounded-2xl space-y-6",
+            "glass-liquid-premium glass-specular-premium p-6 rounded-2xl space-y-6",
             getTabColors('recruitment').shadowClass
           )}>
             <RecruitmentKPIs />
@@ -347,7 +348,7 @@ export default function UnifiedDashboard() {
         {/* Tab 4: Lijst */}
         <TabsContent value="lijst" className="mt-6">
           <div className={cn(
-            "glass-layer-1 glass-light-bleed p-6 rounded-2xl",
+            "glass-liquid-premium glass-specular-premium p-6 rounded-2xl",
             getTabColors('lijst').shadowClass
           )}>
             <Suspense fallback={<TabLoadingFallback />}>
@@ -359,7 +360,7 @@ export default function UnifiedDashboard() {
         {/* Tab 5: Kalender */}
         <TabsContent value="kalender" className="mt-6">
           <div className={cn(
-            "glass-layer-1 glass-light-bleed p-6 rounded-2xl",
+            "glass-liquid-premium glass-specular-premium p-6 rounded-2xl",
             getTabColors('kalender').shadowClass
           )}>
             <Suspense fallback={<TabLoadingFallback />}>
@@ -371,7 +372,7 @@ export default function UnifiedDashboard() {
         {/* Tab 6: Opvolging */}
         <TabsContent value="opvolging" className="mt-6">
           <div className={cn(
-            "glass-layer-1 glass-light-bleed p-6 rounded-2xl",
+            "glass-liquid-premium glass-specular-premium p-6 rounded-2xl",
             getTabColors('opvolging').shadowClass
           )}>
             <Suspense fallback={<TabLoadingFallback />}>
