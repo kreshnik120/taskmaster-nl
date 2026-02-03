@@ -307,7 +307,7 @@ export default function Bijlagen() {
   }, [attachments]);
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto py-6 space-y-6 glass-ambient-mesh-indigo">
       <PageHero
         title="Documentenbeheer"
         subtitle={`${stats.total} documenten • ${stats.images} afbeeldingen • ${stats.pdfs} PDFs • ${stats.docs} documenten`}

@@ -10,6 +10,7 @@ import { Plus, Search, X, Users, Building2, Target, LayoutGrid, Network, FileSpr
 import { toast } from "sonner";
 import NewClientDialog from "@/components/NewClientDialog";
 import { KPICard } from "@/components/ui/kpi-card";
+import { PageHero } from "@/components/ui/page-hero";
 import { OrganizationCardSimple, OrganizationCardSimpleSkeleton } from "@/components/organization/OrganizationCardSimple";
 import { ClientGroupingToggle } from "@/components/recruitment/ClientGroupingToggle";
 import { DensityToggle } from "@/components/recruitment/DensityToggle";
@@ -577,13 +578,13 @@ export default function Klanten() {
 
   return (
     <div className="space-y-6 glass-ambient-mesh-slate">
-      {/* Hero Section - Apple Design Minimal */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold">Klanten</h1>
-        <p className="text-muted-foreground text-sm">
-          {organizations.length} organisaties • {totalSublocations} werklocaties
-        </p>
-      </div>
+      {/* Hero Section with PageHero */}
+      <PageHero
+        title="Klanten"
+        subtitle={`${organizations.length} organisaties • ${totalSublocations} werklocaties`}
+        icon={Building2}
+        contextColor="slate"
+      />
 
       {/* View Toggle */}
       <div className="flex items-center gap-2 mb-6">
