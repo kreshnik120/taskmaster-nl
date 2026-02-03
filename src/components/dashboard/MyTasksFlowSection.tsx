@@ -551,12 +551,7 @@ export function MyTasksFlowSection() {
             <div className="flex items-center gap-2">
               <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
                 <SelectTrigger className="h-8 w-[140px] text-xs glass-select-trigger">
-                  <div className="flex items-center gap-1.5">
-                    {sortBy === 'due_at' && <Calendar className="h-3 w-3" />}
-                    {sortBy === 'priority' && <AlertCircle className="h-3 w-3" />}
-                    {sortBy === 'created_at' && <Clock className="h-3 w-3" />}
-                    <SelectValue />
-                  </div>
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="glass-layer-2 border-white/30 dark:border-white/15">
                   <SelectItem value="due_at">
