@@ -1,223 +1,316 @@
 
 
-# Responsive & Performance Optimalisatie - visionOS Glassmorphism
+# Diepere Apple visionOS Glassmorphism - Meer Kleur & Schaduw
 
-## Geïdentificeerde Problemen
+## Onderzoeksresultaten
 
-Na analyse van de huidige implementatie heb ik de volgende aandachtspunten gevonden:
+Na uitgebreide analyse van de huidige implementatie zie ik de volgende mogelijkheden voor verbetering:
 
-### 1. Performance Issues op Mobiel
+### Huidige Staat
+| Element | Status | Beoordeling |
+|---------|--------|-------------|
+| Ambient mesh (achtergrond glow) | Alle 8 pagina's | Goed - maar kan intenser |
+| Glass cards per context | 7 kleuren gedefinieerd | Goed - maar niet overal toegepast |
+| Floating shadows per kleur | 7 kleuren | Goed - maar weinig gebruikt op componenten |
+| KPI cards met context kleur | Alleen `facturatie` variant | Kan uitgebreid naar alle contexten |
+| Filter bars glassmorphism | Alleen Facturatie | Ontbreekt op andere pagina's |
+| Table/list styling | Basis | Mist gekleurde hover states |
+| Specular highlights | Beperkt | Kan verbeterd worden |
 
-| Probleem | Impact | Locatie |
-|----------|--------|---------|
-| `backdrop-filter: blur(20-24px)` | Hoge GPU-belasting op mobiel | Alle `.glass-card-*` classes |
-| `inset: -150px` op ambient mesh | Overflowing pseudo-elements buiten viewport | Alle `.glass-ambient-mesh-*` classes |
-| `filter: blur(50px)` op achtergrond | Extra compositing layer, batterijverbruik | Ambient mesh `::before` elements |
-| Ontbrekende `overflow: hidden` op sommige pagina's | Horizontale scroll door -150px inset | Facturatie.tsx (heeft `p-6` maar geen clip) |
+### Gevonden Verbetermogelijkheden
 
-### 2. Ontbrekende Responsive Styling
-
-| Pagina | Probleem |
-|--------|----------|
-| WhatsApp.tsx | Geen `glass-ambient-mesh-blue` toegepast |
-| Alle pagina's | Geen mobiele blur-reductie voor performance |
-| KPI Cards | Grid gaat naar 2 kolommen maar shadow-float kan te zwaar zijn |
+1. **KPI Cards gebruiken nu generieke kleuren** - niet de context-specifieke tint
+2. **Filter/zoekbars** zijn standaard Cards - kunnen glassmorphism krijgen
+3. **Tabel hover states** gebruiken de context kleur niet consistent
+4. **Zwevende schaduw** wordt niet overal toegepast op interactieve elementen
+5. **Light bleed effect** (Apple specular highlight) ontbreekt op veel cards
+6. **Accent borders** (subtiele gekleurde rand aan bovenkant) ontbreken
 
 ---
 
-## Oplossingen
+## Verbeteringen Per Categorie
 
-### Fase 1: CSS Performance Optimalisaties (`src/index.css`)
+### 1. Gekleurde KPI Card Varianten
 
-**A. Mobiele Blur Reductie**
+Nieuwe KPI varianten toevoegen die de context-specifieke kleuren gebruiken:
 
-Voeg media queries toe om blur te verminderen op kleinere schermen:
+| Context | Variant Naam | Kleur HSL |
+|---------|--------------|-----------|
+| Sollicitaties | `rose` | 345, 48%, 52% |
+| Professionals | `violet` | 270, 45%, 55% |
+| Klanten | `slate` | 215, 25%, 48% |
+| Plaatsingen | `teal` | 174, 42%, 43% |
+| Tijdregistratie | `amber` | 38, 55%, 50% |
+| WhatsApp | `blue` | 217, 91%, 60% |
+| Mijn Werk | `indigo` | 234, 45%, 52% |
+
+Elke variant krijgt:
+- Gekleurde gradient achtergrond
+- Gekleurde border-top accent
+- Gekleurde zwevende schaduw
+- Context-specifieke icon kleur
+
+### 2. Enhanced Glass Filter Bars
+
+Nieuwe CSS class `.glass-filter-bar-[color]` voor elke pagina:
 
 ```css
-/* Mobile performance: reduce blur intensity */
-@media (max-width: 768px) {
-  .glass-layer-1,
-  .glass-layer-2,
-  .glass-card-emerald,
-  .glass-card-indigo,
-  .glass-card-rose,
-  .glass-card-violet,
-  .glass-card-slate,
-  .glass-card-teal,
-  .glass-card-amber {
-    backdrop-filter: blur(12px) saturate(130%);
-    -webkit-backdrop-filter: blur(12px) saturate(130%);
-  }
+.glass-filter-bar-rose {
+  background: linear-gradient(135deg, hsla(345, 48%, 99%, 0.85) 0%, hsla(345, 48%, 97%, 0.70) 100%);
+  border: 1px solid hsla(345, 48%, 90%, 0.6);
+  border-top: 3px solid hsla(345, 48%, 52%, 0.4);
+  box-shadow: 0 4px 16px hsla(345, 48%, 52%, 0.08);
 }
 ```
 
-**B. Ambient Mesh Verkleining op Mobiel**
+### 3. Specular Highlights (Lichtreflectie Banden)
+
+Apple visionOS gebruikt een subtiele lichtband aan de bovenkant van elementen:
 
 ```css
-@media (max-width: 768px) {
-  .glass-ambient-mesh::before,
-  .glass-ambient-mesh-emerald::before,
-  .glass-ambient-mesh-rose::before,
-  .glass-ambient-mesh-violet::before,
-  .glass-ambient-mesh-slate::before,
-  .glass-ambient-mesh-teal::before,
-  .glass-ambient-mesh-amber::before {
-    /* Kleinere gradients voor mobiel */
-    inset: -50px;
-    filter: blur(30px);
-  }
-}
-```
-
-**C. Prefers-reduced-motion Ondersteuning**
-
-```css
-@media (prefers-reduced-motion: reduce) {
-  .glass-layer-1,
-  .glass-layer-2,
-  .glass-card-emerald,
-  /* ... alle glass cards ... */
-  {
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    transition: none;
-  }
-  
-  .glass-ambient-mesh::before,
-  /* ... alle ambient mesh ... */
-  {
-    display: none;
-  }
-}
-```
-
-**D. GPU Acceleration Hints**
-
-```css
-.glass-ambient-mesh::before,
-.glass-ambient-mesh-emerald::before,
-/* alle ambient mesh */
-{
-  will-change: auto;
-  contain: strict;
-}
-```
-
-### Fase 2: WhatsApp Pagina Blue Theme (`src/pages/WhatsApp.tsx`)
-
-Voeg de blue glassmorphism toe aan de WhatsApp pagina:
-
-```tsx
-// Update wrapper div
-<div className="flex h-[calc(100vh-4rem)] glass-ambient-mesh-blue">
-```
-
-En voeg de bijbehorende CSS toe:
-
-```css
-/* Blue ambient mesh for WhatsApp/Communicatie */
-.glass-ambient-mesh-blue {
-  position: relative;
-  overflow: visible;
-}
-
-.glass-ambient-mesh-blue::before {
+.glass-specular::before {
   content: '';
   position: absolute;
-  inset: -150px;
-  background: 
-    radial-gradient(ellipse 700px 500px at 0% 0%, hsla(217, 91%, 65%, 0.12) 0%, transparent 50%),
-    radial-gradient(ellipse 600px 400px at 100% 100%, hsla(217, 91%, 55%, 0.08) 0%, transparent 50%),
-    radial-gradient(ellipse 400px 300px at 50% 50%, hsla(217, 91%, 70%, 0.05) 0%, transparent 60%);
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(180deg, 
+    rgba(255,255,255,0.25) 0%, 
+    rgba(255,255,255,0.05) 50%,
+    transparent 100%
+  );
   pointer-events: none;
-  z-index: -1;
-  filter: blur(50px);
-}
-
-.dark .glass-ambient-mesh-blue::before {
-  background: 
-    radial-gradient(ellipse 700px 500px at 0% 0%, hsla(217, 91%, 25%, 0.10) 0%, transparent 50%),
-    radial-gradient(ellipse 600px 400px at 100% 100%, hsla(217, 91%, 20%, 0.06) 0%, transparent 50%),
-    radial-gradient(ellipse 400px 300px at 50% 50%, hsla(217, 91%, 30%, 0.04) 0%, transparent 60%);
+  border-radius: inherit;
 }
 ```
 
-### Fase 3: Container Overflow Fixes
+### 4. Context-Gekleurde Table Hover States
 
-**Facturatie.tsx:**
-```tsx
-// Van:
-<div className="space-y-6 p-6 glass-ambient-mesh-emerald">
+Elke pagina krijgt tabel rows met context-specifieke hover:
 
-// Naar:
-<div className="space-y-6 glass-ambient-mesh-emerald overflow-hidden">
-```
-
-**Alle pagina wrappers krijgen:**
 ```css
-.glass-ambient-mesh-emerald,
-.glass-ambient-mesh-rose,
-.glass-ambient-mesh-violet,
-.glass-ambient-mesh-slate,
-.glass-ambient-mesh-teal,
-.glass-ambient-mesh-amber,
-.glass-ambient-mesh-blue {
-  overflow: hidden; /* Voorkom horizontale scroll */
+.table-row-hover-rose:hover {
+  background: hsla(345, 48%, 97%, 0.6);
+  box-shadow: inset 0 0 0 1px hsla(345, 48%, 85%, 0.5);
 }
 ```
 
-### Fase 4: KPI Card Responsive Shadows
+### 5. Accent Border Top Systeem
 
-Update `kpi-card.tsx` voor lichtere shadows op mobiel:
+Subtiele gekleurde bovenkant rand voor visuele hiërarchie:
 
-```tsx
-// Voeg responsive shadow class toe
-className={cn(
-  // Bestaande classes...
-  // Mobiel: lichtere shadows
-  "shadow-sm md:shadow-float-emerald"
-)}
+```css
+.accent-border-rose {
+  border-top: 3px solid hsla(345, 48%, 52%, 0.5);
+}
 ```
 
 ---
 
-## Technische Wijzigingen
+## Implementatie Per Pagina
+
+### Sollicitaties.tsx (Rose)
+| Element | Huidige Class | Nieuwe Class |
+|---------|---------------|--------------|
+| KPI Cards | `variant="count"` etc. | `variant="rose"` |
+| Filter Popover | Standaard Card | + `glass-filter-bar-rose` |
+| Kanban columns | `border-t-4` | + `shadow-float-rose` |
+
+### Professionals.tsx (Violet)
+| Element | Huidige Class | Nieuwe Class |
+|---------|---------------|--------------|
+| KPI Cards | `variant="count"` etc. | `variant="violet"` |
+| Filter section | Standaard | + `glass-card-violet glass-light-bleed` |
+| Professional cards | Basis Card | + `shadow-float-violet-hover` |
+
+### Klanten.tsx (Slate)
+| Element | Huidige Class | Nieuwe Class |
+|---------|---------------|--------------|
+| KPI Cards | `variant="count"` etc. | `variant="slate"` |
+| Search/filter bar | Standaard | + `glass-filter-bar-slate` |
+| Organization cards | OrganizationCard | + `glass-card-slate` |
+
+### Plaatsingen.tsx (Teal)
+| Element | Huidige Class | Nieuwe Class |
+|---------|---------------|--------------|
+| KPI Cards | `variant="count"` etc. | `variant="teal"` |
+| Filter section | Standaard Card | + `glass-card-teal` |
+| Placement cards | Basis | + `shadow-float-teal-hover` |
+
+### Tijdregistratie.tsx (Amber)
+| Element | Huidige Class | Nieuwe Class |
+|---------|---------------|--------------|
+| Timer cards | Basis | + `glass-card-amber` |
+| Time entries table | Standaard | + hover state amber |
+
+### WhatsApp.tsx (Blue)
+| Element | Huidige Class | Nieuwe Class |
+|---------|---------------|--------------|
+| Chat list panel | Standaard | + `glass-layer-1 glass-specular` |
+| Message bubbles | Basis styling | + blue tinted glass |
+
+---
+
+## Nieuwe CSS Classes Toe Te Voegen
+
+### A. KPI Card Variant Config (~60 regels)
+
+```typescript
+// In kpi-card.tsx - nieuwe varianten:
+rose: {
+  gradient: "from-tab-recruitment-50/80 to-white/60",
+  borderColor: "border-t-tab-recruitment-400/60",
+  textColor: "text-tab-recruitment-600",
+  iconColor: "text-tab-recruitment-500",
+  shadowColor: "shadow-float-rose",
+}
+// + violet, slate, teal, amber, blue, indigo
+```
+
+### B. Glass Filter Bars (~120 regels CSS)
+
+```css
+.glass-filter-bar-rose { ... }
+.glass-filter-bar-violet { ... }
+.glass-filter-bar-slate { ... }
+.glass-filter-bar-teal { ... }
+.glass-filter-bar-amber { ... }
+.glass-filter-bar-blue { ... }
+```
+
+### C. Enhanced Light Bleed Per Kleur (~80 regels CSS)
+
+```css
+.glass-light-bleed-rose::before { ... }
+.glass-light-bleed-violet::before { ... }
+.glass-light-bleed-slate::before { ... }
+/* etc. */
+```
+
+### D. Table Row Hover States (~70 regels CSS)
+
+```css
+.table-row-hover-rose:hover { ... }
+.table-row-hover-violet:hover { ... }
+/* etc. */
+```
+
+### E. Accent Border System (~40 regels CSS)
+
+```css
+.accent-border-rose { ... }
+.accent-border-violet { ... }
+/* etc. */
+```
+
+---
+
+## Visueel Resultaat
+
+### Per Pagina Kleuridentiteit:
+
+```text
+┌────────────────────────────────────────────────────────────────┐
+│  SOLLICITATIES (Rose 345°)                                     │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  🌸 Rose KPI cards met rose schaduwen                    │  │
+│  │  🌸 Filter bar met subtiele rose tint                    │  │
+│  │  🌸 Kanban columns met rose border-top accent            │  │
+│  │  🌸 Ambient mesh geeft warme rose achtergrond glow       │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────┐
+│  PROFESSIONALS (Violet 270°)                                   │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  💜 Violet KPI cards met purple floating shadows         │  │
+│  │  💜 Professional cards krijgen violet hover glow          │  │
+│  │  💜 Filter section met violet glass styling              │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────┐
+│  FACTURATIE (Emerald 142°)                                     │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  💚 Emerald glass cards (al geïmplementeerd)             │  │
+│  │  💚 Floating green shadows op alle elementen             │  │
+│  │  💚 Table rows met emerald hover                         │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Technische Details
 
 ### Bestanden die worden aangepast:
 
-1. **`src/index.css`** (~80 regels toevoegen)
-   - Media queries voor mobiele blur reductie
-   - Media queries voor ambient mesh verkleining
-   - `prefers-reduced-motion` support
-   - `contain: strict` voor GPU optimalisatie
-   - `.glass-ambient-mesh-blue` class voor WhatsApp
-   - `overflow: hidden` op alle ambient mesh classes
+1. **`src/index.css`** (~350 regels toevoegen)
+   - Glass filter bar classes per kleur
+   - Enhanced light bleed per kleur
+   - Table row hover states per kleur
+   - Accent border utilities
+   - Specular highlight class
+   - Glass hover lift per kleur variant
 
-2. **`src/pages/WhatsApp.tsx`**
-   - Voeg `glass-ambient-mesh-blue` toe aan wrapper
+2. **`src/components/ui/kpi-card.tsx`** (~100 regels wijzigen)
+   - 7 nieuwe color-context varianten
+   - Consistente shadow-float classes per variant
+   - Glass light-bleed integratie
 
-3. **`src/pages/Facturatie.tsx`**
-   - Verwijder inline padding, voeg `overflow-hidden` toe
+3. **`src/pages/Sollicitaties.tsx`**
+   - KPI cards → `variant="rose"`
+   - Filter popover → glass styling
+   - Kanban columns → rose shadow hover
 
-4. **`src/components/ui/kpi-card.tsx`**
-   - Responsive shadow classes
+4. **`src/pages/Professionals.tsx`**
+   - KPI cards → `variant="violet"`
+   - Cards → `glass-card-violet`
+
+5. **`src/pages/Klanten.tsx`**
+   - KPI cards → `variant="slate"`
+   - Organization cards → glass slate styling
+
+6. **`src/pages/Plaatsingen.tsx`**
+   - KPI cards → `variant="teal"`
+   - Cards → `glass-card-teal`
+
+7. **`src/pages/Tijdregistratie.tsx`**
+   - Timer KPIs → `variant="amber"`
+   - Table → amber hover states
+
+8. **`src/pages/WhatsApp.tsx`**
+   - Chat panels → `glass-layer-1 glass-specular`
+   - Input area → blue glass styling
 
 ---
 
-## Verwacht Resultaat
+## Apple Glassmorphism Kenmerken Die Worden Toegepast
 
-| Device | Verwachte Verbetering |
-|--------|----------------------|
-| iPhone/Android | 30-40% minder GPU-gebruik door blur reductie |
-| iPad/Tablet | Stabiele 60fps door kleinere gradients |
-| Desktop | Geen verandering - volledige effecten behouden |
-| Toegankelijkheid | Volledige support voor motion-gevoelige gebruikers |
+| Effect | Beschrijving | Implementatie |
+|--------|--------------|---------------|
+| **Layered Blur** | Meerdere blur-lagen voor diepte | `blur(20px) saturate(150%)` |
+| **Colored Shadows** | Schaduwen nemen kleur aan van content | `hsla(hue, sat%, lig%, opacity)` |
+| **Specular Highlights** | Lichtreflectie aan bovenkant | `::before` gradient overlay |
+| **Frosted Glass** | Doorschijnend met kleur-tint | Gradient background + border |
+| **Ambient Light Bleed** | Zachte glow langs randen | `::before` met mask-composite |
+| **Floating Effect** | Elements lijken te zweven | Multi-layer colored box-shadow |
+| **Accent Borders** | Subtiele gekleurde bovenkant | `border-top: 3px solid` |
 
-### Test Scenario's
+---
 
-1. **Mobiel (iPhone/Android)**: Scroll door pagina's, geen lag of jank
-2. **Tablet (iPad)**: Glassmorphism zichtbaar maar performant
-3. **Desktop**: Volledige visionOS effecten
-4. **Reduced Motion**: Geen animaties, geen blur effecten
-5. **Dark Mode**: Alle kleuren correct aangepast
+## Performance Overwegingen
+
+Alle nieuwe effecten volgen de bestaande mobile-first strategie:
+
+```css
+@media (max-width: 768px) {
+  /* Reduceer blur naar 12px */
+  /* Verklein shadows */
+  /* Vereenvoudig gradients */
+}
+```
+
+Geen nieuwe transforms (DnD-safe), alleen shadow-based elevation changes.
 
