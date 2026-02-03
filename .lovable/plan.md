@@ -1,56 +1,126 @@
 
 
-# Facturatie UI Implementatie - Uitvoeringsplan
+# M6 Facturatie - Deel 1: Foundation Components
 
-## Status
-Het plan is gereed en goedgekeurd. **Klik op "Approve"** om mij naar de uitvoeringsmodus te schakelen, zodat ik de volgende wijzigingen kan doorvoeren.
+## Overzicht
 
----
-
-## Uit te voeren wijzigingen
-
-### Bestand 1: `src/App.tsx`
-**Actie:** EDIT - Import toevoegen + route toevoegen
-
-```typescript
-// Regel 28 - Import toevoegen:
-import Facturatie from "./pages/Facturatie";
-
-// Regel 104 - Route toevoegen (na /notulen):
-<Route path="/facturatie" element={<Facturatie />} />
-```
-
-### Bestand 2: `src/components/AppSidebar.tsx`
-**Actie:** EDIT - Receipt icon + menu item
-
-```typescript
-// Regel 1 - Receipt toevoegen aan imports:
-import { ..., Receipt } from "lucide-react";
-
-// Regel 80 - Menu item toevoegen in Recruitment groep (na Plaatsingen):
-{
-  title: "Facturatie",
-  url: "/facturatie",
-  icon: Receipt,
-  requiresEdit: true
-}
-```
-
-### Bestand 3: `src/pages/Facturatie.tsx`
-**Actie:** CREATE - Complete pagina (450+ regels)
-
-Bevat:
-- PageHero met titel en "Nieuwe factuur" button
-- 4 KPI cards (Openstaand, Vervallen, Betaald, Omzet)
-- Filter sectie (zoekbalk, status dropdown, type dropdown)
-- Facturen tabel met alle kolommen
-- Paginatie component
-- Empty state en error handling
-- Keyboard shortcuts (Cmd+K, /)
+Dit plan implementeert de foundation components voor de Facturatie module:
+- Route configuratie voor `/facturatie/nieuw` en `/facturatie/:id`
+- BetalingRegistrerenDialog component
+- StatusWijzigenDialog component
+- Placeholder pagina's voor FactuurDetail en FactuurAanmaken
 
 ---
 
-## Klik "Approve" om te starten
+## Fase 1: Routing Updates
 
-Na goedkeuring voer ik alle 3 bestandswijzigingen in één keer uit.
+### Bestand: `src/App.tsx`
+
+Voeg imports en routes toe (LET OP: `/nieuw` VOOR `/:id`):
+
+```typescript
+import FactuurDetail from "./pages/FactuurDetail";
+import FactuurAanmaken from "./pages/FactuurAanmaken";
+
+// Na regel 106 (<Route path="/facturatie" element={<Facturatie />} />):
+<Route path="/facturatie/nieuw" element={<FactuurAanmaken />} />
+<Route path="/facturatie/:id" element={<FactuurDetail />} />
+```
+
+---
+
+## Fase 2: Dialog Components
+
+### 2.1 BetalingRegistrerenDialog
+
+**Nieuw bestand:** `src/components/facturatie/BetalingRegistrerenDialog.tsx`
+
+| Element | Beschrijving |
+|---------|--------------|
+| Props | `open`, `onOpenChange`, `factuurId`, `openstaandBedrag` |
+| Form fields | Bedrag, Datum, Methode, Referentie, Opmerking |
+| Hook | `useCreateBetaling` voor opslaan |
+| Validatie | Bedrag verplicht, datum verplicht |
+
+### 2.2 StatusWijzigenDialog
+
+**Nieuw bestand:** `src/components/facturatie/StatusWijzigenDialog.tsx`
+
+Status transitie matrix:
+
+| Huidige Status | Toegestane Transities |
+|----------------|----------------------|
+| CONCEPT | DEFINITIEF |
+| DEFINITIEF | CONCEPT, VERZONDEN |
+| VERZONDEN | HERINNERING_1, BETWIST, BETAALD, AFGEBOEKT |
+| HERINNERING_1 | HERINNERING_2, BETWIST, BETAALD, AFGEBOEKT |
+| HERINNERING_2 | HERINNERING_3, BETWIST, BETAALD, AFGEBOEKT |
+| HERINNERING_3 | BETWIST, BETAALD, AFGEBOEKT |
+| BETWIST | VERZONDEN, BETAALD, AFGEBOEKT |
+| BETAALD | (geen) |
+| AFGEBOEKT | (geen) |
+
+---
+
+## Fase 3: Placeholder Pagina's
+
+### 3.1 FactuurDetail Placeholder
+
+**Nieuw bestand:** `src/pages/FactuurDetail.tsx`
+
+Tijdelijke pagina met:
+- Terug knop naar `/facturatie`
+- Toont factuur ID uit URL params
+- Placeholder tekst
+
+### 3.2 FactuurAanmaken Placeholder
+
+**Nieuw bestand:** `src/pages/FactuurAanmaken.tsx`
+
+Tijdelijke pagina met:
+- Terug knop naar `/facturatie`
+- Placeholder tekst
+
+---
+
+## Fase 4: Technische Details
+
+### Bestanden Overzicht
+
+| Bestand | Actie | Regels |
+|---------|-------|--------|
+| `src/App.tsx` | EDIT | +4 regels |
+| `src/components/facturatie/BetalingRegistrerenDialog.tsx` | CREATE | ~120 regels |
+| `src/components/facturatie/StatusWijzigenDialog.tsx` | CREATE | ~100 regels |
+| `src/pages/FactuurDetail.tsx` | CREATE | ~35 regels |
+| `src/pages/FactuurAanmaken.tsx` | CREATE | ~35 regels |
+
+### Hooks Verificatie
+
+De benodigde hooks zijn beschikbaar:
+- `useCreateBetaling` - geëxporteerd via `src/hooks/facturatie/index.ts`
+- `useUpdateFactuur` - bevat `updateStatus` functie
+
+### Types Verificatie
+
+Alle types beschikbaar in `src/types/facturatie.ts`:
+- `BetalingMethode`
+- `FactuurStatus`
+- `BETALING_METHODE_LABELS`
+- `FACTUUR_STATUS_LABELS`
+
+---
+
+## Verificatie Checklist
+
+Na implementatie:
+
+| Check | Item |
+|-------|------|
+| [ ] | Route `/facturatie/nieuw` laadt placeholder |
+| [ ] | Route `/facturatie/:id` laadt placeholder met ID |
+| [ ] | BetalingRegistrerenDialog.tsx bestaat |
+| [ ] | StatusWijzigenDialog.tsx bestaat |
+| [ ] | Geen TypeScript errors |
+| [ ] | ALLOWED_TRANSITIONS bevat alle 9 statussen |
 
