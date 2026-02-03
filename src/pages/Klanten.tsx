@@ -576,7 +576,7 @@ export default function Klanten() {
   const hasActiveFilters = searchQuery || bureauFilter !== 'all' || sectorFilter !== 'all';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 glass-ambient-mesh-slate">
       {/* Hero Section - Apple Design Minimal */}
       <div className="mb-8">
         <h1 className="text-2xl font-semibold">Klanten</h1>
