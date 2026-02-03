@@ -1,203 +1,138 @@
 
-# Diepgaand Technisch Onderzoek: Drag-and-Drop Werkt Niet
 
-## Executive Summary
+# Fix: Agent Router 404 Foutmelding Bij Drag-and-Drop
 
-Na grondige analyse van de codebase, browser testing en @dnd-kit documentatie is de **kritieke root cause** geïdentificeerd:
+## Probleemanalyse
 
-**De combinatie van Radix UI `HoverCardTrigger asChild` met @dnd-kit `useSortable` listeners creëert een pointer event conflict.**
+De drag-and-drop werkt correct (taak wordt verplaatst), maar elke keer verschijnt er een storende foutmelding:
 
----
+**"Agent kon actie niet uitvoeren - Agent Router error: 404"**
 
-## Root Cause Analyse
+### Root Cause
 
-### Het Kernprobleem
-
-In `TaskCard.tsx` (regels 156-165) is de structuur als volgt:
-
-```tsx
-<HoverCard openDelay={500}>
-  <HoverCardTrigger asChild>       {/* ← PROBLEEM: asChild "steelt" events */}
-    <div 
-      ref={setNodeRef}              {/* ← dnd-kit ref */}
-      style={style} 
-      className="group touch-none"
-      {...attributes}
-      {...listeners}                {/* ← dnd-kit pointer events */}
-    >
-      {/* Task Card Content */}
-    </div>
-  </HoverCardTrigger>
-</HoverCard>
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│  FLOW BIJ DRAG                                                  │
+│                                                                 │
+│  handleDragStart                                                │
+│       │                                                         │
+│       ├─── setActiveTask ✅                                     │
+│       │                                                         │
+│       └─── executeIntent('suggest_task_flow')                   │
+│                   │                                             │
+│                   ▼                                             │
+│            agent-router-proxy                                   │
+│                   │                                             │
+│                   ▼                                             │
+│            VPS:3002/api/v1/execute                              │
+│                   │                                             │
+│                   ▼                                             │
+│            ❌ 404 Not Found (service niet actief)               │
+│                   │                                             │
+│                   ▼                                             │
+│            toast.error() ← ONGEWENST                            │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│  handleDragEnd                                                  │
+│       │                                                         │
+│       ├─── supabase.update(column_id) ✅                        │
+│       │                                                         │
+│       └─── toast.success() ✅                                   │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Wat er technisch gebeurt
+### De VPS Agent Router Status (uit memory)
 
-1. **HoverCardTrigger met `asChild`** merged zijn eigen event handlers op het child element
-2. Radix UI's `asChild` implementeert `Slot` die events **doorgeeft maar ook onderschept**
-3. De `onPointerDown` van @dnd-kit wordt **overschreven of geblokkeerd** door Radix interne hover tracking
-4. @dnd-kit's `PointerSensor` ontvangt nooit de initiële `pointerdown` event - drag start niet
-
-### Bewijs uit Code
-
-Radix `Slot` (gebruikt door `asChild`) doet het volgende:
-```tsx
-// Intern in Radix - mergedRef en mergedProps
-function Slot({ children, ...slotProps }) {
-  // Merge props - kan event handlers overschrijven!
-  const childProps = mergeProps(slotProps, child.props);
-  return cloneElement(child, childProps);
-}
-```
-
-De `mergeProps` functie kan de volgorde van event handlers veranderen, waardoor @dnd-kit listeners niet correct worden aangeroepen.
-
-### Browser Test Resultaten
-
-Tijdens mijn browser test:
-- Playwright's `dragAndDrop` werkt (native browser events)
-- User pointer events worden **niet correct doorgegeven** aan @dnd-kit
-- Geen console errors - het probleem is silent event interception
-
----
-
-## Impact Assessment
-
-| Component | Impact | Ernst |
-|-----------|--------|-------|
-| TaskCard in MyTasksFlowSection | Drag werkt niet | KRITIEK |
-| TaskCard in Kanban page | Zelfde probleem | KRITIEK |
-| ApplicationCard in Sollicitaties | Potentieel zelfde | HOOG |
+De VPS Agent Router is in "definition-only" state:
+- Frontend code bestaat (`useAgentRouter`, `agentIntents.ts`)
+- Edge function `agent-router-proxy` bestaat
+- **MAAR: de VPS service op poort 3002 draait niet**
+- De `CLAWDBOT_VPS_URL` secret wijst naar de WhatsApp Relay (poort 58438), niet naar Agent Router
 
 ---
 
 ## Oplossingsstrategieën
 
-### Optie A: Verplaats HoverCard naar binnen (Aanbevolen)
+### Optie A: Silent Mode voor Non-Critical Intents (Aanbevolen)
 
-Maak de drag wrapper BUITEN de HoverCard, zodat @dnd-kit volledige controle heeft:
+Voeg een `silent: true` parameter toe aan de `executeIntent` call voor non-critical operaties zoals `suggest_task_flow`. Dit onderdrukt de toast foutmeldingen.
 
-```tsx
-// VOOR (PROBLEMATISCH)
-<HoverCard>
-  <HoverCardTrigger asChild>
-    <div ref={setNodeRef} {...listeners}>
-      <Card>...</Card>
-    </div>
-  </HoverCardTrigger>
-</HoverCard>
+**Voordelen:**
+- Minimale code wijziging
+- Houdt de Agent Router infrastructuur intact voor toekomstig gebruik
+- Andere (kritische) intents tonen nog steeds fouten
 
-// NA (CORRECT)
-<div ref={setNodeRef} {...attributes} {...listeners}>
-  <HoverCard>
-    <HoverCardTrigger asChild>
-      <Card>...</Card>           {/* HoverCard werkt op Card, niet op drag wrapper */}
-    </HoverCardTrigger>
-  </HoverCard>
-</div>
-```
+### Optie B: Disable Agent Router Volledig in Drag Context
 
-### Optie B: Verwijder HoverCard Volledig
+Verwijder de `executeIntent` aanroep volledig uit `handleDragStart`. De AI-suggestie feature is toch niet operationeel.
 
-Als HoverCard geen kritische functionaliteit is, verwijder het:
+**Voordelen:**
+- Geen onnodige API calls
+- Eenvoudiger code
 
-```tsx
-<div ref={setNodeRef} {...attributes} {...listeners}>
-  <Card>...</Card>
-</div>
-```
+**Nadelen:**
+- Moet later weer toegevoegd worden wanneer VPS actief is
 
-De HoverCard content kan worden verplaatst naar een Tooltip of de TaskDetailModal.
+### Optie C: Environment-Based Feature Flag
 
-### Optie C: Dedicated Drag Handle met `setActivatorNodeRef`
-
-Gebruik een aparte drag handle die NIET in de HoverCard zit:
-
-```tsx
-const { setNodeRef, setActivatorNodeRef, listeners, attributes } = useSortable({...});
-
-<div ref={setNodeRef}>
-  <HoverCard>
-    <HoverCardTrigger asChild>
-      <Card>
-        {/* Drag handle BUITEN HoverCard invloed */}
-        <div 
-          ref={setActivatorNodeRef}
-          {...listeners}
-          {...attributes}
-        >
-          <GripVertical />
-        </div>
-        {/* Rest van content */}
-      </Card>
-    </HoverCardTrigger>
-  </HoverCard>
-</div>
-```
+Voeg een check toe die alleen calls maakt als de Agent Router daadwerkelijk geconfigureerd is.
 
 ---
 
-## Aanbevolen Implementatie: Optie A
+## Implementatieplan: Optie A (Silent Mode)
 
-### Waarom Optie A?
+### Stap 1: Uitbreid `executeIntent` met `silent` optie
 
-1. **Minste code wijzigingen** - alleen wrapper structuur aanpassen
-2. **Behoudt HoverCard functionaliteit** - preview blijft werken
-3. **Volgt @dnd-kit best practices** - drag wrapper is altijd buitenste element
-4. **Consistente ervaring** - hele kaart blijft draggable
+**Bestand:** `src/hooks/useAgentRouter.ts`
 
-### Implementatieplan
+Voeg een optionele `silent` parameter toe die toast notificaties onderdrukt:
 
-#### Bestand: `src/components/TaskCard.tsx`
-
-**Huidige structuur (regels 156-375):**
-```tsx
-return (
-  <HoverCard openDelay={500}>
-    <HoverCardTrigger asChild>
-      <div 
-        ref={setNodeRef} 
-        style={style} 
-        className="group touch-none"
-        {...attributes}
-        {...listeners}
-      >
-        <Card className="glass-task-card ...">
-          ...
-        </Card>
-      </div>
-    </HoverCardTrigger>
-    <HoverCardContent>...</HoverCardContent>
-  </HoverCard>
+```typescript
+const executeIntent = useCallback(
+  async (
+    intentId: string,
+    payload: Record<string, unknown> = {},
+    message?: string,
+    options?: { silent?: boolean }  // NIEUWE PARAMETER
+  ): Promise<AgentResult> => {
+    // ...existing code...
+    
+    if (result.success) {
+      if (!options?.silent) {
+        options.onSuccess?.(result);
+        toast.success(...);
+      }
+    } else {
+      if (!options?.silent) {
+        options.onError?.(result.error);
+        toast.error("Agent kon actie niet uitvoeren", ...);
+      }
+    }
+    // ...
+  }
 );
 ```
 
-**Nieuwe structuur:**
-```tsx
-return (
-  <div 
-    ref={setNodeRef} 
-    style={style} 
-    className="group touch-none"
-    {...attributes}
-    {...listeners}
-  >
-    <HoverCard openDelay={500}>
-      <HoverCardTrigger asChild>
-        <Card className="glass-task-card ...">
-          ...
-        </Card>
-      </HoverCardTrigger>
-      <HoverCardContent>...</HoverCardContent>
-    </HoverCard>
-  </div>
-);
-```
+### Stap 2: Gebruik `silent: true` voor suggest_task_flow
 
-**Veranderingen:**
-1. Drag wrapper (`div` met `ref`, `listeners`, etc.) wordt **buitenste** element
-2. HoverCard wordt **binnenste** component
-3. HoverCardTrigger wraps nu alleen de Card component
+**Bestand:** `src/components/dashboard/MyTasksFlowSection.tsx`
+
+```typescript
+// Non-blocking, silent AI suggestion request during drag
+executeIntent('suggest_task_flow', {
+  dragging_task_id: task.id,
+  source_column: task.column_id,
+  task_priority: task.priority,
+  task_due_at: task.due_at,
+}, undefined, { silent: true })  // SILENT MODE
+.then(result => {
+  if (result.suggestions?.length && dragContext) {
+    dragContext.setAISuggestion(result.suggestions[0]);
+  }
+}).catch(() => {
+  // Silent fail - AI suggestions are non-critical
+});
+```
 
 ---
 
@@ -205,89 +140,42 @@ return (
 
 | Bestand | Actie | Wijzigingen |
 |---------|-------|-------------|
-| `src/components/TaskCard.tsx` | REFACTOR | Herstructureer wrapper volgorde: drag wrapper buiten, HoverCard binnen |
-
-**Totaal: 1 bestand, structurele wijziging**
+| `src/hooks/useAgentRouter.ts` | EDIT | Voeg `silent` optie toe aan executeIntent |
+| `src/components/dashboard/MyTasksFlowSection.tsx` | EDIT | Gebruik `silent: true` voor suggest_task_flow |
 
 ---
 
 ## Acceptatiecriteria
 
-1. Taken kunnen worden vastgepakt en gesleept naar andere kolommen
-2. Taak blijft exact onder cursor tijdens drag (geen offset)
-3. Taak wordt correct losgelaten bij pointer up
-4. HoverCard preview verschijnt nog steeds na 500ms hover
-5. Klikken op taak opent nog steeds de detail modal
-6. Toast notificatie verschijnt na succesvolle verplaatsing
-7. Geen console errors
+1. Drag-and-drop werkt zonder foutmeldingen
+2. Toast "Taak verplaatst naar [kolom]" verschijnt nog steeds
+3. Geen "Agent kon actie niet uitvoeren" foutmelding
+4. Console logs tonen nog steeds de 404 (voor debugging)
+5. Andere (kritieke) agent intents tonen nog steeds fouten indien ze falen
 
 ---
 
-## Technische Achtergrond
+## Technische Notities
 
-### Radix UI Slot Mechanisme
+### Waarom Silent Mode?
 
-Radix's `asChild` patroon gebruikt `@radix-ui/react-slot` dat:
-- Child props merged met parent props
-- Event handlers combineert via `composeEventHandlers`
-- **Maar**: kan de volgorde van handlers beïnvloeden
-- **En**: kan `pointer-events` management toevoegen voor hover detection
+De `suggest_task_flow` intent is een **enhancement feature** die:
+- AI-suggesties geeft tijdens drag operaties
+- Optioneel is - de app werkt perfect zonder
+- Momenteel niet operationeel is (VPS niet actief)
+- Geen impact heeft op de kernfunctionaliteit
 
-### @dnd-kit PointerSensor Requirements
+Door silent mode te gebruiken in plaats van de functie te verwijderen:
+1. Behouden we de code voor wanneer VPS wel actief is
+2. Vermijden we storende UX voor de eindgebruiker
+3. Kunnen we via logs nog steeds zien dat de service niet beschikbaar is
 
-De PointerSensor vereist:
-- `pointerdown` event op exact het element met `listeners`
-- Geen interferentie van parent event handlers
-- `touch-action: none` CSS (correct ingesteld)
-- Geen `pointer-events: none` op het element
+### Toekomstige Activatie
 
-### De Conflictzone
-
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│  EVENT FLOW ANALYSE                                             │
-│                                                                 │
-│  HUIDIGE (KAPOT):                                               │
-│                                                                 │
-│  User Pointer Down                                              │
-│       │                                                         │
-│       ▼                                                         │
-│  ┌─────────────────────────────────────────┐                    │
-│  │ HoverCardTrigger (asChild Slot)         │                    │
-│  │   - Intercepts pointerdown              │                    │
-│  │   - Runs hover tracking logic           │                    │
-│  │   - Calls child handler (maybe)         │ ← HIER GAAT HET    │
-│  └──────────────┬──────────────────────────┘   FOUT             │
-│                 │                                               │
-│                 ▼                                               │
-│  ┌─────────────────────────────────────────┐                    │
-│  │ @dnd-kit listeners                      │                    │
-│  │   - onPointerDown                       │ ← WORDT NIET       │
-│  │   - Zou drag moeten starten             │   BEREIKT          │
-│  └─────────────────────────────────────────┘                    │
-│                                                                 │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  NA FIX:                                                        │
-│                                                                 │
-│  User Pointer Down                                              │
-│       │                                                         │
-│       ▼                                                         │
-│  ┌─────────────────────────────────────────┐                    │
-│  │ Drag Wrapper (div)                      │                    │
-│  │   - @dnd-kit listeners FIRST            │ ← DRAG WERKT!      │
-│  │   - onPointerDown triggers sensor       │                    │
-│  └──────────────┬──────────────────────────┘                    │
-│                 │                                               │
-│                 ▼                                               │
-│  ┌─────────────────────────────────────────┐                    │
-│  │ HoverCard (inside)                      │                    │
-│  │   - Alleen hover op Card                │                    │
-│  │   - Geen conflict met drag              │                    │
-│  └─────────────────────────────────────────┘                    │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+Wanneer de VPS Agent Router operationeel wordt:
+1. Deploy de service op `srv1304497.hstgr.cloud:3002`
+2. Voeg dedicated `AGENT_ROUTER_VPS_URL` secret toe
+3. Verwijder `silent: true` parameter om toasts weer te activeren
 
 ---
 
@@ -295,21 +183,7 @@ De PointerSensor vereist:
 
 | Risico | Impact | Mitigatie |
 |--------|--------|-----------|
-| HoverCard positie verandert | Low | Side/align props aanpassen indien nodig |
-| CSS styling breekt | Low | Card behoudt alle styling, wrapper is transparent |
-| Click handler werkt niet | Medium | handleCardClick op inner div behouden |
-| Focus ring verkeerd element | Low | Focus ring op Card component houden |
+| Silent mode verbergt echte fouten | Low | Alleen voor suggest_task_flow, andere intents behouden toasts |
+| VPS komt nooit online | None | Silent mode is permanente oplossing |
+| Ontwikkelaars missen de logs | Low | Console logs blijven actief |
 
----
-
-## Verificatie Checklist
-
-Na implementatie:
-
-- [ ] Drag werkt op TaskCard in "Mijn Werk" tab
-- [ ] Drag werkt op TaskCard in Kanban pagina  
-- [ ] HoverCard preview verschijnt bij hover
-- [ ] Click opent TaskDetailModal
-- [ ] Geen visuele regressies
-- [ ] Console is schoon van errors
-- [ ] Touch devices werken correct
