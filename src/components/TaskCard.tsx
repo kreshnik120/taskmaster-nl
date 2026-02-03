@@ -154,15 +154,15 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
   const daysInColumn = getDaysInColumn(task);
 
   return (
-    <HoverCard openDelay={500}>
-      <HoverCardTrigger asChild>
-        <div 
-          ref={setNodeRef} 
-          style={style} 
-          className="group touch-none"
-          {...attributes}
-          {...listeners}
-        >
+    <div 
+      ref={setNodeRef} 
+      style={style} 
+      className="group touch-none"
+      {...attributes}
+      {...listeners}
+    >
+      <HoverCard openDelay={500}>
+        <HoverCardTrigger asChild>
           <Card className="glass-task-card glass-hover-lift bg-white/75 dark:bg-slate-900/75 border-white/40 dark:border-white/12 shadow-[0_2px_6px_hsla(234,45%,52%,0.06),0_8px_24px_hsla(234,45%,52%,0.10)] focus:outline-none focus:ring-2 focus:ring-tab-mijn-werk-500/30 focus:ring-offset-2 relative rounded-xl cursor-grab active:cursor-grabbing">
             <CardContent className="p-4 space-y-2">
               <div className="flex items-start gap-2">
@@ -312,9 +312,8 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
               </Button>
             </div>
           </Card>
-        </div>
-      </HoverCardTrigger>
-      <HoverCardContent className="w-80 glass-layer-2 glass-light-bleed rounded-xl" side="right" align="start">
+        </HoverCardTrigger>
+        <HoverCardContent className="w-80 glass-layer-2 glass-light-bleed rounded-xl" side="right" align="start">
         <div className="space-y-2">
           <h4 className="text-sm font-semibold text-foreground">{task.title}</h4>
           <div className="space-y-1 text-xs text-muted-foreground">
@@ -371,6 +370,7 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
           </div>
         </div>
       </HoverCardContent>
-    </HoverCard>
+      </HoverCard>
+    </div>
   );
 }
