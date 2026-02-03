@@ -1,128 +1,165 @@
 
 
-# Kritische Bug Fix: Dubbele Iconen in Sorteer Dropdown
+# Kritische Drag-and-Drop Bug Fix: Vastgeplakte Cursor & Offset Verschuiving
 
 ## Root Cause Analyse
 
-Na grondige code-analyse is de oorzaak van de **dubbele iconen** duidelijk geïdentificeerd:
+Na grondige analyse van de code, de session replay data, en @dnd-kit documentatie zijn er **twee kritische problemen** geïdentificeerd:
 
-### Het Probleem
+### Probleem 1: Taak "springt naar beneden" bij vastpakken
 
-In `MyTasksFlowSection.tsx` (regels 552-580) worden iconen **twee keer gerenderd**:
+**Oorzaak:** De combinatie van `MouseSensor` met `delay` activatie en de CSS `touch-none` op het sorteerbare element veroorzaakt een offset probleem. Wanneer de delay wordt bereikt, berekent @dnd-kit de initiële positie van het element, maar de muiscursor is dan al verplaatst ten opzichte van waar de gebruiker oorspronkelijk klikte.
 
-```tsx
-// PROBLEEM 1: Icoon in de SelectTrigger (regels 554-557)
-<SelectTrigger className="...">
-  <div className="flex items-center gap-1.5">
-    {sortBy === 'due_at' && <Calendar className="h-3 w-3" />}      // ← ICOON 1
-    {sortBy === 'priority' && <AlertCircle className="h-3 w-3" />} // ← ICOON 1
-    {sortBy === 'created_at' && <Clock className="h-3 w-3" />}     // ← ICOON 1
-    <SelectValue />  // ← Dit rendert ook het icoon uit SelectItem!
-  </div>
-</SelectTrigger>
+**Technische details:**
+- `MouseSensor` met `delay: 150` activeert pas na 150ms
+- Gedurende die 150ms kan de muis al bewegen
+- @dnd-kit berekent de offset op het moment van activatie, niet op het moment van pointer down
+- Dit veroorzaakt de visuele "sprong" naar beneden
 
-// PROBLEEM 2: Icoon ook in elke SelectItem (regels 562-579)
-<SelectItem value="due_at">
-  <div className="flex items-center gap-2">
-    <Calendar className="h-3 w-3" />  // ← ICOON 2 (komt in SelectValue terecht)
-    Deadline
-  </div>
-</SelectItem>
+### Probleem 2: Taak blijft "vastgeplakt" na loslaten
+
+**Oorzaak:** Dit is een bekend @dnd-kit issue met de `DragOverlay` en `dropAnimation`. Momenteel is `dropAnimation={null}` ingesteld, wat betekent dat er geen animatie is. Echter, als de `activeTask` state niet correct wordt gereset vóór de DOM cleanup, kan de overlay blijven hangen.
+
+**Technische details uit session replay:**
+```
+1770108020062: Draggable item was dropped
+1770108020065: Element verwijderd uit parent
+```
+De timing suggereert dat de state reset te laat gebeurt.
+
+---
+
+## Oplossing: 3-Staps Fix
+
+### Stap 1: Sensor Configuratie Aanpassen
+
+**Bestand:** `src/components/dashboard/MyTasksFlowSection.tsx`
+
+**Probleem:** `delay` activatie veroorzaakt cursor offset.
+
+**Oplossing:** Gebruik `distance` in plaats van `delay` voor activatie. Dit is de standaard @dnd-kit aanpak die geen offset problemen veroorzaakt.
+
+```typescript
+// HUIDIGE CODE (PROBLEMATISCH)
+const sensors = useSensors(
+  useSensor(MouseSensor, {
+    activationConstraint: {
+      delay: 150,
+      tolerance: 5,
+    },
+  }),
+  useSensor(TouchSensor, {
+    activationConstraint: {
+      delay: 200,
+      tolerance: 8,
+    },
+  })
+);
+
+// NIEUWE CODE (FIX)
+const sensors = useSensors(
+  useSensor(PointerSensor, {
+    activationConstraint: {
+      distance: 8, // 8px movement before drag starts
+    },
+  })
+);
 ```
 
-### Hoe Radix Select werkt
+**Waarom dit werkt:**
+- `distance: 8` betekent dat de gebruiker 8px moet bewegen voordat drag start
+- Dit onderscheidt click van drag zonder timing-gerelateerde offset issues
+- PointerSensor werkt voor zowel mouse als touch
 
-Radix UI's `SelectValue` component rendert automatisch de **volledige children** van de geselecteerde `SelectItem`. Dit betekent:
+### Stap 2: TaskCard Click/Drag Onderscheid Verbeteren
 
-1. Wanneer "Deadline" geselecteerd is, toont `SelectValue`:
-   - `<Calendar />` + "Deadline" (uit de SelectItem)
-2. De custom wrapper in SelectTrigger voegt **nog een icoon** toe
-3. Resultaat: **📅📅 Deadline** (dubbel icoon)
+**Bestand:** `src/components/TaskCard.tsx`
 
-### Visueel
+**Probleem:** Met `distance`-based activatie moeten we nog steeds click vs drag kunnen onderscheiden.
 
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│  HUIDIGE SITUATIE (BUG)                                         │
-│                                                                 │
-│  ┌───────────────────────────┐                                  │
-│  │ 📅 📅 Deadline         ▼  │  ← Dubbel icoon!                 │
-│  └───────────────────────────┘                                  │
-│                                                                 │
-│  Bron:                                                          │
-│  - Eerste 📅: Handmatig in SelectTrigger                        │
-│  - Tweede 📅: Via SelectValue uit SelectItem                    │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+**Oplossing:** Gebruik de `isDragging` state van useSortable in combinatie met een pointer beweging tracker.
 
-┌─────────────────────────────────────────────────────────────────┐
-│  NA FIX                                                          │
-│                                                                 │
-│  ┌───────────────────────────┐                                  │
-│  │ 📅 Deadline            ▼  │  ← Enkel icoon                   │
-│  └───────────────────────────┘                                  │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+```typescript
+// Track of er significante beweging was
+const hasMoved = useRef(false);
+const startPos = useRef({ x: 0, y: 0 });
+
+const handlePointerDown = (e: React.PointerEvent) => {
+  startPos.current = { x: e.clientX, y: e.clientY };
+  hasMoved.current = false;
+};
+
+const handlePointerMove = (e: React.PointerEvent) => {
+  const dx = Math.abs(e.clientX - startPos.current.x);
+  const dy = Math.abs(e.clientY - startPos.current.y);
+  if (dx > 5 || dy > 5) {
+    hasMoved.current = true;
+  }
+};
+
+const handleCardClick = (e: React.MouseEvent) => {
+  // Skip als er beweging was of tijdens drag
+  if (hasMoved.current || isDragging) return;
+  onClick?.(task);
+};
+```
+
+### Stap 3: DragOverlay State Reset Robuuster Maken
+
+**Bestand:** `src/components/dashboard/MyTasksFlowSection.tsx`
+
+**Probleem:** `activeTask` wordt mogelijk te laat gereset.
+
+**Oplossing:** Reset `activeTask` aan het begin van `handleDragEnd`, niet aan het einde.
+
+```typescript
+const handleDragEnd = async (event: DragEndEvent) => {
+  // IMMEDIATE state reset - FIRST ACTION
+  const draggedTask = activeTask; // Capture before clearing
+  setActiveTask(null); // Clear immediately
+  
+  // Remove dragging class
+  document.documentElement.classList.remove('dnd-dragging');
+  
+  const { active, over } = event;
+  
+  // Clear drag context
+  if (dragContext) {
+    dragContext.endDrag();
+  }
+  
+  if (!over || !draggedTask) return;
+  
+  // ... rest of logic using draggedTask instead of looking it up again
+};
 ```
 
 ---
 
-## Oplossing
+## Alternatieve Benadering: Strikte Grip Handle Mode
 
-Er zijn **twee opties** om dit op te lossen:
+Als de bovenstaande fix niet voldoende werkt, is er een alternatief:
 
-### Optie A: Verwijder iconen uit SelectTrigger (Aanbevolen)
+**Gebruik een dedicated drag handle met `useDraggable` in plaats van hele kaart draggable:**
 
-Laat de `SelectValue` het volledige item renderen zoals Radix bedoeld is:
+```typescript
+// In TaskCard
+const { attributes, listeners, setNodeRef: setDragRef } = useDraggable({
+  id: task.id,
+});
 
-```tsx
-<SelectTrigger className="h-8 w-[140px] text-xs glass-select-trigger">
-  <SelectValue />  {/* Rendert automatisch icoon + label */}
-</SelectTrigger>
+// Alleen grip handle heeft listeners
+<div {...attributes} {...listeners} ref={setDragRef} className="cursor-grab">
+  <GripVertical />
+</div>
+
+// Rest van kaart is pure click
+<div onClick={handleCardClick}>
+  {/* content */}
+</div>
 ```
 
-De iconen in de `SelectItem` blijven behouden — die worden correct getoond in zowel de dropdown als de trigger.
-
-### Optie B: Gebruik SelectValue placeholder
-
-Verwijder iconen uit SelectItem en toon alleen tekst:
-
-```tsx
-<SelectItem value="due_at">Deadline</SelectItem>
-<SelectItem value="priority">Prioriteit</SelectItem>
-<SelectItem value="created_at">Aangemaakt</SelectItem>
-```
-
-En behoud de handmatige iconen in de trigger.
-
-**Aanbeveling**: **Optie A** is schoner en volgt het Radix-patroon correct.
-
----
-
-## Implementatieplan
-
-### Bestand: `src/components/dashboard/MyTasksFlowSection.tsx`
-
-**Wijzigingen (regels 552-560):**
-
-**Van:**
-```tsx
-<SelectTrigger className="h-8 w-[140px] text-xs glass-select-trigger">
-  <div className="flex items-center gap-1.5">
-    {sortBy === 'due_at' && <Calendar className="h-3 w-3" />}
-    {sortBy === 'priority' && <AlertCircle className="h-3 w-3" />}
-    {sortBy === 'created_at' && <Clock className="h-3 w-3" />}
-    <SelectValue />
-  </div>
-</SelectTrigger>
-```
-
-**Naar:**
-```tsx
-<SelectTrigger className="h-8 w-[140px] text-xs glass-select-trigger">
-  <SelectValue />
-</SelectTrigger>
-```
+Dit scheidt de concerns volledig en voorkomt alle click/drag conflicten.
 
 ---
 
@@ -130,40 +167,85 @@ En behoud de handmatige iconen in de trigger.
 
 | Bestand | Actie | Wijzigingen |
 |---------|-------|-------------|
-| `src/components/dashboard/MyTasksFlowSection.tsx` | EDIT | Verwijder handmatige iconen uit SelectTrigger wrapper |
+| `src/components/dashboard/MyTasksFlowSection.tsx` | EDIT | Sensor config: `PointerSensor` met `distance: 8`, immediate state reset in handleDragEnd |
+| `src/components/TaskCard.tsx` | EDIT | Pointer tracking voor click/drag onderscheid |
 
-**Totaal: 1 bestand, ~6 regels verwijderd**
+---
+
+## Visueel Diagram: Verbeterde Drag Flow
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│  NIEUWE DRAG FLOW                                               │
+│                                                                 │
+│  POINTER DOWN                                                   │
+│       │                                                         │
+│       ▼                                                         │
+│  ┌─────────────────┐                                            │
+│  │ Track start pos │                                            │
+│  └────────┬────────┘                                            │
+│           │                                                     │
+│           ▼                                                     │
+│  ┌─────────────────────────────────────────┐                    │
+│  │ Beweging > 8px?                         │                    │
+│  └──────────────┬──────────────────────────┘                    │
+│                 │                                               │
+│     ┌───────────┴───────────┐                                   │
+│     │ NEE                   │ JA                                │
+│     ▼                       ▼                                   │
+│  ┌─────────┐        ┌──────────────┐                            │
+│  │ CLICK   │        │ DRAG START   │                            │
+│  │ Modal   │        │ DragOverlay  │                            │
+│  └─────────┘        │ activeert    │                            │
+│                     └───────┬──────┘                            │
+│                             │                                   │
+│                             ▼                                   │
+│                     ┌──────────────┐                            │
+│                     │ DRAG END     │                            │
+│                     │ - activeTask │ ← IMMEDIATE reset          │
+│                     │   = null     │                            │
+│                     │ - Update DB  │                            │
+│                     └──────────────┘                            │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Acceptatiecriteria
 
-1. Sorteer dropdown toont **één icoon** per optie
-2. Icoon + label correct getoond in gesloten trigger state
-3. Icoon + label correct getoond in open dropdown menu
-4. Geen visuele regressie in styling of spacing
-5. Alle drie opties (Deadline, Prioriteit, Aangemaakt) correct gerenderd
+1. Taak blijft exact onder cursor bij vastpakken (geen offset/sprong)
+2. Taak wordt losgelaten bij muis release (niet vastgeplakt)
+3. Korte klik opent nog steeds detail modal
+4. Drag naar andere kolom werkt correct
+5. Toast notificatie toont "Taak verplaatst naar [kolom]"
+6. Geen console errors tijdens drag operaties
+7. Touch devices: swipe scroll werkt nog steeds
 
 ---
 
-## Technische Notitie
+## Technische Notities
 
-Dit is een **veelvoorkomende Radix UI valkuil**. De `SelectValue` component is bedoeld om de volledige content van de geselecteerde `SelectItem` te spiegelen. Het handmatig toevoegen van elementen naast `SelectValue` leidt tot duplicatie.
+### Waarom `distance` beter is dan `delay`
 
-### Best Practice
+| Aspect | `delay` | `distance` |
+|--------|---------|------------|
+| Cursor offset | ❌ Kan offset veroorzaken | ✅ Geen offset |
+| Voelt responsief | ❌ Voelt traag (wachten) | ✅ Instant na threshold |
+| Click onderscheid | ✅ Goed | ✅ Goed met tracking |
+| Touch compatibility | ⚠️ Conflict met scroll | ✅ Werkt goed |
 
-```tsx
-// CORRECT: Laat SelectValue het werk doen
-<SelectTrigger>
-  <SelectValue placeholder="Selecteer..." />
-</SelectTrigger>
+### @dnd-kit Best Practice
 
-// SelectItem bevat het icoon + label
-<SelectItem value="option">
-  <div className="flex items-center gap-2">
-    <Icon />
-    Label
-  </div>
-</SelectItem>
-```
+De officiële @dnd-kit documentatie raadt `distance` aan voor de meeste use cases. `delay` is bedoeld voor specifieke scenario's waar je bewust een wachttijd wilt introduceren (bijv. voor right-click context menu's).
+
+---
+
+## Risico's & Mitigatie
+
+| Risico | Impact | Mitigatie |
+|--------|--------|-----------|
+| Click nog steeds triggert na kleine beweging | Medium | 8px threshold is genoeg voor onderscheid |
+| Touch scroll conflict | Low | PointerSensor heeft ingebouwde touch handling |
+| Performance impact | Negligible | Pointer tracking is lightweight |
 
