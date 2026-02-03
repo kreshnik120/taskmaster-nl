@@ -52,12 +52,18 @@ import {
   Calendar,
   AlertCircle,
   Clock,
-  Plus
+  Plus,
+  Sparkles,
+  Lightbulb,
+  Zap,
+  Target
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { User } from "@supabase/supabase-js";
 import { useRealtimeChannel } from "@/hooks/useRealtimeChannel";
+import { useAgentRouter } from "@/hooks/useAgentRouter";
+import { useDragContextOptional } from "@/hooks/useDragContext";
 
 // ENTERPRISE CONFIG
 const MAX_VISIBLE_TASKS = 5;
@@ -138,6 +144,30 @@ export function MyTasksFlowSection() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+
+  // Optional drag context (used when wrapped in DragContextProvider)
+  const dragContext = useDragContextOptional();
+
+  // Agent Router for AI-powered flow operations
+  const { 
+    executeIntent, 
+    isExecuting: isAgentExecuting,
+    availableIntents,
+  } = useAgentRouter({
+    pageContext: {
+      active_column_id: activeTask?.column_id,
+      visible_task_ids: tasks.map(t => t.id),
+      column_task_counts: columns.reduce((acc, col) => ({
+        ...acc,
+        [col.id]: tasks.filter(t => t.column_id === col.id).length
+      }), {} as Record<string, number>),
+    },
+    onSuccess: (result) => {
+      if (result.action_taken?.includes('verplaatst') || result.action_taken?.includes('moved')) {
+        loadData();
+      }
+    }
+  });
 
   // Accessibility: status message for screen readers
   const [statusMessage, setStatusMessage] = useState("");
@@ -297,12 +327,33 @@ export function MyTasksFlowSection() {
     };
   };
 
-  // Drag handlers
+  // Drag handlers with AI context
   const handleDragStart = (event: DragStartEvent) => {
     // Add dragging class to freeze hover transforms globally
     document.documentElement.classList.add('dnd-dragging');
     const task = tasks.find(t => t.id === event.active.id);
-    if (task) setActiveTask(task);
+    if (task) {
+      setActiveTask(task);
+      
+      // Update drag context if available
+      if (dragContext) {
+        dragContext.startDrag(task.id, task.column_id || '');
+      }
+      
+      // Non-blocking AI suggestion request during drag
+      executeIntent('suggest_task_flow', {
+        dragging_task_id: task.id,
+        source_column: task.column_id,
+        task_priority: task.priority,
+        task_due_at: task.due_at,
+      }).then(result => {
+        if (result.suggestions?.length && dragContext) {
+          dragContext.setAISuggestion(result.suggestions[0]);
+        }
+      }).catch(() => {
+        // Silent fail - AI suggestions are non-critical
+      });
+    }
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
@@ -310,6 +361,12 @@ export function MyTasksFlowSection() {
     document.documentElement.classList.remove('dnd-dragging');
     const { active, over } = event;
     setActiveTask(null);
+    
+    // Clear drag context
+    if (dragContext) {
+      dragContext.endDrag();
+    }
+    
     if (!over) return;
 
     const taskId = active.id as string;
@@ -550,15 +607,65 @@ export function MyTasksFlowSection() {
             </div>
 
             <div className="flex items-center gap-2">
+              {/* AI Flow Actions */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="gap-2 btn-glass-outline"
+                    disabled={isAgentExecuting}
+                  >
+                    {isAgentExecuting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4" />
+                    )}
+                    <span className="hidden sm:inline">AI Acties</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="glass-layer-2 w-56">
+                  <DropdownMenuLabel className="text-xs text-muted-foreground">
+                    Flow Optimalisatie
+                  </DropdownMenuLabel>
+                  <DropdownMenuItem 
+                    onClick={() => executeIntent('suggest_task_flow')}
+                    disabled={isAgentExecuting}
+                  >
+                    <Lightbulb className="h-4 w-4 mr-2 text-amber-500" />
+                    Optimaliseer mijn flow
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => executeIntent('bulk_move_tasks', { 
+                      filter_criteria: { priority: 'HIGH' }, 
+                      target_column: 'DOING' 
+                    })}
+                    disabled={isAgentExecuting}
+                  >
+                    <Zap className="h-4 w-4 mr-2 text-orange-500" />
+                    Urgente taken → Doing
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    onClick={() => executeIntent('prioritize')}
+                    disabled={isAgentExecuting}
+                  >
+                    <Target className="h-4 w-4 mr-2 text-tab-mijn-werk-500" />
+                    Auto-prioriteren
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
               <Button 
                 onClick={() => setTaskDialogOpen(true)} 
                 size="sm" 
                 className="gap-2 btn-premium-primary"
               >
                 <Plus className="h-4 w-4" />
-                Nieuwe taak
+                <span className="hidden sm:inline">Nieuwe taak</span>
+                <span className="sm:hidden">Nieuw</span>
               </Button>
-              <Button variant="outline" size="sm" className="btn-glass-outline" asChild>
+              <Button variant="outline" size="sm" className="btn-glass-outline hidden md:flex" asChild>
                 <Link to="/kanban" className="gap-2">
                   Team overzicht
                   <ArrowRight className="h-4 w-4" />
