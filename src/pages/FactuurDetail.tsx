@@ -65,6 +65,8 @@ import {
 
 import { BetalingRegistrerenDialog } from "@/components/facturatie/BetalingRegistrerenDialog";
 import { StatusWijzigenDialog } from "@/components/facturatie/StatusWijzigenDialog";
+import { BetalingenHistorie } from "@/components/facturatie/BetalingenHistorie";
+import { HerinneringenPanel } from "@/components/facturatie/HerinneringenPanel";
 
 // Status badge met kleuren per status
 function StatusBadge({ status }: { status: FactuurStatus }) {
@@ -361,93 +363,24 @@ export default function FactuurDetail() {
             </TabsContent>
 
             <TabsContent value="betalingen">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle>Betalingshistorie</CardTitle>
-                  {canRegisterPayment && (
-                    <Button size="sm" onClick={() => setShowBetalingDialog(true)}>
-                      <CreditCard className="h-4 w-4 mr-2" />
-                      Betaling registreren
-                    </Button>
-                  )}
-                </CardHeader>
-                <CardContent>
-                  {factuur.betalingen && factuur.betalingen.length > 0 ? (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Datum</TableHead>
-                          <TableHead>Methode</TableHead>
-                          <TableHead>Referentie</TableHead>
-                          <TableHead className="text-right">Bedrag</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {factuur.betalingen.map((betaling) => (
-                          <TableRow key={betaling.id}>
-                            <TableCell>
-                              {format(new Date(betaling.datum), "d MMM yyyy", { locale: nl })}
-                            </TableCell>
-                            <TableCell>{BETALING_METHODE_LABELS[betaling.methode]}</TableCell>
-                            <TableCell>{betaling.referentie || "—"}</TableCell>
-                            <TableCell className="text-right font-medium">
-                              {formatCurrency(betaling.bedrag)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                      <Euro className="h-8 w-8 mb-2" />
-                      <p>Nog geen betalingen ontvangen</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              <BetalingenHistorie
+                factuurId={factuur.id}
+                openstaandBedrag={factuur.openstaand_bedrag}
+                totaalBedrag={factuur.totaal}
+                onRegisterPayment={() => setShowBetalingDialog(true)}
+                canRegisterPayment={canRegisterPayment}
+              />
             </TabsContent>
 
             <TabsContent value="herinneringen">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Herinneringen</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {factuur.herinneringen && factuur.herinneringen.length > 0 ? (
-                    <div className="space-y-4">
-                      {factuur.herinneringen.map((herinnering) => (
-                        <div
-                          key={herinnering.id}
-                          className="flex items-start gap-3 p-3 border rounded-lg"
-                        >
-                          <Bell className="h-5 w-5 text-muted-foreground mt-0.5" />
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between">
-                              <p className="font-medium">Herinnering {herinnering.niveau}</p>
-                              <span className="text-sm text-muted-foreground">
-                                {format(new Date(herinnering.verzonden_op), "d MMM yyyy HH:mm", {
-                                  locale: nl,
-                                })}
-                              </span>
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              Verzonden naar: {herinnering.verzonden_naar}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              Openstaand bedrag: {formatCurrency(herinnering.openstaand_bedrag)}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                      <Bell className="h-8 w-8 mb-2" />
-                      <p>Geen herinneringen verzonden</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              <HerinneringenPanel
+                factuurId={factuur.id}
+                factuurNummer={factuur.factuur_nummer}
+                factuurStatus={factuur.status}
+                openstaandBedrag={factuur.openstaand_bedrag}
+                opdrachtgeverEmail={factuur.opdrachtgever?.centrale_facturatie_email || null}
+                vervaldatum={factuur.vervaldatum}
+              />
             </TabsContent>
           </Tabs>
         </div>
@@ -527,6 +460,19 @@ export default function FactuurDetail() {
                 <Mail className="h-4 w-4 mr-2" />
                 E-mail verzenden
               </Button>
+              {canRegisterPayment && factuur.openstaand_bedrag > 0 && (
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    const tabsTrigger = document.querySelector('[value="herinneringen"]') as HTMLElement;
+                    if (tabsTrigger) tabsTrigger.click();
+                  }}
+                >
+                  <Bell className="h-4 w-4 mr-2" />
+                  Herinnering versturen
+                </Button>
+              )}
               <Button variant="outline" className="w-full justify-start">
                 <Copy className="h-4 w-4 mr-2" />
                 Factuur dupliceren
@@ -537,10 +483,13 @@ export default function FactuurDetail() {
       </div>
 
       <BetalingRegistrerenDialog
-        factuurId={factuur.id}
-        openstaandBedrag={factuur.openstaand_bedrag}
         open={showBetalingDialog}
         onOpenChange={setShowBetalingDialog}
+        factuurId={factuur.id}
+        factuurNummer={factuur.factuur_nummer}
+        openstaandBedrag={factuur.openstaand_bedrag}
+        totaalBedrag={factuur.totaal}
+        reedsBetaald={factuur.betaald_bedrag}
       />
 
       <StatusWijzigenDialog
