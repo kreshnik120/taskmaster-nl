@@ -226,7 +226,7 @@ export default function WhatsApp() {
 
   return (
     <WhatsAppErrorBoundary>
-      <div className="flex h-[calc(100vh-4rem)]">
+      <div className="flex h-[calc(100vh-4rem)] glass-ambient-mesh-blue">
         {/* Connection Status - fixed position */}
         <div className="fixed top-20 right-4 z-50">
           <WhatsAppConnectionStatus 
