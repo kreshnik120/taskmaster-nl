@@ -344,13 +344,14 @@ export function MyTasksFlowSection() {
         dragContext.startDrag(task.id, task.column_id || '');
       }
       
-      // Non-blocking AI suggestion request during drag
+      // Non-blocking, silent AI suggestion request during drag
+      // Silent mode: no toast errors shown (VPS Agent Router may not be active)
       executeIntent('suggest_task_flow', {
         dragging_task_id: task.id,
         source_column: task.column_id,
         task_priority: task.priority,
         task_due_at: task.due_at,
-      }).then(result => {
+      }, undefined, { silent: true }).then(result => {
         if (result.suggestions?.length && dragContext) {
           dragContext.setAISuggestion(result.suggestions[0]);
         }
