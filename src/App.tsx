@@ -10,6 +10,7 @@ import UnifiedDashboard from "./pages/UnifiedDashboard";
 import Auth from "./pages/Auth";
 import Bijlagen from "./pages/Bijlagen";
 import Notulen from "./pages/Notulen";
+import Facturatie from "./pages/Facturatie";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Layout } from "./components/Layout";
 import Kanban from "./pages/Kanban";
@@ -102,6 +103,7 @@ const App = () => (
             <Route path="/gebruikers" element={<Gebruikers />} />
             <Route path="/bijlagen" element={<Bijlagen />} />
             <Route path="/notulen" element={<Notulen />} />
+            <Route path="/facturatie" element={<Facturatie />} />
           </Route>
           
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
