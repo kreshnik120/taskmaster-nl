@@ -419,7 +419,7 @@ const Professionals = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 glass-ambient-mesh-violet">
       {/* Hero Section - Unified PageHero */}
       <PageHero
         title="Professionals"

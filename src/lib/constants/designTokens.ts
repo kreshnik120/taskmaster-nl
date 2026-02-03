@@ -261,4 +261,41 @@ export const GLASS_TOKENS = {
     class: 'glass-task-card',
     description: 'Hover glass effect for task cards',
   },
+  // Color-tinted glass cards per context
+  rose: {
+    class: 'glass-card-rose',
+    ambientMesh: 'glass-ambient-mesh-rose',
+    shadow: 'shadow-float-rose',
+    description: 'Rose-tinted glass for Sollicitaties/Recruitment',
+  },
+  violet: {
+    class: 'glass-card-violet',
+    ambientMesh: 'glass-ambient-mesh-violet',
+    shadow: 'shadow-float-violet',
+    description: 'Violet-tinted glass for Professionals/Team',
+  },
+  slate: {
+    class: 'glass-card-slate',
+    ambientMesh: 'glass-ambient-mesh-slate',
+    shadow: 'shadow-float-slate',
+    description: 'Slate-tinted glass for Klanten',
+  },
+  teal: {
+    class: 'glass-card-teal',
+    ambientMesh: 'glass-ambient-mesh-teal',
+    shadow: 'shadow-float-teal',
+    description: 'Teal-tinted glass for Plaatsingen/Kalender',
+  },
+  amber: {
+    class: 'glass-card-amber',
+    ambientMesh: 'glass-ambient-mesh-amber',
+    shadow: 'shadow-float-amber',
+    description: 'Amber-tinted glass for Tijdregistratie/Opvolging',
+  },
+  emerald: {
+    class: 'glass-card-emerald',
+    ambientMesh: 'glass-ambient-mesh-emerald',
+    shadow: 'shadow-float-emerald',
+    description: 'Emerald-tinted glass for Facturatie',
+  },
 } as const;

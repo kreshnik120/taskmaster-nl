@@ -1093,6 +1093,159 @@ All colors MUST be HSL.
     box-shadow: 0 4px 12px hsla(345, 48%, 20%, 0.25), 0 8px 32px hsla(345, 48%, 15%, 0.35);
   }
 
+  /* Slate-tinted glass for Klanten */
+  .glass-card-slate {
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.75rem;
+    background: linear-gradient(135deg, hsla(215, 25%, 97%, 0.75) 0%, hsla(215, 25%, 97%, 0.45) 100%);
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    border: 1px solid hsla(215, 25%, 88%, 0.5);
+    box-shadow: 0 4px 12px hsla(215, 25%, 48%, 0.08), 0 8px 32px hsla(215, 25%, 48%, 0.12);
+    transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .dark .glass-card-slate {
+    background: linear-gradient(135deg, hsla(215, 25%, 22%, 0.55) 0%, hsla(215, 25%, 16%, 0.35) 100%);
+    border-color: hsla(215, 25%, 35%, 0.35);
+    box-shadow: 0 4px 12px hsla(215, 25%, 15%, 0.25), 0 8px 32px hsla(215, 25%, 10%, 0.35);
+  }
+
+  /* ============================================
+     AMBIENT MESH GRADIENTS - Per Context Color
+     ============================================ */
+
+  /* Rose ambient mesh for Sollicitaties/Recruitment */
+  .glass-ambient-mesh-rose {
+    position: relative;
+    overflow: visible;
+  }
+
+  .glass-ambient-mesh-rose::before {
+    content: '';
+    position: absolute;
+    inset: -150px;
+    background: 
+      radial-gradient(ellipse 700px 500px at 0% 0%, hsla(345, 48%, 70%, 0.15) 0%, transparent 50%),
+      radial-gradient(ellipse 600px 400px at 100% 100%, hsla(345, 48%, 60%, 0.10) 0%, transparent 50%),
+      radial-gradient(ellipse 400px 300px at 50% 50%, hsla(345, 48%, 75%, 0.06) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: -1;
+    filter: blur(50px);
+  }
+
+  .dark .glass-ambient-mesh-rose::before {
+    background: 
+      radial-gradient(ellipse 700px 500px at 0% 0%, hsla(345, 48%, 30%, 0.12) 0%, transparent 50%),
+      radial-gradient(ellipse 600px 400px at 100% 100%, hsla(345, 48%, 25%, 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse 400px 300px at 50% 50%, hsla(345, 48%, 35%, 0.05) 0%, transparent 60%);
+  }
+
+  /* Violet ambient mesh for Professionals/Team */
+  .glass-ambient-mesh-violet {
+    position: relative;
+    overflow: visible;
+  }
+
+  .glass-ambient-mesh-violet::before {
+    content: '';
+    position: absolute;
+    inset: -150px;
+    background: 
+      radial-gradient(ellipse 700px 500px at 0% 0%, hsla(270, 45%, 70%, 0.15) 0%, transparent 50%),
+      radial-gradient(ellipse 600px 400px at 100% 100%, hsla(270, 45%, 60%, 0.10) 0%, transparent 50%),
+      radial-gradient(ellipse 400px 300px at 50% 50%, hsla(270, 45%, 75%, 0.06) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: -1;
+    filter: blur(50px);
+  }
+
+  .dark .glass-ambient-mesh-violet::before {
+    background: 
+      radial-gradient(ellipse 700px 500px at 0% 0%, hsla(270, 45%, 30%, 0.12) 0%, transparent 50%),
+      radial-gradient(ellipse 600px 400px at 100% 100%, hsla(270, 45%, 25%, 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse 400px 300px at 50% 50%, hsla(270, 45%, 35%, 0.05) 0%, transparent 60%);
+  }
+
+  /* Slate ambient mesh for Klanten */
+  .glass-ambient-mesh-slate {
+    position: relative;
+    overflow: visible;
+  }
+
+  .glass-ambient-mesh-slate::before {
+    content: '';
+    position: absolute;
+    inset: -150px;
+    background: 
+      radial-gradient(ellipse 700px 500px at 0% 0%, hsla(215, 25%, 70%, 0.12) 0%, transparent 50%),
+      radial-gradient(ellipse 600px 400px at 100% 100%, hsla(215, 25%, 60%, 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse 400px 300px at 50% 50%, hsla(215, 25%, 75%, 0.04) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: -1;
+    filter: blur(50px);
+  }
+
+  .dark .glass-ambient-mesh-slate::before {
+    background: 
+      radial-gradient(ellipse 700px 500px at 0% 0%, hsla(215, 25%, 25%, 0.10) 0%, transparent 50%),
+      radial-gradient(ellipse 600px 400px at 100% 100%, hsla(215, 25%, 20%, 0.06) 0%, transparent 50%),
+      radial-gradient(ellipse 400px 300px at 50% 50%, hsla(215, 25%, 30%, 0.04) 0%, transparent 60%);
+  }
+
+  /* Teal ambient mesh for Plaatsingen */
+  .glass-ambient-mesh-teal {
+    position: relative;
+    overflow: visible;
+  }
+
+  .glass-ambient-mesh-teal::before {
+    content: '';
+    position: absolute;
+    inset: -150px;
+    background: 
+      radial-gradient(ellipse 700px 500px at 0% 0%, hsla(174, 42%, 65%, 0.15) 0%, transparent 50%),
+      radial-gradient(ellipse 600px 400px at 100% 100%, hsla(174, 42%, 55%, 0.10) 0%, transparent 50%),
+      radial-gradient(ellipse 400px 300px at 50% 50%, hsla(174, 42%, 70%, 0.06) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: -1;
+    filter: blur(50px);
+  }
+
+  .dark .glass-ambient-mesh-teal::before {
+    background: 
+      radial-gradient(ellipse 700px 500px at 0% 0%, hsla(174, 42%, 28%, 0.12) 0%, transparent 50%),
+      radial-gradient(ellipse 600px 400px at 100% 100%, hsla(174, 42%, 22%, 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse 400px 300px at 50% 50%, hsla(174, 42%, 32%, 0.05) 0%, transparent 60%);
+  }
+
+  /* Amber ambient mesh for Tijdregistratie */
+  .glass-ambient-mesh-amber {
+    position: relative;
+    overflow: visible;
+  }
+
+  .glass-ambient-mesh-amber::before {
+    content: '';
+    position: absolute;
+    inset: -150px;
+    background: 
+      radial-gradient(ellipse 700px 500px at 0% 0%, hsla(38, 55%, 65%, 0.15) 0%, transparent 50%),
+      radial-gradient(ellipse 600px 400px at 100% 100%, hsla(38, 55%, 55%, 0.10) 0%, transparent 50%),
+      radial-gradient(ellipse 400px 300px at 50% 50%, hsla(38, 55%, 70%, 0.06) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: -1;
+    filter: blur(50px);
+  }
+
+  .dark .glass-ambient-mesh-amber::before {
+    background: 
+      radial-gradient(ellipse 700px 500px at 0% 0%, hsla(38, 55%, 28%, 0.12) 0%, transparent 50%),
+      radial-gradient(ellipse 600px 400px at 100% 100%, hsla(38, 55%, 22%, 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse 400px 300px at 50% 50%, hsla(38, 55%, 32%, 0.05) 0%, transparent 60%);
+  }
+
   /* ============================================
      SIDEBAR GLOW EFFECT - visionOS Separation
      ============================================ */

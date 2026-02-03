@@ -179,7 +179,7 @@ export default function Plaatsingen() {
   // getStatusLabel removed - unused
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 glass-ambient-mesh-teal">
       {/* Hero Section - Unified PageHero */}
       <PageHero
         title="Plaatsingen"
