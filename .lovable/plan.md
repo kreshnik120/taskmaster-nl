@@ -1,88 +1,106 @@
 
 
-# Kritische Drag-and-Drop Bug Fix: Vastgeplakte Cursor & Offset Verschuiving
+# Kritische Fix: Drag-and-Drop Event Handler Conflict
 
-## Root Cause Analyse
+## Gevonden Probleem
 
-Na grondige analyse van de code, de session replay data, en @dnd-kit documentatie zijn er **twee kritische problemen** geïdentificeerd:
+De drag-and-drop werkt niet meer omdat de **custom event handlers de @dnd-kit listeners overschrijven**.
 
-### Probleem 1: Taak "springt naar beneden" bij vastpakken
-
-**Oorzaak:** De combinatie van `MouseSensor` met `delay` activatie en de CSS `touch-none` op het sorteerbare element veroorzaakt een offset probleem. Wanneer de delay wordt bereikt, berekent @dnd-kit de initiële positie van het element, maar de muiscursor is dan al verplaatst ten opzichte van waar de gebruiker oorspronkelijk klikte.
-
-**Technische details:**
-- `MouseSensor` met `delay: 150` activeert pas na 150ms
-- Gedurende die 150ms kan de muis al bewegen
-- @dnd-kit berekent de offset op het moment van activatie, niet op het moment van pointer down
-- Dit veroorzaakt de visuele "sprong" naar beneden
-
-### Probleem 2: Taak blijft "vastgeplakt" na loslaten
-
-**Oorzaak:** Dit is een bekend @dnd-kit issue met de `DragOverlay` en `dropAnimation`. Momenteel is `dropAnimation={null}` ingesteld, wat betekent dat er geen animatie is. Echter, als de `activeTask` state niet correct wordt gereset vóór de DOM cleanup, kan de overlay blijven hangen.
-
-**Technische details uit session replay:**
+### Huidige Code (Problematisch)
+```tsx
+<div 
+  ref={setNodeRef} 
+  style={style} 
+  className="group touch-none"
+  {...attributes}
+  {...listeners}           // ← @dnd-kit onPointerDown zit HIER
+  onPointerDown={handlePointerDown}  // ← Dit OVERSCHRIJFT de @dnd-kit handler!
+  onPointerMove={handlePointerMove}  // ← Dit OVERSCHRIJFT ook!
+>
 ```
-1770108020062: Draggable item was dropped
-1770108020065: Element verwijderd uit parent
-```
-De timing suggereert dat de state reset te laat gebeurt.
+
+**Waarom dit faalt:**
+- Wanneer je `{...listeners}` spread, voegt @dnd-kit o.a. `onPointerDown` toe
+- Daarna definiëren we onze eigen `onPointerDown={handlePointerDown}`
+- React neemt alleen de **laatste** handler - de @dnd-kit handler wordt volledig genegeerd
+- Resultaat: drag start nooit omdat de sensor events nooit bij @dnd-kit aankomen
 
 ---
 
-## Oplossing: 3-Staps Fix
+## Oplossing: Event Handler Compositie
 
-### Stap 1: Sensor Configuratie Aanpassen
+We moeten de handlers **combineren** in plaats van overschrijven:
 
-**Bestand:** `src/components/dashboard/MyTasksFlowSection.tsx`
-
-**Probleem:** `delay` activatie veroorzaakt cursor offset.
-
-**Oplossing:** Gebruik `distance` in plaats van `delay` voor activatie. Dit is de standaard @dnd-kit aanpak die geen offset problemen veroorzaakt.
-
-```typescript
-// HUIDIGE CODE (PROBLEMATISCH)
-const sensors = useSensors(
-  useSensor(MouseSensor, {
-    activationConstraint: {
-      delay: 150,
-      tolerance: 5,
-    },
-  }),
-  useSensor(TouchSensor, {
-    activationConstraint: {
-      delay: 200,
-      tolerance: 8,
-    },
-  })
-);
-
-// NIEUWE CODE (FIX)
-const sensors = useSensors(
-  useSensor(PointerSensor, {
-    activationConstraint: {
-      distance: 8, // 8px movement before drag starts
-    },
-  })
-);
+### Correcte Aanpak
+```tsx
+<div 
+  ref={setNodeRef} 
+  style={style} 
+  className="group touch-none"
+  {...attributes}
+  {...listeners}
+  onPointerDown={(e) => {
+    // Onze tracking EERST
+    handlePointerDown(e);
+    // Dan @dnd-kit handler aanroepen als die bestaat
+    listeners?.onPointerDown?.(e);
+  }}
+  onPointerMove={(e) => {
+    handlePointerMove(e);
+    listeners?.onPointerMove?.(e);
+  }}
+>
 ```
 
-**Waarom dit werkt:**
-- `distance: 8` betekent dat de gebruiker 8px moet bewegen voordat drag start
-- Dit onderscheidt click van drag zonder timing-gerelateerde offset issues
-- PointerSensor werkt voor zowel mouse als touch
+**Echter**, dit is fragiel. Een betere aanpak is om de tracking logica **niet** op de drag container te zetten, maar alleen in de click handler te checken of we al aan het draggen zijn.
 
-### Stap 2: TaskCard Click/Drag Onderscheid Verbeteren
+### Beste Oplossing: Vertrouw op isDragging
 
-**Bestand:** `src/components/TaskCard.tsx`
+Aangezien @dnd-kit met `distance: 8` al onderscheid maakt tussen click en drag, kunnen we onze custom handlers volledig verwijderen en alleen `isDragging` checken:
 
-**Probleem:** Met `distance`-based activatie moeten we nog steeds click vs drag kunnen onderscheiden.
+```tsx
+// Simpele, robuuste implementatie
+const handleCardClick = (e: React.MouseEvent) => {
+  if ((e.target as HTMLElement).closest('button')) return;
+  if (isDragging) return;  // @dnd-kit beheert dit al
+  onClick?.(task);
+};
 
-**Oplossing:** Gebruik de `isDragging` state van useSortable in combinatie met een pointer beweging tracker.
+// Render - geen custom pointer handlers nodig
+<div 
+  ref={setNodeRef} 
+  style={style} 
+  className="group touch-none"
+  {...attributes}
+  {...listeners}
+  // GEEN onPointerDown of onPointerMove - laat @dnd-kit zijn werk doen
+>
+```
 
-```typescript
-// Track of er significante beweging was
-const hasMoved = useRef(false);
+Dit werkt omdat:
+1. `PointerSensor` met `distance: 8` activeert drag pas na 8px beweging
+2. Als de gebruiker minder dan 8px beweegt, is het een click en `isDragging` blijft `false`
+3. Als de gebruiker meer dan 8px beweegt, activeert drag en wordt `isDragging` = `true`
+4. De `onClick` handler checkt `isDragging` en negeert clicks tijdens drag
+
+---
+
+## Implementatieplan
+
+### Bestand: `src/components/TaskCard.tsx`
+
+**Wijzigingen:**
+
+1. **Verwijder** de `startPos` en `hasMoved` refs
+2. **Verwijder** de `handlePointerDown` en `handlePointerMove` functies
+3. **Verwijder** de `onPointerDown` en `onPointerMove` props van de div
+4. **Vereenvoudig** `handleCardClick` om alleen `isDragging` te checken
+
+**Van:**
+```tsx
+// Track pointer movement for click vs drag distinction (distance-based)
 const startPos = useRef({ x: 0, y: 0 });
+const hasMoved = useRef(false);
 
 const handlePointerDown = (e: React.PointerEvent) => {
   startPos.current = { x: e.clientX, y: e.clientY };
@@ -98,68 +116,35 @@ const handlePointerMove = (e: React.PointerEvent) => {
 };
 
 const handleCardClick = (e: React.MouseEvent) => {
-  // Skip als er beweging was of tijdens drag
+  if ((e.target as HTMLElement).closest('button')) return;
   if (hasMoved.current || isDragging) return;
   onClick?.(task);
 };
+
+// In render:
+<div 
+  {...attributes}
+  {...listeners}
+  onPointerDown={handlePointerDown}
+  onPointerMove={handlePointerMove}
+>
 ```
 
-### Stap 3: DragOverlay State Reset Robuuster Maken
-
-**Bestand:** `src/components/dashboard/MyTasksFlowSection.tsx`
-
-**Probleem:** `activeTask` wordt mogelijk te laat gereset.
-
-**Oplossing:** Reset `activeTask` aan het begin van `handleDragEnd`, niet aan het einde.
-
-```typescript
-const handleDragEnd = async (event: DragEndEvent) => {
-  // IMMEDIATE state reset - FIRST ACTION
-  const draggedTask = activeTask; // Capture before clearing
-  setActiveTask(null); // Clear immediately
-  
-  // Remove dragging class
-  document.documentElement.classList.remove('dnd-dragging');
-  
-  const { active, over } = event;
-  
-  // Clear drag context
-  if (dragContext) {
-    dragContext.endDrag();
-  }
-  
-  if (!over || !draggedTask) return;
-  
-  // ... rest of logic using draggedTask instead of looking it up again
+**Naar:**
+```tsx
+const handleCardClick = (e: React.MouseEvent) => {
+  if ((e.target as HTMLElement).closest('button')) return;
+  if (isDragging) return; // @dnd-kit beheert dit automatisch
+  onClick?.(task);
 };
+
+// In render:
+<div 
+  {...attributes}
+  {...listeners}
+  // Geen custom pointer handlers - @dnd-kit beheert drag/click onderscheid
+>
 ```
-
----
-
-## Alternatieve Benadering: Strikte Grip Handle Mode
-
-Als de bovenstaande fix niet voldoende werkt, is er een alternatief:
-
-**Gebruik een dedicated drag handle met `useDraggable` in plaats van hele kaart draggable:**
-
-```typescript
-// In TaskCard
-const { attributes, listeners, setNodeRef: setDragRef } = useDraggable({
-  id: task.id,
-});
-
-// Alleen grip handle heeft listeners
-<div {...attributes} {...listeners} ref={setDragRef} className="cursor-grab">
-  <GripVertical />
-</div>
-
-// Rest van kaart is pure click
-<div onClick={handleCardClick}>
-  {/* content */}
-</div>
-```
-
-Dit scheidt de concerns volledig en voorkomt alle click/drag conflicten.
 
 ---
 
@@ -167,85 +152,25 @@ Dit scheidt de concerns volledig en voorkomt alle click/drag conflicten.
 
 | Bestand | Actie | Wijzigingen |
 |---------|-------|-------------|
-| `src/components/dashboard/MyTasksFlowSection.tsx` | EDIT | Sensor config: `PointerSensor` met `distance: 8`, immediate state reset in handleDragEnd |
-| `src/components/TaskCard.tsx` | EDIT | Pointer tracking voor click/drag onderscheid |
+| `src/components/TaskCard.tsx` | EDIT | Verwijder custom pointer handlers die @dnd-kit overschrijven |
 
----
-
-## Visueel Diagram: Verbeterde Drag Flow
-
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│  NIEUWE DRAG FLOW                                               │
-│                                                                 │
-│  POINTER DOWN                                                   │
-│       │                                                         │
-│       ▼                                                         │
-│  ┌─────────────────┐                                            │
-│  │ Track start pos │                                            │
-│  └────────┬────────┘                                            │
-│           │                                                     │
-│           ▼                                                     │
-│  ┌─────────────────────────────────────────┐                    │
-│  │ Beweging > 8px?                         │                    │
-│  └──────────────┬──────────────────────────┘                    │
-│                 │                                               │
-│     ┌───────────┴───────────┐                                   │
-│     │ NEE                   │ JA                                │
-│     ▼                       ▼                                   │
-│  ┌─────────┐        ┌──────────────┐                            │
-│  │ CLICK   │        │ DRAG START   │                            │
-│  │ Modal   │        │ DragOverlay  │                            │
-│  └─────────┘        │ activeert    │                            │
-│                     └───────┬──────┘                            │
-│                             │                                   │
-│                             ▼                                   │
-│                     ┌──────────────┐                            │
-│                     │ DRAG END     │                            │
-│                     │ - activeTask │ ← IMMEDIATE reset          │
-│                     │   = null     │                            │
-│                     │ - Update DB  │                            │
-│                     └──────────────┘                            │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+**Totaal: 1 bestand, ~20 regels verwijderd/vereenvoudigd**
 
 ---
 
 ## Acceptatiecriteria
 
-1. Taak blijft exact onder cursor bij vastpakken (geen offset/sprong)
-2. Taak wordt losgelaten bij muis release (niet vastgeplakt)
-3. Korte klik opent nog steeds detail modal
-4. Drag naar andere kolom werkt correct
-5. Toast notificatie toont "Taak verplaatst naar [kolom]"
-6. Geen console errors tijdens drag operaties
-7. Touch devices: swipe scroll werkt nog steeds
+1. Taak kan worden vastgepakt en gesleept naar andere kolom
+2. Korte klik (< 8px beweging) opent nog steeds detail modal
+3. Geen tekst selectie tijdens drag pogingen
+4. Toast notificatie verschijnt na succesvolle verplaatsing
+5. Geen console errors
 
 ---
 
-## Technische Notities
+## Technische Notitie
 
-### Waarom `distance` beter is dan `delay`
+Dit is een klassieke "event handler shadowing" bug in React. Wanneer je spread operators gebruikt voor props (`{...listeners}`), worden de handlers als individuele props toegevoegd. Als je daarna dezelfde prop opnieuw definieert, overschrijft de laatste definitie de vorige volledig.
 
-| Aspect | `delay` | `distance` |
-|--------|---------|------------|
-| Cursor offset | ❌ Kan offset veroorzaken | ✅ Geen offset |
-| Voelt responsief | ❌ Voelt traag (wachten) | ✅ Instant na threshold |
-| Click onderscheid | ✅ Goed | ✅ Goed met tracking |
-| Touch compatibility | ⚠️ Conflict met scroll | ✅ Werkt goed |
-
-### @dnd-kit Best Practice
-
-De officiële @dnd-kit documentatie raadt `distance` aan voor de meeste use cases. `delay` is bedoeld voor specifieke scenario's waar je bewust een wachttijd wilt introduceren (bijv. voor right-click context menu's).
-
----
-
-## Risico's & Mitigatie
-
-| Risico | Impact | Mitigatie |
-|--------|--------|-----------|
-| Click nog steeds triggert na kleine beweging | Medium | 8px threshold is genoeg voor onderscheid |
-| Touch scroll conflict | Low | PointerSensor heeft ingebouwde touch handling |
-| Performance impact | Negligible | Pointer tracking is lightweight |
+**Best Practice:** Gebruik nooit custom handlers op dezelfde props die door een library worden beheerd, tenzij je expliciet de library handler aanroept vanuit jouw handler.
 
