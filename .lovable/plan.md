@@ -1,178 +1,181 @@
 
-
-# Fase 16.1: Micro-Correcties — Design System Perfectie
+# Fase 17: Dashboard Agent Context Completering
 
 ## Executive Summary
 
-Na de kritische review van Fase 16 zijn er **4 kleine inconsistenties** geïdentificeerd die de 100% design system consistentie verhinderen. Dit plan corrigeert deze laatste details om een perfect geünificeerd glassmorphism framework te bereiken.
+Na grondige audit blijkt dat **5 van de 6 dashboard tabs** geen correcte AI Agent context hebben. De visuele functionaliteit werkt, maar de Agent Router kan niet de juiste specialist-agents aanroepen per tab. Dit plan voegt de ontbrekende configuraties toe.
 
 ---
 
-## Geïdentificeerde Inconsistenties
+## Audit Resultaten
 
-| # | Bestand | Probleem | Huidige Waarde | Correcte Waarde |
-|---|---------|----------|----------------|-----------------|
-| 1 | `context-menu.tsx` | Ontbrekende `focus:backdrop-blur-sm` op 4 items | Niet aanwezig | Toevoegen |
-| 2 | `skeleton.tsx` | Niet-standaard dark border opacity | `border-white/8` | `border-white/10` |
-| 3 | `TaskListEmptyState.tsx` | Niet-standaard dark border opacity | `border-white/12` | `border-white/10` |
-| 4 | `sonner.tsx` | Ontbrekende `border` declaratie | Alleen kleur, geen breedte | Toevoegen `group-[.toaster]:border` |
+### Huidige Status
 
----
-
-## Design System Standaard Referentie
-
-### Border Opacity Standaard
-```css
-/* Light mode */
-border-white/30  /* primair */
-border-white/20  /* subtiel/separators */
-
-/* Dark mode */
-border-white/15  /* primair */
-border-white/10  /* subtiel/separators */
-```
-
-### Focus State Standaard
-```css
-focus:bg-white/50 dark:focus:bg-slate-800/50 
-focus:backdrop-blur-sm  /* ← VERPLICHT voor consistentie */
-```
+| Tab | URL | Agent Mapping | Status |
+|-----|-----|--------------|--------|
+| Mijn Werk | `?tab=mijn-werk` → `/` | DEFAULT (learn_agent) | ❌ Incorrect |
+| Kalender | `?tab=kalender` → `/kalender` | schedule_agent | ✅ Correct |
+| Lijst | `?tab=lijst` → `/lijst` | DEFAULT (learn_agent) | ❌ Ontbreekt |
+| Opvolging | `?tab=opvolging` → `/opvolging` | DEFAULT (learn_agent) | ❌ Ontbreekt |
+| Team | `?tab=team` | DEFAULT (learn_agent) | ❌ Niet gemapped |
+| Recruitment | `?tab=recruitment` | DEFAULT (learn_agent) | ❌ Niet gemapped |
 
 ---
 
 ## Implementatieplan
 
-### Correctie 1: ContextMenu — Toevoegen `focus:backdrop-blur-sm`
+### Deel 1: Uitbreiden tabMapping (agentIntents.ts)
 
-**Bestand:** `src/components/ui/context-menu.tsx`
+**Locatie:** `src/lib/agentIntents.ts` regel 308-315
 
-**Probleem:** 4 componenten missen `focus:backdrop-blur-sm` terwijl DropdownMenu dit wel heeft.
-
-**Wijzigingen:**
-
-**1.1 ContextMenuSubTrigger (regel 30)**
-```tsx
-// Huidige staat (regel 30):
-"focus:bg-white/50 dark:focus:bg-slate-800/50",
-
-// Correctie:
-"focus:bg-white/50 dark:focus:bg-slate-800/50 focus:backdrop-blur-sm",
+**Huidige code:**
+```typescript
+const tabMapping: Record<string, string> = {
+  'lijst': '/lijst',
+  'kalender': '/kalender',
+  'opvolging': '/opvolging',
+  'mijn-werk': '/',
+};
 ```
 
-**1.2 ContextMenuItem (regel 93)**
-```tsx
-// Huidige staat:
-"focus:bg-white/50 dark:focus:bg-slate-800/50",
-
-// Correctie:
-"focus:bg-white/50 dark:focus:bg-slate-800/50 focus:backdrop-blur-sm",
-```
-
-**1.3 ContextMenuCheckboxItem (regel 111)**
-```tsx
-// Huidige staat:
-"focus:bg-white/50 dark:focus:bg-slate-800/50",
-
-// Correctie:
-"focus:bg-white/50 dark:focus:bg-slate-800/50 focus:backdrop-blur-sm",
-```
-
-**1.4 ContextMenuRadioItem (regel 136)**
-```tsx
-// Huidige staat:
-"focus:bg-white/50 dark:focus:bg-slate-800/50",
-
-// Correctie:
-"focus:bg-white/50 dark:focus:bg-slate-800/50 focus:backdrop-blur-sm",
+**Nieuwe code:**
+```typescript
+const tabMapping: Record<string, string> = {
+  'mijn-werk': '/mijn-werk',
+  'kalender': '/kalender',
+  'lijst': '/lijst',
+  'opvolging': '/opvolging',
+  'team': '/team',
+  'recruitment': '/recruitment',
+};
 ```
 
 ---
 
-### Correctie 2: Skeleton — Standaardiseer Border Opacity
+### Deel 2: Toevoegen PAGE_AGENT_CONFIG entries
 
-**Bestand:** `src/components/ui/skeleton.tsx`
+**Locatie:** `src/lib/agentIntents.ts` na regel 286
 
-**Probleem:** Gebruikt `border-white/8` in plaats van standaard `border-white/10`.
+**Toe te voegen configuraties:**
 
-**Wijziging (regel 10):**
-```tsx
-// Huidige staat:
-"border border-white/20 dark:border-white/8",
+```typescript
+// Dashboard Tab: Mijn Werk (Personal Focus)
+"/mijn-werk": {
+  primaryAgent: "task_agent",
+  intents: [
+    ALL_INTENTS.create_task,
+    ALL_INTENTS.update_task,
+    ALL_INTENTS.prioritize,
+    ALL_INTENTS.schedule_meeting,
+  ],
+  contextFields: ["user_id", "selected_task_id"],
+},
 
-// Correctie:
-"border border-white/20 dark:border-white/10",
-```
+// Dashboard Tab: Lijst (Full Task List)
+"/lijst": {
+  primaryAgent: "task_agent",
+  intents: [
+    ALL_INTENTS.create_task,
+    ALL_INTENTS.update_task,
+    ALL_INTENTS.prioritize,
+    ALL_INTENTS.assign_task,
+  ],
+  contextFields: ["filter_status", "filter_priority", "selected_task_ids"],
+},
 
----
+// Dashboard Tab: Opvolging (AI-Powered Follow-up)
+"/opvolging": {
+  primaryAgent: "task_agent",
+  intents: [
+    ALL_INTENTS.prioritize,
+    ALL_INTENTS.create_task,
+    ALL_INTENTS.send_email,
+    ALL_INTENTS.schedule_meeting,
+  ],
+  contextFields: ["ai_score_threshold", "filter_type"],
+},
 
-### Correctie 3: TaskListEmptyState — Standaardiseer Border Opacity
+// Dashboard Tab: Team Overview
+"/team": {
+  primaryAgent: "report_agent",
+  intents: [
+    ALL_INTENTS.generate_report,
+    ALL_INTENTS.assign_task,
+    ALL_INTENTS.create_task,
+    ALL_INTENTS.send_email,
+  ],
+  contextFields: ["team_member_id", "date_range"],
+},
 
-**Bestand:** `src/components/TaskListView/TaskListEmptyState.tsx`
-
-**Probleem:** Gebruikt `border-white/12` in plaats van standaard `border-white/10`.
-
-**Wijziging (regel 18):**
-```tsx
-// Huidige staat:
-"border border-white/30 dark:border-white/12",
-
-// Correctie:
-"border border-white/30 dark:border-white/10",
-```
-
----
-
-### Correctie 4: Sonner — Toevoegen Border Declaratie
-
-**Bestand:** `src/components/ui/sonner.tsx`
-
-**Probleem:** Border kleur is ingesteld maar de `border` class ontbreekt, waardoor de border mogelijk niet zichtbaar is.
-
-**Wijziging (regel 13):**
-```tsx
-// Huidige staat:
-"group-[.toaster]:border-white/40 dark:group-[.toaster]:border-white/15"
-
-// Correctie:
-"group-[.toaster]:border group-[.toaster]:border-white/40 dark:group-[.toaster]:border-white/15"
+// Dashboard Tab: Recruitment KPIs
+"/recruitment": {
+  primaryAgent: "candidate_agent",
+  intents: [
+    ALL_INTENTS.screen_candidate,
+    ALL_INTENTS.schedule_interview,
+    ALL_INTENTS.request_documents,
+    ALL_INTENTS.generate_report,
+  ],
+  contextFields: ["pipeline_stage", "urgency_filter"],
+},
 ```
 
 ---
 
 ## Samenvatting Wijzigingen
 
-| Bestand | Wijzigingen | Regels |
-|---------|-------------|--------|
-| `context-menu.tsx` | +4x `focus:backdrop-blur-sm` | 30, 93, 111, 136 |
-| `skeleton.tsx` | `border-white/8` → `border-white/10` | 10 |
-| `TaskListEmptyState.tsx` | `border-white/12` → `border-white/10` | 18 |
-| `sonner.tsx` | +`group-[.toaster]:border` | 13 |
+| Bestand | Type Wijziging | Details |
+|---------|---------------|---------|
+| `src/lib/agentIntents.ts` | Update tabMapping | +2 tabs (team, recruitment), fix mijn-werk path |
+| `src/lib/agentIntents.ts` | Add PAGE_AGENT_CONFIG | +5 nieuwe entries (mijn-werk, lijst, opvolging, team, recruitment) |
 
-**Totaal: 7 micro-correcties in 4 bestanden**
+**Totaal: 1 bestand, ~50 regels nieuwe code**
 
 ---
 
-## Visueel Effect
+## Agent Toewijzingen per Tab (Na Fix)
+
+| Tab | Primary Agent | Beschikbare Intents |
+|-----|--------------|---------------------|
+| **Mijn Werk** | task_agent | create_task, update_task, prioritize, schedule_meeting |
+| **Kalender** | schedule_agent | schedule_meeting, reschedule, send_reminder, send_email |
+| **Lijst** | task_agent | create_task, update_task, prioritize, assign_task |
+| **Opvolging** | task_agent | prioritize, create_task, send_email, schedule_meeting |
+| **Team** | report_agent | generate_report, assign_task, create_task, send_email |
+| **Recruitment** | candidate_agent | screen_candidate, schedule_interview, request_documents, generate_report |
+
+---
+
+## Verwacht Resultaat
+
+Na implementatie:
+
+1. **ChatWidget** detecteert automatisch de juiste agent per dashboard tab
+2. **Quick Actions** in de chat tonen relevante acties per tab context
+3. **Intent Detection** werkt correct voor tab-specifieke keywords
+4. **Agent Router Proxy** stuurt requests naar de juiste specialist-agents
+
+---
+
+## Visueel Diagram
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│  BEFORE vs AFTER                                             │
+│  UNIFIED DASHBOARD - AGENT CONTEXT MAPPING                   │
 │                                                              │
-│  ContextMenu Items:                                          │
-│  ├─ Before: focus:bg-white/50 (geen blur)                   │
-│  └─ After:  focus:bg-white/50 focus:backdrop-blur-sm ✓      │
+│  ┌─────────────────────────────────────────────────────────┐ │
+│  │  [Mijn Werk] [Kalender] [Lijst] [Opvolging] [Team] [Rec]│ │
+│  │       ↓          ↓         ↓         ↓         ↓     ↓  │ │
+│  │   task_agent schedule  task_agent task_agent report cand│ │
+│  └─────────────────────────────────────────────────────────┘ │
 │                                                              │
-│  Skeleton Border (Dark Mode):                                │
-│  ├─ Before: border-white/8  (8% opacity - te subtiel)       │
-│  └─ After:  border-white/10 (10% opacity - standaard) ✓     │
-│                                                              │
-│  Empty State Border (Dark Mode):                             │
-│  ├─ Before: border-white/12 (12% opacity - inconsistent)    │
-│  └─ After:  border-white/10 (10% opacity - standaard) ✓     │
-│                                                              │
-│  Toast Border:                                               │
-│  ├─ Before: border-white/40 (kleur, geen breedte)           │
-│  └─ After:  border border-white/40 (volledig) ✓             │
+│  URL: /dashboard?tab=lijst                                   │
+│                    ↓                                         │
+│  getEffectivePath() → "/lijst"                               │
+│                    ↓                                         │
+│  PAGE_AGENT_CONFIG["/lijst"] → task_agent                    │
+│                    ↓                                         │
+│  ChatWidget shows: [+ Taak] [Prioriteren] [Toewijzen]        │
 │                                                              │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -181,39 +184,29 @@ focus:backdrop-blur-sm  /* ← VERPLICHT voor consistentie */
 
 ## Acceptatiecriteria
 
-1. Alle ContextMenu items hebben `focus:backdrop-blur-sm` zoals DropdownMenu
-2. Skeleton component gebruikt standaard `border-white/10` in dark mode
-3. TaskListEmptyState gebruikt standaard `border-white/10` in dark mode
-4. Sonner toasts tonen zichtbare border door correcte `border` declaratie
-5. Geen visuele regressies in bestaande componenten
-6. 100% consistentie met design system standaarden
+1. Alle 6 dashboard tabs hebben een dedicated PAGE_AGENT_CONFIG entry
+2. tabMapping bevat alle 6 tab values
+3. ChatWidget toont correcte quick actions per tab
+4. useAgentRouter.primaryAgent retourneert juiste agent per tab
+5. Intent detection werkt voor tab-specifieke keywords
+6. Geen regressie in bestaande pagina-configuraties
 
 ---
 
-## Technische Details
+## Technische Notities
 
-### Waarom `focus:backdrop-blur-sm`?
+### Waarom /mijn-werk in plaats van /?
 
-Het toevoegen van `backdrop-blur-sm` aan focus states zorgt voor:
-- **Visuele consistentie** met andere menu componenten (DropdownMenu, Menubar)
-- **Subtiele diepte** die de visionOS esthetiek versterkt
-- **Betere leesbaarheid** door lichte blur achter gefocuste items
+Het oorspronkelijke mapping `'mijn-werk': '/'` is problematisch omdat:
+- `/` wordt gebruikt als redirect naar `/dashboard?tab=mijn-werk`
+- Een lege root config zou conflicteren met andere routes
+- Expliciete `/mijn-werk` path is duidelijker en voorkomt edge cases
 
-### Waarom `/10` in plaats van `/8` of `/12`?
+### Context Fields per Tab
 
-De design system standaard gebruikt een **consistent opacity schema**:
-- Light mode: `/30` (primair), `/20` (subtiel)
-- Dark mode: `/15` (primair), `/10` (subtiel)
-
-Afwijkingen zoals `/8` of `/12` creëren visuele inconsistenties die opvallen bij nauwkeurige inspectie.
-
----
-
-## Quality Score na Correcties
-
-| Aspect | Voor | Na |
-|--------|------|-----|
-| Focus States | 92% | 100% |
-| Border Consistency | 85% | 100% |
-| Overall Design System | 92% | **100%** |
-
+De `contextFields` zijn voorbereid voor toekomstige agent integratie:
+- **mijn-werk**: user_id voor persoonlijke taken
+- **lijst**: filters voor bulk operations
+- **opvolging**: AI score thresholds
+- **team**: team member filtering
+- **recruitment**: pipeline stage filtering
