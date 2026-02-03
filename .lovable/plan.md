@@ -1,258 +1,264 @@
 
 
-# M6 Facturatie - Betalingen + Herinneringen UI (DEEL 2 van 2)
+# M6 Facturatie - DEEL 1: Implementatie Plan
 
 ## Overzicht
 
-Dit plan implementeert de herinneringen componenten en integreert alle nieuwe componenten in de FactuurDetail pagina. DEEL 1 is compleet (hooks + betalingen componenten).
+Dit plan implementeert de volledige foundation voor de Facturatie Instellingen module:
+
+1. Database migratie met tabel, RLS, CHECK constraints, index en trigger update
+2. TypeScript types voor instellingen en export
+3. React hooks voor data management en export
+4. Instellingen pagina met volledige configuratie UI
+5. Route configuratie in App.tsx
 
 ---
 
-## Fase 1: HerinneringenPanel Component
+## Fase 1: Database Migratie
 
-**Nieuw bestand:** `src/components/facturatie/HerinneringenPanel.tsx`
+### SQL Script
 
-### Structuur
+```sql
+CREATE TABLE public.facturatie_instellingen (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+
+    -- BTW Configuratie
+    standaard_btw_percentage NUMERIC(4,2) NOT NULL DEFAULT 21.00
+        CHECK (standaard_btw_percentage IN (0.00, 9.00, 21.00)),
+    btw_vrijgesteld BOOLEAN NOT NULL DEFAULT false,
+    btw_nummer VARCHAR(20),
+
+    -- Betalingstermijn
+    standaard_betalingstermijn INTEGER NOT NULL DEFAULT 30
+        CHECK (standaard_betalingstermijn BETWEEN 1 AND 90),
+
+    -- Factuurnummer configuratie
+    factuur_prefix VARCHAR(10) NOT NULL DEFAULT 'FAC',
+    factuur_volgnummer_lengte INTEGER NOT NULL DEFAULT 6
+        CHECK (factuur_volgnummer_lengte BETWEEN 4 AND 10),
+
+    -- Herinnering schema
+    herinnering_dagen_1 INTEGER NOT NULL DEFAULT 14
+        CHECK (herinnering_dagen_1 BETWEEN 1 AND 60),
+    herinnering_dagen_2 INTEGER NOT NULL DEFAULT 28
+        CHECK (herinnering_dagen_2 BETWEEN 1 AND 90),
+    herinnering_dagen_3 INTEGER NOT NULL DEFAULT 42
+        CHECK (herinnering_dagen_3 BETWEEN 1 AND 120),
+
+    -- Bedrijfsgegevens
+    bedrijfsnaam VARCHAR(255),
+    adres_straat VARCHAR(255),
+    adres_postcode VARCHAR(10),
+    adres_plaats VARCHAR(100),
+    adres_land VARCHAR(100) DEFAULT 'Nederland',
+    kvk_nummer VARCHAR(20),
+    iban VARCHAR(34),
+    bic VARCHAR(11),
+    logo_url VARCHAR(500),
+
+    -- Factuur teksten
+    factuur_footer_tekst TEXT,
+    betalingsinstructies TEXT DEFAULT 'Gelieve het factuurnummer te vermelden bij uw betaling.',
+
+    -- Metadata
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ,
+
+    -- Constraints
+    CONSTRAINT chk_herinnering_volgorde CHECK (
+        herinnering_dagen_1 < herinnering_dagen_2
+        AND herinnering_dagen_2 < herinnering_dagen_3
+    ),
+    CONSTRAINT uq_tenant_instellingen UNIQUE (tenant_id)
+);
+
+CREATE INDEX idx_facturatie_instellingen_tenant ON public.facturatie_instellingen(tenant_id);
+
+-- RLS Policies
+ALTER TABLE public.facturatie_instellingen ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.facturatie_instellingen FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY "instellingen_select" ON public.facturatie_instellingen FOR SELECT
+USING (EXISTS (
+    SELECT 1 FROM public.user_organizations uo
+    WHERE uo.org_id = facturatie_instellingen.tenant_id
+    AND uo.user_id = auth.uid()
+));
+
+CREATE POLICY "instellingen_insert" ON public.facturatie_instellingen FOR INSERT
+WITH CHECK (EXISTS (
+    SELECT 1 FROM public.user_organizations uo
+    WHERE uo.org_id = facturatie_instellingen.tenant_id
+    AND uo.user_id = auth.uid()
+));
+
+CREATE POLICY "instellingen_update" ON public.facturatie_instellingen FOR UPDATE
+USING (EXISTS (
+    SELECT 1 FROM public.user_organizations uo
+    WHERE uo.org_id = facturatie_instellingen.tenant_id
+    AND uo.user_id = auth.uid()
+));
+
+-- Trigger Update (met correcte $$ delimiters)
+CREATE OR REPLACE FUNCTION public.fn_generate_factuur_nummer()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_jaar INTEGER;
+    v_volgnummer INTEGER;
+    v_prefix VARCHAR(10);
+    v_lengte INTEGER;
+BEGIN
+    IF NEW.factuur_nummer IS NOT NULL THEN
+        RETURN NEW;
+    END IF;
+
+    v_jaar := EXTRACT(YEAR FROM NEW.factuurdatum);
+
+    PERFORM pg_advisory_xact_lock(hashtext(NEW.tenant_id::text || v_jaar::text));
+
+    INSERT INTO public.factuur_nummer_sequence (tenant_id, jaar, laatste_nummer)
+    VALUES (NEW.tenant_id, v_jaar, 1)
+    ON CONFLICT (tenant_id, jaar)
+    DO UPDATE SET laatste_nummer = public.factuur_nummer_sequence.laatste_nummer + 1
+    RETURNING laatste_nummer INTO v_volgnummer;
+
+    SELECT
+        COALESCE(fi.factuur_prefix, UPPER(LEFT(REGEXP_REPLACE(o.name, '[^a-zA-Z]', '', 'g'), 3))),
+        COALESCE(fi.factuur_volgnummer_lengte, 6)
+    INTO v_prefix, v_lengte
+    FROM public.organizations o
+    LEFT JOIN public.facturatie_instellingen fi ON fi.tenant_id = o.id
+    WHERE o.id = NEW.tenant_id;
+
+    IF v_prefix IS NULL OR v_prefix = '' THEN
+        v_prefix := 'FAC';
+    END IF;
+
+    IF v_lengte IS NULL THEN
+        v_lengte := 6;
+    END IF;
+
+    NEW.factuur_nummer := v_prefix || '-' || v_jaar || '-' || LPAD(v_volgnummer::TEXT, v_lengte, '0');
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+```
+
+---
+
+## Fase 2: TypeScript Types
+
+**Bestand:** `src/types/facturatie.ts`
+
+Toevoegen aan het einde:
+- `FacturatieInstellingen` interface (22 velden)
+- `UpdateFacturatieInstellingenInput` interface (alle velden optioneel)
+- `FactuurExportRow` interface (12 velden voor export)
+- `ExportFormat` type (`'csv' | 'xlsx'`)
+
+---
+
+## Fase 3: React Hooks
+
+### 3.1 Nieuw: `src/hooks/facturatie/useFacturatieInstellingen.ts`
+
+| Hook | Functie |
+|------|---------|
+| `useFacturatieInstellingen()` | Query voor tenant instellingen |
+| `useUpdateFacturatieInstellingen()` | Upsert mutation met toast feedback |
+
+### 3.2 Nieuw: `src/hooks/facturatie/useFactuurExport.ts`
+
+| Functie | Beschrijving |
+|---------|--------------|
+| `exportFacturen(format, filters?, selectedIds?)` | Export naar CSV of XLSX |
+| CSV | BOM header, Nederlandse decimalen, puntkomma separator |
+| XLSX | Dynamic import, kolom breedtes |
+
+### 3.3 Update: `src/hooks/facturatie/index.ts`
+
+Nieuwe exports toevoegen.
+
+---
+
+## Fase 4: Instellingen Pagina
+
+**Nieuw:** `src/pages/FacturatieInstellingen.tsx`
+
+### Layout
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│ 🔔 Betalingsherinneringen           ⚠️ 14 dagen over verval │
-├─────────────────────────────────────────────────────────────┤
-│ ┌─────────────────────────────────────────────────────────┐ │
-│ │ [NIVEAU 1] Eerste herinnering        [✓ Verstuurd]     │ │
-│ │ Toon: Vriendelijk • Na 14 dagen                        │ │
-│ │ ─────────────────────────────────────                  │ │
-│ │ 📅 1 januari 2025 om 14:30                             │ │
-│ │ 📧 factuur@bedrijf.nl                                  │ │
-│ │ Openstaand op dat moment: €1.210,00                    │ │
-│ └─────────────────────────────────────────────────────────┘ │
-│ ┌─────────────────────────────────────────────────────────┐ │
-│ │ [NIVEAU 2] Tweede herinnering       [Versturen →]      │ │
-│ │ Toon: Formeel • Na 28 dagen                            │ │
-│ └─────────────────────────────────────────────────────────┘ │
-│ ┌─────────────────────────────────────────────────────────┐ │
-│ │ [NIVEAU 3] Laatste herinnering      [⏳ Wachten]        │ │
-│ │ Toon: Escalatie • Na 42 dagen                          │ │
-│ └─────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
++------------------------------------------------------------------+
+| <- Terug   Facturatie Instellingen                    [Opslaan]  |
++------------------------------------------------------------------+
+| BTW Configuratie                                                 |
+| [21%/9%/0%] [BTW-nummer] [BTW-vrijgesteld toggle]               |
++------------------------------------------------------------------+
+| Factuurnummer Configuratie                                       |
+| Prefix: [FAC]  Lengte: [6]  Voorbeeld: FAC-2026-000001          |
++------------------------------------------------------------------+
+| Betalingstermijn: [30] dagen                                     |
++------------------------------------------------------------------+
+| Herinnering Schema                                               |
+| (1) [14] dagen  (2) [28] dagen  (3) [42] dagen                  |
++------------------------------------------------------------------+
+| Bedrijfsgegevens                                                 |
+| Naam, Adres, KvK, IBAN, BIC                                      |
++------------------------------------------------------------------+
+| Factuur Teksten                                                  |
+| Betalingsinstructies, Footer                                     |
++------------------------------------------------------------------+
 ```
-
-### Logica
-
-| Conditie | Gedrag |
-|----------|--------|
-| `sentNiveaus.has(niveau)` | Toon "Verstuurd" badge + details |
-| `canSendReminder(niveau)` | Toon "Versturen" button |
-| Niveau 2 zonder niveau 1 | Toon "Wachten" |
-| Niveau 3 zonder niveau 2 | Toon "Wachten" |
-| Status BETAALD/AFGEBOEKT | Herinneringen uitgeschakeld |
-| Geen e-mailadres | Warning message |
-
-### Props
-
-```typescript
-interface HerinneringenPanelProps {
-  factuurId: string;
-  factuurNummer: string;
-  factuurStatus: FactuurStatus;
-  openstaandBedrag: number;
-  opdrachtgeverEmail: string | null;
-  vervaldatum: string;
-}
-```
-
----
-
-## Fase 2: HerinneringVersturenDialog Component
-
-**Nieuw bestand:** `src/components/facturatie/HerinneringVersturenDialog.tsx`
 
 ### Features
+- Auto-load bestaande instellingen
+- Live factuurnummer preview
+- Change tracking voor save button
+- Upsert logica (insert/update)
+- Success feedback met checkmark
+- Mobile responsive
 
-| Feature | Beschrijving |
-|---------|--------------|
-| E-mail preview | Toont onderwerp + intro per niveau |
-| Niveau indicatie | Badge met "Vriendelijk", "Formeel", of "Escalatie" |
-| Niveau 3 warning | Extra waarschuwing voor laatste herinnering |
-| E-mail validatie | Regex check voor geldig e-mailadres |
-| CC optie | Alleen bij niveau 3 (bijv. voor manager) |
-| Status info | Alert dat status automatisch wordt bijgewerkt |
+---
 
-### E-mail Templates
+## Fase 5: Route Configuratie
+
+**Bestand:** `src/App.tsx`
+
+Route toevoegen VOOR de `:id` route:
 
 ```typescript
-const EMAIL_TEMPLATES: Record<HerinneringNiveau, {...}> = {
-  1: {
-    subject: "Herinnering: Factuur {nummer} nog niet ontvangen",
-    intro: "Graag willen wij u vriendelijk herinneren...",
-    tone: "Vriendelijk",
-  },
-  2: {
-    subject: "Tweede herinnering: Factuur {nummer} - betaling nog niet ontvangen",
-    intro: "Ondanks onze eerdere herinnering...",
-    tone: "Formeel",
-  },
-  3: {
-    subject: "LAATSTE HERINNERING: Factuur {nummer} - directe actie vereist",
-    intro: "Ondanks meerdere herinneringen...",
-    tone: "Escalatie",
-  },
-};
-```
-
----
-
-## Fase 3: FactuurDetail Pagina Updates
-
-**Bestand:** `src/pages/FactuurDetail.tsx`
-
-### Wijzigingen
-
-| Locatie | Wijziging |
-|---------|-----------|
-| Imports | + `BetalingenHistorie`, `HerinneringenPanel` |
-| TabsContent "betalingen" | Vervangen door `<BetalingenHistorie>` component |
-| TabsContent "herinneringen" | Vervangen door `<HerinneringenPanel>` component |
-| BetalingRegistrerenDialog | + `factuurNummer`, `totaalBedrag`, `reedsBetaald` props |
-| Acties Card | + "Herinnering versturen" button (conditioneel) |
-
-### Nieuwe BetalingenHistorie Props
-
-```jsx
-<BetalingenHistorie
-  factuurId={factuur.id}
-  openstaandBedrag={factuur.openstaand_bedrag}
-  totaalBedrag={factuur.totaal}
-  onRegisterPayment={() => setShowBetalingDialog(true)}
-  canRegisterPayment={canRegisterPayment}
-/>
-```
-
-### Nieuwe HerinneringenPanel Props
-
-```jsx
-<HerinneringenPanel
-  factuurId={factuur.id}
-  factuurNummer={factuur.factuur_nummer}
-  factuurStatus={factuur.status}
-  openstaandBedrag={factuur.openstaand_bedrag}
-  opdrachtgeverEmail={factuur.opdrachtgever?.centrale_facturatie_email || null}
-  vervaldatum={factuur.vervaldatum}
-/>
-```
-
-### Bijgewerkte BetalingRegistrerenDialog
-
-```jsx
-<BetalingRegistrerenDialog
-  open={showBetalingDialog}
-  onOpenChange={setShowBetalingDialog}
-  factuurId={factuur.id}
-  factuurNummer={factuur.factuur_nummer}
-  openstaandBedrag={factuur.openstaand_bedrag}
-  totaalBedrag={factuur.totaal}
-  reedsBetaald={factuur.betaald_bedrag}
-/>
-```
-
----
-
-## Fase 4: Quick Actions Update
-
-**Bestand:** `src/pages/FactuurDetail.tsx` (Acties Card)
-
-Toevoegen na "E-mail verzenden" button:
-
-```jsx
-{canRegisterPayment && factuur.openstaand_bedrag > 0 && (
-  <Button
-    variant="outline"
-    className="w-full justify-start"
-    onClick={() => {
-      const tabsTrigger = document.querySelector('[value="herinneringen"]') as HTMLElement;
-      if (tabsTrigger) tabsTrigger.click();
-    }}
-  >
-    <Bell className="h-4 w-4 mr-2" />
-    Herinnering versturen
-  </Button>
-)}
-```
-
----
-
-## Fase 5: Componenten Index Update
-
-**Bestand:** `src/components/facturatie/index.ts`
-
-```typescript
-// Dialogs
-export { BetalingRegistrerenDialog } from './BetalingRegistrerenDialog';
-export { BetalingBewerkDialog } from './BetalingBewerkDialog';
-export { StatusWijzigenDialog } from './StatusWijzigenDialog';
-export { HerinneringVersturenDialog } from './HerinneringVersturenDialog';
-
-// Panels
-export { BetalingenHistorie } from './BetalingenHistorie';
-export { HerinneringenPanel } from './HerinneringenPanel';
+<Route path="/facturatie/instellingen" element={<FacturatieInstellingen />} />
 ```
 
 ---
 
 ## Bestanden Overzicht
 
-| Bestand | Actie | Regels |
-|---------|-------|--------|
-| `src/components/facturatie/HerinneringenPanel.tsx` | CREATE | ~180 |
-| `src/components/facturatie/HerinneringVersturenDialog.tsx` | CREATE | ~160 |
-| `src/pages/FactuurDetail.tsx` | EDIT | ~30 regels wijzigen |
-| `src/components/facturatie/index.ts` | EDIT | +2 exports |
+| Bestand | Actie |
+|---------|-------|
+| Database migratie | CREATE |
+| `src/types/facturatie.ts` | EDIT (+55 regels) |
+| `src/hooks/facturatie/useFacturatieInstellingen.ts` | CREATE |
+| `src/hooks/facturatie/useFactuurExport.ts` | CREATE |
+| `src/hooks/facturatie/index.ts` | EDIT |
+| `src/pages/FacturatieInstellingen.tsx` | CREATE |
+| `src/App.tsx` | EDIT |
 
 ---
 
-## Dependencies Check
-
-Alle benodigde componenten zijn beschikbaar:
-- Alert, AlertTitle, AlertDescription (`@/components/ui/alert`)
-- Badge (`@/components/ui/badge`)
-- Card components
-- Dialog components
-- Separator
-- date-fns voor datum formatting
-- `useHerinneringen`, `useSendHerinnering` hooks (DEEL 1)
-
----
-
-## Verificatie Checklist DEEL 2
+## Verificatie Checklist
 
 | Check | Item |
 |-------|------|
-| [ ] | HerinneringenPanel toont 3 niveaus |
-| [ ] | Verstuurd status wordt correct getoond |
-| [ ] | Versturen button alleen actief voor volgende niveau |
-| [ ] | HerinneringVersturenDialog toont preview |
-| [ ] | E-mail validatie werkt |
-| [ ] | Niveau 3 toont extra warning |
-| [ ] | Herinnering wordt correct opgeslagen |
-| [ ] | Factuur status wordt automatisch bijgewerkt |
-| [ ] | Geen herinneringen mogelijk voor BETAALD facturen |
-| [ ] | Warning bij ontbrekend e-mailadres |
-| [ ] | FactuurDetail tabs gebruiken nieuwe componenten |
-| [ ] | Quick action "Herinnering versturen" werkt |
+| [ ] | Database tabel met CHECK constraints |
+| [ ] | Index aangemaakt |
+| [ ] | RLS policies werken |
+| [ ] | Trigger met $$ delimiters |
+| [ ] | TypeScript types toegevoegd |
+| [ ] | Hooks werken |
+| [ ] | Pagina laadt en slaat op |
+| [ ] | Route werkt |
 | [ ] | Geen TypeScript errors |
-
----
-
-## Na DEEL 2 Succes
-
-M6 FACTURATIE MODULE IS COMPLEET!
-
-Voltooide functionaliteit:
-- Facturen aanmaken, bewerken, verwijderen
-- Factuurregels met BTW berekening
-- Betalingen registreren, bewerken, verwijderen
-- Betalingen voortgang tracking
-- 3-niveau herinneringen systeem
-- Automatische status updates
-- E-mail preview per herinnering niveau
 
