@@ -2544,3 +2544,191 @@ All colors MUST be HSL.
     display: none;
   }
 }
+
+/* ============================================
+   ENTERPRISE TYPOGRAPHY SYSTEM
+   ============================================ */
+
+/* Display Headings - Hero sections */
+.heading-display {
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+/* Extra Large - Page titles */
+.heading-xl {
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+/* Large - Section headers */
+.heading-lg {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+/* Medium - Card titles */
+.heading-md {
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+}
+
+/* Small - Subsection titles */
+.heading-sm {
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+}
+
+/* Body text - Default readable text */
+.body-default {
+  font-weight: 400;
+  letter-spacing: 0.005em;
+  line-height: 1.6;
+}
+
+/* Uppercase labels - Small category labels */
+.label-uppercase {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+/* Small captions */
+.caption-sm {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: hsl(var(--muted-foreground));
+}
+
+/* ============================================
+   PREMIUM SKELETON SHIMMER EFFECT
+   ============================================ */
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(
+    90deg,
+    hsla(215, 25%, 95%, 0.5) 0%,
+    hsla(215, 25%, 98%, 0.8) 50%,
+    hsla(215, 25%, 95%, 0.5) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+.dark .skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    hsla(215, 25%, 15%, 0.5) 0%,
+    hsla(215, 25%, 20%, 0.8) 50%,
+    hsla(215, 25%, 15%, 0.5) 100%
+  );
+  background-size: 200% 100%;
+}
+
+/* ============================================
+   SPACING CONSISTENCY TOKENS
+   ============================================ */
+
+.section-gap { 
+  @apply space-y-6; 
+}
+
+.card-gap { 
+  @apply gap-4; 
+}
+
+.kpi-grid-gap { 
+  @apply gap-3 md:gap-4; 
+}
+
+.filter-bar-gap { 
+  @apply gap-3; 
+}
+
+.content-padding { 
+  @apply p-6; 
+}
+
+/* ============================================
+   ICON SIZE SYSTEM
+   ============================================ */
+
+.icon-xs { 
+  @apply h-3 w-3; 
+}
+
+.icon-sm { 
+  @apply h-4 w-4; 
+}
+
+.icon-md { 
+  @apply h-5 w-5; 
+}
+
+.icon-lg { 
+  @apply h-6 w-6; 
+}
+
+/* ============================================
+   TEXT CONTRAST ON GLASS - Accessibility
+   ============================================ */
+
+.text-on-glass {
+  color: hsl(var(--foreground) / 0.88);
+  text-shadow: 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+.dark .text-on-glass {
+  text-shadow: 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.text-muted-on-glass {
+  color: hsl(var(--muted-foreground) / 0.9);
+}
+
+/* ============================================
+   KPI CARD HOVER ENHANCEMENT
+   ============================================ */
+
+.kpi-card-hover {
+  position: relative;
+  transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.kpi-card-hover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.15) 0%,
+    transparent 50%
+  );
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.kpi-card-hover:hover::after {
+  opacity: 1;
+}
