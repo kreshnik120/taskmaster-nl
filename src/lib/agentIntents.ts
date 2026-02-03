@@ -284,6 +284,61 @@ export const PAGE_AGENT_CONFIG: Record<string, PageAgentConfig> = {
     ],
     contextFields: ["conversation_id", "contact_jid", "last_message"],
   },
+  // Dashboard Tab: Mijn Werk (Personal Focus)
+  "/mijn-werk": {
+    primaryAgent: "task_agent",
+    intents: [
+      ALL_INTENTS.create_task,
+      ALL_INTENTS.update_task,
+      ALL_INTENTS.prioritize,
+      ALL_INTENTS.schedule_meeting,
+    ],
+    contextFields: ["user_id", "selected_task_id"],
+  },
+  // Dashboard Tab: Lijst (Full Task List)
+  "/lijst": {
+    primaryAgent: "task_agent",
+    intents: [
+      ALL_INTENTS.create_task,
+      ALL_INTENTS.update_task,
+      ALL_INTENTS.prioritize,
+      ALL_INTENTS.assign_task,
+    ],
+    contextFields: ["filter_status", "filter_priority", "selected_task_ids"],
+  },
+  // Dashboard Tab: Opvolging (AI-Powered Follow-up)
+  "/opvolging": {
+    primaryAgent: "task_agent",
+    intents: [
+      ALL_INTENTS.prioritize,
+      ALL_INTENTS.create_task,
+      ALL_INTENTS.send_email,
+      ALL_INTENTS.schedule_meeting,
+    ],
+    contextFields: ["ai_score_threshold", "filter_type"],
+  },
+  // Dashboard Tab: Team Overview
+  "/team": {
+    primaryAgent: "report_agent",
+    intents: [
+      ALL_INTENTS.generate_report,
+      ALL_INTENTS.assign_task,
+      ALL_INTENTS.create_task,
+      ALL_INTENTS.send_email,
+    ],
+    contextFields: ["team_member_id", "date_range"],
+  },
+  // Dashboard Tab: Recruitment KPIs
+  "/recruitment": {
+    primaryAgent: "candidate_agent",
+    intents: [
+      ALL_INTENTS.screen_candidate,
+      ALL_INTENTS.schedule_interview,
+      ALL_INTENTS.request_documents,
+      ALL_INTENTS.generate_report,
+    ],
+    contextFields: ["pipeline_stage", "urgency_filter"],
+  },
 };
 
 // Default config for unlisted pages
@@ -307,10 +362,12 @@ export function getEffectivePath(pathname: string, search: string): string {
   
   if (pathname === '/dashboard' && tab) {
     const tabMapping: Record<string, string> = {
-      'lijst': '/lijst',
+      'mijn-werk': '/mijn-werk',
       'kalender': '/kalender',
+      'lijst': '/lijst',
       'opvolging': '/opvolging',
-      'mijn-werk': '/',
+      'team': '/team',
+      'recruitment': '/recruitment',
     };
     return tabMapping[tab] || pathname;
   }
