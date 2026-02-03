@@ -1,4 +1,4 @@
-import { useRef } from "react";
+
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent } from "@/components/ui/card";
@@ -118,32 +118,15 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
     id: task.id,
   });
 
-  // Track pointer movement for click vs drag distinction (distance-based)
-  const startPos = useRef({ x: 0, y: 0 });
-  const hasMoved = useRef(false);
-
-  const handlePointerDown = (e: React.PointerEvent) => {
-    startPos.current = { x: e.clientX, y: e.clientY };
-    hasMoved.current = false;
-  };
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-    const dx = Math.abs(e.clientX - startPos.current.x);
-    const dy = Math.abs(e.clientY - startPos.current.y);
-    // Mark as moved if pointer traveled more than 5px
-    if (dx > 5 || dy > 5) {
-      hasMoved.current = true;
-    }
-  };
-
+  // Click handler - @dnd-kit manages drag/click distinction via distance: 8
   const handleCardClick = (e: React.MouseEvent) => {
     // Don't trigger if clicking on quick action buttons
     if ((e.target as HTMLElement).closest('button')) {
       return;
     }
     
-    // Skip if there was significant movement (drag) or currently dragging
-    if (hasMoved.current || isDragging) {
+    // Skip if currently dragging - @dnd-kit sets this automatically
+    if (isDragging) {
       return;
     }
     
@@ -179,8 +162,6 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
           className="group touch-none"
           {...attributes}
           {...listeners}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
         >
           <Card className="glass-task-card glass-hover-lift bg-white/75 dark:bg-slate-900/75 border-white/40 dark:border-white/12 shadow-[0_2px_6px_hsla(234,45%,52%,0.06),0_8px_24px_hsla(234,45%,52%,0.10)] focus:outline-none focus:ring-2 focus:ring-tab-mijn-werk-500/30 focus:ring-offset-2 relative rounded-xl cursor-grab active:cursor-grabbing">
             <CardContent className="p-4 space-y-2">
