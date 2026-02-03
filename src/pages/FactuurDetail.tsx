@@ -67,6 +67,7 @@ import { BetalingRegistrerenDialog } from "@/components/facturatie/BetalingRegis
 import { StatusWijzigenDialog } from "@/components/facturatie/StatusWijzigenDialog";
 import { BetalingenHistorie } from "@/components/facturatie/BetalingenHistorie";
 import { HerinneringenPanel } from "@/components/facturatie/HerinneringenPanel";
+import { FactuurPDFDownloadButton } from "@/components/facturatie/pdf";
 
 // Status badge met kleuren per status
 function StatusBadge({ status }: { status: FactuurStatus }) {
@@ -195,9 +196,16 @@ export default function FactuurDetail() {
                 <Edit className="h-4 w-4 mr-2" />
                 Status wijzigen
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Download className="h-4 w-4 mr-2" />
-                Download PDF
+              <DropdownMenuItem
+                onSelect={(e) => e.preventDefault()}
+                className="p-0"
+              >
+                <FactuurPDFDownloadButton
+                  factuur={factuur}
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start h-auto px-2 py-1.5 font-normal"
+                />
               </DropdownMenuItem>
               <DropdownMenuItem>
                 <Copy className="h-4 w-4 mr-2" />
@@ -452,10 +460,11 @@ export default function FactuurDetail() {
               <CardTitle>Acties</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button variant="outline" className="w-full justify-start">
-                <Download className="h-4 w-4 mr-2" />
-                Download PDF
-              </Button>
+              <FactuurPDFDownloadButton
+                factuur={factuur}
+                variant="outline"
+                className="w-full justify-start"
+              />
               <Button variant="outline" className="w-full justify-start">
                 <Mail className="h-4 w-4 mr-2" />
                 E-mail verzenden
