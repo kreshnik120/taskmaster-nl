@@ -1,124 +1,69 @@
 
+# Fix: 0% BTW Bug - Nullish Coalescing Operator
 
-# Fix: PDF Generatie - Font Loading Error
+## Probleem
 
-## Probleem Geïdentificeerd
+De 0% BTW optie werkt niet correct. Bij selectie van 0% BTW wordt toch 21% berekend.
 
-Bij het testen van de PDF download functionaliteit faalt de PDF generatie met de volgende foutmelding:
-
+**Oorzaak:** JavaScript OR operator (`||`) behandelt `0` als "falsy" waarde:
+```javascript
+0 || 21  // Geeft 21 terug (FOUT!)
+0 ?? 21  // Geeft 0 terug (CORRECT!)
 ```
-Failed to load resource: the server responded with a status of 404
-https://fonts.gstatic.com/s/inter/v12/...woff2
-```
-
-**Oorzaak**: De Google Fonts URLs in `FactuurPDFDocument.tsx` zijn verouderd (v12) en niet meer beschikbaar.
-
----
 
 ## Oplossing
 
-Verwijder de custom font registratie en gebruik de standaard Helvetica font van react-pdf. Dit is de meest betrouwbare oplossing omdat:
-1. Geen externe dependencies
-2. Werkt altijd offline
-3. Helvetica is professioneel en universeel leesbaar
-
----
+Vervang alle `||` operators door `??` (nullish coalescing) op 4 locaties in `FactuurAanmaken.tsx`.
 
 ## Wijzigingen
 
-### Bestand: `src/components/facturatie/pdf/FactuurPDFDocument.tsx`
-
-#### 1. Verwijder Font Registratie (regels 13-30)
-
-**Verwijderen:**
-```typescript
-// Register fonts for better typography
-Font.register({
-  family: 'Inter',
-  fonts: [
-    { 
-      src: 'https://fonts.gstatic.com/s/inter/v12/...woff2',
-      fontWeight: 400,
-    },
-    { 
-      src: 'https://fonts.gstatic.com/s/inter/v12/...woff2', 
-      fontWeight: 600,
-    },
-    { 
-      src: 'https://fonts.gstatic.com/s/inter/v12/...woff2', 
-      fontWeight: 700,
-    },
-  ],
-});
-```
-
-#### 2. Update Import (regel 7)
-
-**Verwijderen uit import:**
-```typescript
-Font,
-```
-
-**Nieuwe import:**
-```typescript
-import {
-  Document,
-  Page,
-  Text,
-  View,
-  StyleSheet,
-} from '@react-pdf/renderer';
-```
-
-#### 3. Update Styles - Page (regel 34-38)
-
-**Van:**
-```typescript
-page: {
-  padding: 40,
-  fontSize: 10,
-  fontFamily: 'Inter',
-  color: '#1f2937',
-},
-```
-
-**Naar:**
-```typescript
-page: {
-  padding: 40,
-  fontSize: 10,
-  fontFamily: 'Helvetica',
-  color: '#1f2937',
-},
-```
-
----
-
-## Locaties in Code
+### Bestand: `src/pages/FactuurAanmaken.tsx`
 
 | Regel | Wijziging |
 |-------|-----------|
-| 7 | Verwijder `Font` uit import |
-| 13-30 | Verwijder complete `Font.register()` block |
-| 37 | Wijzig `fontFamily: 'Inter'` naar `fontFamily: 'Helvetica'` |
+| 112 | `regel.btw_percentage \|\| 21` → `regel.btw_percentage ?? 21` |
+| 295 | `regel.btw_percentage \|\| 21` → `regel.btw_percentage ?? 21` |
+| 335 | `regel.btw_percentage \|\| 21` → `regel.btw_percentage ?? 21` |
+| 476 | `regel.btw_percentage \|\| 21` → `regel.btw_percentage ?? 21` |
 
----
+### Details per locatie
 
-## Verwacht Resultaat Na Fix
+**Regel 112 - BTW berekening in `calculateTotals`:**
+```typescript
+// Van:
+const regelBtw = regelSubtotaal * ((regel.btw_percentage || 21) / 100);
+// Naar:
+const regelBtw = regelSubtotaal * ((regel.btw_percentage ?? 21) / 100);
+```
 
-Na deze wijziging:
-- PDF download werkt correct
-- Geen externe font dependencies
-- Professionele Helvetica typografie
-- Alle overige PDF features blijven werken
+**Regel 295 - Regeltotaal in tabel (Stap 2):**
+```typescript
+// Van:
+regel.aantal * regel.prijs * (1 + (regel.btw_percentage || 21) / 100);
+// Naar:
+regel.aantal * regel.prijs * (1 + (regel.btw_percentage ?? 21) / 100);
+```
 
----
+**Regel 335 - BTW dropdown value:**
+```typescript
+// Van:
+value={String(regel.btw_percentage || 21)}
+// Naar:
+value={String(regel.btw_percentage ?? 21)}
+```
 
-## Alternatieve Oplossing (Optioneel)
+**Regel 476 - Regeltotaal in overzicht (Stap 3):**
+```typescript
+// Van:
+regel.aantal * regel.prijs * (1 + (regel.btw_percentage || 21) / 100)
+// Naar:
+regel.aantal * regel.prijs * (1 + (regel.btw_percentage ?? 21) / 100)
+```
 
-Als je toch custom fonts wilt gebruiken, kun je:
-1. De font bestanden lokaal hosten in `/public/fonts/`
-2. Of gebruik maken van een betrouwbare CDN zoals unpkg of cdnjs
+## Verwacht Resultaat
 
-Maar de Helvetica oplossing is aanbevolen voor maximale betrouwbaarheid.
-
+| Test | Verwacht |
+|------|----------|
+| Prijs €45 + 0% BTW | Totaal = €45,00 |
+| Prijs €45 + 9% BTW | Totaal = €49,05 |
+| Prijs €45 + 21% BTW | Totaal = €54,45 |
