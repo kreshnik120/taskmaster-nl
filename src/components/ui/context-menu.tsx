@@ -27,7 +27,7 @@ const ContextMenuSubTrigger = React.forwardRef<
     className={cn(
       "flex cursor-default select-none items-center rounded-lg px-2 py-1.5 text-sm outline-none transition-colors",
       "data-[state=open]:bg-white/50 dark:data-[state=open]:bg-slate-800/50",
-      "focus:bg-white/50 dark:focus:bg-slate-800/50",
+      "focus:bg-white/50 dark:focus:bg-slate-800/50 focus:backdrop-blur-sm",
       inset && "pl-8",
       className,
     )}
@@ -90,7 +90,7 @@ const ContextMenuItem = React.forwardRef<
     className={cn(
       "relative flex cursor-default select-none items-center rounded-lg px-2 py-1.5 text-sm outline-none transition-colors",
       "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-      "focus:bg-white/50 dark:focus:bg-slate-800/50",
+      "focus:bg-white/50 dark:focus:bg-slate-800/50 focus:backdrop-blur-sm",
       inset && "pl-8",
       className,
     )}
@@ -108,7 +108,7 @@ const ContextMenuCheckboxItem = React.forwardRef<
     className={cn(
       "relative flex cursor-default select-none items-center rounded-lg py-1.5 pl-8 pr-2 text-sm outline-none transition-colors",
       "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-      "focus:bg-white/50 dark:focus:bg-slate-800/50",
+      "focus:bg-white/50 dark:focus:bg-slate-800/50 focus:backdrop-blur-sm",
       className,
     )}
     checked={checked}
@@ -133,7 +133,7 @@ const ContextMenuRadioItem = React.forwardRef<
     className={cn(
       "relative flex cursor-default select-none items-center rounded-lg py-1.5 pl-8 pr-2 text-sm outline-none transition-colors",
       "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-      "focus:bg-white/50 dark:focus:bg-slate-800/50",
+      "focus:bg-white/50 dark:focus:bg-slate-800/50 focus:backdrop-blur-sm",
       className,
     )}
     {...props}

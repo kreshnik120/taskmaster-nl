@@ -7,7 +7,7 @@ function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>)
         "animate-pulse rounded-md",
         "bg-white/40 dark:bg-slate-800/40",
         "backdrop-blur-sm",
-        "border border-white/20 dark:border-white/8",
+        "border border-white/20 dark:border-white/10",
         className
       )}
       {...props}
