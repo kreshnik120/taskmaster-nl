@@ -240,7 +240,7 @@ export default function Facturatie() {
   };
 
   return (
-    <div className="space-y-6 p-6 glass-ambient-mesh-emerald">
+    <div className="space-y-6 p-6 glass-ambient-mesh-emerald overflow-hidden">
       {/* Page Header */}
       <PageHero title="Facturatie" subtitle="Beheer facturen, betalingen en herinneringen">
         <div className="flex items-center gap-2">

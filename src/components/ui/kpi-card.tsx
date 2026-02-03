@@ -117,6 +117,8 @@ export function KPICard({
               "border border-white/50 dark:border-white/10",
               config.borderColor,
               "border-t-4",
+              // Responsive shadow: lighter on mobile, full effect on desktop
+              "shadow-sm md:shadow-none",
               config.shadowColor
             ),
         onClick && "cursor-pointer glass-hover-lift",
