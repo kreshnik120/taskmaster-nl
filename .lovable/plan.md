@@ -1,245 +1,124 @@
 
-# M6 FACTURATIE - DEEL 2: PDF Generatie + Export Functionaliteit
 
-## Overzicht
+# Fix: PDF Generatie - Font Loading Error
 
-Dit plan implementeert de PDF generatie en export functionaliteit voor de Facturatie module. DEEL 1 is compleet - alle benodigde types en hooks zijn aanwezig.
+## Probleem Geïdentificeerd
 
----
+Bij het testen van de PDF download functionaliteit faalt de PDF generatie met de volgende foutmelding:
 
-## Status DEEL 1 Verificatie
+```
+Failed to load resource: the server responded with a status of 404
+https://fonts.gstatic.com/s/inter/v12/...woff2
+```
 
-| Component | Status |
-|-----------|--------|
-| `src/types/facturatie.ts` | Compleet - bevat `FacturatieInstellingen`, `FactuurExportRow`, `ExportFormat` |
-| `src/hooks/facturatie/useFactuurExport.ts` | Compleet - CSV en Excel export functionaliteit |
-| `src/hooks/facturatie/useFacturatieInstellingen.ts` | Compleet - settings ophalen en opslaan |
-| `xlsx` package | Geïnstalleerd (package.json regel 75) |
+**Oorzaak**: De Google Fonts URLs in `FactuurPDFDocument.tsx` zijn verouderd (v12) en niet meer beschikbaar.
 
 ---
 
-## Dependencies
+## Oplossing
 
-**Te installeren:**
-- `@react-pdf/renderer` - Voor professionele PDF generatie
-
-**Reeds aanwezig:**
-- `xlsx` - Al geïnstalleerd voor Excel export
-- `jspdf` + `jspdf-autotable` - Al aanwezig (alternatief voor PDF indien nodig)
+Verwijder de custom font registratie en gebruik de standaard Helvetica font van react-pdf. Dit is de meest betrouwbare oplossing omdat:
+1. Geen externe dependencies
+2. Werkt altijd offline
+3. Helvetica is professioneel en universeel leesbaar
 
 ---
 
-## Wijzigingen per Bestand
+## Wijzigingen
 
-### 1. Nieuwe Bestanden - PDF Componenten
+### Bestand: `src/components/facturatie/pdf/FactuurPDFDocument.tsx`
 
-#### 1.1 `src/components/facturatie/pdf/FactuurPDFDocument.tsx`
+#### 1. Verwijder Font Registratie (regels 13-30)
 
-React-PDF document component met:
-- Professionele A4 layout
-- Bedrijfsgegevens uit `facturatie_instellingen`
-- Factuurregels tabel
-- Totalen sectie (subtotaal, BTW, totaal)
-- Betalingsgegevens (IBAN, BIC, betalingskenmerk)
-- Status badge (kleur per status)
-- Nederlandse datumnotatie
-- Footer tekst uit instellingen
-
-#### 1.2 `src/components/facturatie/pdf/FactuurPDFDownloadButton.tsx`
-
-Herbruikbare download button component:
-- Genereert PDF on-click
-- Loading state tijdens generatie
-- Toast notification bij succes/fout
-- Bestandsnaam: `{factuurnummer}.pdf`
-- Props: `factuur`, `variant`, `size`, `className`
-
-#### 1.3 `src/components/facturatie/pdf/index.ts`
-
-Export barrel file voor PDF componenten.
-
----
-
-### 2. Nieuwe Bestanden - Export Dialog
-
-#### 2.1 `src/components/facturatie/FactuurExportDialog.tsx`
-
-Modal dialog voor bulk export:
-- Radio group: Excel (xlsx) of CSV formaat
-- Info over welke kolommen worden geëxporteerd
-- Teller: aantal te exporteren facturen
-- Ondersteunt filters en geselecteerde IDs
-- Gebruikt bestaande `useFactuurExport` hook
-
----
-
-### 3. Bestaande Bestanden Aanpassen
-
-#### 3.1 `src/components/facturatie/index.ts`
-
-Toevoegen aan exports:
+**Verwijderen:**
 ```typescript
-// PDF
-export { FactuurPDFDocument } from './pdf/FactuurPDFDocument';
-export { FactuurPDFDownloadButton } from './pdf/FactuurPDFDownloadButton';
-
-// Dialog
-export { FactuurExportDialog } from './FactuurExportDialog';
+// Register fonts for better typography
+Font.register({
+  family: 'Inter',
+  fonts: [
+    { 
+      src: 'https://fonts.gstatic.com/s/inter/v12/...woff2',
+      fontWeight: 400,
+    },
+    { 
+      src: 'https://fonts.gstatic.com/s/inter/v12/...woff2', 
+      fontWeight: 600,
+    },
+    { 
+      src: 'https://fonts.gstatic.com/s/inter/v12/...woff2', 
+      fontWeight: 700,
+    },
+  ],
+});
 ```
 
-#### 3.2 `src/pages/FactuurDetail.tsx`
+#### 2. Update Import (regel 7)
 
-**Locatie 1 - Regel 455-458 (Acties Card):**
-
-Vervang placeholder "Download PDF" button met:
-```tsx
-<FactuurPDFDownloadButton
-  factuur={factuur}
-  variant="outline"
-  className="w-full justify-start"
-/>
-```
-
-**Locatie 2 - Regel 198-201 (Dropdown Menu):**
-
-Vervang placeholder menu item met werkende PDF download actie.
-
-**Import toevoegen:**
+**Verwijderen uit import:**
 ```typescript
-import { FactuurPDFDownloadButton } from "@/components/facturatie";
+Font,
 ```
 
-#### 3.3 `src/pages/Facturatie.tsx`
-
-**Imports toevoegen:**
+**Nieuwe import:**
 ```typescript
-import { Download } from "lucide-react";
-import { FactuurExportDialog } from "@/components/facturatie";
+import {
+  Document,
+  Page,
+  Text,
+  View,
+  StyleSheet,
+} from '@react-pdf/renderer';
 ```
 
-**State toevoegen:**
+#### 3. Update Styles - Page (regel 34-38)
+
+**Van:**
 ```typescript
-const [showExportDialog, setShowExportDialog] = useState(false);
+page: {
+  padding: 40,
+  fontSize: 10,
+  fontFamily: 'Inter',
+  color: '#1f2937',
+},
 ```
 
-**Header buttons uitbreiden (regel 241-253):**
-```tsx
-<div className="flex items-center gap-2">
-  <Button
-    variant="outline"
-    onClick={() => navigate("/facturatie/instellingen")}
-  >
-    <Settings className="h-4 w-4 sm:mr-2" />
-    <span className="hidden sm:inline">Instellingen</span>
-  </Button>
-  <Button
-    variant="outline"
-    onClick={() => setShowExportDialog(true)}
-  >
-    <Download className="h-4 w-4 sm:mr-2" />
-    <span className="hidden sm:inline">Exporteren</span>
-  </Button>
-  <Button onClick={() => navigate("/facturatie/nieuw")}>
-    <Plus className="mr-2 h-4 w-4" />
-    Nieuwe factuur
-  </Button>
-</div>
-```
-
-**Dialog toevoegen (voor sluitende `</div>` tag):**
-```tsx
-<FactuurExportDialog
-  open={showExportDialog}
-  onOpenChange={setShowExportDialog}
-  filters={currentFilters}
-  totalCount={facturen?.length || 0}
-/>
+**Naar:**
+```typescript
+page: {
+  padding: 40,
+  fontSize: 10,
+  fontFamily: 'Helvetica',
+  color: '#1f2937',
+},
 ```
 
 ---
 
-## Technische Details
+## Locaties in Code
 
-### PDF Styling
-
-```text
-+------------------------------------------+
-|  [Logo]              Bedrijfsnaam        |
-|                      Adres               |
-|                      KvK / BTW           |
-+------------------------------------------+
-|                                          |
-|  FACTUUR                    [BETAALD]    |
-|                                          |
-+------------------------------------------+
-|  FACTUURADRES      |  FACTUURDETAILS     |
-|  Klantnaam         |  Nummer: FAC-2024-1 |
-|                    |  Datum: 1 jan 2024  |
-|                    |  Vervalt: 31 jan    |
-+------------------------------------------+
-|  REGELS TABEL                            |
-|  Omschrijving | Aantal | Prijs | Totaal  |
-|  ─────────────────────────────────────── |
-|  Dienst A     |    10  | €50   | €500    |
-|  Dienst B     |     5  | €30   | €150    |
-+------------------------------------------+
-|                    Subtotaal   €650,00   |
-|                    BTW 21%     €136,50   |
-|                    ─────────────────────  |
-|                    TOTAAL      €786,50   |
-+------------------------------------------+
-|  BETALINGSGEGEVENS                       |
-|  IBAN: NL12ABCD0123456789                |
-|  Kenmerk: FAC-2024-0001                  |
-|  Termijn: 30 dagen                       |
-+------------------------------------------+
-|  Footer tekst (uit instellingen)         |
-+------------------------------------------+
-```
-
-### Export Formaten
-
-| Formaat | Separator | Decimaal | Encoding |
-|---------|-----------|----------|----------|
-| CSV | `;` (puntkomma) | `,` (komma) | UTF-8 BOM |
-| Excel | N/A | Numeriek | XLSX |
+| Regel | Wijziging |
+|-------|-----------|
+| 7 | Verwijder `Font` uit import |
+| 13-30 | Verwijder complete `Font.register()` block |
+| 37 | Wijzig `fontFamily: 'Inter'` naar `fontFamily: 'Helvetica'` |
 
 ---
 
-## Bestanden Overzicht
+## Verwacht Resultaat Na Fix
 
-### Nieuwe Bestanden (4)
-
-1. `src/components/facturatie/pdf/FactuurPDFDocument.tsx`
-2. `src/components/facturatie/pdf/FactuurPDFDownloadButton.tsx`
-3. `src/components/facturatie/pdf/index.ts`
-4. `src/components/facturatie/FactuurExportDialog.tsx`
-
-### Aan te passen Bestanden (3)
-
-1. `src/components/facturatie/index.ts` - Exports toevoegen
-2. `src/pages/FactuurDetail.tsx` - PDF button integreren
-3. `src/pages/Facturatie.tsx` - Export button + dialog toevoegen
+Na deze wijziging:
+- PDF download werkt correct
+- Geen externe font dependencies
+- Professionele Helvetica typografie
+- Alle overige PDF features blijven werken
 
 ---
 
-## Impactanalyse
+## Alternatieve Oplossing (Optioneel)
 
-- Geen database wijzigingen nodig
-- Geen breaking changes
-- Volledig client-side PDF generatie
-- Export hook al getest en werkend
+Als je toch custom fonts wilt gebruiken, kun je:
+1. De font bestanden lokaal hosten in `/public/fonts/`
+2. Of gebruik maken van een betrouwbare CDN zoals unpkg of cdnjs
 
----
+Maar de Helvetica oplossing is aanbevolen voor maximale betrouwbaarheid.
 
-## Verificatie Na Implementatie
-
-| Functie | Test |
-|---------|------|
-| PDF Download | Klik "Download PDF" op factuur detail |
-| PDF Inhoud | Controleer bedrijfsgegevens, regels, totalen |
-| Status Badge | Controleer kleur per status type |
-| Export Dialog | Klik "Exporteren" op overzicht |
-| CSV Export | Download en open in Excel |
-| Excel Export | Download en controleer kolommen |
-| Nederlandse Notatie | Datums en bedragen correct |
