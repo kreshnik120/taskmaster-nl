@@ -12,7 +12,23 @@ const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableE
 Table.displayName = "Table";
 
 const TableHeader = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(
-  ({ className, ...props }, ref) => <thead ref={ref} className={cn("[&_tr]:border-b", className)} {...props} />,
+  ({ className, ...props }, ref) => (
+    <thead 
+      ref={ref} 
+      className={cn(
+        "[&_tr]:border-b",
+        // Glassmorphism header
+        "bg-white/70 dark:bg-slate-900/70",
+        "backdrop-blur-md",
+        // Sticky behavior
+        "sticky top-0 z-10",
+        // Subtle bottom shadow for separation
+        "shadow-[0_1px_3px_rgba(0,0,0,0.05)]",
+        className
+      )} 
+      {...props} 
+    />
+  ),
 );
 TableHeader.displayName = "TableHeader";
 
@@ -46,7 +62,11 @@ const TableHead = React.forwardRef<HTMLTableCellElement, React.ThHTMLAttributes<
     <th
       ref={ref}
       className={cn(
-        "h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0",
+        "h-11 px-4 text-left align-middle",
+        // Enterprise typography
+        "text-xs font-semibold uppercase tracking-wider",
+        "text-muted-foreground/70",
+        "[&:has([role=checkbox])]:pr-0",
         className,
       )}
       {...props}

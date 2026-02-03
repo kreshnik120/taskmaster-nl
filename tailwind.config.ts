@@ -13,6 +13,19 @@ export default {
       },
     },
     extend: {
+      // Premium Font Stack
+      fontFamily: {
+        sans: ['Inter', 'ui-sans-serif', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
+      },
+      // Enterprise Letter Spacing
+      letterSpacing: {
+        'tighter': '-0.03em',   // Display headings
+        'tight': '-0.02em',     // h1-h2
+        'normal': '-0.01em',    // h3-h4
+        'wide': '0.01em',       // Body text
+        'wider': '0.02em',      // Captions/labels
+        'widest': '0.08em',     // Uppercase labels
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

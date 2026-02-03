@@ -173,6 +173,15 @@ export function OrganizationCardSimple({
             delay: index * 0.05,
             ease: [0.4, 0, 0.2, 1]
           }}
+          // Premium micro-interactions
+          whileHover={{ 
+            y: -2,
+            transition: { type: "spring", stiffness: 400, damping: 25 }
+          }}
+          whileTap={{ 
+            scale: 0.995,
+            transition: { duration: 0.1 }
+          }}
         >
           <Card 
             className={`cursor-pointer glass-hover-lift bg-white/75 dark:bg-slate-900/75 border-white/40 dark:border-white/12 shadow-[0_2px_6px_hsla(215,25%,48%,0.06),0_8px_24px_hsla(215,25%,48%,0.10)] focus:outline-none focus:ring-2 focus:ring-slate-500/30 rounded-xl ${isIncomplete ? 'opacity-80' : 'opacity-100'} flex flex-col overflow-hidden`}
