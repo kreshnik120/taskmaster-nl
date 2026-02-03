@@ -223,7 +223,7 @@ export default function Gebruikers() {
         </div>
       }
     >
-      <div className="space-y-6">
+      <div className="space-y-6 glass-ambient-mesh-violet">
         <PageHero
           title="Gebruikers"
           subtitle="Beheer teamleden en hun rollen"

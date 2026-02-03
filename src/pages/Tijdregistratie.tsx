@@ -15,6 +15,7 @@ import { Loader2, Play, Square, Clock, Trash2, Calendar, ListChecks, Timer } fro
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { KPICard } from "@/components/ui/kpi-card";
+import { PageHero } from "@/components/ui/page-hero";
 
 interface Task {
   id: string;
@@ -359,13 +360,13 @@ const Tijdregistratie = () => {
 
   return (
     <div className="space-y-6 glass-ambient-mesh-amber">
-      {/* Hero Section - Minimal */}
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Tijdregistratie</h1>
-        <p className="text-muted-foreground">
-          {formatMinutes(totalMinutes)} geregistreerd {filterPeriod === 'today' ? 'vandaag' : filterPeriod === 'week' ? 'deze week' : 'deze maand'}
-        </p>
-      </div>
+      {/* Hero Section with PageHero */}
+      <PageHero
+        title="Tijdregistratie"
+        subtitle={`${formatMinutes(totalMinutes)} geregistreerd ${filterPeriod === 'today' ? 'vandaag' : filterPeriod === 'week' ? 'deze week' : 'deze maand'}`}
+        icon={Clock}
+        contextColor="amber"
+      />
 
       {/* KPI Cards met Icons */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

@@ -217,7 +217,7 @@ export default function Notulen() {
 
   return (
     <TooltipProvider>
-      <div className="container mx-auto py-6 space-y-6">
+      <div className="container mx-auto py-6 space-y-6 glass-ambient-mesh-indigo">
         <PageHero
           title="Vergadernotulen"
           subtitle={`${stats.total} notulen • ${stats.draft} concept • ${stats.approved} goedgekeurd`}
