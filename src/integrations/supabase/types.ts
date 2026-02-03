@@ -1605,6 +1605,50 @@ export type Database = {
           },
         ]
       }
+      betaling: {
+        Row: {
+          bedrag: number
+          created_at: string
+          created_by: string
+          datum: string
+          factuur_id: string
+          id: string
+          methode: string
+          opmerking: string | null
+          referentie: string | null
+        }
+        Insert: {
+          bedrag: number
+          created_at?: string
+          created_by: string
+          datum?: string
+          factuur_id: string
+          id?: string
+          methode?: string
+          opmerking?: string | null
+          referentie?: string | null
+        }
+        Update: {
+          bedrag?: number
+          created_at?: string
+          created_by?: string
+          datum?: string
+          factuur_id?: string
+          id?: string
+          methode?: string
+          opmerking?: string | null
+          referentie?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "betaling_factuur_id_fkey"
+            columns: ["factuur_id"]
+            isOneToOne: false
+            referencedRelation: "factuur"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       business_intelligence: {
         Row: {
           data: Json
@@ -2487,6 +2531,255 @@ export type Database = {
             columns: ["knowledge_id"]
             isOneToOne: false
             referencedRelation: "ai_knowledge_base"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      factuur: {
+        Row: {
+          betaald_bedrag: number
+          betalingskenmerk: string | null
+          btw_bedrag: number
+          btw_percentage: number
+          created_at: string
+          created_by: string
+          deleted_at: string | null
+          factuur_nummer: string | null
+          factuurdatum: string
+          flexwerker_id: string | null
+          id: string
+          notities: string | null
+          opdrachtgever_id: string | null
+          openstaand_bedrag: number
+          pdf_url: string | null
+          referentie: string | null
+          status: string
+          subtotaal: number
+          tenant_id: string
+          totaal: number
+          type: string
+          updated_at: string | null
+          updated_by: string | null
+          urenstaat_ids: string[]
+          vervaldatum: string
+          verzonden_naar: string | null
+          verzonden_op: string | null
+        }
+        Insert: {
+          betaald_bedrag?: number
+          betalingskenmerk?: string | null
+          btw_bedrag?: number
+          btw_percentage?: number
+          created_at?: string
+          created_by: string
+          deleted_at?: string | null
+          factuur_nummer?: string | null
+          factuurdatum?: string
+          flexwerker_id?: string | null
+          id?: string
+          notities?: string | null
+          opdrachtgever_id?: string | null
+          openstaand_bedrag?: number
+          pdf_url?: string | null
+          referentie?: string | null
+          status?: string
+          subtotaal?: number
+          tenant_id: string
+          totaal?: number
+          type?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          urenstaat_ids?: string[]
+          vervaldatum: string
+          verzonden_naar?: string | null
+          verzonden_op?: string | null
+        }
+        Update: {
+          betaald_bedrag?: number
+          betalingskenmerk?: string | null
+          btw_bedrag?: number
+          btw_percentage?: number
+          created_at?: string
+          created_by?: string
+          deleted_at?: string | null
+          factuur_nummer?: string | null
+          factuurdatum?: string
+          flexwerker_id?: string | null
+          id?: string
+          notities?: string | null
+          opdrachtgever_id?: string | null
+          openstaand_bedrag?: number
+          pdf_url?: string | null
+          referentie?: string | null
+          status?: string
+          subtotaal?: number
+          tenant_id?: string
+          totaal?: number
+          type?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          urenstaat_ids?: string[]
+          vervaldatum?: string
+          verzonden_naar?: string | null
+          verzonden_op?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "factuur_flexwerker_id_fkey"
+            columns: ["flexwerker_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "factuur_flexwerker_id_fkey"
+            columns: ["flexwerker_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_admin_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "factuur_flexwerker_id_fkey"
+            columns: ["flexwerker_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "factuur_opdrachtgever_id_fkey"
+            columns: ["opdrachtgever_id"]
+            isOneToOne: false
+            referencedRelation: "client_organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "factuur_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      factuur_herinnering: {
+        Row: {
+          created_at: string
+          email_log: string | null
+          factuur_id: string
+          id: string
+          niveau: number
+          openstaand_bedrag: number
+          verzonden_naar: string
+          verzonden_op: string
+        }
+        Insert: {
+          created_at?: string
+          email_log?: string | null
+          factuur_id: string
+          id?: string
+          niveau: number
+          openstaand_bedrag: number
+          verzonden_naar: string
+          verzonden_op?: string
+        }
+        Update: {
+          created_at?: string
+          email_log?: string | null
+          factuur_id?: string
+          id?: string
+          niveau?: number
+          openstaand_bedrag?: number
+          verzonden_naar?: string
+          verzonden_op?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "factuur_herinnering_factuur_id_fkey"
+            columns: ["factuur_id"]
+            isOneToOne: false
+            referencedRelation: "factuur"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      factuur_nummer_sequence: {
+        Row: {
+          jaar: number
+          laatste_nummer: number
+          tenant_id: string
+        }
+        Insert: {
+          jaar: number
+          laatste_nummer?: number
+          tenant_id: string
+        }
+        Update: {
+          jaar?: number
+          laatste_nummer?: number
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "factuur_nummer_sequence_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      factuur_regel: {
+        Row: {
+          aantal: number
+          btw_bedrag: number | null
+          btw_percentage: number
+          created_at: string
+          eenheid: string | null
+          factuur_id: string
+          id: string
+          omschrijving: string
+          prijs: number
+          subtotaal: number | null
+          totaal: number | null
+          urenstaat_id: string | null
+          volgorde: number
+        }
+        Insert: {
+          aantal?: number
+          btw_bedrag?: number | null
+          btw_percentage?: number
+          created_at?: string
+          eenheid?: string | null
+          factuur_id: string
+          id?: string
+          omschrijving: string
+          prijs: number
+          subtotaal?: number | null
+          totaal?: number | null
+          urenstaat_id?: string | null
+          volgorde?: number
+        }
+        Update: {
+          aantal?: number
+          btw_bedrag?: number | null
+          btw_percentage?: number
+          created_at?: string
+          eenheid?: string | null
+          factuur_id?: string
+          id?: string
+          omschrijving?: string
+          prijs?: number
+          subtotaal?: number | null
+          totaal?: number | null
+          urenstaat_id?: string | null
+          volgorde?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "factuur_regel_factuur_id_fkey"
+            columns: ["factuur_id"]
+            isOneToOne: false
+            referencedRelation: "factuur"
             referencedColumns: ["id"]
           },
         ]
