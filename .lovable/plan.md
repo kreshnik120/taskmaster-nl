@@ -1,179 +1,127 @@
 
-# Fase 19: Intuïtieve Drag-and-Drop UX Verbetering
 
-## Probleem Analyse
+# Kritische Bug Fix: Dubbele Iconen in Sorteer Dropdown
 
-Na analyse van de video en code is het probleem duidelijk: **gebruikers verwachten overal op de taakkaart te kunnen klikken en vasthouden om te slepen**, maar momenteel:
+## Root Cause Analyse
 
-1. **Drag werkt alleen via de grip handle** (kleine ⋮⋮ puntjes links)
-2. **Klikken ergens anders opent de detail modal** (onClick handler)
-3. Dit is **niet intuïtief** voor de meeste gebruikers
+Na grondige code-analyse is de oorzaak van de **dubbele iconen** duidelijk geïdentificeerd:
 
-### Huidige Interactie (Verwarrend)
-| Actie | Resultaat |
-|-------|-----------|
-| Klik op grip handle + sleep | ✅ Drag werkt |
-| Klik ergens op kaart | ❌ Opent modal (verwacht: drag starten) |
-| Lang indrukken op kaart | ❌ Geen effect |
+### Het Probleem
 
-### Gewenste Interactie (Intuïtief)
-| Actie | Resultaat |
-|-------|-----------|
-| Klik + kort vasthouden + sleep | ✅ Drag start |
-| Korte klik (tap) | ✅ Opent modal |
-| Dubbelklik | ✅ Opent modal |
+In `MyTasksFlowSection.tsx` (regels 552-580) worden iconen **twee keer gerenderd**:
+
+```tsx
+// PROBLEEM 1: Icoon in de SelectTrigger (regels 554-557)
+<SelectTrigger className="...">
+  <div className="flex items-center gap-1.5">
+    {sortBy === 'due_at' && <Calendar className="h-3 w-3" />}      // ← ICOON 1
+    {sortBy === 'priority' && <AlertCircle className="h-3 w-3" />} // ← ICOON 1
+    {sortBy === 'created_at' && <Clock className="h-3 w-3" />}     // ← ICOON 1
+    <SelectValue />  // ← Dit rendert ook het icoon uit SelectItem!
+  </div>
+</SelectTrigger>
+
+// PROBLEEM 2: Icoon ook in elke SelectItem (regels 562-579)
+<SelectItem value="due_at">
+  <div className="flex items-center gap-2">
+    <Calendar className="h-3 w-3" />  // ← ICOON 2 (komt in SelectValue terecht)
+    Deadline
+  </div>
+</SelectItem>
+```
+
+### Hoe Radix Select werkt
+
+Radix UI's `SelectValue` component rendert automatisch de **volledige children** van de geselecteerde `SelectItem`. Dit betekent:
+
+1. Wanneer "Deadline" geselecteerd is, toont `SelectValue`:
+   - `<Calendar />` + "Deadline" (uit de SelectItem)
+2. De custom wrapper in SelectTrigger voegt **nog een icoon** toe
+3. Resultaat: **📅📅 Deadline** (dubbel icoon)
+
+### Visueel
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│  HUIDIGE SITUATIE (BUG)                                         │
+│                                                                 │
+│  ┌───────────────────────────┐                                  │
+│  │ 📅 📅 Deadline         ▼  │  ← Dubbel icoon!                 │
+│  └───────────────────────────┘                                  │
+│                                                                 │
+│  Bron:                                                          │
+│  - Eerste 📅: Handmatig in SelectTrigger                        │
+│  - Tweede 📅: Via SelectValue uit SelectItem                    │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│  NA FIX                                                          │
+│                                                                 │
+│  ┌───────────────────────────┐                                  │
+│  │ 📅 Deadline            ▼  │  ← Enkel icoon                   │
+│  └───────────────────────────┘                                  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## Oplossing: Touch-Friendly Drag Activation
+## Oplossing
 
-We passen de `PointerSensor` aan met een **delay-gebaseerde activatie** in plaats van alleen afstand. Dit betekent:
+Er zijn **twee opties** om dit op te lossen:
 
-- **Korte klik (< 250ms)** = Opent detail modal
-- **Lang indrukken (> 250ms) + beweging** = Start drag
+### Optie A: Verwijder iconen uit SelectTrigger (Aanbevolen)
 
-Dit patroon wordt gebruikt door Trello, Notion, en andere moderne Kanban-tools.
+Laat de `SelectValue` het volledige item renderen zoals Radix bedoeld is:
+
+```tsx
+<SelectTrigger className="h-8 w-[140px] text-xs glass-select-trigger">
+  <SelectValue />  {/* Rendert automatisch icoon + label */}
+</SelectTrigger>
+```
+
+De iconen in de `SelectItem` blijven behouden — die worden correct getoond in zowel de dropdown als de trigger.
+
+### Optie B: Gebruik SelectValue placeholder
+
+Verwijder iconen uit SelectItem en toon alleen tekst:
+
+```tsx
+<SelectItem value="due_at">Deadline</SelectItem>
+<SelectItem value="priority">Prioriteit</SelectItem>
+<SelectItem value="created_at">Aangemaakt</SelectItem>
+```
+
+En behoud de handmatige iconen in de trigger.
+
+**Aanbeveling**: **Optie A** is schoner en volgt het Radix-patroon correct.
 
 ---
 
 ## Implementatieplan
 
-### Stap 1: MyTasksFlowSection - Sensor Configuratie Updaten
+### Bestand: `src/components/dashboard/MyTasksFlowSection.tsx`
 
-**Bestand:** `src/components/dashboard/MyTasksFlowSection.tsx`
+**Wijzigingen (regels 552-560):**
 
-**Huidige code (regel 188-192):**
-```typescript
-const sensors = useSensors(
-  useSensor(PointerSensor, {
-    activationConstraint: { distance: 10 },
-  })
-);
-```
-
-**Nieuwe code:**
-```typescript
-import { PointerSensor, TouchSensor, MouseSensor } from "@dnd-kit/core";
-
-const sensors = useSensors(
-  // Mouse: delay van 150ms OF 10px beweging
-  useSensor(MouseSensor, {
-    activationConstraint: {
-      delay: 150,
-      tolerance: 5,
-    },
-  }),
-  // Touch: delay van 200ms voor onderscheid van scroll
-  useSensor(TouchSensor, {
-    activationConstraint: {
-      delay: 200,
-      tolerance: 8,
-    },
-  })
-);
-```
-
-### Stap 2: TaskCard - Drag Listeners op Hele Kaart
-
-**Bestand:** `src/components/TaskCard.tsx`
-
-**Wijzigingen:**
-
-1. Verplaats `{...attributes} {...listeners}` van grip handle naar de hele kaart container
-2. Behoud grip handle als visuele indicator (zonder listeners)
-3. Voeg `touch-action: none` toe voor betere touch-respons
-
-**Huidige structuur:**
+**Van:**
 ```tsx
-<div ref={setNodeRef} style={style}>
-  <Card>
-    <div {...attributes} {...listeners}> // Alleen grip heeft listeners
-      <GripVertical />
-    </div>
-    <div onClick={handleCardClick}> // Rest is click-only
-      // Content
-    </div>
-  </Card>
-</div>
+<SelectTrigger className="h-8 w-[140px] text-xs glass-select-trigger">
+  <div className="flex items-center gap-1.5">
+    {sortBy === 'due_at' && <Calendar className="h-3 w-3" />}
+    {sortBy === 'priority' && <AlertCircle className="h-3 w-3" />}
+    {sortBy === 'created_at' && <Clock className="h-3 w-3" />}
+    <SelectValue />
+  </div>
+</SelectTrigger>
 ```
 
-**Nieuwe structuur:**
+**Naar:**
 ```tsx
-<div 
-  ref={setNodeRef} 
-  style={style}
-  {...attributes}
-  {...listeners}  // Hele kaart is draggable
-  className="touch-none"
->
-  <Card>
-    <div> // Grip is nu alleen visueel
-      <GripVertical />
-    </div>
-    <div onClick={handleCardClick}>
-      // Content - klik werkt nog steeds door delay
-    </div>
-  </Card>
-</div>
-```
-
-### Stap 3: Click vs Drag Onderscheid in TaskCard
-
-Om te voorkomen dat de modal opent tijdens drag, voegen we state tracking toe:
-
-```typescript
-const [isDragIntent, setIsDragIntent] = useState(false);
-const pointerDownTime = useRef<number>(0);
-
-const handlePointerDown = () => {
-  pointerDownTime.current = Date.now();
-  setIsDragIntent(false);
-};
-
-const handleCardClick = (e: React.MouseEvent) => {
-  // Skip als het een drag was (meer dan 150ms ingedrukt)
-  const pressDuration = Date.now() - pointerDownTime.current;
-  if (pressDuration > 150 || isDragging) {
-    return;
-  }
-  onClick?.(task);
-};
-```
-
----
-
-## Visueel Diagram: Nieuwe Interactie Flow
-
-```text
-┌────────────────────────────────────────────────────────────┐
-│  TAAKKAART INTERACTIE - VERBETERDE UX                      │
-│                                                            │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  [⋮⋮]  K  Specialist controle t...                   │  │
-│  │                                                      │  │
-│  │       Vandaag                                        │  │
-│  └──────────────────────────────────────────────────────┘  │
-│         ▲                                                  │
-│         │                                                  │
-│  ┌──────┴──────────────────────────────────────────────┐   │
-│  │                                                      │   │
-│  │   KORTE KLIK (< 150ms)                              │   │
-│  │   ────────────────────                              │   │
-│  │   → Opent TaskDetailModal                           │   │
-│  │                                                      │   │
-│  │   LANG INDRUKKEN (> 150ms) + BEWEGING               │   │
-│  │   ────────────────────────────────────              │   │
-│  │   → Start Drag-and-Drop                             │   │
-│  │   → Cursor verandert naar 'grabbing'                │   │
-│  │   → Kaart volgt muis/vinger                         │   │
-│  │                                                      │   │
-│  │   TOUCH/MOBIEL (> 200ms delay)                      │   │
-│  │   ──────────────────────────                        │   │
-│  │   → Langere delay voorkomt conflict met scroll      │   │
-│  │                                                      │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                                                            │
-└────────────────────────────────────────────────────────────┘
+<SelectTrigger className="h-8 w-[140px] text-xs glass-select-trigger">
+  <SelectValue />
+</SelectTrigger>
 ```
 
 ---
@@ -182,54 +130,40 @@ const handleCardClick = (e: React.MouseEvent) => {
 
 | Bestand | Actie | Wijzigingen |
 |---------|-------|-------------|
-| `src/components/dashboard/MyTasksFlowSection.tsx` | EDIT | Sensor configuratie met MouseSensor + TouchSensor met delay |
-| `src/components/TaskCard.tsx` | EDIT | Drag listeners op hele kaart, click/drag onderscheid |
+| `src/components/dashboard/MyTasksFlowSection.tsx` | EDIT | Verwijder handmatige iconen uit SelectTrigger wrapper |
 
-**Totaal: 2 bestanden bewerken**
+**Totaal: 1 bestand, ~6 regels verwijderd**
 
 ---
 
 ## Acceptatiecriteria
 
-1. ✅ Overal op de kaart klikken en 150ms+ vasthouden start drag
-2. ✅ Korte klik (< 150ms) opent nog steeds de detail modal
-3. ✅ Touch op mobiel werkt met 200ms delay (voorkomt scroll-conflict)
-4. ✅ Grip handle blijft zichtbaar als visuele indicator
-5. ✅ Cursor verandert naar `grabbing` tijdens drag
-6. ✅ Geen regressie in bestaande keyboard accessibility
-7. ✅ Modal opent NIET na een drag-and-drop actie
+1. Sorteer dropdown toont **één icoon** per optie
+2. Icoon + label correct getoond in gesloten trigger state
+3. Icoon + label correct getoond in open dropdown menu
+4. Geen visuele regressie in styling of spacing
+5. Alle drie opties (Deadline, Prioriteit, Aangemaakt) correct gerenderd
 
 ---
 
-## Technische Notities
+## Technische Notitie
 
-### Waarom Delay-Based Activatie?
+Dit is een **veelvoorkomende Radix UI valkuil**. De `SelectValue` component is bedoeld om de volledige content van de geselecteerde `SelectItem` te spiegelen. Het handmatig toevoegen van elementen naast `SelectValue` leidt tot duplicatie.
 
-| Methode | Voordelen | Nadelen |
-|---------|-----------|---------|
-| Distance-only (huidige) | Snel | Conflicteert met click |
-| Delay-only | Intuïtief | Kan traag voelen |
-| **Delay + Tolerance** | Beste van beide | Iets complexer |
+### Best Practice
 
-De combinatie van `delay: 150` met `tolerance: 5` betekent:
-- Na 150ms indrukken wordt drag geactiveerd
-- OF na 5px beweging binnen die 150ms
-- Korte taps blijven clicks
+```tsx
+// CORRECT: Laat SelectValue het werk doen
+<SelectTrigger>
+  <SelectValue placeholder="Selecteer..." />
+</SelectTrigger>
 
-### Touch-Specifieke Overwegingen
+// SelectItem bevat het icoon + label
+<SelectItem value="option">
+  <div className="flex items-center gap-2">
+    <Icon />
+    Label
+  </div>
+</SelectItem>
+```
 
-Op touch devices is 200ms delay nodig omdat:
-- Scroll gestures ook pointer events triggeren
-- Gebruikers langzamer zijn met touch dan muis
-- iOS heeft eigen gesture delays die we moeten respecteren
-
----
-
-## Verwacht Resultaat
-
-Na implementatie:
-
-1. **Intuïtieve UX**: Gebruikers kunnen overal op de kaart klikken en slepen
-2. **Geen conflict**: Korte clicks openen modal, lange press start drag
-3. **Touch-friendly**: Werkt goed op tablets en mobiel
-4. **Visuele feedback**: Grip handle toont dat slepen mogelijk is
