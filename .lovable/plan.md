@@ -1,198 +1,222 @@
 
-# M6 Facturatie - Deel 2: Volledige Pagina's
+# M6 Facturatie - Betalingen + Herinneringen UI (DEEL 1 van 2)
 
 ## Overzicht
 
-Dit plan implementeert de volledige pagina's voor de Facturatie module, inclusief een nieuwe hook voor opdrachtgever selectie.
+Dit plan implementeert de betalingen hooks en componenten voor de M6 Facturatie module. De herinneringen-functionaliteit en integratie volgt in DEEL 2.
 
 ---
 
-## Fase 1: Nieuwe Hook - useClientOrganizations
+## Fase 1: Nieuwe Hooks
 
-**Nieuw bestand:** `src/hooks/useClientOrganizations.ts`
+### 1.1 useBetalingen Hook
 
-De `useClientOrganizations` hook bestaat nog niet in de codebase. Deze moet eerst gemaakt worden voordat de wizard kan werken.
+**Nieuw bestand:** `src/hooks/facturatie/useBetalingen.ts`
+
+Bevat drie hooks:
+
+| Hook | Functie |
+|------|---------|
+| `useBetalingen` | Query voor betalingen per factuur |
+| `useDeleteBetaling` | Betaling verwijderen met cache invalidatie |
+| `useUpdateBetaling` | Betaling bijwerken (bedrag, datum, methode, etc.) |
+
+Alle hooks volgen het bestaande patroon in `useCreateBetaling.ts`:
+- Gebruik van `FACTURATIE_QUERY_KEYS` voor cache management
+- Toast notificaties voor succes/fout
+- `isDeleting`/`isUpdating` loading states
+
+### 1.2 useHerinneringen Hook
+
+**Nieuw bestand:** `src/hooks/facturatie/useHerinneringen.ts`
+
+| Hook | Functie |
+|------|---------|
+| `useHerinneringen` | Query voor herinneringen per factuur |
+| `useSendHerinnering` | Herinnering versturen + status update naar HERINNERING_1/2/3 |
+
+De `useSendHerinnering` hook:
+- Valideert niveau (1, 2, of 3)
+- Controleert of niveau al verstuurd is
+- Insert in `factuur_herinnering` tabel
+- Update factuur status automatisch
+
+### 1.3 Hooks Index Update
+
+**Bestand:** `src/hooks/facturatie/index.ts`
+
+Toevoegen van exports:
+```typescript
+export { useBetalingen, useDeleteBetaling, useUpdateBetaling } from './useBetalingen';
+export { useHerinneringen, useSendHerinnering } from './useHerinneringen';
+```
+
+---
+
+## Fase 2: Verbeterde BetalingRegistrerenDialog
+
+**Bestand:** `src/components/facturatie/BetalingRegistrerenDialog.tsx` (vervangen)
+
+### Nieuwe Features
+
+| Feature | Beschrijving |
+|---------|--------------|
+| Factuur samenvatting | Toont totaal, reeds betaald, openstaand |
+| Quick amount buttons | "Volledig" en "50%" knoppen |
+| Deelbetaling warning | Info alert bij gedeeltelijke betaling |
+| Overbetaling warning | Warning alert bij bedrag > openstaand |
+| Volledige betaling success | Success indicator bij volledige betaling |
+| useEffect reset | Form reset bij openen dialog |
+
+### Nieuwe Props
 
 ```typescript
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-
-interface ClientOrganization {
-  id: string;
-  name: string;
-  kvk_nummer: string | null;
-  btw_nummer: string | null;
-  centrale_facturatie_email: string | null;
-}
-
-export function useClientOrganizations() {
-  return useQuery({
-    queryKey: ["client-organizations"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("client_organizations")
-        .select("id, name, kvk_nummer, btw_nummer, centrale_facturatie_email")
-        .order("name");
-
-      if (error) throw error;
-      return data as ClientOrganization[];
-    },
-    staleTime: 5 * 60 * 1000, // 5 minuten cache
-  });
+interface BetalingRegistrerenDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  factuurId: string;
+  factuurNummer?: string;        // NIEUW
+  openstaandBedrag: number;
+  totaalBedrag?: number;         // NIEUW
+  reedsBetaald?: number;         // NIEUW
 }
 ```
 
 ---
 
-## Fase 2: FactuurDetail Pagina
+## Fase 3: Betalingen Historie Componenten
 
-**Bestand:** `src/pages/FactuurDetail.tsx` (volledig vervangen)
+### 3.1 BetalingenHistorie Component
 
-### Structuur
+**Nieuw bestand:** `src/components/facturatie/BetalingenHistorie.tsx`
 
+Structuur:
 ```text
-┌──────────────────────────────────────────────────────────┐
-│ ← Terug   FAC-2025-0001   [VERZONDEN]                    │
-│           Verkoopfactuur • Aangemaakt op 3 februari 2025 │
-│                                                          │
-│               [Betaling registreren] [Verzenden] [⋮]     │
-├────────────────────────────────────┬─────────────────────┤
-│                                    │                     │
-│ [Details] [Regels] [Betalingen]    │ Financieel          │
-│ [Herinneringen]                    │ ├─ Subtotaal €1.000 │
-│                                    │ ├─ BTW €210         │
-│ ┌────────────────────────────────┐ │ ├─ Totaal €1.210    │
-│ │ Tab content hier               │ │ ├─ Betaald €0       │
-│ │                                │ │ └─ Openstaand €1.210│
-│ │                                │ │                     │
-│ │                                │ │ Datums              │
-│ └────────────────────────────────┘ │ ├─ Factuurdatum     │
-│                                    │ └─ Vervaldatum      │
-│                                    │                     │
-│                                    │ Acties              │
-│                                    │ [Download PDF]      │
-│                                    │ [E-mail verzenden]  │
-└────────────────────────────────────┴─────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│ Betalingen                      [Betaling registreren]  │
+├─────────────────────────────────────────────────────────┤
+│ Voortgang: €500 van €1.210 (41%)                        │
+│ ████████████░░░░░░░░░░░░░░░░░                           │
+│ Openstaand: €710                                        │
+├─────────────────────────────────────────────────────────┤
+│ Datum       │ Methode   │ Referentie │ Bedrag │    │
+│ 1 feb 2025  │ Bank      │ TXN-123    │ €300   │ ⋮ │
+│ 15 jan 2025 │ iDEAL     │ —          │ €200   │ ⋮ │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### Componenten Gebruikt
+### 3.2 BetalingBewerkDialog Component
 
-| Component | Import |
-|-----------|--------|
-| StatusBadge | Lokale functie met kleuren per status |
-| Tabs | `@/components/ui/tabs` |
-| AlertDialog | `@/components/ui/alert-dialog` |
-| DropdownMenu | `@/components/ui/dropdown-menu` |
-| BetalingRegistrerenDialog | `@/components/facturatie/BetalingRegistrerenDialog` |
-| StatusWijzigenDialog | `@/components/facturatie/StatusWijzigenDialog` |
+**Nieuw bestand:** `src/components/facturatie/BetalingBewerkDialog.tsx`
 
-### Conditionele Acties
-
-| Actie | Voorwaarde |
-|-------|------------|
-| canEdit | status === "CONCEPT" |
-| canDelete | status === "CONCEPT" |
-| canSend | status === "DEFINITIEF" |
-| canRegisterPayment | status NOT IN ("CONCEPT", "AFGEBOEKT", "BETAALD") |
+Vergelijkbaar met BetalingRegistrerenDialog maar:
+- Pre-filled met bestaande betaling data
+- Gebruikt `useUpdateBetaling` hook
+- Titel: "Betaling bewerken"
 
 ---
 
-## Fase 3: FactuurAanmaken Wizard
+## Fase 4: Types Uitbreiden
 
-**Bestand:** `src/pages/FactuurAanmaken.tsx` (volledig vervangen)
+**Bestand:** `src/types/facturatie.ts`
 
-### 3-Step Wizard Flow
+Toevoegen:
 
-```text
-Step 1: Basisgegevens        Step 2: Factuurregels       Step 3: Bevestigen
-┌─────────────────────┐      ┌─────────────────────┐     ┌─────────────────────┐
-│  ●───○───○          │      │  ✓───●───○          │     │  ✓───✓───●          │
-│                     │      │                     │     │                     │
-│ Type factuur        │      │ Omschrijving       │     │ SAMENVATTING        │
-│ [Verkoopfactuur ▼]  │      │ Aantal  Prijs  BTW │     │                     │
-│                     │      │ [Regel 1]          │     │ Opdrachtgever:      │
-│ Opdrachtgever *     │      │ [Regel 2]          │     │ Ziekenhuis Noord    │
-│ [Selecteer... ▼]    │      │ [+ Regel toevoegen]│     │                     │
-│                     │      │                     │     │ Regels: 2           │
-│ Factuurdatum        │      │ Subtotaal €1.000   │     │ Subtotaal €1.000    │
-│ [2025-02-03]        │      │ BTW €210           │     │ BTW €210            │
-│                     │      │ Totaal €1.210      │     │ Totaal €1.210       │
-│ Vervaldatum         │      │                     │     │                     │
-│ [2025-03-05]        │      │                     │     │ Notities (optioneel)│
-│                     │      │                     │     │ [________________]  │
-│ Referentie          │      │                     │     │                     │
-│ [optioneel]         │      │                     │     │ [Factuur aanmaken]  │
-└─────────────────────┘      └─────────────────────┘     └─────────────────────┘
-     [Volgende →]                [← Terug] [Volgende →]      [← Terug]
+```typescript
+// Herinnering niveau constanten
+export const HERINNERING_NIVEAUS: HerinneringNiveau[] = [1, 2, 3];
+
+export const HERINNERING_NIVEAU_LABELS: Record<HerinneringNiveau, string> = {
+  1: 'Eerste herinnering',
+  2: 'Tweede herinnering',
+  3: 'Laatste herinnering',
+};
+
+export const HERINNERING_NIVEAU_COLORS: Record<HerinneringNiveau, string> = {
+  1: 'yellow',
+  2: 'orange',
+  3: 'red',
+};
+
+// Betaling samenvatting voor dashboard
+export interface BetalingSummary {
+  factuur_id: string;
+  factuur_nummer: string;
+  totaal_bedrag: number;
+  betaald_bedrag: number;
+  openstaand_bedrag: number;
+  aantal_betalingen: number;
+  laatste_betaling_datum: string | null;
+}
 ```
-
-### Form State
-
-| Field | Type | Default | Validatie |
-|-------|------|---------|-----------|
-| type | FactuurType | "VERKOOP" | Verplicht |
-| opdrachtgeverId | string | "" | Verplicht |
-| factuurdatum | string | today | Verplicht |
-| vervaldatum | string | today + 30 dagen | Verplicht |
-| referentie | string | "" | Optioneel |
-| notities | string | "" | Optioneel |
-| regels | array | [{ omschrijving: "", aantal: 1, prijs: 0, btw_percentage: 21 }] | Min 1 |
-
-### Regel Validatie
-
-| Stap | canGoNext Conditie |
-|------|-------------------|
-| 1 | opdrachtgeverId && factuurdatum && vervaldatum |
-| 2 | regels.every(r => r.omschrijving && r.aantal > 0 && r.prijs >= 0) |
-| 3 | Altijd true |
 
 ---
 
-## Fase 4: Bestanden Overzicht
+## Fase 5: Componenten Index
+
+**Nieuw bestand:** `src/components/facturatie/index.ts`
+
+```typescript
+// Dialogs
+export { BetalingRegistrerenDialog } from './BetalingRegistrerenDialog';
+export { BetalingBewerkDialog } from './BetalingBewerkDialog';
+export { StatusWijzigenDialog } from './StatusWijzigenDialog';
+
+// Panels
+export { BetalingenHistorie } from './BetalingenHistorie';
+```
+
+---
+
+## Bestanden Overzicht
 
 | Bestand | Actie | Regels |
 |---------|-------|--------|
-| `src/hooks/useClientOrganizations.ts` | CREATE | ~25 |
-| `src/pages/FactuurDetail.tsx` | REPLACE | ~350 |
-| `src/pages/FactuurAanmaken.tsx` | REPLACE | ~280 |
+| `src/hooks/facturatie/useBetalingen.ts` | CREATE | ~85 |
+| `src/hooks/facturatie/useHerinneringen.ts` | CREATE | ~95 |
+| `src/hooks/facturatie/index.ts` | EDIT | +2 |
+| `src/components/facturatie/BetalingRegistrerenDialog.tsx` | REPLACE | ~180 |
+| `src/components/facturatie/BetalingenHistorie.tsx` | CREATE | ~200 |
+| `src/components/facturatie/BetalingBewerkDialog.tsx` | CREATE | ~130 |
+| `src/components/facturatie/index.ts` | CREATE | ~10 |
+| `src/types/facturatie.ts` | EDIT | +25 |
 
 ---
 
-## Fase 5: Dependencies Check
+## Dependencies Check
 
-Alle benodigde UI componenten zijn beschikbaar:
-- ✅ Table, TableBody, TableCell, etc. (`@/components/ui/table`)
-- ✅ Tabs, TabsList, TabsTrigger, TabsContent (`@/components/ui/tabs`)
-- ✅ Select, SelectTrigger, SelectContent, SelectItem (`@/components/ui/select`)
-- ✅ Dialog, DialogContent, etc. (`@/components/ui/dialog`)
-- ✅ AlertDialog components (`@/components/ui/alert-dialog`)
-- ✅ DropdownMenu components (`@/components/ui/dropdown-menu`)
-- ✅ date-fns voor datum formatting
-
-### Hooks Check
-
-- ✅ `useFactuur` - bevat opdrachtgever relatie data
-- ✅ `useUpdateFactuur` - bevat `updateStatus` functie
-- ✅ `useDeleteFactuur` - bevat status check voor CONCEPT
-- ✅ `useCreateFactuur` - retourneert factuur met id
-- ⚠️ `useClientOrganizations` - MOET AANGEMAAKT WORDEN
+Alle benodigde componenten zijn beschikbaar:
+- Alert, AlertDescription (`@/components/ui/alert`)
+- Progress styling via inline div
+- DropdownMenu voor acties
+- AlertDialog voor delete confirmatie
+- date-fns voor datum formatting
 
 ---
 
-## Verificatie Checklist
-
-Na implementatie:
+## Verificatie Checklist DEEL 1
 
 | Check | Item |
 |-------|------|
-| [ ] | `/facturatie/:id` laadt factuur data |
-| [ ] | StatusBadge toont correcte kleuren |
-| [ ] | 4 Tabs werken (Details, Regels, Betalingen, Herinneringen) |
-| [ ] | Betaling registreren dialog opent |
-| [ ] | Status wijzigen dialog opent |
-| [ ] | `/facturatie/nieuw` laadt wizard |
-| [ ] | Stap 1: Opdrachtgever selectie werkt |
-| [ ] | Stap 2: Regels toevoegen/verwijderen werkt |
-| [ ] | Stap 3: Totalen kloppen |
-| [ ] | Factuur aanmaken werkt + redirect naar detail |
+| [ ] | useBetalingen hook werkt |
+| [ ] | useDeleteBetaling hook werkt |
+| [ ] | useUpdateBetaling hook werkt |
+| [ ] | useHerinneringen hook werkt |
+| [ ] | useSendHerinnering hook werkt |
+| [ ] | BetalingRegistrerenDialog toont factuur samenvatting |
+| [ ] | Quick amount buttons werken |
+| [ ] | Deelbetaling/Overbetaling warnings tonen |
+| [ ] | BetalingenHistorie toont progress bar |
+| [ ] | Betalingen kunnen bewerkt worden |
+| [ ] | Betalingen kunnen verwijderd worden |
 | [ ] | Geen TypeScript errors |
+
+---
+
+## Na DEEL 1 Succes
+
+DEEL 2 bevat:
+- HerinneringenPanel component
+- HerinneringVersturenDialog component
+- FactuurDetail tabs update met nieuwe componenten
+- Quick actions integratie
