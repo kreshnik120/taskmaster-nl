@@ -109,7 +109,7 @@ export default function FactuurAanmaken() {
     let btw_bedrag = 0;
     regels.forEach((regel) => {
       const regelSubtotaal = regel.aantal * regel.prijs;
-      const regelBtw = regelSubtotaal * ((regel.btw_percentage || 21) / 100);
+      const regelBtw = regelSubtotaal * ((regel.btw_percentage ?? 21) / 100);
       subtotaal += regelSubtotaal;
       btw_bedrag += regelBtw;
     });
@@ -292,7 +292,7 @@ export default function FactuurAanmaken() {
               <TableBody>
                 {regels.map((regel, index) => {
                   const regelTotaal =
-                    regel.aantal * regel.prijs * (1 + (regel.btw_percentage || 21) / 100);
+                    regel.aantal * regel.prijs * (1 + (regel.btw_percentage ?? 21) / 100);
                   return (
                     <TableRow key={index}>
                       <TableCell>
@@ -332,7 +332,7 @@ export default function FactuurAanmaken() {
                       </TableCell>
                       <TableCell>
                         <Select
-                          value={String(regel.btw_percentage || 21)}
+                          value={String(regel.btw_percentage ?? 21)}
                           onValueChange={(v) =>
                             updateRegel(index, "btw_percentage", parseInt(v) as BtwPercentage)
                           }
@@ -473,7 +473,7 @@ export default function FactuurAanmaken() {
                       <TableCell className="text-right">{formatCurrency(regel.prijs)}</TableCell>
                       <TableCell className="text-right font-medium">
                         {formatCurrency(
-                          regel.aantal * regel.prijs * (1 + (regel.btw_percentage || 21) / 100)
+                          regel.aantal * regel.prijs * (1 + (regel.btw_percentage ?? 21) / 100)
                         )}
                       </TableCell>
                     </TableRow>
