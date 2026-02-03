@@ -3,7 +3,9 @@ import { cn } from "@/lib/utils";
 import { useCountUp } from "@/hooks/useCountUp";
 import { LucideIcon } from "lucide-react";
 
-type KPIVariant = "count" | "success" | "time" | "urgent" | "personal" | "minimal" | "facturatie";
+type KPIVariant = 
+  | "count" | "success" | "time" | "urgent" | "personal" | "minimal" 
+  | "facturatie" | "rose" | "violet" | "slate" | "teal" | "amber" | "blue" | "indigo";
 
 interface KPICardProps {
   icon: LucideIcon;
@@ -88,6 +90,70 @@ const variantConfig: Record<KPIVariant, {
     shadowColor: "shadow-float-emerald shadow-float-emerald-hover",
     ringColor: "ring-tab-facturatie-500",
     accentDot: "bg-tab-facturatie-500",
+  },
+  // Context-specific variants
+  rose: {
+    gradient: "from-tab-recruitment-50/80 to-white/60 dark:from-tab-recruitment-900/30 dark:to-background/60",
+    borderColor: "border-t-tab-recruitment-400/60",
+    textColor: "text-tab-recruitment-600 dark:text-tab-recruitment-400",
+    iconColor: "text-tab-recruitment-500",
+    shadowColor: "shadow-float-rose shadow-float-rose-hover",
+    ringColor: "ring-tab-recruitment-500",
+    accentDot: "bg-tab-recruitment-500",
+  },
+  violet: {
+    gradient: "from-tab-team-50/80 to-white/60 dark:from-tab-team-900/30 dark:to-background/60",
+    borderColor: "border-t-tab-team-400/60",
+    textColor: "text-tab-team-600 dark:text-tab-team-400",
+    iconColor: "text-tab-team-500",
+    shadowColor: "shadow-float-violet shadow-float-violet-hover",
+    ringColor: "ring-tab-team-500",
+    accentDot: "bg-tab-team-500",
+  },
+  slate: {
+    gradient: "from-tab-lijst-50/80 to-white/60 dark:from-tab-lijst-900/30 dark:to-background/60",
+    borderColor: "border-t-tab-lijst-400/60",
+    textColor: "text-tab-lijst-600 dark:text-tab-lijst-400",
+    iconColor: "text-tab-lijst-500",
+    shadowColor: "shadow-float-slate shadow-float-slate-hover",
+    ringColor: "ring-tab-lijst-500",
+    accentDot: "bg-tab-lijst-500",
+  },
+  teal: {
+    gradient: "from-tab-kalender-50/80 to-white/60 dark:from-tab-kalender-900/30 dark:to-background/60",
+    borderColor: "border-t-tab-kalender-400/60",
+    textColor: "text-tab-kalender-600 dark:text-tab-kalender-400",
+    iconColor: "text-tab-kalender-500",
+    shadowColor: "shadow-float-teal shadow-float-teal-hover",
+    ringColor: "ring-tab-kalender-500",
+    accentDot: "bg-tab-kalender-500",
+  },
+  amber: {
+    gradient: "from-tab-opvolging-50/80 to-white/60 dark:from-tab-opvolging-900/30 dark:to-background/60",
+    borderColor: "border-t-tab-opvolging-400/60",
+    textColor: "text-tab-opvolging-600 dark:text-tab-opvolging-400",
+    iconColor: "text-tab-opvolging-500",
+    shadowColor: "shadow-float-amber shadow-float-amber-hover",
+    ringColor: "ring-tab-opvolging-500",
+    accentDot: "bg-tab-opvolging-500",
+  },
+  blue: {
+    gradient: "from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60",
+    borderColor: "border-t-blue-400/60",
+    textColor: "text-blue-600 dark:text-blue-400",
+    iconColor: "text-blue-500",
+    shadowColor: "shadow-float-indigo shadow-float-indigo-hover",
+    ringColor: "ring-blue-500",
+    accentDot: "bg-blue-500",
+  },
+  indigo: {
+    gradient: "from-tab-mijn-werk-50/80 to-white/60 dark:from-tab-mijn-werk-900/30 dark:to-background/60",
+    borderColor: "border-t-tab-mijn-werk-400/60",
+    textColor: "text-tab-mijn-werk-600 dark:text-tab-mijn-werk-400",
+    iconColor: "text-tab-mijn-werk-500",
+    shadowColor: "shadow-float-indigo shadow-float-indigo-hover",
+    ringColor: "ring-tab-mijn-werk-500",
+    accentDot: "bg-tab-mijn-werk-500",
   },
 };
 

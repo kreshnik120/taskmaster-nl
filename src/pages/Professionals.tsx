@@ -539,7 +539,7 @@ const Professionals = () => {
           icon={Users}
           title="Totaal"
           value={totalCount}
-          variant="count"
+          variant="violet"
           isActive={activeKpi === "all"}
           onClick={() => handleKpiClick("all")}
         />
@@ -547,7 +547,7 @@ const Professionals = () => {
           icon={CheckCircle}
           title="Beschikbaar"
           value={availableCount}
-          variant="success"
+          variant="violet"
           isActive={activeKpi === "beschikbaar"}
           onClick={() => handleKpiClick("beschikbaar")}
         />
@@ -555,14 +555,14 @@ const Professionals = () => {
               icon={TrendingUp}
               title="Gekoppeld"
               value={withActivePlacementCount}
-              variant="time"
+              variant="violet"
               onClick={() => handleKpiClick("gekoppeld")}
             />
         <KPICard
           icon={UserPlus}
           title="Nieuw (7d)"
           value={newInLast7Days}
-          variant="personal"
+          variant="violet"
           isActive={activeKpi === "nieuw"}
           onClick={() => handleKpiClick("nieuw")}
         />

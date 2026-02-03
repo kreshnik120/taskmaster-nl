@@ -374,7 +374,7 @@ const Tijdregistratie = () => {
           title="Vandaag"
           value={animatedTodayMinutes}
           subtitle={formatMinutes(animatedTodayMinutes)}
-          variant="count"
+          variant="amber"
           isActive={filterPeriod === "today"}
           onClick={() => setFilterPeriod("today")}
         />
@@ -383,7 +383,7 @@ const Tijdregistratie = () => {
           title="Deze Week"
           value={animatedWeekMinutes}
           subtitle={formatMinutes(animatedWeekMinutes)}
-          variant="success"
+          variant="amber"
           isActive={filterPeriod === "week"}
           onClick={() => setFilterPeriod("week")}
         />
@@ -391,7 +391,7 @@ const Tijdregistratie = () => {
           icon={ListChecks}
           title="Registraties"
           value={animatedEntries}
-          variant="time"
+          variant="amber"
           onClick={() => setFilterPeriod("all")}
         />
         <KPICard
@@ -399,8 +399,8 @@ const Tijdregistratie = () => {
           title="Actieve Timer"
           value={activeTimer ? Math.floor((currentTime.getTime() - new Date(activeTimer.start).getTime()) / 1000 / 3600) : 0}
           subtitle={activeTimer ? getRunningTime() : '0u 0m'}
-          variant="personal"
-          className={cn(activeTimer && "ring-2 ring-purple-500")}
+          variant="amber"
+          className={cn(activeTimer && "ring-2 ring-tab-opvolging-500")}
           onClick={() => {
             const timerSection = document.querySelector('[data-timer-card]');
             timerSection?.scrollIntoView({ behavior: 'smooth', block: 'center' });

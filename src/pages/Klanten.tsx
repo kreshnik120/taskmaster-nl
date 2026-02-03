@@ -614,7 +614,7 @@ export default function Klanten() {
           title="Organisaties"
           value={organizations.length}
           subtitle="totaal"
-          variant="count"
+          variant="slate"
           onClick={() => handleMetricClick('total')}
         />
         <KPICard
@@ -622,7 +622,7 @@ export default function Klanten() {
           title="ABCzorg"
           value={abczorgCount}
           subtitle="organisaties"
-          variant="success"
+          variant="slate"
           onClick={() => handleMetricClick('abczorg')}
         />
         <KPICard
@@ -630,7 +630,7 @@ export default function Klanten() {
           title="CitoZorg"
           value={citozorgCount}
           subtitle="organisaties"
-          variant="time"
+          variant="slate"
           onClick={() => handleMetricClick('citozorg')}
         />
         <KPICard
@@ -638,7 +638,7 @@ export default function Klanten() {
           title="Werklocaties"
           value={totalSublocations}
           subtitle="sublocaties"
-          variant="urgent"
+          variant="slate"
           onClick={() => handleMetricClick('sublocations')}
         />
       </div>

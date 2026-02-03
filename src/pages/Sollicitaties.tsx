@@ -1056,7 +1056,7 @@ const Sollicitaties = () => {
                 title="Totaal"
                 value={displayedTotal}
                 subtitle="sollicitaties"
-                variant="count"
+                variant="rose"
                 onClick={() => {
                   setFilterStage("all");
                   setSearchQuery("");
@@ -1071,7 +1071,7 @@ const Sollicitaties = () => {
             title="Nieuw"
             value={displayedNew}
             subtitle="binnengekomen"
-            variant="success"
+            variant="rose"
             isActive={filterStage === "nieuw"}
             onClick={() => setFilterStage(filterStage === "nieuw" ? "all" : "nieuw")}
           />
@@ -1080,7 +1080,7 @@ const Sollicitaties = () => {
               title="Goedgekeurd"
               value={displayedApproved}
               subtitle="klaar voor plaatsing"
-              variant="time"
+              variant="rose"
               isActive={filterStage === "goedgekeurd"}
               onClick={() => setFilterStage(filterStage === "goedgekeurd" ? "all" : "goedgekeurd")}
             />
@@ -1089,7 +1089,7 @@ const Sollicitaties = () => {
                 title="Intake Gereed"
                 value={filteredApplications.filter(app => (app.completeness_score || 0) >= 80).length}
                 subtitle={`van ${displayedTotal}`}
-                variant="urgent"
+                variant="rose"
                 onClick={() => {
                   // Filter by high completeness
                   toast.info(`${filteredApplications.filter(app => (app.completeness_score || 0) >= 80).length} sollicitaties met ≥80% compleetheid`);

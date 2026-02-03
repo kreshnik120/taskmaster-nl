@@ -193,7 +193,7 @@ export default function Plaatsingen() {
           title="Totaal"
           value={stats.total}
           subtitle="plaatsingen"
-          variant="count"
+          variant="teal"
           onClick={() => setStatusFilter("all")}
           isActive={statusFilter === "all"}
         />
@@ -202,7 +202,7 @@ export default function Plaatsingen() {
           title="Actief"
           value={stats.active}
           subtitle="lopend"
-          variant="success"
+          variant="teal"
           onClick={() => setStatusFilter(statusFilter === "active" ? "all" : "active")}
           isActive={statusFilter === "active"}
         />
@@ -211,7 +211,7 @@ export default function Plaatsingen() {
           title="Concept"
           value={stats.draft}
           subtitle="te activeren"
-          variant="time"
+          variant="teal"
           onClick={() => setStatusFilter(statusFilter === "draft" ? "all" : "draft")}
           isActive={statusFilter === "draft"}
         />
@@ -220,7 +220,7 @@ export default function Plaatsingen() {
           title="Afgerond"
           value={stats.completed}
           subtitle="plaatsingen"
-          variant="urgent"
+          variant="teal"
           onClick={() => setStatusFilter(statusFilter === "completed" ? "all" : "completed")}
           isActive={statusFilter === "completed"}
         />

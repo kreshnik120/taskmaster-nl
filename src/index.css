@@ -2219,6 +2219,302 @@ All colors MUST be HSL.
 }
 
 /* ============================================
+   GLASS FILTER BARS - Context-specific search/filter areas
+   ============================================ */
+
+.glass-filter-bar-rose {
+  position: relative;
+  background: linear-gradient(135deg, hsla(345, 48%, 99%, 0.88) 0%, hsla(345, 48%, 97%, 0.72) 100%);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid hsla(345, 48%, 90%, 0.55);
+  border-top: 3px solid hsla(345, 48%, 52%, 0.45);
+  box-shadow: 0 4px 16px hsla(345, 48%, 52%, 0.08);
+  border-radius: 0.75rem;
+}
+
+.dark .glass-filter-bar-rose {
+  background: linear-gradient(135deg, hsla(345, 48%, 20%, 0.55) 0%, hsla(345, 48%, 15%, 0.40) 100%);
+  border-color: hsla(345, 48%, 40%, 0.35);
+  box-shadow: 0 4px 16px hsla(345, 48%, 15%, 0.20);
+}
+
+.glass-filter-bar-violet {
+  position: relative;
+  background: linear-gradient(135deg, hsla(270, 45%, 99%, 0.88) 0%, hsla(270, 45%, 97%, 0.72) 100%);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid hsla(270, 45%, 90%, 0.55);
+  border-top: 3px solid hsla(270, 45%, 55%, 0.45);
+  box-shadow: 0 4px 16px hsla(270, 45%, 55%, 0.08);
+  border-radius: 0.75rem;
+}
+
+.dark .glass-filter-bar-violet {
+  background: linear-gradient(135deg, hsla(270, 45%, 20%, 0.55) 0%, hsla(270, 45%, 15%, 0.40) 100%);
+  border-color: hsla(270, 45%, 40%, 0.35);
+  box-shadow: 0 4px 16px hsla(270, 45%, 20%, 0.20);
+}
+
+.glass-filter-bar-slate {
+  position: relative;
+  background: linear-gradient(135deg, hsla(215, 25%, 99%, 0.88) 0%, hsla(215, 25%, 97%, 0.72) 100%);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid hsla(215, 25%, 90%, 0.55);
+  border-top: 3px solid hsla(215, 25%, 48%, 0.45);
+  box-shadow: 0 4px 16px hsla(215, 25%, 48%, 0.08);
+  border-radius: 0.75rem;
+}
+
+.dark .glass-filter-bar-slate {
+  background: linear-gradient(135deg, hsla(215, 25%, 20%, 0.55) 0%, hsla(215, 25%, 15%, 0.40) 100%);
+  border-color: hsla(215, 25%, 35%, 0.35);
+  box-shadow: 0 4px 16px hsla(215, 25%, 20%, 0.20);
+}
+
+.glass-filter-bar-teal {
+  position: relative;
+  background: linear-gradient(135deg, hsla(174, 42%, 99%, 0.88) 0%, hsla(174, 42%, 97%, 0.72) 100%);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid hsla(174, 42%, 88%, 0.55);
+  border-top: 3px solid hsla(174, 42%, 43%, 0.45);
+  box-shadow: 0 4px 16px hsla(174, 42%, 43%, 0.08);
+  border-radius: 0.75rem;
+}
+
+.dark .glass-filter-bar-teal {
+  background: linear-gradient(135deg, hsla(174, 42%, 20%, 0.55) 0%, hsla(174, 42%, 15%, 0.40) 100%);
+  border-color: hsla(174, 42%, 40%, 0.35);
+  box-shadow: 0 4px 16px hsla(174, 42%, 20%, 0.20);
+}
+
+.glass-filter-bar-amber {
+  position: relative;
+  background: linear-gradient(135deg, hsla(38, 55%, 99%, 0.88) 0%, hsla(38, 55%, 97%, 0.72) 100%);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid hsla(38, 55%, 88%, 0.55);
+  border-top: 3px solid hsla(38, 55%, 50%, 0.45);
+  box-shadow: 0 4px 16px hsla(38, 55%, 50%, 0.08);
+  border-radius: 0.75rem;
+}
+
+.dark .glass-filter-bar-amber {
+  background: linear-gradient(135deg, hsla(38, 55%, 20%, 0.55) 0%, hsla(38, 55%, 15%, 0.40) 100%);
+  border-color: hsla(38, 55%, 40%, 0.35);
+  box-shadow: 0 4px 16px hsla(38, 55%, 25%, 0.20);
+}
+
+.glass-filter-bar-emerald {
+  position: relative;
+  background: linear-gradient(135deg, hsla(142, 55%, 99%, 0.88) 0%, hsla(142, 55%, 97%, 0.72) 100%);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid hsla(142, 55%, 88%, 0.55);
+  border-top: 3px solid hsla(142, 55%, 45%, 0.45);
+  box-shadow: 0 4px 16px hsla(142, 55%, 45%, 0.08);
+  border-radius: 0.75rem;
+}
+
+.dark .glass-filter-bar-emerald {
+  background: linear-gradient(135deg, hsla(142, 55%, 18%, 0.55) 0%, hsla(142, 55%, 12%, 0.40) 100%);
+  border-color: hsla(142, 55%, 35%, 0.35);
+  box-shadow: 0 4px 16px hsla(142, 55%, 20%, 0.20);
+}
+
+.glass-filter-bar-blue {
+  position: relative;
+  background: linear-gradient(135deg, hsla(217, 91%, 99%, 0.88) 0%, hsla(217, 91%, 97%, 0.72) 100%);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid hsla(217, 91%, 90%, 0.55);
+  border-top: 3px solid hsla(217, 91%, 60%, 0.45);
+  box-shadow: 0 4px 16px hsla(217, 91%, 60%, 0.08);
+  border-radius: 0.75rem;
+}
+
+.dark .glass-filter-bar-blue {
+  background: linear-gradient(135deg, hsla(217, 91%, 18%, 0.55) 0%, hsla(217, 91%, 12%, 0.40) 100%);
+  border-color: hsla(217, 91%, 40%, 0.35);
+  box-shadow: 0 4px 16px hsla(217, 91%, 25%, 0.20);
+}
+
+/* ============================================
+   SPECULAR HIGHLIGHTS - Apple visionOS Light Reflection
+   ============================================ */
+
+.glass-specular {
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-specular::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(180deg, 
+    rgba(255, 255, 255, 0.28) 0%, 
+    rgba(255, 255, 255, 0.08) 40%,
+    transparent 100%
+  );
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 1;
+}
+
+.dark .glass-specular::before {
+  background: linear-gradient(180deg, 
+    rgba(255, 255, 255, 0.12) 0%, 
+    rgba(255, 255, 255, 0.03) 40%,
+    transparent 100%
+  );
+}
+
+/* ============================================
+   TABLE ROW HOVER STATES - Context-specific
+   ============================================ */
+
+.table-row-hover-rose:hover {
+  background: hsla(345, 48%, 97%, 0.65);
+  box-shadow: inset 0 0 0 1px hsla(345, 48%, 85%, 0.45);
+}
+
+.dark .table-row-hover-rose:hover {
+  background: hsla(345, 48%, 20%, 0.35);
+  box-shadow: inset 0 0 0 1px hsla(345, 48%, 40%, 0.30);
+}
+
+.table-row-hover-violet:hover {
+  background: hsla(270, 45%, 97%, 0.65);
+  box-shadow: inset 0 0 0 1px hsla(270, 45%, 86%, 0.45);
+}
+
+.dark .table-row-hover-violet:hover {
+  background: hsla(270, 45%, 20%, 0.35);
+  box-shadow: inset 0 0 0 1px hsla(270, 45%, 40%, 0.30);
+}
+
+.table-row-hover-slate:hover {
+  background: hsla(215, 25%, 97%, 0.65);
+  box-shadow: inset 0 0 0 1px hsla(215, 25%, 88%, 0.45);
+}
+
+.dark .table-row-hover-slate:hover {
+  background: hsla(215, 25%, 20%, 0.35);
+  box-shadow: inset 0 0 0 1px hsla(215, 25%, 35%, 0.30);
+}
+
+.table-row-hover-teal:hover {
+  background: hsla(174, 42%, 97%, 0.65);
+  box-shadow: inset 0 0 0 1px hsla(174, 42%, 85%, 0.45);
+}
+
+.dark .table-row-hover-teal:hover {
+  background: hsla(174, 42%, 20%, 0.35);
+  box-shadow: inset 0 0 0 1px hsla(174, 42%, 40%, 0.30);
+}
+
+.table-row-hover-amber:hover {
+  background: hsla(38, 55%, 97%, 0.65);
+  box-shadow: inset 0 0 0 1px hsla(38, 55%, 85%, 0.45);
+}
+
+.dark .table-row-hover-amber:hover {
+  background: hsla(38, 55%, 20%, 0.35);
+  box-shadow: inset 0 0 0 1px hsla(38, 55%, 40%, 0.30);
+}
+
+.table-row-hover-emerald:hover {
+  background: hsla(142, 55%, 97%, 0.65);
+  box-shadow: inset 0 0 0 1px hsla(142, 55%, 85%, 0.45);
+}
+
+.dark .table-row-hover-emerald:hover {
+  background: hsla(142, 55%, 18%, 0.35);
+  box-shadow: inset 0 0 0 1px hsla(142, 55%, 35%, 0.30);
+}
+
+/* ============================================
+   ACCENT BORDER SYSTEM - Visual hierarchy
+   ============================================ */
+
+.accent-border-rose {
+  border-top: 3px solid hsla(345, 48%, 52%, 0.50);
+}
+
+.accent-border-violet {
+  border-top: 3px solid hsla(270, 45%, 55%, 0.50);
+}
+
+.accent-border-slate {
+  border-top: 3px solid hsla(215, 25%, 48%, 0.50);
+}
+
+.accent-border-teal {
+  border-top: 3px solid hsla(174, 42%, 43%, 0.50);
+}
+
+.accent-border-amber {
+  border-top: 3px solid hsla(38, 55%, 50%, 0.50);
+}
+
+.accent-border-emerald {
+  border-top: 3px solid hsla(142, 55%, 45%, 0.50);
+}
+
+.accent-border-blue {
+  border-top: 3px solid hsla(217, 91%, 60%, 0.50);
+}
+
+.accent-border-indigo {
+  border-top: 3px solid hsla(234, 45%, 52%, 0.50);
+}
+
+/* ============================================
+   HOVER SHADOWS - Context-specific elevation
+   ============================================ */
+
+.shadow-float-rose-hover:hover {
+  box-shadow: 
+    0 8px 16px rgba(0, 0, 0, 0.05),
+    0 16px 40px hsla(345, 48%, 52%, 0.14),
+    0 32px 80px hsla(345, 48%, 52%, 0.10);
+}
+
+.shadow-float-violet-hover:hover {
+  box-shadow: 
+    0 8px 16px rgba(0, 0, 0, 0.05),
+    0 16px 40px hsla(270, 45%, 55%, 0.14),
+    0 32px 80px hsla(270, 45%, 55%, 0.10);
+}
+
+.shadow-float-teal-hover:hover {
+  box-shadow: 
+    0 8px 16px rgba(0, 0, 0, 0.05),
+    0 16px 40px hsla(174, 42%, 43%, 0.14),
+    0 32px 80px hsla(174, 42%, 43%, 0.10);
+}
+
+.shadow-float-amber-hover:hover {
+  box-shadow: 
+    0 8px 16px rgba(0, 0, 0, 0.05),
+    0 16px 40px hsla(38, 55%, 50%, 0.14),
+    0 32px 80px hsla(38, 55%, 50%, 0.10);
+}
+
+.shadow-float-slate-hover:hover {
+  box-shadow: 
+    0 8px 16px rgba(0, 0, 0, 0.05),
+    0 16px 40px hsla(215, 25%, 48%, 0.14),
+    0 32px 80px hsla(215, 25%, 48%, 0.10);
+}
+
+/* ============================================
    REDUCED MOTION - Accessibility
    ============================================ */
 
