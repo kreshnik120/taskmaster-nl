@@ -40,6 +40,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
+  Settings,
 } from "lucide-react";
 
 // Hooks & Types
@@ -237,10 +238,19 @@ export default function Facturatie() {
     <div className="space-y-6 p-6">
       {/* Page Header */}
       <PageHero title="Facturatie" subtitle="Beheer facturen, betalingen en herinneringen">
-        <Button onClick={() => navigate("/facturatie/nieuw")}>
-          <Plus className="mr-2 h-4 w-4" />
-          Nieuwe factuur
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => navigate("/facturatie/instellingen")}
+          >
+            <Settings className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Instellingen</span>
+          </Button>
+          <Button onClick={() => navigate("/facturatie/nieuw")}>
+            <Plus className="mr-2 h-4 w-4" />
+            Nieuwe factuur
+          </Button>
+        </div>
       </PageHero>
 
       {/* KPI Dashboard */}
