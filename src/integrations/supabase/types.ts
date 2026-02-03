@@ -2535,6 +2535,95 @@ export type Database = {
           },
         ]
       }
+      facturatie_instellingen: {
+        Row: {
+          adres_land: string | null
+          adres_plaats: string | null
+          adres_postcode: string | null
+          adres_straat: string | null
+          bedrijfsnaam: string | null
+          betalingsinstructies: string | null
+          bic: string | null
+          btw_nummer: string | null
+          btw_vrijgesteld: boolean
+          created_at: string
+          factuur_footer_tekst: string | null
+          factuur_prefix: string
+          factuur_volgnummer_lengte: number
+          herinnering_dagen_1: number
+          herinnering_dagen_2: number
+          herinnering_dagen_3: number
+          iban: string | null
+          id: string
+          kvk_nummer: string | null
+          logo_url: string | null
+          standaard_betalingstermijn: number
+          standaard_btw_percentage: number
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          adres_land?: string | null
+          adres_plaats?: string | null
+          adres_postcode?: string | null
+          adres_straat?: string | null
+          bedrijfsnaam?: string | null
+          betalingsinstructies?: string | null
+          bic?: string | null
+          btw_nummer?: string | null
+          btw_vrijgesteld?: boolean
+          created_at?: string
+          factuur_footer_tekst?: string | null
+          factuur_prefix?: string
+          factuur_volgnummer_lengte?: number
+          herinnering_dagen_1?: number
+          herinnering_dagen_2?: number
+          herinnering_dagen_3?: number
+          iban?: string | null
+          id?: string
+          kvk_nummer?: string | null
+          logo_url?: string | null
+          standaard_betalingstermijn?: number
+          standaard_btw_percentage?: number
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          adres_land?: string | null
+          adres_plaats?: string | null
+          adres_postcode?: string | null
+          adres_straat?: string | null
+          bedrijfsnaam?: string | null
+          betalingsinstructies?: string | null
+          bic?: string | null
+          btw_nummer?: string | null
+          btw_vrijgesteld?: boolean
+          created_at?: string
+          factuur_footer_tekst?: string | null
+          factuur_prefix?: string
+          factuur_volgnummer_lengte?: number
+          herinnering_dagen_1?: number
+          herinnering_dagen_2?: number
+          herinnering_dagen_3?: number
+          iban?: string | null
+          id?: string
+          kvk_nummer?: string | null
+          logo_url?: string | null
+          standaard_betalingstermijn?: number
+          standaard_btw_percentage?: number
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "facturatie_instellingen_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       factuur: {
         Row: {
           betaald_bedrag: number

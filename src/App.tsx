@@ -13,6 +13,7 @@ import Notulen from "./pages/Notulen";
 import Facturatie from "./pages/Facturatie";
 import FactuurDetail from "./pages/FactuurDetail";
 import FactuurAanmaken from "./pages/FactuurAanmaken";
+import FacturatieInstellingen from "./pages/FacturatieInstellingen";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Layout } from "./components/Layout";
 import Kanban from "./pages/Kanban";
@@ -107,6 +108,7 @@ const App = () => (
             <Route path="/notulen" element={<Notulen />} />
             <Route path="/facturatie" element={<Facturatie />} />
             <Route path="/facturatie/nieuw" element={<FactuurAanmaken />} />
+            <Route path="/facturatie/instellingen" element={<FacturatieInstellingen />} />
             <Route path="/facturatie/:id" element={<FactuurDetail />} />
           </Route>
           

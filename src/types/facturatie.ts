@@ -250,3 +250,89 @@ export interface BetalingSummary {
   aantal_betalingen: number;
   laatste_betaling_datum: string | null;
 }
+
+// =============================================================================
+// FACTURATIE INSTELLINGEN TYPES
+// =============================================================================
+
+export interface FacturatieInstellingen {
+  id: string;
+  tenant_id: string;
+
+  // BTW
+  standaard_btw_percentage: number;
+  btw_vrijgesteld: boolean;
+  btw_nummer: string | null;
+
+  // Betalingstermijn
+  standaard_betalingstermijn: number;
+
+  // Factuurnummer
+  factuur_prefix: string;
+  factuur_volgnummer_lengte: number;
+
+  // Herinneringen
+  herinnering_dagen_1: number;
+  herinnering_dagen_2: number;
+  herinnering_dagen_3: number;
+
+  // Bedrijfsgegevens
+  bedrijfsnaam: string | null;
+  adres_straat: string | null;
+  adres_postcode: string | null;
+  adres_plaats: string | null;
+  adres_land: string | null;
+  kvk_nummer: string | null;
+  iban: string | null;
+  bic: string | null;
+  logo_url: string | null;
+
+  // Teksten
+  factuur_footer_tekst: string | null;
+  betalingsinstructies: string | null;
+
+  // Metadata
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface UpdateFacturatieInstellingenInput {
+  standaard_btw_percentage?: number;
+  btw_vrijgesteld?: boolean;
+  btw_nummer?: string | null;
+  standaard_betalingstermijn?: number;
+  factuur_prefix?: string;
+  factuur_volgnummer_lengte?: number;
+  herinnering_dagen_1?: number;
+  herinnering_dagen_2?: number;
+  herinnering_dagen_3?: number;
+  bedrijfsnaam?: string | null;
+  adres_straat?: string | null;
+  adres_postcode?: string | null;
+  adres_plaats?: string | null;
+  adres_land?: string | null;
+  kvk_nummer?: string | null;
+  iban?: string | null;
+  bic?: string | null;
+  logo_url?: string | null;
+  factuur_footer_tekst?: string | null;
+  betalingsinstructies?: string | null;
+}
+
+// Export types (voor useFactuurExport hook)
+export interface FactuurExportRow {
+  factuurnummer: string;
+  type: string;
+  status: string;
+  factuurdatum: string;
+  vervaldatum: string;
+  opdrachtgever: string;
+  subtotaal: number;
+  btw_percentage: number;
+  btw_bedrag: number;
+  totaal: number;
+  betaald_bedrag: number;
+  openstaand_bedrag: number;
+}
+
+export type ExportFormat = 'csv' | 'xlsx';
