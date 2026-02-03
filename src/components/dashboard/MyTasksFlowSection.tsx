@@ -5,7 +5,8 @@ import {
   DragEndEvent, 
   DragOverlay, 
   DragStartEvent, 
-  PointerSensor, 
+  MouseSensor,
+  TouchSensor,
   useSensor, 
   useSensors,
   useDroppable 
@@ -184,10 +185,21 @@ export function MyTasksFlowSection() {
   });
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Drag sensors with distance threshold
+  // Drag sensors with delay-based activation for intuitive UX
+  // Mouse: 150ms delay allows distinguishing click vs drag
+  // Touch: 200ms delay prevents conflict with scroll gestures
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 10 },
+    useSensor(MouseSensor, {
+      activationConstraint: {
+        delay: 150,
+        tolerance: 5,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 200,
+        tolerance: 8,
+      },
     })
   );
 
