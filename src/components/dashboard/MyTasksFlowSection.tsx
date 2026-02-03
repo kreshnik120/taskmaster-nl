@@ -5,8 +5,7 @@ import {
   DragEndEvent, 
   DragOverlay, 
   DragStartEvent, 
-  MouseSensor,
-  TouchSensor,
+  PointerSensor,
   useSensor, 
   useSensors,
   useDroppable 
@@ -185,20 +184,13 @@ export function MyTasksFlowSection() {
   });
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Drag sensors with delay-based activation for intuitive UX
-  // Mouse: 150ms delay allows distinguishing click vs drag
-  // Touch: 200ms delay prevents conflict with scroll gestures
+  // Drag sensors with distance-based activation for precise cursor tracking
+  // Distance: 8px movement required to start drag - prevents click/drag confusion
+  // PointerSensor handles both mouse and touch with consistent behavior
   const sensors = useSensors(
-    useSensor(MouseSensor, {
+    useSensor(PointerSensor, {
       activationConstraint: {
-        delay: 150,
-        tolerance: 5,
-      },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: {
-        delay: 200,
-        tolerance: 8,
+        distance: 8, // 8px movement before drag activates - no cursor offset
       },
     })
   );
@@ -369,20 +361,24 @@ export function MyTasksFlowSection() {
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
+    // IMMEDIATE state reset - prevents "stuck" overlay
+    const draggedTask = activeTask; // Capture before clearing
+    setActiveTask(null); // Clear immediately - FIRST ACTION
+    
     // Remove dragging class to restore hover effects
     document.documentElement.classList.remove('dnd-dragging');
-    const { active, over } = event;
-    setActiveTask(null);
     
     // Clear drag context
     if (dragContext) {
       dragContext.endDrag();
     }
     
-    if (!over) return;
+    const { active, over } = event;
+    
+    if (!over || !draggedTask) return;
 
     const taskId = active.id as string;
-    const task = tasks.find(t => t.id === taskId);
+    const task = draggedTask; // Use captured task, not lookup
     if (!task) return;
 
     // Determine target column
