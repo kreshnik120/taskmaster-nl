@@ -1,272 +1,223 @@
 
-# Apple visionOS Premium Glassmorphism - Uitgebreide Implementatie
 
-## Onderzoeksresultaten
+# Responsive & Performance Optimalisatie - visionOS Glassmorphism
 
-Op basis van mijn analyse van de huidige codebase en onderzoek naar Apple's visionOS en iOS 18 "Liquid Glass" design patterns, heb ik de volgende verfijningen en verbeteringen geïdentificeerd:
+## Geïdentificeerde Problemen
 
-### Huidige Status
-- **Facturatie**: Heeft al emerald glassmorphism met floating shadows
-- **Mijn Werk (Kanban)**: Heeft indigo glassmorphism basis
-- **Design Tokens**: Goede basis met 7 tab-contexten gedefinieerd
+Na analyse van de huidige implementatie heb ik de volgende aandachtspunten gevonden:
 
-### Ontbrekende Kleuren/Pagina's
-| Pagina | Huidige Status | Voorgestelde Kleur |
-|--------|----------------|-------------------|
-| Sollicitaties | Geen glass | **Rose** (345°) - Recruitment/Growth |
-| Professionals | Geen glass | **Violet** (270°) - People/Team |
-| Klanten | Geen glass | **Slate** (215°) - Data/Neutral |
-| Plaatsingen | Geen glass | **Teal** (174°) - Connections |
-| Tijdregistratie | Geen glass | **Amber** (38°) - Time/Urgency |
-| WhatsApp | Geen glass | **Blue** (217°) - Communication |
+### 1. Performance Issues op Mobiel
+
+| Probleem | Impact | Locatie |
+|----------|--------|---------|
+| `backdrop-filter: blur(20-24px)` | Hoge GPU-belasting op mobiel | Alle `.glass-card-*` classes |
+| `inset: -150px` op ambient mesh | Overflowing pseudo-elements buiten viewport | Alle `.glass-ambient-mesh-*` classes |
+| `filter: blur(50px)` op achtergrond | Extra compositing layer, batterijverbruik | Ambient mesh `::before` elements |
+| Ontbrekende `overflow: hidden` op sommige pagina's | Horizontale scroll door -150px inset | Facturatie.tsx (heeft `p-6` maar geen clip) |
+
+### 2. Ontbrekende Responsive Styling
+
+| Pagina | Probleem |
+|--------|----------|
+| WhatsApp.tsx | Geen `glass-ambient-mesh-blue` toegepast |
+| Alle pagina's | Geen mobiele blur-reductie voor performance |
+| KPI Cards | Grid gaat naar 2 kolommen maar shadow-float kan te zwaar zijn |
 
 ---
 
-## Verfijningen voor Premium Apple Kwaliteit
+## Oplossingen
 
-### 1. SVG Noise Texture (Grain Effect)
-Apple gebruikt subtiele "grain/noise" textuur voor meer diepte en realisme:
+### Fase 1: CSS Performance Optimalisaties (`src/index.css`)
+
+**A. Mobiele Blur Reductie**
+
+Voeg media queries toe om blur te verminderen op kleinere schermen:
 
 ```css
-.glass-noise::after {
+/* Mobile performance: reduce blur intensity */
+@media (max-width: 768px) {
+  .glass-layer-1,
+  .glass-layer-2,
+  .glass-card-emerald,
+  .glass-card-indigo,
+  .glass-card-rose,
+  .glass-card-violet,
+  .glass-card-slate,
+  .glass-card-teal,
+  .glass-card-amber {
+    backdrop-filter: blur(12px) saturate(130%);
+    -webkit-backdrop-filter: blur(12px) saturate(130%);
+  }
+}
+```
+
+**B. Ambient Mesh Verkleining op Mobiel**
+
+```css
+@media (max-width: 768px) {
+  .glass-ambient-mesh::before,
+  .glass-ambient-mesh-emerald::before,
+  .glass-ambient-mesh-rose::before,
+  .glass-ambient-mesh-violet::before,
+  .glass-ambient-mesh-slate::before,
+  .glass-ambient-mesh-teal::before,
+  .glass-ambient-mesh-amber::before {
+    /* Kleinere gradients voor mobiel */
+    inset: -50px;
+    filter: blur(30px);
+  }
+}
+```
+
+**C. Prefers-reduced-motion Ondersteuning**
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  .glass-layer-1,
+  .glass-layer-2,
+  .glass-card-emerald,
+  /* ... alle glass cards ... */
+  {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    transition: none;
+  }
+  
+  .glass-ambient-mesh::before,
+  /* ... alle ambient mesh ... */
+  {
+    display: none;
+  }
+}
+```
+
+**D. GPU Acceleration Hints**
+
+```css
+.glass-ambient-mesh::before,
+.glass-ambient-mesh-emerald::before,
+/* alle ambient mesh */
+{
+  will-change: auto;
+  contain: strict;
+}
+```
+
+### Fase 2: WhatsApp Pagina Blue Theme (`src/pages/WhatsApp.tsx`)
+
+Voeg de blue glassmorphism toe aan de WhatsApp pagina:
+
+```tsx
+// Update wrapper div
+<div className="flex h-[calc(100vh-4rem)] glass-ambient-mesh-blue">
+```
+
+En voeg de bijbehorende CSS toe:
+
+```css
+/* Blue ambient mesh for WhatsApp/Communicatie */
+.glass-ambient-mesh-blue {
+  position: relative;
+  overflow: visible;
+}
+
+.glass-ambient-mesh-blue::before {
   content: '';
   position: absolute;
-  inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-  opacity: 0.03;
+  inset: -150px;
+  background: 
+    radial-gradient(ellipse 700px 500px at 0% 0%, hsla(217, 91%, 65%, 0.12) 0%, transparent 50%),
+    radial-gradient(ellipse 600px 400px at 100% 100%, hsla(217, 91%, 55%, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse 400px 300px at 50% 50%, hsla(217, 91%, 70%, 0.05) 0%, transparent 60%);
   pointer-events: none;
-  mix-blend-mode: overlay;
+  z-index: -1;
+  filter: blur(50px);
+}
+
+.dark .glass-ambient-mesh-blue::before {
+  background: 
+    radial-gradient(ellipse 700px 500px at 0% 0%, hsla(217, 91%, 25%, 0.10) 0%, transparent 50%),
+    radial-gradient(ellipse 600px 400px at 100% 100%, hsla(217, 91%, 20%, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse 400px 300px at 50% 50%, hsla(217, 91%, 30%, 0.04) 0%, transparent 60%);
 }
 ```
 
-### 2. Specular Highlights (Lichtreflectie)
-Verbeterde "light bleed" met meerdere lagen:
+### Fase 3: Container Overflow Fixes
 
+**Facturatie.tsx:**
+```tsx
+// Van:
+<div className="space-y-6 p-6 glass-ambient-mesh-emerald">
+
+// Naar:
+<div className="space-y-6 glass-ambient-mesh-emerald overflow-hidden">
+```
+
+**Alle pagina wrappers krijgen:**
 ```css
-.glass-specular::before {
-  background: linear-gradient(
-    135deg,
-    rgba(255,255,255,0.5) 0%,
-    rgba(255,255,255,0.1) 30%,
-    transparent 60%
-  );
+.glass-ambient-mesh-emerald,
+.glass-ambient-mesh-rose,
+.glass-ambient-mesh-violet,
+.glass-ambient-mesh-slate,
+.glass-ambient-mesh-teal,
+.glass-ambient-mesh-amber,
+.glass-ambient-mesh-blue {
+  overflow: hidden; /* Voorkom horizontale scroll */
 }
-
-.glass-specular::after {
-  /* Secondary highlight - bottom right edge glow */
-  box-shadow: 
-    inset -1px -1px 0 rgba(255,255,255,0.15),
-    inset 1px 1px 0 rgba(255,255,255,0.4);
-}
 ```
 
-### 3. Enhanced Backdrop Filter Stack
-Apple visionOS gebruikt een specifieke combinatie:
+### Fase 4: KPI Card Responsive Shadows
 
-```css
-backdrop-filter: 
-  blur(24px) 
-  saturate(180%) 
-  brightness(1.05)
-  contrast(1.02);
+Update `kpi-card.tsx` voor lichtere shadows op mobiel:
+
+```tsx
+// Voeg responsive shadow class toe
+className={cn(
+  // Bestaande classes...
+  // Mobiel: lichtere shadows
+  "shadow-sm md:shadow-float-emerald"
+)}
 ```
-
-### 4. Multi-Layer Shadow System
-Echte "zwevende" diepte met 4 shadow layers:
-
-```css
-box-shadow:
-  /* Layer 1: Subtle ambient */
-  0 1px 2px hsla(var(--hue), 45%, 45%, 0.02),
-  /* Layer 2: Near shadow */
-  0 4px 8px hsla(var(--hue), 45%, 45%, 0.04),
-  /* Layer 3: Medium shadow */
-  0 8px 24px hsla(var(--hue), 45%, 45%, 0.08),
-  /* Layer 4: Far diffuse shadow */
-  0 24px 48px hsla(var(--hue), 45%, 35%, 0.12),
-  /* Inner specular highlight */
-  inset 0 1px 1px rgba(255,255,255,0.15);
-```
-
-### 5. Vibrancy Levels (Apple visionOS)
-4 levels van vibrancy voor hiërarchie:
-
-| Level | Opacity | Blur | Gebruik |
-|-------|---------|------|---------|
-| Primary | 75% | 24px | Hoofdkaarten |
-| Secondary | 60% | 20px | Subkaarten |
-| Tertiary | 45% | 16px | Columns |
-| Quaternary | 30% | 12px | Achtergrond elementen |
 
 ---
 
-## Implementatie Per Pagina
-
-### Fase 1: CSS Uitbreidingen (`src/index.css`)
-
-#### A. Nieuwe Kleur-Tinted Glass Classes
-
-```css
-/* Rose-tinted glass for Sollicitaties/Recruitment */
-.glass-card-rose { ... }
-.shadow-float-rose { ... }
-.glass-ambient-mesh-rose::before { ... }
-
-/* Violet-tinted glass for Professionals/Team */
-.glass-card-violet { ... }
-.shadow-float-violet { ... }
-.glass-ambient-mesh-violet::before { ... }
-
-/* Slate-tinted glass for Klanten */
-.glass-card-slate { ... }
-.shadow-float-slate { ... }
-.glass-ambient-mesh-slate::before { ... }
-
-/* Teal-tinted glass for Plaatsingen */
-.glass-card-teal { ... }
-.shadow-float-teal { ... }
-.glass-ambient-mesh-teal::before { ... }
-
-/* Amber-tinted glass for Tijdregistratie */
-.glass-card-amber { ... }
-.shadow-float-amber { ... }
-.glass-ambient-mesh-amber::before { ... }
-
-/* Blue-tinted glass for WhatsApp/Communicatie */
-.glass-card-blue { ... }
-.shadow-float-blue { ... }
-.glass-ambient-mesh-blue::before { ... }
-```
-
-#### B. Premium Effecten
-
-```css
-/* Noise/Grain texture overlay - Apple realisme */
-.glass-noise::after { ... }
-
-/* Enhanced specular highlights */
-.glass-specular-premium::before { ... }
-.glass-specular-premium::after { ... }
-
-/* Improved vibrancy levels */
-.glass-vibrancy-primary { ... }
-.glass-vibrancy-secondary { ... }
-.glass-vibrancy-tertiary { ... }
-```
-
-### Fase 2: Design Tokens Update (`src/lib/constants/designTokens.ts`)
-
-Voeg nieuwe glasClass en shadowClass toe voor alle tab-contexten.
-
-### Fase 3: Pagina Updates
-
-#### Sollicitaties.tsx (Rose)
-- Wrapper: `glass-ambient-mesh-rose`
-- KPI Cards: `glass-card-rose shadow-float-rose`
-- Pipeline columns: Tinted borders met rose accenten
-
-#### Professionals.tsx (Violet)
-- Wrapper: `glass-ambient-mesh-violet`
-- Filter Card: `glass-card-violet glass-light-bleed`
-- Professional Cards: `shadow-float-violet-hover`
-
-#### Klanten.tsx (Slate)
-- Wrapper: `glass-ambient-mesh-slate`
-- Organization Cards: `glass-card-slate`
-- Neutral/professional uitstraling
-
-#### Plaatsingen.tsx (Teal)
-- Wrapper: `glass-ambient-mesh-teal`
-- Placement Cards: `glass-card-teal shadow-float-teal`
-
-#### Tijdregistratie.tsx (Amber)
-- Wrapper: `glass-ambient-mesh-amber`
-- Timer KPIs: `glass-card-amber`
-- Table: Enhanced glass styling
-
-#### WhatsApp.tsx (Blue)
-- Chat list panel: `glass-layer-1` met blue tint
-- Message bubbles: Subtle glass effect
-
----
-
-## Technische Details
+## Technische Wijzigingen
 
 ### Bestanden die worden aangepast:
 
-1. **`src/index.css`** (~200 regels toevoegen)
-   - 6 nieuwe kleur-tinted glass class sets
-   - Noise/grain texture overlay
-   - Enhanced specular highlights
-   - Vibrancy level system
-   - Improved shadow-float variants
+1. **`src/index.css`** (~80 regels toevoegen)
+   - Media queries voor mobiele blur reductie
+   - Media queries voor ambient mesh verkleining
+   - `prefers-reduced-motion` support
+   - `contain: strict` voor GPU optimalisatie
+   - `.glass-ambient-mesh-blue` class voor WhatsApp
+   - `overflow: hidden` op alle ambient mesh classes
 
-2. **`src/lib/constants/designTokens.ts`**
-   - Update `TAB_CONTEXT_COLORS` met nieuwe glassClass/shadowClass
-   - Voeg nieuwe GLASS_TOKENS toe
+2. **`src/pages/WhatsApp.tsx`**
+   - Voeg `glass-ambient-mesh-blue` toe aan wrapper
 
-3. **`src/pages/Sollicitaties.tsx`**
-   - Apply rose glassmorphism
-   - Update wrapper en cards
+3. **`src/pages/Facturatie.tsx`**
+   - Verwijder inline padding, voeg `overflow-hidden` toe
 
-4. **`src/pages/Professionals.tsx`**
-   - Apply violet glassmorphism
-   - Update filter en cards
-
-5. **`src/pages/Klanten.tsx`**
-   - Apply slate glassmorphism
-   - Update organization cards
-
-6. **`src/pages/Plaatsingen.tsx`**
-   - Apply teal glassmorphism
-   - Update placement cards
-
-7. **`src/pages/Tijdregistratie.tsx`**
-   - Apply amber glassmorphism
-   - Update timer interface
-
-8. **`src/pages/WhatsApp.tsx`**
-   - Apply blue glassmorphism
-   - Chat panel styling
-
-9. **`src/components/ui/kpi-card.tsx`**
-   - Nieuwe variants voor alle kleuren
-   - Glass noise effect optie
+4. **`src/components/ui/kpi-card.tsx`**
+   - Responsive shadow classes
 
 ---
 
-## Verwacht Visueel Resultaat
+## Verwacht Resultaat
 
-### Per Pagina:
-- **Sollicitaties**: Warme rose glow, recruitment-gevoel
-- **Professionals**: Paarse vibrancy, team/people focus
-- **Klanten**: Neutrale slate, professioneel/data-driven
-- **Plaatsingen**: Teal connectie-gevoel, flow
-- **Tijdregistratie**: Amber urgentie, tijd-awareness
-- **WhatsApp**: Blauwe communicatie-vibe
+| Device | Verwachte Verbetering |
+|--------|----------------------|
+| iPhone/Android | 30-40% minder GPU-gebruik door blur reductie |
+| iPad/Tablet | Stabiele 60fps door kleinere gradients |
+| Desktop | Geen verandering - volledige effecten behouden |
+| Toegankelijkheid | Volledige support voor motion-gevoelige gebruikers |
 
-### Consistente Elementen:
-- Alle kaarten "zweven" met gekleurde schaduwen
-- Subtiele grain texture voor realisme
-- Specular highlights voor 3D-gevoel
-- Smooth spring-physics transities
-- Dark mode ondersteuning
+### Test Scenario's
 
----
+1. **Mobiel (iPhone/Android)**: Scroll door pagina's, geen lag of jank
+2. **Tablet (iPad)**: Glassmorphism zichtbaar maar performant
+3. **Desktop**: Volledige visionOS effecten
+4. **Reduced Motion**: Geen animaties, geen blur effecten
+5. **Dark Mode**: Alle kleuren correct aangepast
 
-## Kleurenpalet Overzicht
-
-```text
-┌─────────────────┬─────────────────┬─────────────────┐
-│   Sollicitaties │   Professionals │     Klanten     │
-│   Rose (345°)   │   Violet (270°) │   Slate (215°)  │
-├─────────────────┼─────────────────┼─────────────────┤
-│   Plaatsingen   │  Tijdregistratie│    WhatsApp     │
-│   Teal (174°)   │   Amber (38°)   │   Blue (217°)   │
-├─────────────────┼─────────────────┼─────────────────┤
-│   Facturatie    │    Mijn Werk    │                 │
-│  Emerald (142°) │   Indigo (234°) │                 │
-└─────────────────┴─────────────────┴─────────────────┘
-```
-
-Elke pagina krijgt een unieke identiteit terwijl het design system consistent blijft.
