@@ -42,15 +42,22 @@ export function useAgentRouter(options: UseAgentRouterOptions = {}) {
 
   /**
    * Execute an intent via the VPS Agent Router
+   * @param intentId - The intent to execute
+   * @param payload - Additional data to send
+   * @param message - Optional natural language message
+   * @param executeOptions - Execution options (e.g., silent mode)
    */
   const executeIntent = useCallback(
     async (
       intentId: string,
       payload: Record<string, unknown> = {},
-      message?: string
+      message?: string,
+      executeOptions?: { silent?: boolean }
     ): Promise<AgentResult> => {
       setIsExecuting(true);
       setLastResult(null);
+
+      const isSilent = executeOptions?.silent ?? false;
 
       try {
         const { data, error } = await supabase.functions.invoke("agent-router-proxy", {
@@ -71,8 +78,10 @@ export function useAgentRouter(options: UseAgentRouterOptions = {}) {
             error: error.message || "Failed to execute intent",
           };
           setLastResult(errorResult);
-          options.onError?.(errorResult.error!);
-          toast.error("Agent fout", { description: errorResult.error });
+          if (!isSilent) {
+            options.onError?.(errorResult.error!);
+            toast.error("Agent fout", { description: errorResult.error });
+          }
           return errorResult;
         }
 
@@ -81,13 +90,17 @@ export function useAgentRouter(options: UseAgentRouterOptions = {}) {
         setExecutionHistory((prev) => [result, ...prev.slice(0, 9)]); // Keep last 10
 
         if (result.success) {
-          options.onSuccess?.(result);
-          toast.success("Actie uitgevoerd", {
-            description: result.action_taken || `${result.agent} heeft de taak voltooid`,
-          });
+          if (!isSilent) {
+            options.onSuccess?.(result);
+            toast.success("Actie uitgevoerd", {
+              description: result.action_taken || `${result.agent} heeft de taak voltooid`,
+            });
+          }
         } else {
-          options.onError?.(result.error || "Unknown error");
-          toast.error("Agent kon actie niet uitvoeren", { description: result.error });
+          if (!isSilent) {
+            options.onError?.(result.error || "Unknown error");
+            toast.error("Agent kon actie niet uitvoeren", { description: result.error });
+          }
         }
 
         return result;
@@ -95,8 +108,10 @@ export function useAgentRouter(options: UseAgentRouterOptions = {}) {
         const errorMessage = err instanceof Error ? err.message : "Unexpected error";
         const errorResult: AgentResult = { success: false, error: errorMessage };
         setLastResult(errorResult);
-        options.onError?.(errorMessage);
-        toast.error("Verbindingsfout", { description: "Kon geen verbinding maken met Agent Router" });
+        if (!isSilent) {
+          options.onError?.(errorMessage);
+          toast.error("Verbindingsfout", { description: "Kon geen verbinding maken met Agent Router" });
+        }
         return errorResult;
       } finally {
         setIsExecuting(false);
