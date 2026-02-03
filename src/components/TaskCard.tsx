@@ -17,9 +17,6 @@ import { cn } from "@/lib/utils";
 
 const log = logger.create('TaskCard');
 
-// Delay threshold for distinguishing click vs drag (in ms)
-const DRAG_DELAY_THRESHOLD = 150;
-
 interface Task {
   id: string;
   title: string;
@@ -121,11 +118,22 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
     id: task.id,
   });
 
-  // Track pointer down time for click vs drag distinction
-  const pointerDownTime = useRef<number>(0);
+  // Track pointer movement for click vs drag distinction (distance-based)
+  const startPos = useRef({ x: 0, y: 0 });
+  const hasMoved = useRef(false);
 
-  const handlePointerDown = () => {
-    pointerDownTime.current = Date.now();
+  const handlePointerDown = (e: React.PointerEvent) => {
+    startPos.current = { x: e.clientX, y: e.clientY };
+    hasMoved.current = false;
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    const dx = Math.abs(e.clientX - startPos.current.x);
+    const dy = Math.abs(e.clientY - startPos.current.y);
+    // Mark as moved if pointer traveled more than 5px
+    if (dx > 5 || dy > 5) {
+      hasMoved.current = true;
+    }
   };
 
   const handleCardClick = (e: React.MouseEvent) => {
@@ -134,9 +142,8 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
       return;
     }
     
-    // Skip if it was a drag (pressed longer than threshold) or currently dragging
-    const pressDuration = Date.now() - pointerDownTime.current;
-    if (pressDuration > DRAG_DELAY_THRESHOLD || isDragging) {
+    // Skip if there was significant movement (drag) or currently dragging
+    if (hasMoved.current || isDragging) {
       return;
     }
     
@@ -173,6 +180,7 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
           {...attributes}
           {...listeners}
           onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
         >
           <Card className="glass-task-card glass-hover-lift bg-white/75 dark:bg-slate-900/75 border-white/40 dark:border-white/12 shadow-[0_2px_6px_hsla(234,45%,52%,0.06),0_8px_24px_hsla(234,45%,52%,0.10)] focus:outline-none focus:ring-2 focus:ring-tab-mijn-werk-500/30 focus:ring-offset-2 relative rounded-xl cursor-grab active:cursor-grabbing">
             <CardContent className="p-4 space-y-2">
