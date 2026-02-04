@@ -335,7 +335,7 @@ export default function Notulen() {
                   {paginatedMinutes.map((minute) => (
                     <TableRow
                       key={minute.id}
-                      className="cursor-pointer hover:bg-muted/50"
+                      className="cursor-pointer table-row-hover-indigo"
                       onClick={() => {
                         setSelectedMinute(minute);
                         setIsDetailOpen(true);

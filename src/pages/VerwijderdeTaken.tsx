@@ -252,7 +252,7 @@ const VerwijderdeTaken = () => {
                       }
                       return true;
                     }).map((task) => (
-                      <TableRow key={task.id}>
+                      <TableRow key={task.id} className="table-row-hover-slate">
                         <TableCell className="font-medium">{task.title}</TableCell>
                         <TableCell>{task.organizations?.name || "-"}</TableCell>
                         <TableCell>

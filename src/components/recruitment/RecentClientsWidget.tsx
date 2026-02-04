@@ -92,7 +92,7 @@ export function RecentClientsWidget({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full">
+      <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground collapsible-glass rounded-md px-2 py-1 -mx-2 w-full">
         <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-0' : '-rotate-90'}`} />
         Recente klanten ({recentClients.length})
       </CollapsibleTrigger>
