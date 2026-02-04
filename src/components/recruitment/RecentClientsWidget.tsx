@@ -7,6 +7,7 @@ import { ChevronDown, Mail, Phone, MapPin } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
 import { useState } from "react";
+import { getAssigneeColor } from "@/hooks/useAssigneeColor";
 
 interface Client {
   id: string;
@@ -49,18 +50,7 @@ export function RecentClientsWidget({
       .toUpperCase();
   };
 
-  const getAvatarColor = (name: string) => {
-    const colors = [
-      "bg-blue-600",
-      "bg-green-600",
-      "bg-purple-600",
-      "bg-orange-600",
-      "bg-pink-600",
-      "bg-indigo-600",
-    ];
-    const hash = name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return colors[hash % colors.length];
-  };
+  // Avatar colors now use centralized hook - removed local getAvatarColor
 
   const getHumanizedTime = (createdAt: string) => {
     const now = new Date();
@@ -107,7 +97,9 @@ export function RecentClientsWidget({
         Recente klanten ({recentClients.length})
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-3 space-y-1">
-        {recentClients.map((client, index) => (
+        {recentClients.map((client, index) => {
+          const avatarColor = getAssigneeColor(client.id);
+          return (
           <HoverCard key={client.id} openDelay={300}>
             <HoverCardTrigger asChild>
               <div
@@ -120,7 +112,7 @@ export function RecentClientsWidget({
                   {client.logo_url && (
                     <AvatarImage src={client.logo_url} alt={client.company} />
                   )}
-                  <AvatarFallback className={`${getAvatarColor(client.company)} text-white text-xs font-semibold`}>
+                  <AvatarFallback className={`${avatarColor.avatarBg} ${avatarColor.avatarText} text-xs font-semibold`}>
                     {getInitials(client.company)}
                   </AvatarFallback>
                 </Avatar>
@@ -208,8 +200,9 @@ export function RecentClientsWidget({
                 )}
               </div>
             </HoverCardContent>
-          </HoverCard>
-        ))}
+            </HoverCard>
+          );
+        })}
       </CollapsibleContent>
     </Collapsible>
   );

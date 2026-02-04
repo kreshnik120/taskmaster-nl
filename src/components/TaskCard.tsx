@@ -1,4 +1,3 @@
-
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,6 +13,7 @@ import { UrgencyBadge } from "@/components/ui/urgency-badge";
 import { formatDateFull } from "@/lib/dateFormatters";
 import { SUBTASK_TOKENS, ACTION_TOKENS } from "@/lib/constants/designTokens";
 import { cn } from "@/lib/utils";
+import { getAssigneeColor } from "@/hooks/useAssigneeColor";
 
 const log = logger.create('TaskCard');
 
@@ -77,18 +77,7 @@ const getInitials = (name: string) => {
     .toUpperCase();
 };
 
-const getAvatarColor = (name: string) => {
-  const colors = [
-    'bg-blue-100 text-blue-700',
-    'bg-green-100 text-green-700',
-    'bg-purple-100 text-purple-700',
-    'bg-amber-100 text-amber-700',
-    'bg-rose-100 text-rose-700',
-    'bg-cyan-100 text-cyan-700',
-  ];
-  const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  return colors[hash % colors.length];
-};
+// Avatar colors now use centralized hook - removed local getAvatarColor
 
 const getDaysInColumn = (task: Task) => {
   const lastUpdate = new Date(task.updated_at || task.created_at);
@@ -152,6 +141,7 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
 
   const assigneeName = task.profiles?.name || 'Niet toegewezen';
   const daysInColumn = getDaysInColumn(task);
+  const assigneeColor = getAssigneeColor(task.assignee_id);
 
   return (
     <div 
@@ -180,7 +170,7 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
                   <div className="flex items-center gap-2">
                     {task.assignee_id && (
                       <Avatar className="h-6 w-6 flex-shrink-0 ring-2 ring-white/50 dark:ring-white/20 shadow-sm">
-                        <AvatarFallback className={`text-xs font-medium ${getAvatarColor(assigneeName)}`}>
+                        <AvatarFallback className={`text-xs font-medium ${assigneeColor.avatarBg} ${assigneeColor.avatarText}`}>
                           {getInitials(assigneeName)}
                         </AvatarFallback>
                       </Avatar>

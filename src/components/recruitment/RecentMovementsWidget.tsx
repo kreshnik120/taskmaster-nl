@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { resolveApplicationName } from "@/lib/utils";
+import { getAssigneeColor } from "@/hooks/useAssigneeColor";
 
 interface Application {
   id: string;
@@ -55,18 +56,7 @@ export function RecentMovementsWidget({ applications, isLoading, onViewAll }: Re
       .toUpperCase();
   };
 
-  const getAvatarColor = (name: string) => {
-    const colors = [
-      'bg-blue-100 text-blue-700',
-      'bg-green-100 text-green-700',
-      'bg-purple-100 text-purple-700',
-      'bg-amber-100 text-amber-700',
-      'bg-rose-100 text-rose-700',
-      'bg-cyan-100 text-cyan-700',
-    ];
-    const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return colors[hash % colors.length];
-  };
+  // Avatar colors now use centralized hook - removed local getAvatarColor
 
   if (isLoading) {
     return (
@@ -113,6 +103,7 @@ export function RecentMovementsWidget({ applications, isLoading, onViewAll }: Re
           });
 
           const stageColor = STAGE_COLORS[stage] || { dot: "bg-gray-400", text: "text-gray-600" };
+          const avatarColor = getAssigneeColor(app.id);
           
           return (
             <HoverCard key={app.id} openDelay={300}>
@@ -123,7 +114,7 @@ export function RecentMovementsWidget({ applications, isLoading, onViewAll }: Re
                   }`}
                 >
                   <Avatar className="h-6 w-6">
-                    <AvatarFallback className={`text-[10px] font-medium ${getAvatarColor(candidateName)}`}>
+                    <AvatarFallback className={`text-[10px] font-medium ${avatarColor.avatarBg} ${avatarColor.avatarText}`}>
                       {getInitials(candidateName)}
                     </AvatarFallback>
                   </Avatar>

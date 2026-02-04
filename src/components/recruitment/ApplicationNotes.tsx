@@ -8,6 +8,7 @@ import { Pin, Trash2, Edit2, X, Check } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
+import { getAssigneeColor } from "@/hooks/useAssigneeColor";
 
 interface Note {
   id: string;
@@ -190,7 +191,7 @@ export function ApplicationNotes({ applicationId }: ApplicationNotesProps) {
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
                   <Avatar className="h-8 w-8 flex-shrink-0">
-                    <AvatarFallback className="text-xs bg-muted">
+                    <AvatarFallback className={`text-xs ${getAssigneeColor(note.user_id).avatarBg} ${getAssigneeColor(note.user_id).avatarText}`}>
                       {getInitials(note.user_id)}
                     </AvatarFallback>
                   </Avatar>
