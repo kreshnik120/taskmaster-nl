@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { useNavigate } from "react-router-dom";
+import { PageContainer } from "@/components/ui/page-container";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -177,7 +178,7 @@ const VerwijderdeTaken = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <PageContainer contextColor="slate" className="space-y-6">
       {/* Hero Section */}
       <div>
         <h1 className="text-2xl font-semibold mb-1">{fullGreeting}</h1>
@@ -316,9 +317,9 @@ const VerwijderdeTaken = () => {
                   Definitief verwijderen
                 </AlertDialogAction>
               </AlertDialogFooter>
-            </AlertDialogContent>
+          </AlertDialogContent>
           </AlertDialog>
-    </div>
+    </PageContainer>
   );
 };
 

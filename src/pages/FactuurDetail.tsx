@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
+import { PageContainer } from "@/components/ui/page-container";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -153,7 +154,7 @@ export default function FactuurDetail() {
   const canRegisterPayment = !["CONCEPT", "AFGEBOEKT", "BETAALD"].includes(factuur.status);
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <PageContainer contextColor="emerald" className="container mx-auto py-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -507,6 +508,6 @@ export default function FactuurDetail() {
         open={showStatusDialog}
         onOpenChange={setShowStatusDialog}
       />
-    </div>
+    </PageContainer>
   );
 }

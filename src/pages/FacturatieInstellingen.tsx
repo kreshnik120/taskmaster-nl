@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { PageContainer } from "@/components/ui/page-container";
 import { ArrowLeft, Save, Check, Settings, Building2, FileText, Bell, Receipt } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -149,7 +150,7 @@ export default function FacturatieInstellingen() {
   }
 
   return (
-    <div className="container mx-auto p-4 md:p-6 max-w-4xl space-y-6">
+    <PageContainer contextColor="emerald" className="container mx-auto p-4 md:p-6 max-w-4xl space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -514,6 +515,6 @@ export default function FacturatieInstellingen() {
           )}
         </Button>
       </div>
-    </div>
+    </PageContainer>
   );
 }

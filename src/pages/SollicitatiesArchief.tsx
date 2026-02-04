@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { PageContainer } from "@/components/ui/page-container";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -184,7 +185,7 @@ export default function SollicitatiesArchief() {
   }
 
   return (
-    <div className="space-y-6">
+    <PageContainer contextColor="rose" className="space-y-6">
           {/* Hero Section */}
           <div>
             <h1 className="text-2xl font-semibold mb-1">Sollicitaties Archief</h1>
@@ -400,6 +401,6 @@ export default function SollicitatiesArchief() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageContainer>
   );
 }

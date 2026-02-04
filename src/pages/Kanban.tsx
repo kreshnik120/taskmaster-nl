@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { PageContainer } from "@/components/ui/page-container";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { TaskCard } from "@/components/TaskCard";
 import { TaskDialog } from "@/components/TaskDialog";
@@ -692,7 +693,7 @@ const Kanban = () => {
   const completedToday = tasks.filter(t => t.completed_at && new Date(t.completed_at).toDateString() === new Date().toDateString()).length;
 
   return (
-    <>
+    <PageContainer contextColor="indigo">
       {/* KPI Stats Bar */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <KPICard 
@@ -914,7 +915,7 @@ const Kanban = () => {
           onTaskUpdated={handleTaskUpdated}
         />
       )}
-    </>
+    </PageContainer>
   );
 };
 
