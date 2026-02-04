@@ -1018,7 +1018,139 @@ All colors MUST be HSL.
       0 2px 8px rgba(0, 0, 0, 0.08);
   }
 
-  /* Collapsible section glass styling */
+  /* ============================================
+     CONTEXT-COLORED TABLE ROW HOVERS
+     Per-module semantic hover colors (Fase 3)
+     ============================================ */
+
+  .table-row-hover-rose {
+    transition: background 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .table-row-hover-rose:hover {
+    background: hsla(345, 48%, 97%, 0.7);
+  }
+  .dark .table-row-hover-rose:hover {
+    background: hsla(345, 40%, 15%, 0.4);
+  }
+
+  .table-row-hover-violet {
+    transition: background 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .table-row-hover-violet:hover {
+    background: hsla(270, 45%, 97%, 0.7);
+  }
+  .dark .table-row-hover-violet:hover {
+    background: hsla(270, 40%, 15%, 0.4);
+  }
+
+  .table-row-hover-amber {
+    transition: background 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .table-row-hover-amber:hover {
+    background: hsla(38, 55%, 97%, 0.7);
+  }
+  .dark .table-row-hover-amber:hover {
+    background: hsla(38, 45%, 15%, 0.4);
+  }
+
+  .table-row-hover-indigo {
+    transition: background 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .table-row-hover-indigo:hover {
+    background: hsla(234, 45%, 97%, 0.7);
+  }
+  .dark .table-row-hover-indigo:hover {
+    background: hsla(234, 40%, 15%, 0.4);
+  }
+
+  .table-row-hover-emerald {
+    transition: background 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .table-row-hover-emerald:hover {
+    background: hsla(142, 55%, 97%, 0.7);
+  }
+  .dark .table-row-hover-emerald:hover {
+    background: hsla(142, 45%, 15%, 0.4);
+  }
+
+  .table-row-hover-teal {
+    transition: background 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .table-row-hover-teal:hover {
+    background: hsla(174, 42%, 97%, 0.7);
+  }
+  .dark .table-row-hover-teal:hover {
+    background: hsla(174, 35%, 15%, 0.4);
+  }
+
+  .table-row-hover-blue {
+    transition: background 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .table-row-hover-blue:hover {
+    background: hsla(217, 55%, 97%, 0.7);
+  }
+  .dark .table-row-hover-blue:hover {
+    background: hsla(217, 45%, 15%, 0.4);
+  }
+
+  /* ============================================
+     GLASS COLLAPSIBLE TRIGGERS
+     Premium hover for accordion headers (Fase 3)
+     ============================================ */
+
+  .collapsible-glass {
+    transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .collapsible-glass:hover {
+    background: rgba(255, 255, 255, 0.50);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  }
+
+  .dark .collapsible-glass:hover {
+    background: rgba(30, 41, 59, 0.50);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  }
+
+  /* Context-colored collapsible variants */
+  .collapsible-glass-rose:hover {
+    box-shadow: 0 2px 8px hsla(345, 48%, 52%, 0.06);
+  }
+  .dark .collapsible-glass-rose:hover {
+    box-shadow: 0 2px 8px hsla(345, 40%, 30%, 0.15);
+  }
+
+  .collapsible-glass-indigo:hover {
+    box-shadow: 0 2px 8px hsla(234, 45%, 52%, 0.06);
+  }
+  .dark .collapsible-glass-indigo:hover {
+    box-shadow: 0 2px 8px hsla(234, 40%, 30%, 0.15);
+  }
+
+  .collapsible-glass-violet:hover {
+    box-shadow: 0 2px 8px hsla(270, 45%, 55%, 0.06);
+  }
+  .dark .collapsible-glass-violet:hover {
+    box-shadow: 0 2px 8px hsla(270, 40%, 30%, 0.15);
+  }
+
+  .collapsible-glass-amber:hover {
+    box-shadow: 0 2px 8px hsla(38, 55%, 50%, 0.06);
+  }
+  .dark .collapsible-glass-amber:hover {
+    box-shadow: 0 2px 8px hsla(38, 45%, 30%, 0.15);
+  }
+
+  .collapsible-glass-emerald:hover {
+    box-shadow: 0 2px 8px hsla(142, 55%, 45%, 0.06);
+  }
+  .dark .collapsible-glass-emerald:hover {
+    box-shadow: 0 2px 8px hsla(142, 45%, 30%, 0.15);
+  }
+
+  /* Collapsible section glass styling (legacy, kept for compatibility) */
   .glass-section-trigger {
     background: rgba(255, 255, 255, 0.4);
     backdrop-filter: blur(8px);
