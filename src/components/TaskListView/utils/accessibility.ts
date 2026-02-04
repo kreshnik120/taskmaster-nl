@@ -1,4 +1,5 @@
 import type { TaskListTask } from '../types';
+import { getPriorityLabel } from '@/hooks/usePriorityConfig';
 
 /**
  * Announces a message to screen readers via a live region
@@ -27,13 +28,7 @@ export function generateTaskAriaLabel(task: TaskListTask): string {
   const parts: string[] = [task.title];
   
   if (task.priority) {
-    const priorityLabels: Record<string, string> = {
-      CRITICAL: 'Kritiek',
-      HIGH: 'Hoog',
-      MEDIUM: 'Gemiddeld',
-      LOW: 'Laag',
-    };
-    parts.push(`prioriteit ${priorityLabels[task.priority] || task.priority}`);
+    parts.push(`prioriteit ${getPriorityLabel(task.priority)}`);
   }
   
   if (task.due_at) {
