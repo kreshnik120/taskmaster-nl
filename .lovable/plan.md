@@ -1,198 +1,150 @@
 
 
-# Enterprise-Niveau Page Background Systeem
+# KPI-Tegels Verfijning: Compacter Formaat + Enhanced Apple Glass
 
-## Analyse: Huidige Staat vs. Gewenste Staat
+## Probleemanalyse
 
-### Wat werkt al:
-- ✅ **Ambient mesh classes** bestaan voor alle modules (rose, violet, slate, teal, amber, emerald, blue, indigo)
-- ✅ **Per-pagina toepassing** - elke pagina heeft al een `glass-ambient-mesh-[color]` class
-- ✅ **Dark mode support** in alle ambient mesh variants
+Op basis van de screenshot zie ik de volgende verbeterpunten:
 
-### Wat ontbreekt voor "top-tier enterprise":
+| Issue | Impact |
+|-------|--------|
+| **KPI-tegels te breed** | Cards vullen de hele breedte, voelen "uitgesmeerd" aan |
+| **Onvoldoende "lift" effect** | Cards lijken plat te liggen op de achtergrond |
+| **Schaduw ontbreekt of is te subtiel** | Geen duidelijke scheiding tussen card en achtergrond |
+| **Glass effect niet krachtig genoeg** | Te weinig specular highlights en depth |
 
-| Probleem | Impact |
-|----------|--------|
-| Ambient mesh opaciteit te laag (0.10-0.15) | Kleur is nauwelijks zichtbaar, geen sterke visuele identiteit |
-| Geen achtergrond-tint op pagina zelf | Glass elementen hebben geen context-kleur om mee te interageren |
-| Geen vignette/edge gradient | Pagina voelt "plat" in plaats van 3D ruimtelijk |
-| Geen noise texture op page niveau | Mist "materiaal" gevoel van echte Apple interfaces |
+## Oplossingsplan
 
----
+### Stap 1: Compacter Card Formaat
 
-## Het 3-Tier Enterprise Background Systeem
+**Bestand:** `src/components/ui/kpi-card.tsx`
 
-```text
-┌──────────────────────────────────────────────────────────────┐
-│  TIER 3: Noise Texture Overlay (optioneel)                   │
-│  ┌────────────────────────────────────────────────────────┐  │
-│  │  TIER 2: Ambient Mesh Orbs (VERSTERKT)                 │  │
-│  │  ┌──────────────────────────────────────────────────┐  │  │
-│  │  │  TIER 1: Page Background Tint                    │  │  │
-│  │  │  (Subtiele context-kleur in achtergrond)         │  │  │
-│  │  │                                                  │  │  │
-│  │  │     [Glass Cards zweven hier bovenop]           │  │  │
-│  │  │                                                  │  │  │
-│  │  └──────────────────────────────────────────────────┘  │  │
-│  └────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────┘
-```
+Verklein de padding en font sizes voor een strakker uiterlijk:
 
----
+| Element | Huidig | Nieuw |
+|---------|--------|-------|
+| CardContent padding | `p-4` | `p-3` |
+| Icon size | `h-5 w-5` | `h-4 w-4` |
+| Value font | `text-3xl` | `text-2xl` |
+| Title margin | `mb-3` | `mb-2` |
 
-## Implementatie Stappen
+### Stap 2: Enhanced Glass Effect met Floating Shadow
 
-### Stap 1: Page Background Tint Classes (CSS)
+**Bestand:** `src/components/ui/kpi-card.tsx`
 
-**Bestand:** `src/index.css`
-
-Nieuwe utility classes die een subtiele context-kleur aan de volledige pagina-achtergrond toevoegen:
-
-```css
-/* Page Background Tints - Enterprise niveau */
-.page-bg-rose {
-  background: linear-gradient(
-    165deg,
-    hsl(345 48% 98%) 0%,
-    hsl(345 15% 99%) 40%,
-    hsl(0 0% 100%) 100%
-  );
-}
-
-.page-bg-violet { /* Professionals */ }
-.page-bg-slate  { /* Klanten */ }
-.page-bg-teal   { /* Plaatsingen */ }
-.page-bg-amber  { /* Tijdregistratie */ }
-.page-bg-emerald { /* Facturatie */ }
-.page-bg-indigo { /* Dashboard/Mijn Werk */ }
-.page-bg-blue   { /* WhatsApp */ }
-```
-
-### Stap 2: Versterkte Ambient Mesh Orbs (CSS)
-
-**Bestand:** `src/index.css`
-
-Verhoog de opaciteit van de bestaande ambient mesh classes van 0.10-0.15 naar **0.18-0.28** en vergroot de radial gradients voor meer "ruimte" gevoel:
-
-| Huidige Waarde | Nieuwe Waarde | Effect |
-|----------------|---------------|--------|
-| `hsla(..., 0.15)` | `hsla(..., 0.22)` | 47% sterker, nog steeds elegant |
-| `inset: -150px` | `inset: -200px` | Groter bereik, zachter verloop |
-| `blur(50px)` | `blur(65px)` | Nog vloeiender, visionOS-achtig |
-
-### Stap 3: Page Vignette Effect (CSS)
-
-Voeg een subtiele edge-darkening toe voor 3D diepte:
-
-```css
-.page-vignette::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background: radial-gradient(
-    ellipse 80% 60% at 50% 50%,
-    transparent 50%,
-    hsla(0 0% 0% / 0.02) 100%
-  );
-}
-```
-
-### Stap 4: PageContainer Component (TSX)
-
-**Nieuw bestand:** `src/components/ui/page-container.tsx`
-
-Een wrapper component die automatisch de juiste background, ambient mesh en optionele noise texture toepast:
+Voeg een prominentere schaduw en glass-laag toe:
 
 ```tsx
-interface PageContainerProps {
-  contextColor: "rose" | "violet" | "slate" | "teal" | "amber" | "emerald" | "indigo" | "blue";
-  children: React.ReactNode;
-  withNoise?: boolean; // Optionele noise texture
-}
-
-export function PageContainer({ 
-  contextColor, 
-  children, 
-  withNoise = false 
-}: PageContainerProps) {
-  return (
-    <div className={cn(
-      "min-h-full",
-      `page-bg-${contextColor}`,
-      `glass-ambient-mesh-${contextColor}`,
-      withNoise && "page-noise-texture"
-    )}>
-      {children}
-    </div>
-  );
-}
+// In de Card className:
+cn(
+  "glass-liquid-card", // Nieuwe enhanced glass class
+  "shadow-[0_8px_30px_rgba(0,0,0,0.08),0_4px_12px_rgba(0,0,0,0.05)]",
+  "hover:shadow-[0_12px_40px_rgba(0,0,0,0.12),0_6px_16px_rgba(0,0,0,0.08)]",
+  "transition-shadow duration-300"
+)
 ```
 
-### Stap 5: Micro-Noise Texture op Page Niveau (CSS)
+### Stap 3: Nieuwe `.glass-liquid-card` Class met Lift Effect
+
+**Bestand:** `src/index.css`
+
+Maak een specifieke class voor KPI cards met meer "float" gevoel:
 
 ```css
-.page-noise-texture::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
-  background-image: url("data:image/svg+xml,...noise...");
-  opacity: 0.015; /* Zeer subtiel */
-  mix-blend-mode: overlay;
+.glass-liquid-card {
+  position: relative;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  
+  /* 4-Layer Float Shadow System */
+  box-shadow:
+    /* Layer 1: Soft ambient glow */
+    0 4px 24px -4px rgba(0, 0, 0, 0.08),
+    /* Layer 2: Edge shadow for lift */
+    0 8px 16px -8px rgba(0, 0, 0, 0.12),
+    /* Layer 3: Subtle bottom spread */
+    0 16px 40px -12px rgba(0, 0, 0, 0.06),
+    /* Layer 4: Inner top highlight */
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.glass-liquid-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 6px 32px -4px rgba(0, 0, 0, 0.10),
+    0 12px 24px -8px rgba(0, 0, 0, 0.15),
+    0 24px 48px -12px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
 }
 ```
 
----
+### Stap 4: Context-Gekleurde Schaduw
 
-## Page-to-Color Mapping
+Voeg context-specifieke schaduwen toe per module (rose, teal, etc.):
 
-| Pagina | contextColor | Hue | Reden |
-|--------|--------------|-----|-------|
-| Sollicitaties | `rose` | 345° | Recruitment = mensen, warmte |
-| Professionals | `violet` | 270° | Team = samenwerking |
-| Gebruikers | `violet` | 270° | Gebruikersbeheer |
-| Klanten | `slate` | 215° | Data = neutraal, professioneel |
-| Plaatsingen | `teal` | 174° | Kalender/planning = rust |
-| Tijdregistratie | `amber` | 38° | Tijd = urgentie, focus |
-| Facturatie | `emerald` | 142° | Geld = groei |
-| WhatsApp | `blue` | 217° | Communicatie |
-| Dashboard | `indigo` | 234° | Focus, werk |
-| Bijlagen | `indigo` | 234° | Documenten |
-| Notulen | `indigo` | 234° | Vergaderingen |
+```css
+.glass-liquid-card-rose {
+  box-shadow:
+    0 4px 24px -4px hsla(345, 55%, 50%, 0.12),
+    0 8px 16px -8px hsla(345, 55%, 40%, 0.10),
+    0 16px 40px -12px hsla(345, 55%, 50%, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
 
----
+.glass-liquid-card-teal { /* Plaatsingen */ }
+.glass-liquid-card-violet { /* Professionals */ }
+/* etc. voor alle context-kleuren */
+```
 
-## Wijzigingen per Bestand
+### Stap 5: Update KPI Grid Spacing
 
-| Bestand | Wijziging |
-|---------|-----------|
-| `src/index.css` | +60 regels: 8 page-bg-* classes, versterkte ambient mesh, vignette, noise texture |
-| `src/components/ui/page-container.tsx` | **NIEUW** - 30 regels wrapper component |
-| `src/pages/Plaatsingen.tsx` | Update naar `<PageContainer contextColor="teal">` |
-| `src/pages/Professionals.tsx` | Update naar `<PageContainer contextColor="violet">` |
-| `src/pages/Klanten.tsx` | Update naar `<PageContainer contextColor="slate">` |
-| `src/pages/Sollicitaties.tsx` | Update naar `<PageContainer contextColor="rose">` |
-| `src/pages/Facturatie.tsx` | Update naar `<PageContainer contextColor="emerald">` |
-| `src/pages/Tijdregistratie.tsx` | Update naar `<PageContainer contextColor="amber">` |
-| `src/pages/WhatsApp.tsx` | Update naar `<PageContainer contextColor="blue">` |
-| `src/pages/Gebruikers.tsx` | Update naar `<PageContainer contextColor="violet">` |
-| `src/pages/Bijlagen.tsx` | Update naar `<PageContainer contextColor="indigo">` |
-| `src/pages/Notulen.tsx` | Update naar `<PageContainer contextColor="indigo">` |
+**Bestand:** `src/pages/Sollicitaties.tsx` en andere pagina's
+
+Optioneel: pas de gap aan voor meer "ademruimte" tussen cards:
+
+```tsx
+// Van:
+<div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+
+// Naar (optioneel):
+<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+```
 
 ---
 
 ## Visueel Resultaat
 
 Na implementatie:
-- **Elke pagina heeft een unieke kleuridentiteit** die onmiddellijk herkenbaar is
-- **Glass elementen "zweven" zichtbaar** boven de gekleurde achtergrond
-- **Ambient orbs zijn prominenter** maar nog steeds elegant (niet fel)
-- **Subtiele vignette** geeft 3D diepte zonder afleidend te zijn
-- **Optionele noise texture** voor premium materiaal-gevoel
-- **Consistent dark mode** met aangepaste saturatie en helderheid
+- **Compactere tegels** met minder padding (strakker)
+- **Duidelijke "lift"** door 4-layer shadow system
+- **Glass effect versterkt** met hogere opaciteit en inner highlight
+- **Hover animatie** die de card 2px optilt voor interactieve feedback
+- **Context-gekleurde schaduwen** die de rose/teal/violet tint subtiel doorzetten
 
-Dit systeem creëert de "ruimtelijke computing" esthetiek van Apple visionOS waar elke module zijn eigen "environment" heeft.
+---
+
+## Technische Details
+
+### Bestanden te wijzigen:
+
+| Bestand | Wijziging |
+|---------|-----------|
+| `src/components/ui/kpi-card.tsx` | Padding verkleinen, enhanced glass classes toevoegen |
+| `src/index.css` | `.glass-liquid-card` class met float shadow system |
+| `src/index.css` | Context-gekleurde card variants (`.glass-liquid-card-rose`, etc.) |
+| `src/pages/Sollicitaties.tsx` | Grid gap optioneel aanpassen |
+
+### Nieuwe CSS Classes:
+
+- `.glass-liquid-card` - Basisclass met enhanced glass + float shadows
+- `.glass-liquid-card-rose` - Rose context-schaduw
+- `.glass-liquid-card-teal` - Teal context-schaduw
+- `.glass-liquid-card-violet` - Violet context-schaduw
+- `.glass-liquid-card-amber` - Amber context-schaduw
+- `.glass-liquid-card-emerald` - Emerald context-schaduw
+- `.glass-liquid-card-slate` - Slate context-schaduw
+- `.glass-liquid-card-indigo` - Indigo context-schaduw
+- `.glass-liquid-card-blue` - Blue context-schaduw
 
