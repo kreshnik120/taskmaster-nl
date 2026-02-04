@@ -62,7 +62,7 @@ export function PipelineAnalyticsWidget({ applications }: PipelineAnalyticsWidge
         <CollapsibleTrigger asChild>
           <Button
             variant="ghost"
-            className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors"
+            className="w-full flex items-center justify-between p-4 collapsible-glass collapsible-glass-rose"
           >
             <div className="flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-primary" />

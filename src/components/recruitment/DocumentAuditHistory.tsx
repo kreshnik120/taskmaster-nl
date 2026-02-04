@@ -159,7 +159,7 @@ export function DocumentAuditHistory({ applicationId }: DocumentAuditHistoryProp
     <Card className="mt-4">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger asChild>
-          <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors py-3">
+          <CardHeader className="cursor-pointer collapsible-glass collapsible-glass-rose py-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <History className="h-4 w-4 text-muted-foreground" />

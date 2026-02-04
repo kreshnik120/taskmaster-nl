@@ -339,7 +339,7 @@ export default function Gebruikers() {
                     const isExpiringSoon = expiresAt.getTime() - Date.now() < 24 * 60 * 60 * 1000;
                     
                     return (
-                      <TableRow key={invitation.id}>
+                      <TableRow key={invitation.id} className="table-row-hover-violet">
                         <TableCell className="font-medium">{invitation.email}</TableCell>
                         <TableCell>
                           <Badge variant={roleConfig.variant} className="gap-1">
@@ -424,7 +424,7 @@ export default function Gebruikers() {
                     const isEditing = editingUserId === user.id;
 
                     return (
-                      <TableRow key={user.id}>
+                      <TableRow key={user.id} className="table-row-hover-violet">
                         <TableCell className="font-medium">
                           {user.raw_user_meta_data?.name || "—"}
                         </TableCell>
