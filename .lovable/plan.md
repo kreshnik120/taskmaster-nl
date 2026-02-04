@@ -1,237 +1,155 @@
 
-# TaskFlow Glass Design System - Consistentie Audit
+# Plan: Medewerker-kleuren in Kalender
 
-## Executive Summary
+## Overzicht
 
-Na grondige analyse van alle pagina's en de styling prompt is de **huidige implementatie grotendeels consistent**, maar er zijn enkele afwijkingen van de specificatie die gecorrigeerd moeten worden.
-
----
-
-## 1. Pagina Kleur Mapping Verificatie
-
-### Specificatie vs. Huidige Implementatie
-
-| Pagina/Route | Specificatie | Huidige Implementatie | Status |
-|--------------|--------------|----------------------|--------|
-| `/dashboard` (Mijn Werk) | Indigo 234° | `indigo` ✓ | ✅ |
-| `/dashboard` (Kalender) | Teal 174° | `teal` ✓ | ✅ |
-| `/dashboard` (Lijst) | Slate 215° | `slate` ✓ | ✅ |
-| `/dashboard` (Opvolging) | Amber 38° | `amber` ✓ | ✅ |
-| `/dashboard` (Team) | Violet 270° | `violet` ✓ | ✅ |
-| `/dashboard` (Recruitment) | Rose 345° | `rose` ✓ | ✅ |
-| `/facturatie/*` | Emerald 142° | `emerald` ✓ | ✅ |
-| `/whatsapp/*` | Blue 217° | `blue` ✓ | ✅ |
-| `/sollicitaties/*` | Rose 345° | `rose` ✓ | ✅ |
-| `/professionals/*` | **Rose 345°** | `violet` ❌ | ⚠️ AFWIJKING |
-| `/klanten/*` | **Rose 345°** | `slate` ❌ | ⚠️ AFWIJKING |
-| `/plaatsingen/*` | **Emerald 142°** | `teal` ❌ | ⚠️ AFWIJKING |
-| `/tijdregistratie` | *(niet gespec.)* | `amber` ✓ | ✅ (logisch) |
-| `/kanban` | *(niet gespec.)* | `indigo` ✓ | ✅ (logisch) |
-| `/gebruikers` | *(niet gespec.)* | `violet` ✓ | ✅ (logisch) |
-| `/ai-training` | *(niet gespec.)* | `violet` ✓ | ✅ (logisch) |
-| `/verwijderd` | *(niet gespec.)* | `slate` ✓ | ✅ (logisch) |
-| `/afgerond` | *(niet gespec.)* | `emerald` ✓ | ✅ (logisch) |
-
-### Gevonden Afwijkingen (3 pagina's):
-
-| Pagina | Specificatie | Huidige | Actie |
-|--------|--------------|---------|-------|
-| **Professionals** | Rose (345°) | Violet | ⚠️ Kleur moet naar `rose` |
-| **Klanten** | Rose (345°) | Slate | ⚠️ Kleur moet naar `rose` |
-| **Plaatsingen** | Emerald (142°) | Teal | ⚠️ Kleur moet naar `emerald` |
+Taken in de kalender worden nu gekleurd op basis van de **toegewezen medewerker** in plaats van prioriteit. Elke medewerker krijgt een consistente, unieke kleur zodat je in één oogopslag kunt zien wie welke taken heeft.
 
 ---
 
-## 2. Component Consistentie Analyse
+## Wat Verandert
 
-### PageContainer Gebruik (19 pagina's)
+### Huidige situatie (maandag 02-02)
+```text
+┌────────────────────────────────┐
+│ ● Intake gesprek    │ Blauw   │ ← Medium prioriteit
+│ ● VOG aanvragen     │ Blauw   │ ← Medium prioriteit  
+│ ● Factuur versturen │ Blauw   │ ← Medium prioriteit
+└────────────────────────────────┘
+Alles ziet er hetzelfde uit!
+```
 
-Alle 19 pagina's gebruiken `<PageContainer contextColor="...">`:
+### Na implementatie
+```text
+┌────────────────────────────────┐
+│ ● Intake gesprek    │ Paars   │ ← Anna
+│ ● VOG aanvragen     │ Teal    │ ← Bob
+│ ● Factuur versturen │ Oranje  │ ← Carla
+└────────────────────────────────┘
+Elke medewerker heeft een eigen kleur!
+```
+
+---
+
+## Technische Aanpak
+
+### 1. Nieuwe Hook: `useAssigneeColor`
+
+Herbruikbare hook die een consistente kleur genereert op basis van een medewerker ID of naam:
 
 ```text
-✅ Kanban          → indigo
-✅ Facturatie      → emerald
-✅ FactuurDetail   → emerald
-✅ FactuurAanmaken → emerald
-✅ FacturatieInst. → emerald
-✅ Tijdregistratie → amber
-✅ WhatsApp        → blue
-✅ Sollicitaties   → rose
-✅ SollicitArchief → rose
-⚠️ Professionals   → violet (moet: rose)
-⚠️ Klanten         → slate (moet: rose)
-⚠️ Plaatsingen     → teal (moet: emerald)
-✅ Gebruikers      → violet
-✅ AiTraining      → violet
-✅ Notulen         → indigo
-✅ Bijlagen        → indigo
-✅ VerwijderdeTaken→ slate
-✅ AfgerondeTaken  → emerald
-✅ UnifiedDashboard→ dynamic ✓
+src/hooks/useAssigneeColor.ts
+├── hashToColor() - Hash algoritme (9 kleuren)
+├── ASSIGNEE_COLORS - Kleurenpalet met bg/border/dot styling
+└── getAssigneeColor(id: string) - Haalt kleur op
 ```
 
-### PageHero Gebruik
+**Kleuren Palet (9 kleuren):**
+| # | Kleur | Background | Border | Dot |
+|---|-------|------------|--------|-----|
+| 1 | Rood | bg-red-50/40 | border-l-red-500/70 | bg-red-500/80 |
+| 2 | Oranje | bg-orange-50/40 | border-l-orange-500/70 | bg-orange-500/80 |
+| 3 | Amber | bg-amber-50/40 | border-l-amber-500/70 | bg-amber-500/80 |
+| 4 | Groen | bg-green-50/40 | border-l-green-500/70 | bg-green-500/80 |
+| 5 | Teal | bg-teal-50/40 | border-l-teal-500/70 | bg-teal-500/80 |
+| 6 | Blauw | bg-blue-50/40 | border-l-blue-500/70 | bg-blue-500/80 |
+| 7 | Indigo | bg-indigo-50/40 | border-l-indigo-500/70 | bg-indigo-500/80 |
+| 8 | Paars | bg-purple-50/40 | border-l-purple-500/70 | bg-purple-500/80 |
+| 9 | Roze | bg-pink-50/40 | border-l-pink-500/70 | bg-pink-500/80 |
 
-| Pagina | PageHero Aanwezig | Status |
-|--------|-------------------|--------|
-| Facturatie | ✅ | Correct |
-| Professionals | ✅ | Correct |
-| Klanten | ✅ | Correct |
-| Plaatsingen | ✅ | Correct |
-| Tijdregistratie | ✅ | Correct |
-| Gebruikers | ✅ | Correct |
-| Notulen | ✅ | Correct |
-| Bijlagen | ✅ | Correct |
-| WhatsApp | ❌ | Geen hero (acceptabel - chat interface) |
-| Sollicitaties | ❌ | Geen hero (acceptabel - kanban layout) |
+### 2. Aanpassing EmbeddedCalendarView.tsx
+
+**Wat wijzigt:**
+- Taak-cards gebruiken medewerker-kleur in plaats van prioriteit-kleur
+- Prioriteit blijft zichtbaar via kleine indicator dot
+
+**Code wijziging (regels 819-854):**
+
+Huidige logica:
+```text
+PRIORITY_BG[priority]      → Achtergrond kleur
+PRIORITY_BORDERS[priority] → Border-left kleur
+PRIORITY_DOTS[priority]    → Dot kleur
+```
+
+Nieuwe logica:
+```text
+ASSIGNEE_BG[assignee_id]      → Achtergrond kleur per medewerker
+ASSIGNEE_BORDERS[assignee_id] → Border-left kleur per medewerker
++ kleine priority indicator dot (optioneel)
+```
+
+### 3. Visuele Indicator voor Prioriteit
+
+Omdat kleur nu op medewerker is gebaseerd, wordt prioriteit getoond via:
+- Kleine dot naast de titel (rood/amber/blauw/groen)
+- Of icon indicator voor urgente taken
 
 ---
 
-## 3. Glass Card Consistentie
+## Implementatie Stappen
 
-### Specificatie:
-
-```css
-.glass-card {
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.55);
-  border-radius: 16px;
-}
-```
-
-### Huidige Implementatie (card.tsx):
-
-```css
-.Card {
-  background: rgba(255, 255, 255, 0.80);  /* ⚠️ 0.80 vs 0.82 */
-  backdrop-filter: blur-md;               /* ✅ 24px equivalent */
-  border-radius: 14px;                    /* ⚠️ 14px vs 16px */
-}
-```
-
-### KPI Card Styling:
-
-Alle pagina's gebruiken `<KPICard>` component met context-specifieke `variant`:
-- Facturatie: `variant="facturatie"` (emerald)
-- Plaatsingen: `variant="teal"` (moet: emerald)
-- Tijdregistratie: `variant="amber"`
-- Professionals: `variant="default"` (moet: rose)
+| Stap | Bestand | Wijziging |
+|------|---------|-----------|
+| 1 | `src/hooks/useAssigneeColor.ts` | **Nieuw** - Hook met kleurlogica |
+| 2 | `src/components/dashboard/EmbeddedCalendarView.tsx` | Import hook + gebruik assignee kleuren |
+| 3 | Task rendering (regels 819-854) | Vervang PRIORITY_* met ASSIGNEE_* |
+| 4 | Priority indicator | Kleine dot toevoegen voor prioriteit |
 
 ---
 
-## 4. Spacing & Typography Consistentie
+## Voorbeeld Resultaat
 
-### Page Container Padding
-
-| Pagina | Specificatie | Huidige | Status |
-|--------|--------------|---------|--------|
-| Alle | `24px (p-6)` | Gemengd | ⚠️ |
-
-Gevonden variaties:
-- `p-6` (24px): Facturatie, Dashboard
-- `space-y-6`: Professionals, Klanten, Plaatsingen, Tijdregistratie
-- `py-6`: Notulen, Bijlagen
-- `p-4 md:p-6`: FacturatieInstellingen
-
-### KPI Grid Layout
-
-| Pagina | Specificatie | Huidige | Status |
-|--------|--------------|---------|--------|
-| Alle | `4 columns, 16px gap` | Gemengd | ⚠️ |
-
-Gevonden variaties:
-- `grid-cols-4 gap-4`: Facturatie ✅
-- `grid-cols-2 md:grid-cols-4 gap-3`: Plaatsingen, Tijdregistratie ✅
-- `gap-4`: Professionals ✅
-
----
-
-## 5. Aanbevolen Correcties
-
-### P0: Context Kleur Fixes (3 wijzigingen)
-
-| Bestand | Huidige Waarde | Correcte Waarde |
-|---------|----------------|-----------------|
-| `src/pages/Professionals.tsx` | `contextColor="violet"` | `contextColor="rose"` |
-| `src/pages/Klanten.tsx` | `contextColor="slate"` | `contextColor="rose"` |
-| `src/pages/Plaatsingen.tsx` | `contextColor="teal"` | `contextColor="emerald"` |
-
-### P1: KPI Card Variant Fixes
-
-| Bestand | Huidige Variant | Correcte Variant |
-|---------|-----------------|------------------|
-| `src/pages/Plaatsingen.tsx` | `variant="teal"` | `variant="emerald"` |
-
-### P2: Card Border Radius (Optioneel)
-
-Wijzig `src/components/ui/card.tsx`:
-```css
-/* Van */
-border-radius: 0.875rem; /* 14px */
-
-/* Naar */
-border-radius: 1rem; /* 16px */
+```text
+Maandag 3 februari
+┌─────────────────────────────────────────┐
+│ 🟣 ● Intake gesprek met kandidaat       │ ← Paars = Anna
+│     09:00  ○ (medium prioriteit)        │
+├─────────────────────────────────────────┤
+│ 🩵 ● VOG aanvragen voor plaatsing       │ ← Teal = Bob
+│     10:30  ● (hoge prioriteit - amber)  │
+├─────────────────────────────────────────┤
+│ 🟠 ● Factuur versturen naar klant       │ ← Oranje = Carla
+│     14:00  ○ (lage prioriteit)          │
+└─────────────────────────────────────────┘
 ```
 
 ---
 
-## 6. Wat is WEL Consistent
+## Voordelen
 
-### Universele Elementen (CORRECT)
-
-| Element | Waarde | Status |
-|---------|--------|--------|
-| Glass blur | 24px (cards), 40px (modals) | ✅ |
-| Glass saturate | 180% | ✅ |
-| Sidebar blur | 24px | ✅ |
-| Hover transform | translateY(-2px) | ✅ |
-| Easing | cubic-bezier(0.22, 1, 0.36, 1) | ✅ |
-| Ambient mesh blur | 40px (optimized) | ✅ |
-| Ambient mesh structure | 3-orb radial gradients | ✅ |
-| Dark mode transformations | Correct opacity shifts | ✅ |
-| Font stack | Inter | ✅ |
-
-### Tab System (Dashboard)
-
-| Tab | Context Color | Ambient Mesh | Status |
-|-----|---------------|--------------|--------|
-| Mijn Werk | Indigo | `glass-ambient-mesh-indigo` | ✅ |
-| Kalender | Teal | `glass-ambient-mesh-teal` | ✅ |
-| Lijst | Slate | `glass-ambient-mesh-slate` | ✅ |
-| Opvolging | Amber | `glass-ambient-mesh-amber` | ✅ |
-| Team | Violet | `glass-ambient-mesh-violet` | ✅ |
-| Recruitment | Rose | `glass-ambient-mesh-rose` | ✅ |
+1. **Visuele duidelijkheid** - Direct zien wie welke taken heeft
+2. **Consistente kleuren** - Dezelfde medewerker = altijd dezelfde kleur (hash-based)
+3. **Prioriteit behouden** - Kleine indicator toont nog steeds urgentie
+4. **Herbruikbaar** - Hook kan ook in andere componenten gebruikt worden
 
 ---
 
-## 7. Technische Details voor Implementatie
+## Technische Details
 
-### Wijzigingen Overzicht
+### Hash Algoritme
+```text
+medewerker_id → hash berekening → modulo 9 → kleur index
+```
 
-| # | Bestand | Regel | Wijziging | Impact |
-|---|---------|-------|-----------|--------|
-| 1 | `src/pages/Professionals.tsx` | 423 | `contextColor="violet"` → `"rose"` | Visueel |
-| 2 | `src/pages/Klanten.tsx` | 581 | `contextColor="slate"` → `"rose"` | Visueel |
-| 3 | `src/pages/Plaatsingen.tsx` | 183 | `contextColor="teal"` → `"emerald"` | Visueel |
-| 4 | `src/pages/Plaatsingen.tsx` | KPIs | `variant="teal"` → `"emerald"` | Visueel |
+Dit zorgt ervoor dat:
+- Dezelfde medewerker altijd dezelfde kleur krijgt
+- Kleuren worden gelijkmatig verdeeld over het team
+- Geen database wijzigingen nodig
 
-**Totaal: 4 éénregelige CSS class wijzigingen**
+### Dark Mode Support
+Alle kleuren hebben automatisch dark mode varianten:
+```text
+bg-teal-50/40 dark:bg-teal-900/20
+```
 
 ---
 
-## 8. Eindoordeel
+## Bestanden
 
-| Categorie | Score | Toelichting |
-|-----------|-------|-------------|
-| Context kleur mapping | 84% | 3 van 19 pagina's afwijkend |
-| Component structuur | 100% | Alle pagina's gebruiken PageContainer |
-| Glass morphism values | 98% | Kleine border-radius afwijking |
-| Spacing systeem | 95% | Minimale variaties |
-| Typography | 100% | Consistent Inter font |
-| Hover/Animation | 100% | Correct timing en easing |
-| **Totaal** | **95%** | Enterprise-grade consistency |
+| Type | Bestand | Actie |
+|------|---------|-------|
+| Nieuw | `src/hooks/useAssigneeColor.ts` | Aanmaken |
+| Wijzigen | `src/components/dashboard/EmbeddedCalendarView.tsx` | ~30 regels |
 
-### Conclusie
-
-Het design system is **95% consistent** met de specificatie. De 3 geïdentificeerde kleur-afwijkingen (Professionals, Klanten, Plaatsingen) zijn eenvoudig te corrigeren met 4 éénregelige wijzigingen. Alle andere aspecten (blur, shadow, spacing, typography, hover effects) zijn volledig uniform over alle pagina's.
+**Totaal: 1 nieuw bestand + 1 wijziging**
