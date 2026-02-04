@@ -1,245 +1,147 @@
 
-# Fase 3: Context-Colored Table Rows & Collapsible Triggers Enhancement
 
-## Analyse van Huidige Status
+# Fase 4: CSS Cleanup & Extended Context-Colored Hovers
 
-Na Fase 1 (Foundation) en Fase 2 (WhatsApp Glass Enhancement) is het design system consistent. De volgende logische stap is het toepassen van **context-gekleurde hover states** op tabelrijen en collapsible triggers door de hele applicatie.
+## Samenvatting
 
-### Wat al aanwezig is:
-| Component | Status | Details |
-|-----------|--------|---------|
-| Table sticky headers | Volledig | `bg-white/70 dark:bg-slate-900/70 backdrop-blur-md sticky top-0 z-10` |
-| ApplicationCard | Volledig | `glass-hover-lift` + rose-tinted shadow `hsla(346,77%,50%,...)` |
-| ClientCard | Volledig | `glass-hover-lift` + slate-tinted shadow |
-| TaskCard | Volledig | `glass-task-card glass-hover-lift` + indigo-tinted shadow |
-| WhatsApp Chat Items | Volledig (Fase 2) | `glass-list-item-blue` + tactile feedback |
+Na voltooiing van Fase 1-3 zijn er twee prioriteiten voor Fase 4:
 
-### Wat ontbreekt (Fase 3 scope):
-
-1. **TableRow Default Hover** - Generiek `hover:bg-muted/50` ipv context-colored
-   - Huidige: `hover:bg-muted/50` (neutral)
-   - Ontbreekt: Per-pagina context-colored hover met subtiele glow
-
-2. **CollapsibleTrigger Hovers** - Flat `hover:bg-muted/50` styling
-   - `ProfessionalDetailModal.tsx`: 4 collapsibles met flat hover
-   - `TaskDetailModal.tsx`: 5 collapsibles met flat hover
-   - `OrganizationSection.tsx`: 1 collapsible met flat hover
-   - Ontbreekt: Glass-achtige hover met context shadow
-
-3. **Tijdregistratie TableRow** - Hardcoded neutral hover
-   - `hover:bg-muted/50` op regel 544
+1. **CSS Cleanup**: Verwijderen van dubbele `table-row-hover-*` definities
+2. **Extended Context-Colored Hovers**: Toepassen op pagina's die nog generic hovers gebruiken
 
 ---
 
-## Implementatie Plan
+## Deel A: CSS Cleanup
 
-### Optie A: CSS Utility Classes (Aanbevolen)
-Nieuwe utility classes toevoegen voor context-colored hovers:
+### Probleem Geïdentificeerd
 
-```css
-/* Context-colored table row hovers */
-.table-row-hover-rose:hover { background: hsla(346, 77%, 96%, 0.6); }
-.table-row-hover-violet:hover { background: hsla(270, 50%, 96%, 0.6); }
-.table-row-hover-amber:hover { background: hsla(38, 92%, 96%, 0.6); }
-.table-row-hover-indigo:hover { background: hsla(234, 89%, 96%, 0.6); }
-.table-row-hover-emerald:hover { background: hsla(142, 71%, 96%, 0.6); }
+In `src/index.css` zijn er **dubbele definities** voor `table-row-hover-*` classes:
 
-/* Collapsible trigger glass hovers */
-.collapsible-glass:hover {
-  background: rgba(255, 255, 255, 0.60);
-  backdrop-filter: blur(4px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-}
-```
+| Locatie | Regels | Type |
+|---------|--------|------|
+| Eerste definitie | 1026-1094 | Binnen `@layer base` - alleen transition + background |
+| Tweede definitie | 2758-2816 | Buiten layers - met extra `box-shadow: inset` |
 
-### Optie B: Per-Component Inline Styling
-Direct toepassen op elk component met context-specifieke kleuren.
+De tweede definitie (regels 2758-2816) is **redundant** en heeft een iets ander ontwerp (met inset box-shadow). Dit moet worden samengevoegd.
+
+### Aanbevolen Actie
+
+Verwijder de dubbele definities (regels 2754-2816) en voeg de `box-shadow: inset` toe aan de eerste definitie voor een gecombineerd premium effect.
+
+---
+
+## Deel B: Extended Context-Colored Hovers
+
+### Pagina's met Generic Hovers
+
+| Pagina | Huidige | Aanbevolen | Context |
+|--------|---------|------------|---------|
+| `Notulen.tsx` | `hover:bg-muted/50` (regel 338) | `table-row-hover-indigo` | Dashboard/Notes context |
+| `Gebruikers.tsx` | geen hover class | `table-row-hover-violet` | Team/Users context |
+| `VerwijderdeTaken.tsx` | geen hover class | `table-row-hover-indigo` | Taken context |
+| `AfgerondeTaken.tsx` | geen hover class | `table-row-hover-indigo` | Taken context |
+
+### Collapsibles die Upgrade Nodig Hebben
+
+| Component | Huidige | Aanbevolen |
+|-----------|---------|------------|
+| `DocumentAuditHistory.tsx` (regel 162) | `hover:bg-muted/50` | `collapsible-glass collapsible-glass-rose` |
+| `PipelineAnalyticsWidget.tsx` (regel 62-79) | Button variant="ghost" | `collapsible-glass collapsible-glass-rose` |
+| `RecentClientsWidget.tsx` (regel 95) | geen glass styling | `collapsible-glass` |
+| `Professionals.tsx` (regel 586) | Button variant="outline" | Behouden (filter-specifiek) |
 
 ---
 
 ## Wijzigingen per Bestand
 
-### 1. `src/index.css` - Nieuwe Utility Classes
+### 1. `src/index.css` - CSS Cleanup
 
-| Toevoeging | Doel |
-|------------|------|
-| `.table-row-hover-rose` | Recruitment tabellen (sollicitaties) |
-| `.table-row-hover-violet` | Team tabellen |
-| `.table-row-hover-amber` | Tijdregistratie/Opvolging tabellen |
-| `.table-row-hover-indigo` | Taken/Kanban tabellen |
-| `.table-row-hover-emerald` | Facturatie/Plaatsingen tabellen |
-| `.collapsible-glass` | Alle collapsible triggers |
-| `.collapsible-glass-rose` | Rose-context collapsibles |
-| `.collapsible-glass-violet` | Violet-context collapsibles |
+**Verwijderen:** Regels 2754-2816 (dubbele table-row-hover definities)
 
-### 2. `src/components/ui/table.tsx` - Default TableRow Enhancement
+**Toevoegen aan eerste definitie (regels 1026-1094):** Subtiele inset box-shadow voor premium feel:
 
-| Regel | Wijziging |
-|-------|-----------|
-| 53 | Voeg Spring Physics transition toe: `transition-all duration-200` |
-| 53 | Verhoog hover opacity: `hover:bg-muted/60` → betere zichtbaarheid |
+```css
+.table-row-hover-rose:hover {
+  background: hsla(345, 48%, 97%, 0.7);
+  box-shadow: inset 0 0 0 1px hsla(345, 48%, 88%, 0.35);
+}
+```
 
-### 3. `src/pages/Tijdregistratie.tsx` - Context-Colored Row
+### 2. `src/pages/Notulen.tsx`
 
 | Regel | Huidige | Nieuwe |
 |-------|---------|--------|
-| 544 | `hover:bg-muted/50` | `table-row-hover-amber` |
+| 338 | `hover:bg-muted/50` | `table-row-hover-indigo` |
 
-### 4. `src/components/ProfessionalDetailModal.tsx` - Glass Collapsibles
-
-| Regels | Wijziging |
-|--------|-----------|
-| 472, 511, 640, 745 | `hover:bg-muted/50` → `collapsible-glass collapsible-glass-rose` |
-
-### 5. `src/components/TaskDetailModal.tsx` - Glass Collapsibles
+### 3. `src/pages/Gebruikers.tsx`
 
 | Regels | Wijziging |
 |--------|-----------|
-| 1034, 1058, 1104, 1140, 1224 | `hover:bg-muted/20` → `collapsible-glass collapsible-glass-indigo` |
+| 342, 427 | Toevoegen `table-row-hover-violet` aan TableRow |
 
-### 6. `src/components/recruitment/OrganizationSection.tsx` - Glass Collapsible
+### 4. `src/pages/VerwijderdeTaken.tsx`
 
 | Regel | Wijziging |
 |-------|-----------|
-| 96 | `hover:bg-muted/50` → `collapsible-glass` |
+| 255 | Toevoegen `table-row-hover-indigo` aan TableRow |
 
----
+### 5. `src/pages/AfgerondeTaken.tsx`
 
-## Visuele Veranderingen
+Onderzoeken of er TableRows zijn die context-colored hover nodig hebben.
 
-### Before & After: Table Row
+### 6. `src/components/recruitment/DocumentAuditHistory.tsx`
 
-```text
-BEFORE:
-┌─────────────────────────────────────────────┐
-│ Taak Naam    │ 2:30 uur │ Vandaag           │ ← Flat gray hover
-└─────────────────────────────────────────────┘
+| Regel | Huidige | Nieuwe |
+|-------|---------|--------|
+| 162 | `hover:bg-muted/50` | `collapsible-glass collapsible-glass-rose` |
 
-AFTER:
-┌─────────────────────────────────────────────┐
-│ Taak Naam    │ 2:30 uur │ Vandaag           │ ← Amber-tinted hover (38°)
-└─────────────────────────────────────────────┘   + Subtiele glow
-```
+### 7. `src/components/recruitment/RecentClientsWidget.tsx`
 
-### Before & After: Collapsible Trigger
-
-```text
-BEFORE:
-┌──────────────────────────────────────────────┐
-│ ▶ Contactgegevens                    ▼      │ ← Flat muted hover
-└──────────────────────────────────────────────┘
-
-AFTER:
-┌──────────────────────────────────────────────┐
-│ ▶ Contactgegevens                    ▼      │ ← Glass backdrop-blur
-└──────────────────────────────────────────────┘   + Rose shadow glow
-```
-
----
-
-## CSS Implementatie Details
-
-### Nieuwe Classes in index.css
-
-```css
-/* ============================================
-   CONTEXT-COLORED TABLE ROW HOVERS
-   Per-module semantic hover colors
-   ============================================ */
-
-.table-row-hover-rose {
-  transition: background 0.2s cubic-bezier(0.22, 1, 0.36, 1);
-}
-.table-row-hover-rose:hover {
-  background: hsla(346, 77%, 97%, 0.7);
-}
-.dark .table-row-hover-rose:hover {
-  background: hsla(346, 50%, 15%, 0.4);
-}
-
-.table-row-hover-amber {
-  transition: background 0.2s cubic-bezier(0.22, 1, 0.36, 1);
-}
-.table-row-hover-amber:hover {
-  background: hsla(38, 92%, 97%, 0.7);
-}
-.dark .table-row-hover-amber:hover {
-  background: hsla(38, 50%, 15%, 0.4);
-}
-
-/* Similar patterns for violet, indigo, emerald, teal, blue */
-
-/* ============================================
-   GLASS COLLAPSIBLE TRIGGERS
-   Premium hover for accordion headers
-   ============================================ */
-
-.collapsible-glass {
-  transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.collapsible-glass:hover {
-  background: rgba(255, 255, 255, 0.50);
-  backdrop-filter: blur(4px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
-}
-
-.dark .collapsible-glass:hover {
-  background: rgba(30, 41, 59, 0.50);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-/* Context-colored variants */
-.collapsible-glass-rose:hover {
-  box-shadow: 0 2px 8px hsla(346, 77%, 50%, 0.06);
-}
-
-.collapsible-glass-indigo:hover {
-  box-shadow: 0 2px 8px hsla(234, 89%, 50%, 0.06);
-}
-```
+| Regel | Huidige | Nieuwe |
+|-------|---------|--------|
+| 95 | `hover:text-foreground` | `collapsible-glass hover:text-foreground` |
 
 ---
 
 ## Technische Details
 
+### CSS Cascade
+
+De tweede definitie (buiten @layer) heeft hogere specificiteit dan de eerste (binnen @layer base). Door deze te verwijderen en de styling te consolideren in de eerste definitie, wordt het CSS bestand:
+- ~60 regels korter
+- Consistenter qua specificiteit
+- Makkelijker te onderhouden
+
 ### Performance
-- `backdrop-filter: blur(4px)` is zeer licht (half van de 8px in WhatsApp)
-- Geen `will-change` nodig voor deze subtiele hovers
-- Spring Physics timing consistent met Fase 1 & 2
+
+Geen impact - we verwijderen alleen redundante code.
 
 ### Dark Mode
-- Alle nieuwe classes hebben dark mode variants
-- HSL saturation verlaagd naar 50% in dark mode (conform design constraints)
 
-### Toegankelijkheid
-- Hover states zijn visuele enhancement, geen functionele afhankelijkheid
-- Focus states blijven ongewijzigd (keyboard navigatie intact)
+Alle wijzigingen behouden de bestaande dark mode variants.
 
 ---
 
-## Samenvatting Bestanden
+## Samenvatting
 
-| Bestand | Type Wijziging | Aantal Edits |
-|---------|----------------|--------------|
-| `src/index.css` | Toevoegen utility classes | +50 regels |
-| `src/components/ui/table.tsx` | TableRow transition | 1 edit |
-| `src/pages/Tijdregistratie.tsx` | Context-colored hover | 1 edit |
-| `src/components/ProfessionalDetailModal.tsx` | Glass collapsibles | 4 edits |
-| `src/components/TaskDetailModal.tsx` | Glass collapsibles | 5 edits |
-| `src/components/recruitment/OrganizationSection.tsx` | Glass collapsible | 1 edit |
+| Bestand | Type Wijziging | Impact |
+|---------|----------------|--------|
+| `src/index.css` | Cleanup + enhance | -60 regels, +8 box-shadows |
+| `src/pages/Notulen.tsx` | Context-colored hover | 1 edit |
+| `src/pages/Gebruikers.tsx` | Context-colored hover | 2 edits |
+| `src/pages/VerwijderdeTaken.tsx` | Context-colored hover | 1 edit |
+| `DocumentAuditHistory.tsx` | Glass collapsible | 1 edit |
+| `RecentClientsWidget.tsx` | Glass collapsible | 1 edit |
 
-**Totaal: 6 bestanden, ~12 edits**
+**Totaal: 6 bestanden, ~8 edits**
 
 ---
 
 ## Verwacht Resultaat
 
 Na implementatie:
-- Alle tabellen hebben context-colored row hovers passend bij hun module
-- Alle collapsible sections hebben premium glass hover effect
-- Consistente Spring Physics timing door de hele applicatie
-- Volledig dark mode compatible
-- Enterprise-niveau polish in detail-modals
+- Schonere CSS codebase zonder duplicaten
+- Alle tabellen met data-rijen hebben context-colored hovers
+- Alle recruitment collapsibles hebben glass styling
+- Consistente enterprise-grade UX door de hele applicatie
 
-Dit completeert de "micro-interaction polish" laag van het design system.
