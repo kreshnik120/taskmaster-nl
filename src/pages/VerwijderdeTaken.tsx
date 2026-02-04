@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Undo2, Trash2, CheckCircle2, AlertTriangle, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { KPICard } from "@/components/ui/kpi-card";
+import { getPrioritySolidClass, getPriorityLabel } from "@/hooks/usePriorityConfig";
 import { nl } from "date-fns/locale";
 import {
   AlertDialog,
@@ -44,19 +45,6 @@ interface DeletedTask {
   };
 }
 
-const priorityColors: Record<string, string> = {
-  LOW: "text-priority-low",
-  MEDIUM: "text-priority-medium",
-  HIGH: "text-priority-high",
-  CRITICAL: "text-priority-critical",
-};
-
-const priorityLabels: Record<string, string> = {
-  LOW: "Laag",
-  MEDIUM: "Middel",
-  HIGH: "Hoog",
-  CRITICAL: "Kritiek",
-};
 
 const VerwijderdeTaken = () => {
   const [tasks, setTasks] = useState<DeletedTask[]>([]);
@@ -268,8 +256,8 @@ const VerwijderdeTaken = () => {
                         <TableCell className="font-medium">{task.title}</TableCell>
                         <TableCell>{task.organizations?.name || "-"}</TableCell>
                         <TableCell>
-                          <Badge variant="secondary" className={priorityColors[task.priority]}>
-                            {priorityLabels[task.priority]}
+                          <Badge className={getPrioritySolidClass(task.priority)}>
+                            {getPriorityLabel(task.priority)}
                           </Badge>
                         </TableCell>
                         <TableCell>

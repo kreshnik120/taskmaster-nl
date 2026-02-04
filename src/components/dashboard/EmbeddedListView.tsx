@@ -29,6 +29,7 @@ import { SUBTASK_TOKENS } from "@/lib/constants/designTokens";
 import { useActiveTimers } from "@/hooks/useActiveTimers";
 import { useGlobalTaskFilter } from "@/hooks/useGlobalTaskFilter";
 import { getAssigneeColor } from "@/hooks/useAssigneeColor";
+import { getPriorityLabel } from "@/hooks/usePriorityConfig";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -73,12 +74,6 @@ interface Profile {
   name: string | null;
 }
 
-const priorityLabels = {
-  LOW: "Laag",
-  MEDIUM: "Gemiddeld",
-  HIGH: "Hoog",
-  CRITICAL: "Kritiek",
-};
 
 // Memoized timer cell to prevent parent re-renders
 const TimerCell = memo(({ activeTimer, getRunningTime }: { activeTimer: { start: string }; getRunningTime: (start: string) => string }) => (
@@ -549,7 +544,7 @@ export default function EmbeddedListView() {
       } else if (groupBy === "due" && task.due_at) {
         key = `EIND: ${format(new Date(task.due_at), "dd-MM-yy", { locale: nl })}`;
       } else if (groupBy === "priority") {
-        key = priorityLabels[task.priority as keyof typeof priorityLabels];
+        key = getPriorityLabel(task.priority);
       }
 
       if (!groups[key]) groups[key] = [];
