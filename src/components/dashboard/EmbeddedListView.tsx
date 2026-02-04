@@ -100,9 +100,9 @@ export default function EmbeddedListView() {
   
   // Centrale hooks voor timer en filter state
   const { activeTimers, getRunningTime } = useActiveTimers();
-  const { showOnlyMyTasks, setShowOnlyMyTasks, userId: globalFilterUserId } = useGlobalTaskFilter();
+  const { showOnlyMyTasks, setShowOnlyMyTasks, userId: globalFilterUserId, loading: filterLoading } = useGlobalTaskFilter();
   const [editingAssignee, setEditingAssignee] = useState<string | null>(null);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  // currentUserId verwijderd - gebruiken nu globalFilterUserId overal
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -123,27 +123,22 @@ export default function EmbeddedListView() {
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   
   // Hook for assigned subtasks
-  const { subtasks: mySubtasks } = useMySubtasks(currentUserId);
+  const { subtasks: mySubtasks } = useMySubtasks(globalFilterUserId);
 
+  // Wacht op userId voordat taken worden geladen (voorkomt race condition)
   useEffect(() => {
-    initUser();
-    fetchTasks();
-    loadProfiles();
-  }, []);
+    if (globalFilterUserId) {
+      fetchTasks();
+      loadProfiles();
+    }
+  }, [globalFilterUserId]);
 
   // Refetch wanneer filter wijzigt
   useEffect(() => {
-    if (currentUserId) {
+    if (globalFilterUserId) {
       fetchTasks();
     }
   }, [showOnlyMyTasks]);
-
-  const initUser = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      setCurrentUserId(session.user.id);
-    }
-  };
 
   const loadProfiles = async () => {
     try {
@@ -289,15 +284,15 @@ export default function EmbeddedListView() {
   };
 
   const handleAcceptTask = async (taskId: string) => {
-    if (!currentUserId) return;
+    if (!globalFilterUserId) return;
     
     try {
       const { error } = await supabase
         .from("tasks")
         .update({ 
-          accepted_by: currentUserId,
+          accepted_by: globalFilterUserId,
           accepted_at: new Date().toISOString(),
-          assignee_id: currentUserId
+          assignee_id: globalFilterUserId
         })
         .eq("id", taskId);
 
@@ -320,8 +315,8 @@ export default function EmbeddedListView() {
         updates.accepted_at = null;
       }
       
-      if (assigneeId === currentUserId) {
-        updates.accepted_by = currentUserId;
+      if (assigneeId === globalFilterUserId) {
+        updates.accepted_by = globalFilterUserId;
         updates.accepted_at = new Date().toISOString();
       }
 
@@ -332,7 +327,7 @@ export default function EmbeddedListView() {
 
       if (error) throw error;
 
-      toast.success(assigneeId === currentUserId ? "Taak toegewezen en geaccepteerd" : "Verantwoordelijke bijgewerkt");
+      toast.success(assigneeId === globalFilterUserId ? "Taak toegewezen en geaccepteerd" : "Verantwoordelijke bijgewerkt");
       setEditingAssignee(null);
       fetchTasks();
     } catch (error) {
@@ -366,14 +361,14 @@ export default function EmbeddedListView() {
   };
 
   const handleDeleteTask = async () => {
-    if (!taskToDelete || !currentUserId) return;
+    if (!taskToDelete || !globalFilterUserId) return;
 
     try {
       const { error } = await supabase
         .from("tasks")
         .update({
           deleted_at: new Date().toISOString(),
-          deleted_by: currentUserId,
+          deleted_by: globalFilterUserId,
         })
         .eq("id", taskToDelete.id);
 
@@ -411,7 +406,7 @@ export default function EmbeddedListView() {
   };
 
   const handleBulkDelete = async () => {
-    if (!currentUserId || selectedTaskIds.size === 0 || isBulkDeleting) return;
+    if (!globalFilterUserId || selectedTaskIds.size === 0 || isBulkDeleting) return;
 
     setIsBulkDeleting(true);
 
@@ -422,7 +417,7 @@ export default function EmbeddedListView() {
         .from("tasks")
         .update({
           deleted_at: new Date().toISOString(),
-          deleted_by: currentUserId,
+          deleted_by: globalFilterUserId,
         })
         .in("id", taskIdsArray);
 
@@ -560,7 +555,7 @@ export default function EmbeddedListView() {
   const openTasksCount = !loading ? tasks.filter(t => !t.completed_at && !t.accepted_by).length : 0;
   const completedTodayCount = !loading ? tasks.filter(t => t.completed_at && new Date(t.completed_at).toDateString() === new Date().toDateString()).length : 0;
   const highPriorityCount = !loading ? tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length : 0;
-  const myTasksCountValue = !loading ? filteredTasks.filter(t => t.assignee_id === currentUserId).length : 0;
+  const myTasksCountValue = !loading ? filteredTasks.filter(t => t.assignee_id === globalFilterUserId).length : 0;
 
   // Animated counters
   const animatedOpenTasks = useCountUp({ end: openTasksCount, duration: 600 });
@@ -595,7 +590,7 @@ export default function EmbeddedListView() {
   };
 
 
-  if (loading) {
+  if (loading || filterLoading) {
     return (
       <div className="flex flex-col items-center gap-3">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
