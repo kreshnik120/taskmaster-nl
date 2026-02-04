@@ -541,7 +541,7 @@ const Tijdregistratie = () => {
                   </TableRow>
                 ) : (
                   timeEntries.map((entry) => (
-                    <TableRow key={entry.id} className="hover:bg-muted/50">
+                    <TableRow key={entry.id} className="table-row-hover-amber">
                       <TableCell className="font-medium">
                         {entry.tasks?.title || "Onbekende taak"}
                       </TableCell>

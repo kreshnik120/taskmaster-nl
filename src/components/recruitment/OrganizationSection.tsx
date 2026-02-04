@@ -93,7 +93,7 @@ export function OrganizationSection({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger className={`flex items-center gap-3 w-full text-left py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors border-l-4 ${accentClass}`}>
+      <CollapsibleTrigger className={`flex items-center gap-3 w-full text-left py-2 px-3 rounded-lg collapsible-glass collapsible-glass-rose border-l-4 ${accentClass}`}>
         <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} />
         <div className="flex-1 flex items-center gap-3">
           <span className="font-semibold">{title}</span>

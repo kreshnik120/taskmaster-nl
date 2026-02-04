@@ -469,7 +469,7 @@ export function ProfessionalDetailModal({
           <TabsContent value="profiel" className="space-y-4 mt-6">
             {/* Persoonsgegevens Sectie */}
             <Collapsible defaultOpen>
-              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-muted/50 rounded-lg transition-colors">
+              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg collapsible-glass collapsible-glass-rose">
                 <h3 className="text-sm font-semibold flex items-center gap-2">
                   <Home className="h-4 w-4" />
                   Persoonsgegevens
@@ -508,7 +508,7 @@ export function ProfessionalDetailModal({
 
             {/* CV Sectie */}
             <Collapsible defaultOpen>
-              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-muted/50 rounded-lg transition-colors">
+              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg collapsible-glass collapsible-glass-rose">
                 <h3 className="text-sm font-semibold flex items-center gap-2">
                   <FileText className="h-4 w-4" />
                   CV / Curriculum Vitae
@@ -637,7 +637,7 @@ export function ProfessionalDetailModal({
 
             {/* Contact Info - Collapsible */}
             <Collapsible open={contactOpen} onOpenChange={setContactOpen}>
-              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-muted/50 rounded-lg transition-colors">
+              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg collapsible-glass collapsible-glass-rose">
                 <h3 className="text-sm font-semibold flex items-center gap-2">
                   <Phone className="h-4 w-4" />
                   Contact & Locatie
@@ -742,7 +742,7 @@ export function ProfessionalDetailModal({
             {/* Financial - Collapsible */}
             {(professional.gewenst_uurloon || professional.kvk_nummer || isEditing) && (
               <Collapsible open={financialOpen} onOpenChange={setFinancialOpen}>
-                <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-muted/50 rounded-lg transition-colors">
+                <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg collapsible-glass collapsible-glass-rose">
                   <h3 className="text-sm font-semibold">Financieel</h3>
                   <ChevronDown className={`h-4 w-4 transition-transform ${financialOpen ? '' : '-rotate-90'}`} />
                 </CollapsibleTrigger>
