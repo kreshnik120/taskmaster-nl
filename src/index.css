@@ -2734,13 +2734,269 @@ All colors MUST be HSL.
 }
 
 /* ============================================
-   APPLE LIQUID GLASS - PHASE 2 PREMIUM
+   APPLE LIQUID GLASS - PHASE 3 ULTRA-MODERN
+   visionOS-inspired glassmorphism system
    ============================================ */
 
-/* 1. Multi-Layer Specular Highlight System */
+/* ============================================
+   MODULAIRE UTILITIES (Composeerbaar & Veilig)
+   ============================================ */
+
+/* Alleen achtergrond + blur - veilig voor alle elementen */
+.glass-bg {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+}
+
+.dark .glass-bg {
+  background: rgba(15, 23, 42, 0.75);
+}
+
+/* Alleen inner glow shadows */
+.glass-glow {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.55),
+    inset 0 2px 4px rgba(255,255,255,0.12),
+    inset 0 -1px 0 rgba(0,0,0,0.025);
+}
+
+.dark .glass-glow {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.15),
+    inset 0 2px 4px rgba(255,255,255,0.04),
+    inset 0 -1px 0 rgba(0,0,0,0.08);
+}
+
+/* Alleen specular highlight - VEILIG: z-index: -1, geen overflow */
+.glass-highlight {
+  position: relative;
+}
+
+.glass-highlight::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: 
+    linear-gradient(180deg, 
+      rgba(255,255,255,0.50) 0%, 
+      rgba(255,255,255,0.15) 2px, 
+      transparent 18%
+    );
+  pointer-events: none;
+  z-index: -1;
+}
+
+.dark .glass-highlight::before {
+  background: 
+    linear-gradient(180deg, 
+      rgba(255,255,255,0.18) 0%, 
+      rgba(255,255,255,0.05) 2px, 
+      transparent 18%
+    );
+}
+
+/* Alleen gradient border */
+.glass-border {
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.dark .glass-border {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Alleen depth shadows - 4-laags systeem */
+.glass-depth {
+  box-shadow:
+    0 0 0 0.5px rgba(0,0,0,0.03),
+    0 4px 6px -1px rgba(0,0,0,0.05),
+    0 10px 20px -5px rgba(0,0,0,0.04),
+    inset 0 -0.5px 0 rgba(0,0,0,0.02);
+}
+
+.dark .glass-depth {
+  box-shadow:
+    0 0 0 0.5px rgba(0,0,0,0.15),
+    0 4px 6px -1px rgba(0,0,0,0.20),
+    0 10px 20px -5px rgba(0,0,0,0.15),
+    inset 0 -0.5px 0 rgba(0,0,0,0.08);
+}
+
+/* ============================================
+   CONTEXT-SPECIFIEKE VARIANTEN
+   ============================================ */
+
+/* Card variant: zachte transparantie voor KPI's en content */
+.glass-liquid-card {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.40);
+  border-radius: 0.75rem;
+}
+
+.dark .glass-liquid-card {
+  background: rgba(15, 23, 42, 0.72);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Overlay variant: solider voor modals & dialogs */
+.glass-liquid-overlay {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(32px) saturate(150%);
+  -webkit-backdrop-filter: blur(32px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.50);
+}
+
+.dark .glass-liquid-overlay {
+  background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Navigation variant: subtiel voor headers & sidebars */
+.glass-liquid-nav {
+  background: rgba(255, 255, 255, 0.80);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.dark .glass-liquid-nav {
+  background: rgba(15, 23, 42, 0.85);
+  border-color: rgba(255, 255, 255, 0.10);
+}
+
+/* ============================================
+   ENHANCED EDGE HIGHLIGHTS (visionOS Style)
+   ============================================ */
+
+.glass-edge-highlight {
+  position: relative;
+}
+
+.glass-edge-highlight::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  
+  /* Dubbele top-highlight voor diepte */
+  background: 
+    linear-gradient(180deg, 
+      rgba(255,255,255,0.65) 0%, 
+      rgba(255,255,255,0.20) 1px, 
+      rgba(255,255,255,0.08) 4px,
+      transparent 20%
+    );
+  
+  /* Edge glow effect */
+  box-shadow:
+    inset 0 0.5px 0 rgba(255,255,255,0.80),
+    inset 0 1px 2px rgba(255,255,255,0.15);
+  
+  pointer-events: none;
+  z-index: -1;
+}
+
+.dark .glass-edge-highlight::before {
+  background: 
+    linear-gradient(180deg, 
+      rgba(255,255,255,0.25) 0%, 
+      rgba(255,255,255,0.08) 1px, 
+      rgba(255,255,255,0.03) 4px,
+      transparent 20%
+    );
+  box-shadow:
+    inset 0 0.5px 0 rgba(255,255,255,0.30),
+    inset 0 1px 2px rgba(255,255,255,0.06);
+}
+
+/* ============================================
+   DEPTH SHADOW SYSTEM (4-Laags)
+   ============================================ */
+
+.glass-depth-shadow {
+  box-shadow:
+    /* Layer 1: Zeer subtiele ambient */
+    0 0 0 0.5px rgba(0,0,0,0.03),
+    /* Layer 2: Soft blur shadow */
+    0 4px 6px -1px rgba(0,0,0,0.05),
+    /* Layer 3: Deeper ambient */
+    0 10px 20px -5px rgba(0,0,0,0.04),
+    /* Layer 4: Bottom edge highlight */
+    inset 0 -0.5px 0 rgba(0,0,0,0.02);
+}
+
+.dark .glass-depth-shadow {
+  box-shadow:
+    0 0 0 0.5px rgba(0,0,0,0.12),
+    0 4px 6px -1px rgba(0,0,0,0.18),
+    0 10px 20px -5px rgba(0,0,0,0.14),
+    inset 0 -0.5px 0 rgba(0,0,0,0.06);
+}
+
+/* ============================================
+   INTERACTIVE GLASS HOVER STATE
+   Spring-physics "licht vangen" effect
+   ============================================ */
+
+.glass-hover-glow {
+  transition: 
+    box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.3s ease;
+}
+
+.glass-hover-glow:hover {
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow:
+    0 0 0 0.5px rgba(255,255,255,0.50),
+    0 8px 24px -4px rgba(0,0,0,0.08),
+    0 16px 32px -8px rgba(0,0,0,0.05),
+    inset 0 1px 0 rgba(255,255,255,0.70);
+  transform: translateY(-1px);
+}
+
+.dark .glass-hover-glow:hover {
+  background: rgba(30, 41, 59, 0.82);
+  box-shadow:
+    0 0 0 0.5px rgba(255,255,255,0.20),
+    0 8px 24px -4px rgba(0,0,0,0.25),
+    0 16px 32px -8px rgba(0,0,0,0.18),
+    inset 0 1px 0 rgba(255,255,255,0.20);
+}
+
+/* Subtielere variant voor kleinere elementen */
+.glass-hover-lift {
+  transition: 
+    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.glass-hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 6px 16px -4px rgba(0,0,0,0.10),
+    0 12px 24px -6px rgba(0,0,0,0.06);
+}
+
+.dark .glass-hover-lift:hover {
+  box-shadow:
+    0 6px 16px -4px rgba(0,0,0,0.30),
+    0 12px 24px -6px rgba(0,0,0,0.20);
+}
+
+/* ============================================
+   PREMIUM SPECULAR SYSTEM (GEFIXED)
+   - GEEN overflow: hidden
+   - z-index: -1 voor pseudo-elementen
+   ============================================ */
+
+/* Multi-Layer Specular Highlight System */
 .glass-specular-premium {
   position: relative;
-  overflow: hidden;
+  /* VERWIJDERD: overflow: hidden - veroorzaakte content clipping */
 }
 
 .glass-specular-premium::before {
@@ -2777,7 +3033,7 @@ All colors MUST be HSL.
     inset 0 -1px 0 rgba(0,0,0,0.03);
   
   pointer-events: none;
-  z-index: 1;
+  z-index: -1; /* GEFIXED: Was z-index: 1 - dekte content af */
 }
 
 .dark .glass-specular-premium::before {
@@ -2796,7 +3052,7 @@ All colors MUST be HSL.
     inset 0 2px 4px rgba(255,255,255,0.04);
 }
 
-/* 2. Micro-Texture Noise Overlay */
+/* Micro-Texture Noise Overlay */
 .glass-noise-texture {
   position: relative;
 }
@@ -2810,7 +3066,7 @@ All colors MUST be HSL.
   opacity: 0.025;
   mix-blend-mode: overlay;
   pointer-events: none;
-  z-index: 2;
+  z-index: -1; /* GEFIXED: Was z-index: 2 */
 }
 
 .dark .glass-noise-texture::after {
@@ -2818,7 +3074,7 @@ All colors MUST be HSL.
   mix-blend-mode: soft-light;
 }
 
-/* 3. Enhanced 3-Layer Inner Glow System */
+/* Enhanced 3-Layer Inner Glow System */
 .glass-inner-glow-3layer {
   box-shadow:
     /* Layer 1: Context-gekleurde ambient glow */
@@ -2842,7 +3098,7 @@ All colors MUST be HSL.
     inset 0 -2px 4px rgba(0,0,0,0.05);
 }
 
-/* 4. Premium Border Glow */
+/* Premium Border Glow */
 .glass-border-glow-premium {
   position: relative;
 }
@@ -2866,7 +3122,7 @@ All colors MUST be HSL.
   -webkit-mask-composite: xor;
   padding: 1.5px;
   pointer-events: none;
-  z-index: 0;
+  z-index: -1; /* GEFIXED: Was z-index: 0 */
 }
 
 .dark .glass-border-glow-premium::after {
@@ -2879,7 +3135,7 @@ All colors MUST be HSL.
   );
 }
 
-/* 5. Animated Light Sweep */
+/* Animated Light Sweep */
 @keyframes liquid-glass-sweep {
   0%, 100% {
     transform: translateX(-100%) rotate(35deg);
@@ -2896,7 +3152,7 @@ All colors MUST be HSL.
 
 .glass-light-sweep {
   position: relative;
-  overflow: hidden;
+  /* VERWIJDERD: overflow: hidden - veroorzaakte content clipping */
 }
 
 .glass-light-sweep::before {
@@ -2919,7 +3175,7 @@ All colors MUST be HSL.
   transform: translateX(-100%) rotate(35deg);
   animation: liquid-glass-sweep 15s ease-in-out infinite;
   pointer-events: none;
-  z-index: 1;
+  z-index: -1; /* GEFIXED: Was z-index: 1 */
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2929,15 +3185,15 @@ All colors MUST be HSL.
   }
 }
 
-/* 6. Combined Premium Glass Utility - ONE-CLICK APPLICATION */
+/* Combined Premium Glass Utility - GEFIXTE VERSIE */
 .glass-liquid-premium {
   position: relative;
-  overflow: hidden;
+  /* VERWIJDERD: overflow: hidden - veroorzaakte content clipping */
   border-radius: 0.75rem;
-  background: rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.72); /* VERHOOGD: Was 0.62 */
   backdrop-filter: blur(28px) saturate(185%);
   -webkit-backdrop-filter: blur(28px) saturate(185%);
-  border: 1px solid rgba(255, 255, 255, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.42);
   box-shadow:
     0 8px 32px hsla(234, 45%, 50%, 0.10),
     0 2px 8px rgba(0,0,0,0.04),
@@ -2947,8 +3203,8 @@ All colors MUST be HSL.
 }
 
 .dark .glass-liquid-premium {
-  background: rgba(15, 23, 42, 0.68);
-  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(15, 23, 42, 0.78); /* VERHOOGD */
+  border-color: rgba(255, 255, 255, 0.16);
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.35),
     0 2px 8px rgba(0, 0, 0, 0.2),
@@ -2957,7 +3213,7 @@ All colors MUST be HSL.
     inset 0 -1px 0 rgba(0,0,0,0.1);
 }
 
-/* 7. Indigo Ambient Mesh for Dashboard/Mijn Werk */
+/* Indigo Ambient Mesh for Dashboard/Mijn Werk */
 .glass-ambient-mesh-indigo {
   position: relative;
   overflow: visible;
