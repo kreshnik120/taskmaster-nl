@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Undo2, Clock, CheckCircle2, AlertCircle, TrendingUp } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { KPICard } from "@/components/ui/kpi-card";
+import { getPrioritySolidClass, getPriorityLabel } from "@/hooks/usePriorityConfig";
 import { nl } from "date-fns/locale";
 import {
   Table,
@@ -36,19 +37,6 @@ interface CompletedTask {
   };
 }
 
-const priorityColors: Record<string, string> = {
-  LOW: "text-priority-low",
-  MEDIUM: "text-priority-medium",
-  HIGH: "text-priority-high",
-  CRITICAL: "text-priority-critical",
-};
-
-const priorityLabels: Record<string, string> = {
-  LOW: "Laag",
-  MEDIUM: "Middel",
-  HIGH: "Hoog",
-  CRITICAL: "Kritiek",
-};
 
 
 const AfgerondeTaken = () => {
@@ -171,8 +159,8 @@ const AfgerondeTaken = () => {
             <TableCell className="font-medium">{task.title}</TableCell>
             <TableCell>{task.organizations?.name || "-"}</TableCell>
             <TableCell>
-              <Badge variant="secondary" className={priorityColors[task.priority]}>
-                {priorityLabels[task.priority]}
+              <Badge className={getPrioritySolidClass(task.priority)}>
+                {getPriorityLabel(task.priority)}
               </Badge>
             </TableCell>
             <TableCell>
