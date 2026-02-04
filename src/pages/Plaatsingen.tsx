@@ -180,7 +180,7 @@ export default function Plaatsingen() {
   // getStatusLabel removed - unused
 
   return (
-    <PageContainer contextColor="teal" className="space-y-6">
+    <PageContainer contextColor="emerald" className="space-y-6">
       {/* Hero Section - Unified PageHero */}
       <PageHero
         title="Plaatsingen"
@@ -194,7 +194,7 @@ export default function Plaatsingen() {
           title="Totaal"
           value={stats.total}
           subtitle="plaatsingen"
-          variant="teal"
+          variant="emerald"
           onClick={() => setStatusFilter("all")}
           isActive={statusFilter === "all"}
         />
@@ -203,7 +203,7 @@ export default function Plaatsingen() {
           title="Actief"
           value={stats.active}
           subtitle="lopend"
-          variant="teal"
+          variant="emerald"
           onClick={() => setStatusFilter(statusFilter === "active" ? "all" : "active")}
           isActive={statusFilter === "active"}
         />
@@ -212,7 +212,7 @@ export default function Plaatsingen() {
           title="Concept"
           value={stats.draft}
           subtitle="te activeren"
-          variant="teal"
+          variant="emerald"
           onClick={() => setStatusFilter(statusFilter === "draft" ? "all" : "draft")}
           isActive={statusFilter === "draft"}
         />
@@ -221,7 +221,7 @@ export default function Plaatsingen() {
           title="Afgerond"
           value={stats.completed}
           subtitle="plaatsingen"
-          variant="teal"
+          variant="emerald"
           onClick={() => setStatusFilter(statusFilter === "completed" ? "all" : "completed")}
           isActive={statusFilter === "completed"}
         />
