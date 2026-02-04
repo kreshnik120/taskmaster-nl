@@ -28,6 +28,7 @@ import { formatPeriod, getDateUrgency } from "@/lib/dateFormatters";
 import { SUBTASK_TOKENS } from "@/lib/constants/designTokens";
 import { useActiveTimers } from "@/hooks/useActiveTimers";
 import { useGlobalTaskFilter } from "@/hooks/useGlobalTaskFilter";
+import { getAssigneeColor } from "@/hooks/useAssigneeColor";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1060,7 +1061,7 @@ export default function EmbeddedListView() {
                                 }}
                               >
                                 <Avatar className="h-7 w-7">
-                                  <AvatarFallback className="bg-primary/10 text-xs font-medium">
+                                  <AvatarFallback className={`text-xs font-medium ${getAssigneeColor(task.assignee_id).avatarBg} ${getAssigneeColor(task.assignee_id).avatarText}`}>
                                     {getInitials(task.profiles?.name) || "NA"}
                                   </AvatarFallback>
                                 </Avatar>

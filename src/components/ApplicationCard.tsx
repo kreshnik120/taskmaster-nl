@@ -16,6 +16,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { calculateSublocationMatchScore } from "@/lib/calculateSublocationMatchScore";
 import { resolveApplicationName } from "@/lib/utils";
+import { getAssigneeColor } from "@/hooks/useAssigneeColor";
 
 interface Application {
   id: string;
@@ -244,19 +245,8 @@ export function ApplicationCard({ application, onClick, searchQuery = "", isSele
       .toUpperCase();
   };
 
-  // Generate consistent color based on name
-  const getAvatarColor = (name: string) => {
-    const colors = [
-      'bg-blue-100 text-blue-700',
-      'bg-green-100 text-green-700',
-      'bg-purple-100 text-purple-700',
-      'bg-amber-100 text-amber-700',
-      'bg-rose-100 text-rose-700',
-      'bg-cyan-100 text-cyan-700',
-    ];
-    const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return colors[hash % colors.length];
-  };
+  // Get consistent color based on application ID (centralized hook)
+  const avatarColor = getAssigneeColor(application.id);
 
   return (
     <HoverCard openDelay={500}>
@@ -299,7 +289,7 @@ export function ApplicationCard({ application, onClick, searchQuery = "", isSele
                           className="object-cover"
                         />
                       ) : null}
-                      <AvatarFallback className={`text-xs font-medium ${getAvatarColor(candidateName)}`}>
+                      <AvatarFallback className={`text-xs font-medium ${avatarColor.avatarBg} ${avatarColor.avatarText}`}>
                         {getInitials(candidateName)}
                       </AvatarFallback>
                     </Avatar>

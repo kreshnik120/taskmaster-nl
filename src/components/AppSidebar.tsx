@@ -17,6 +17,7 @@ import { User } from "@supabase/supabase-js";
 import { usePendingMinutesCount } from "@/hooks/notulen/usePendingMinutesCount";
 import { useWhatsAppUnreadCount } from "@/hooks/whatsapp/useWhatsAppUnreadCount";
 import { useRealtimeChannel } from "@/hooks/useRealtimeChannel";
+import { getAssigneeColor } from "@/hooks/useAssigneeColor";
 
 interface MenuItem {
   title: string;
@@ -317,6 +318,7 @@ export function AppSidebar() {
     .join("")
     .toUpperCase()
     .slice(0, 2);
+  const userAvatarColor = getAssigneeColor(currentUser?.id);
 
   const getRoleLabel = () => {
     switch (role) {
@@ -366,7 +368,7 @@ export function AppSidebar() {
               className="w-full justify-start gap-3 px-3 py-2 h-auto hover:bg-white/60 dark:hover:bg-slate-800/60 rounded-xl transition-all duration-200 bg-white/30 dark:bg-slate-900/30 border border-white/20 dark:border-white/8"
             >
               <Avatar className="h-8 w-8 ring-2 ring-white/20 dark:ring-white/10">
-                <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+                <AvatarFallback className={`text-xs ${userAvatarColor.avatarBg} ${userAvatarColor.avatarText}`}>{initials}</AvatarFallback>
               </Avatar>
               <div className="flex flex-col items-start text-sm flex-1 min-w-0">
                 <span className="font-medium truncate w-full">{displayName}</span>

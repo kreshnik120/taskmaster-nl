@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AssigneeStats } from "@/hooks/useDashboardStats";
+import { getAssigneeColor } from "@/hooks/useAssigneeColor";
 
 interface AssigneeProgressProps {
   assignees: AssigneeStats[];
@@ -77,6 +78,7 @@ export function AssigneeProgress({ assignees, isLoading }: AssigneeProgressProps
             ? Math.round((assignee.completed / assignee.total) * 100) 
             : 0;
           const isClickable = assignee.userId !== 'unassigned';
+          const avatarColor = getAssigneeColor(assignee.userId);
 
           return (
             <div
@@ -92,7 +94,7 @@ export function AssigneeProgress({ assignees, isLoading }: AssigneeProgressProps
             >
               <div className="flex items-center gap-3 mb-2">
                 <Avatar className="h-8 w-8">
-                  <AvatarFallback className="text-xs">
+                  <AvatarFallback className={`text-xs ${avatarColor.avatarBg} ${avatarColor.avatarText}`}>
                     {getInitials(assignee.userName)}
                   </AvatarFallback>
                 </Avatar>
