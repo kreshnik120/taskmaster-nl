@@ -2982,3 +2982,12 @@ All colors MUST be HSL.
     radial-gradient(ellipse 600px 400px at 100% 100%, hsla(234, 45%, 25%, 0.08) 0%, transparent 50%),
     radial-gradient(ellipse 400px 300px at 50% 50%, hsla(234, 45%, 35%, 0.05) 0%, transparent 60%);
 }
+
+/* ============================================
+   FIX: Sheet/Dialog Sidebar Override
+   Zorgt dat sidebar en dialogs solide achtergrond behouden
+   ============================================ */
+[data-sidebar="sidebar"] {
+  background: hsl(var(--sidebar-background)) !important;
+  backdrop-filter: blur(20px) !important;
+}
