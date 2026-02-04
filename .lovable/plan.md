@@ -1,76 +1,76 @@
 
+# Verbeterplan - Apple Liquid Glass Stabilisatie Fase 2
 
-# Kritische Fixes - Apple Liquid Glass Bugs
+## Geïdentificeerde Problemen
 
-## Probleem Analyse
+Na grondige analyse van de codebase heb ik de volgende problemen gevonden die nog moeten worden opgelost:
 
-Na onderzoek zijn er **2 kritische bugs** gevonden door de recente Apple Liquid Glass upgrade:
+### Probleem 1: Sonner (Toast Notificaties)
+**Bestand:** `src/components/ui/sonner.tsx` lijn 13
+**Issue:** Heeft nog steeds `glass-liquid-premium glass-specular-premium` classes die dezelfde `overflow: hidden` en `::before` pseudo-element issues kunnen veroorzaken als bij de sidebar en dialog.
 
-### Bug 1: Sidebar Onzichtbaar op Mobiel (Afbeelding 1)
-**Oorzaak:** In `sheet.tsx` (lijn 33) staat nu:
-```css
-glass-liquid-premium glass-specular-premium
-```
-Dit zet:
-- `background: rgba(255, 255, 255, 0.62)` → te transparant
-- `overflow: hidden` → knipt content af
-- `::before` pseudo-element met `z-index: 1` → dekt sidebar content af
-
-De sidebar SheetContent (sidebar.tsx lijn 159) heeft `bg-sidebar` maar dit wordt **overschreven** door de `glass-liquid-premium` class.
-
-### Bug 2: Dialog/Modal Potentieel Conflict (Afbeelding 2)
-**Oorzaak:** In `dialog.tsx` (lijn 39) staan dezelfde premium classes die conflicteren met het originele dialog systeem.
+### Probleem 2: TaskDetailModal Dialog Content
+**Bestand:** `src/components/TaskDetailModal.tsx` lijn 722
+**Issue:** Gebruikt `glass-layer-2 glass-light-bleed` wat conflicteert met de nieuwe `DialogContent` base styling. Dit is waarschijnlijk de oorzaak van het probleem in afbeelding 2.
 
 ---
 
-## Fixes
+## Oplossingen
 
-### Fix 1: Sheet.tsx - Herstel Originele Styling
-**Bestand:** `src/components/ui/sheet.tsx`
+### Fix 1: Sonner.tsx - Verwijder Premium Glass Classes
+**Wijziging (lijn 12-13):**
+```tsx
+// VAN:
+toast: "group toast glass-liquid-premium glass-specular-premium group-[.toaster]:text-foreground group-[.toaster]:rounded-xl",
 
-**Wijziging (lijn 32-33):**
-```diff
-const sheetVariants = cva(
--  "fixed z-50 gap-4 p-6 transition ease-in-out glass-liquid-premium glass-specular-premium data-[state=open]:animate-in ...",
-+  "fixed z-50 gap-4 p-6 transition ease-in-out bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-white/40 dark:border-white/15 shadow-[0_8px_32px_rgba(0,0,0,0.12)] data-[state=open]:animate-in ...",
+// NAAR:
+toast: "group toast group-[.toaster]:bg-white/90 dark:group-[.toaster]:bg-slate-900/90 group-[.toaster]:backdrop-blur-2xl group-[.toaster]:border-white/40 dark:group-[.toaster]:border-white/15 group-[.toaster]:shadow-[0_8px_32px_rgba(0,0,0,0.12)] group-[.toaster]:text-foreground group-[.toaster]:rounded-xl",
 ```
 
-### Fix 2: Dialog.tsx - Herstel Compatibele Styling
-**Bestand:** `src/components/ui/dialog.tsx`
+### Fix 2: TaskDetailModal.tsx - Verwijder Conflicterende Glass Classes
+**Wijziging (lijn 722):**
+```tsx
+// VAN:
+<DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto glass-layer-2 glass-light-bleed">
 
-**Wijziging (lijn 38-40):**
-```diff
-className={cn(
--  "... glass-liquid-premium glass-specular-premium glass-noise-texture",
-+  "... bg-white/90 dark:bg-slate-900/90 backdrop-blur-2xl border border-white/40 dark:border-white/15 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15),0_4px_16px_rgba(0,0,0,0.1)]",
-  className,
-)}
+// NAAR:
+<DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
 ```
-
-### Fix 3: CSS - Voeg `!important` Override toe voor Sheet/Dialog
-**Bestand:** `src/index.css`
-
-**Toevoegen aan einde:**
-```css
-/* Fix: Sheet en Dialog moeten solide achtergrond behouden */
-[data-sidebar="sidebar"],
-.sheet-content-override {
-  background: hsl(var(--sidebar-background)) !important;
-  backdrop-filter: blur(20px) !important;
-}
-```
+De `DialogContent` heeft nu al de correcte base styling, dus extra glass classes zijn niet nodig en veroorzaken alleen conflicten.
 
 ---
 
 ## Samenvatting
 
-| Bestand | Wijziging |
-|---------|-----------|
-| `src/components/ui/sheet.tsx` | Verwijder `glass-liquid-premium glass-specular-premium`, herstel originele styling |
-| `src/components/ui/dialog.tsx` | Verwijder `glass-liquid-premium glass-specular-premium glass-noise-texture`, herstel originele styling |
-| `src/index.css` | Optioneel: voeg sidebar override toe |
+| Bestand | Wijziging | Reden |
+|---------|-----------|-------|
+| `src/components/ui/sonner.tsx` | Vervang premium glass met stabiele inline styling | Voorkomt `::before` overlay issues op toasts |
+| `src/components/TaskDetailModal.tsx` | Verwijder `glass-layer-2 glass-light-bleed` | Conflicteert met `DialogContent` base styling |
 
-**Geschatte tijd:** 5 minuten
+---
 
-Dit herstelt de sidebar en modals naar werkende staat terwijl de premium glaseffecten op andere componenten (KPI cards, tabs, page heroes) behouden blijven.
+## Wat Is Al Correct
 
+De volgende fixes zijn correct geïmplementeerd en werken:
+
+| Component | Status |
+|-----------|--------|
+| `sheet.tsx` | ✅ Correct - stabiele styling |
+| `dialog.tsx` | ✅ Correct - stabiele styling |
+| `alert-dialog.tsx` | ✅ Correct - stabiele styling |
+| CSS sidebar override | ✅ Correct - `!important` override |
+
+---
+
+## Verwacht Resultaat
+
+Na deze 2 fixes zullen:
+- **Toast notificaties** correct zichtbaar zijn zonder overlay issues
+- **TaskDetailModal** (afbeelding 2) correct renderen zonder styling conflicten
+- **Sidebar** (afbeelding 1) correct blijven werken (al gefixt)
+
+De premium "Apple Liquid Glass" effecten blijven actief op:
+- Dashboard tab containers
+- KPI cards
+- PageHero componenten
+- Alle plaatsen waar `glass-specular-premium` bewust is toegepast zonder `overflow: hidden` conflicten
