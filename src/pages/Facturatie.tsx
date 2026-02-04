@@ -478,7 +478,7 @@ export default function Facturatie() {
                   return (
                     <TableRow
                       key={factuur.id}
-                      className="cursor-pointer hover:bg-tab-facturatie-50/50 dark:hover:bg-tab-facturatie-900/30 transition-colors duration-200"
+                      className="cursor-pointer table-row-hover-emerald"
                       onClick={() => navigate(`/facturatie/${factuur.id}`)}
                     >
                       <TableCell className="font-medium">

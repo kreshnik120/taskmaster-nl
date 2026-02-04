@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 import { logger } from "@/lib/logger";
 import { useNavigate } from "react-router-dom";
 import { PageContainer } from "@/components/ui/page-container";
@@ -155,7 +156,10 @@ const AfgerondeTaken = () => {
       </TableHeader>
       <TableBody>
         {tasksToRender.map((task) => (
-          <TableRow key={task.id} className={showLateIndicator ? "bg-destructive/5" : ""}>
+          <TableRow key={task.id} className={cn(
+            "table-row-hover-emerald",
+            showLateIndicator && "bg-destructive/5"
+          )}>
             <TableCell className="font-medium">{task.title}</TableCell>
             <TableCell>{task.organizations?.name || "-"}</TableCell>
             <TableCell>
