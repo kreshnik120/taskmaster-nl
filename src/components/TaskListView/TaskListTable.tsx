@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
+import { getAssigneeColor } from '@/hooks/useAssigneeColor';
 import { generateTaskAriaLabel } from './utils/accessibility';
 import { TaskListVirtualized } from './TaskListVirtualized';
 import type { TaskListTask } from './types';
@@ -169,7 +170,11 @@ export function TaskListTable({
                 <TableCell role="gridcell">
                   <div className="flex items-center gap-2">
                     <Avatar className="h-6 w-6">
-                      <AvatarFallback className="text-xs">
+                      <AvatarFallback className={cn(
+                        "text-xs",
+                        getAssigneeColor(task.assignee_id).avatarBg,
+                        getAssigneeColor(task.assignee_id).avatarText
+                      )}>
                         {getInitials(task.profiles?.name)}
                       </AvatarFallback>
                     </Avatar>

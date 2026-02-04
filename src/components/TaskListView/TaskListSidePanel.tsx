@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import { X, User, Calendar, AlertTriangle, Edit, Trash2, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getAssigneeColor } from '@/hooks/useAssigneeColor';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -176,7 +177,11 @@ export function TaskListSidePanel({
                   <span className="text-sm text-muted-foreground">Eigenaar</span>
                   <div className="flex items-center gap-2">
                     <Avatar className="h-6 w-6">
-                      <AvatarFallback className="text-xs">
+                      <AvatarFallback className={cn(
+                        "text-xs",
+                        getAssigneeColor(task.assignee_id).avatarBg,
+                        getAssigneeColor(task.assignee_id).avatarText
+                      )}>
                         {getInitials(task.profiles?.name)}
                       </AvatarFallback>
                     </Avatar>
