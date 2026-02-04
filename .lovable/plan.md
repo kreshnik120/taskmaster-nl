@@ -1,228 +1,263 @@
 
 
-# Enterprise Glass Styling - Expert Diagnose en Verfijningsplan
+# Volledige Pagina-Kleur & Sidebar Styling Audit
 
-## Diagnose: Wat Werkt & Wat Ontbreekt
+## Huidige Status
 
-### Wat Correct Is Geïmplementeerd
-| Component | Status | Locatie |
-|-----------|--------|---------|
-| PageContainer component | Werkt | `src/components/ui/page-container.tsx` |
-| Page-bg-* tint classes | Werkt | `src/index.css` (regel 3467-3609) |
-| Enhanced ambient mesh (Tier 2) | Werkt | `src/index.css` (regel 3614-3700+) |
-| glass-liquid-card base | Werkt | `src/index.css` (regel 626-827) |
-| Context-colored shadow variants | Werkt | `src/index.css` |
-| KPICard component met glass classes | Werkt | `src/components/ui/kpi-card.tsx` |
+### Pagina's MET PageContainer (11 ✅)
+| Pagina | contextColor | Status |
+|--------|--------------|--------|
+| Sollicitaties | rose | ✅ Correct |
+| Professionals | violet | ✅ Correct |
+| Klanten | slate | ✅ Correct |
+| Plaatsingen | teal | ✅ Correct |
+| Facturatie | emerald | ✅ Correct |
+| Tijdregistratie | amber | ✅ Correct |
+| Gebruikers | violet | ✅ Correct |
+| Bijlagen | indigo | ✅ Correct |
+| Notulen | indigo | ✅ Correct |
+| WhatsApp | blue | ✅ Correct |
+| UnifiedDashboard | dynamisch | ✅ Correct (per tab) |
 
-### Wat NIET Werkt of Onzichtbaar Is
-
-| Probleem | Root Cause | Impact |
-|----------|------------|--------|
-| **Dashboard puur witte achtergrond** | `UnifiedDashboard.tsx` gebruikt GEEN PageContainer | Geen module-identiteit op hoofddashboard |
-| **Ambient mesh niet zichtbaar op dashboard tabs** | Tab containers hebben `glass-liquid-premium` die de parent ambient mesh overschrijft | Verlies van ruimtelijke diepte |
-| **KPI cards missen floating look** | Opaciteit te subtiel (0.12 in shadows) + achtergrond te wit | Cards lijken plat i.p.v. zwevend |
-| **Geen vignette op pagina's** | PageContainer heeft `withVignette = true` default maar effect te zwak | Mist 3D ruimtelijke diepte |
+### Pagina's ZONDER PageContainer (8 ❌)
+| Pagina | Probleem | Voorgestelde kleur |
+|--------|----------|-------------------|
+| Kanban.tsx | Geen PageContainer | indigo (werk/taken) |
+| AiTraining.tsx | Geen PageContainer | violet (admin/AI) |
+| AfgerondeTaken.tsx | Geen PageContainer | emerald (afgerond) |
+| VerwijderdeTaken.tsx | Geen PageContainer | slate (archief) |
+| SollicitatiesArchief.tsx | Geen PageContainer | rose (recruitment) |
+| FactuurAanmaken.tsx | Geen PageContainer | emerald (facturatie) |
+| FactuurDetail.tsx | Geen PageContainer | emerald (facturatie) |
+| FacturatieInstellingen.tsx | Geen PageContainer | emerald (facturatie) |
 
 ---
 
-## Verfijningsplan: 5 Kritieke Fixes
+## Implementatieplan
 
-### Fix 1: Dashboard Voorzien van PageContainer per Tab Context
+### Stap 1: Kanban.tsx
 
-**Bestand:** `src/pages/UnifiedDashboard.tsx`
+Voeg PageContainer toe aan de Kanban pagina:
 
-Het dashboard moet dynamisch de juiste PageContainer gebruiken gebaseerd op actieve tab:
-
-**Huidige situatie:**
 ```tsx
+import { PageContainer } from "@/components/ui/page-container";
+
+// In return statement, wrap alles in:
 return (
-  <div className="space-y-6">
-    {/* Content zonder page-bg of ambient mesh */}
-  </div>
-);
-```
-
-**Nieuwe situatie:**
-```tsx
-import { PageContainer, ContextColor } from "@/components/ui/page-container";
-
-// Map tab naar context color
-const TAB_CONTEXT_MAP: Record<string, ContextColor> = {
-  'mijn-werk': 'indigo',
-  'kalender': 'teal', 
-  'lijst': 'slate',
-  'opvolging': 'amber',
-  'team': 'violet',
-  'recruitment': 'rose',
-};
-
-return (
-  <PageContainer 
-    contextColor={TAB_CONTEXT_MAP[activeTab] || 'indigo'} 
-    className="space-y-6"
-  >
-    {/* Bestaande content */}
+  <PageContainer contextColor="indigo" className="space-y-6">
+    {/* bestaande content */}
   </PageContainer>
 );
 ```
 
-**Impact:** Dashboard krijgt dynamische kleur-identiteit per tab.
+### Stap 2: AiTraining.tsx
+
+Voeg PageContainer toe met violet kleur (admin/AI context):
+
+```tsx
+import { PageContainer } from "@/components/ui/page-container";
+
+return (
+  <>
+    <ValidationOnboardingWizard />
+    <PageContainer contextColor="violet" className="space-y-6">
+      {/* bestaande content */}
+    </PageContainer>
+  </>
+);
+```
+
+### Stap 3: AfgerondeTaken.tsx
+
+Voeg PageContainer toe met emerald kleur (succes/afgerond):
+
+```tsx
+import { PageContainer } from "@/components/ui/page-container";
+
+return (
+  <PageContainer contextColor="emerald" className="space-y-6">
+    {/* bestaande content */}
+  </PageContainer>
+);
+```
+
+### Stap 4: VerwijderdeTaken.tsx
+
+Voeg PageContainer toe met slate kleur (archief):
+
+```tsx
+import { PageContainer } from "@/components/ui/page-container";
+
+return (
+  <PageContainer contextColor="slate" className="space-y-6">
+    {/* bestaande content */}
+  </PageContainer>
+);
+```
+
+### Stap 5: SollicitatiesArchief.tsx
+
+Voeg PageContainer toe met rose kleur (recruitment):
+
+```tsx
+import { PageContainer } from "@/components/ui/page-container";
+
+return (
+  <PageContainer contextColor="rose" className="space-y-6">
+    {/* bestaande content */}
+  </PageContainer>
+);
+```
+
+### Stap 6: FactuurAanmaken.tsx
+
+Voeg PageContainer toe met emerald kleur (facturatie):
+
+```tsx
+import { PageContainer } from "@/components/ui/page-container";
+
+return (
+  <PageContainer contextColor="emerald" className="container mx-auto py-6 max-w-3xl">
+    {/* bestaande content */}
+  </PageContainer>
+);
+```
+
+### Stap 7: FactuurDetail.tsx
+
+Voeg PageContainer toe met emerald kleur (facturatie):
+
+```tsx
+import { PageContainer } from "@/components/ui/page-container";
+
+return (
+  <PageContainer contextColor="emerald" className="container mx-auto py-6">
+    {/* bestaande content */}
+  </PageContainer>
+);
+```
+
+### Stap 8: FacturatieInstellingen.tsx
+
+Voeg PageContainer toe met emerald kleur (facturatie):
+
+```tsx
+import { PageContainer } from "@/components/ui/page-container";
+
+return (
+  <PageContainer contextColor="emerald" className="container mx-auto py-6">
+    {/* bestaande content */}
+  </PageContainer>
+);
+```
 
 ---
 
-### Fix 2: Versterkte KPI Card Floating Effect
+## Sidebar Styling Verfijning
 
-**Bestand:** `src/index.css`
+### Huidige Status
+- ✅ Sidebar CSS variabelen correct gedefinieerd
+- ✅ Sidebar heeft edge glow effect
+- ✅ Achtergrond geforceerd met `!important`
 
-Verhoog de shadow opaciteit van de glass-liquid-card classes voor meer zichtbaar "lift" effect:
+### Voorgestelde Verbeteringen
 
-**Huidige waarden:**
-- Shadow layer 1: `0.08` opaciteit
-- Shadow layer 2: `0.12` opaciteit  
-- Context shadow layers: `0.12` opaciteit
+1. **Enhanced Glass Effect voor Sidebar**
 
-**Nieuwe waarden:**
-- Shadow layer 1: `0.12` opaciteit (+50%)
-- Shadow layer 2: `0.18` opaciteit (+50%)
-- Context shadow layers: `0.18` opaciteit (+50%)
+Voeg toe aan `src/index.css`:
 
-**Voorbeeld fix voor glass-liquid-card:**
 ```css
-.glass-liquid-card {
+/* Enhanced Sidebar Glass - Enterprise niveau */
+[data-sidebar="sidebar"] {
+  background: rgba(255, 255, 255, 0.92) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.3) !important;
+  box-shadow: 
+    4px 0 24px -8px rgba(0, 0, 0, 0.08),
+    inset -1px 0 0 rgba(255, 255, 255, 0.5) !important;
+}
+
+.dark [data-sidebar="sidebar"] {
+  background: rgba(15, 23, 42, 0.92) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
   box-shadow:
-    0 4px 24px -4px rgba(0, 0, 0, 0.12),  /* Was 0.08 */
-    0 8px 16px -8px rgba(0, 0, 0, 0.18),  /* Was 0.12 */
-    0 16px 40px -12px rgba(0, 0, 0, 0.10), /* Was 0.06 */
-    inset 0 1px 0 rgba(255, 255, 255, 0.85); /* Was 0.75 */
+    4px 0 24px -8px rgba(0, 0, 0, 0.3),
+    inset -1px 0 0 rgba(255, 255, 255, 0.04) !important;
 }
 ```
 
-**Impact:** Cards "zweven" duidelijk zichtbaar boven de achtergrond.
+2. **Active Menu Item Glass Highlight**
 
----
+Verbeter de actieve menu-item styling:
 
-### Fix 3: Versterkte Page Vignette voor 3D Diepte
-
-**Bestand:** `src/index.css`
-
-De huidige vignette (als die bestaat) is te subtiel. Verhoog de edge-darkening:
-
-**Nieuwe/verbeterde vignette class:**
 ```css
-.page-vignette {
-  position: relative;
+/* Active sidebar item - enhanced */
+.sidebar-menu-item-active {
+  background: rgba(255, 255, 255, 0.6) !important;
+  backdrop-filter: blur(8px);
+  box-shadow: 
+    0 2px 8px -2px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
-.page-vignette::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background: radial-gradient(
-    ellipse 85% 65% at 50% 50%,
-    transparent 45%,
-    hsla(0, 0%, 0%, 0.035) 100%  /* Verhoogd van 0.02 */
-  );
-}
-
-.dark .page-vignette::after {
-  background: radial-gradient(
-    ellipse 85% 65% at 50% 50%,
-    transparent 45%,
-    hsla(0, 0%, 0%, 0.08) 100%
-  );
+.dark .sidebar-menu-item-active {
+  background: rgba(255, 255, 255, 0.08) !important;
+  box-shadow:
+    0 2px 8px -2px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 ```
-
-**Impact:** Pagina's krijgen subtiele 3D "ruimte" gevoel.
 
 ---
 
-### Fix 4: Tab Content Containers Transparanter Maken
+## Kleur-Mapping Overzicht (Compleet)
 
-**Bestand:** `src/pages/UnifiedDashboard.tsx`
-
-De huidige tab containers (`glass-liquid-premium`) hebben een te hoge opaciteit waardoor de parent ambient mesh onzichtbaar wordt.
-
-**Huidige situatie:**
-```tsx
-<div className="glass-liquid-premium glass-specular-premium p-6 rounded-2xl">
-```
-
-**Nieuwe situatie:**
-```tsx
-<div className="glass-liquid-overlay rounded-2xl p-6">
-```
-
-Of: verwijder de glass wrapper volledig zodat de cards direct op de page-bg zweven:
-
-```tsx
-<div className="space-y-6">
-  {/* Content direct op PageContainer achtergrond */}
-</div>
-```
-
-**Impact:** Ambient mesh orbs worden zichtbaar door de content heen.
-
----
-
-### Fix 5: PageContainer Ambient Mesh Visibility Boost
-
-**Bestand:** `src/index.css`
-
-De enhanced ambient mesh classes gebruiken `!important` maar de z-index kan conflicteren met content. Zorg dat ze ALTIJD zichtbaar zijn:
-
-**Toevoegen aan ambient mesh classes:**
-```css
-.glass-ambient-mesh-rose::before,
-.glass-ambient-mesh-violet::before,
-.glass-ambient-mesh-teal::before,
-/* etc. */ {
-  z-index: -1 !important;  /* Al aanwezig */
-  opacity: 1 !important;   /* Nieuw: forceer visibility */
-}
-```
-
-Optioneel: verhoog de opaciteit van de radial gradients nog verder:
-- Van `0.22` naar `0.28` voor primaire orb
-- Van `0.16` naar `0.22` voor secundaire orb
-
----
-
-## Samenvatting Wijzigingen
-
-| Bestand | Wijziging |
-|---------|-----------|
-| `src/pages/UnifiedDashboard.tsx` | Wrap met PageContainer, dynamische contextColor per tab |
-| `src/index.css` | Verhoog glass-liquid-card shadow opaciteit (+50%) |
-| `src/index.css` | Voeg/versterk .page-vignette effect toe |
-| `src/index.css` | Optioneel: verhoog ambient mesh opaciteit |
-| `src/pages/UnifiedDashboard.tsx` | Tab containers transparanter of verwijderen |
+| Module | contextColor | HSL Hue | Reden |
+|--------|--------------|---------|-------|
+| Dashboard/Mijn Werk | indigo | 234° | Focus, werk |
+| Kalender | teal | 174° | Planning, rust |
+| Lijst | slate | 215° | Data, neutraal |
+| Opvolging | amber | 38° | Urgentie, aandacht |
+| Team | violet | 270° | Samenwerking |
+| Recruitment/Sollicitaties | rose | 345° | Mensen, warmte |
+| Professionals | violet | 270° | Team/mensen |
+| Klanten | slate | 215° | Data, zakelijk |
+| Plaatsingen | teal | 174° | Planning |
+| Facturatie (alle) | emerald | 142° | Geld, groei |
+| Tijdregistratie | amber | 38° | Tijd, urgentie |
+| WhatsApp | blue | 217° | Communicatie |
+| Bijlagen/Documenten | indigo | 234° | Werk, focus |
+| Notulen | indigo | 234° | Vergaderingen |
+| AI Training | violet | 270° | Admin, technisch |
+| Afgeronde Taken | emerald | 142° | Succes |
+| Verwijderde Taken | slate | 215° | Archief |
+| Sollicitaties Archief | rose | 345° | Recruitment |
 
 ---
 
 ## Technische Details
 
-### Tab-to-Context Color Mapping
+### Bestanden te wijzigen:
 
-| Tab | contextColor | HSL Hue |
-|-----|--------------|---------|
-| Mijn Werk | indigo | 234° |
-| Kalender | teal | 174° |
-| Lijst | slate | 215° |
-| Opvolging | amber | 38° |
-| Team | violet | 270° |
-| Recruitment | rose | 345° |
+| Bestand | Wijziging |
+|---------|-----------|
+| `src/pages/Kanban.tsx` | + PageContainer (indigo) |
+| `src/pages/AiTraining.tsx` | + PageContainer (violet) |
+| `src/pages/AfgerondeTaken.tsx` | + PageContainer (emerald) |
+| `src/pages/VerwijderdeTaken.tsx` | + PageContainer (slate) |
+| `src/pages/SollicitatiesArchief.tsx` | + PageContainer (rose) |
+| `src/pages/FactuurAanmaken.tsx` | + PageContainer (emerald) |
+| `src/pages/FactuurDetail.tsx` | + PageContainer (emerald) |
+| `src/pages/FacturatieInstellingen.tsx` | + PageContainer (emerald) |
+| `src/index.css` | Enhanced sidebar glass styling |
 
-### Shadow Opaciteit Progression
+---
 
-Nieuwe waarden voor optimaal floating effect:
+## Visueel Resultaat
 
-| Layer | Huidig | Nieuw | Effect |
-|-------|--------|-------|--------|
-| Ambient | 0.08 | 0.12 | +50% zichtbaarder |
-| Edge lift | 0.12 | 0.18 | +50% dieper |
-| Bottom spread | 0.06 | 0.10 | +67% grounding |
-| Context shadows | 0.12 | 0.18 | +50% kleur-glow |
+Na implementatie:
+- **Alle 19 pagina's** hebben unieke kleur-identiteit
+- **Sidebar** heeft verbeterd glass effect met zachte edge glow
+- **Consistente module-herkenbaarheid** door het hele platform
+- **Enterprise-niveau visuele coherentie** vergelijkbaar met Apple visionOS
 
