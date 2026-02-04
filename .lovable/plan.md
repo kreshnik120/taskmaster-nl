@@ -1,167 +1,245 @@
 
-# Fase 2: Glass Enhancement Implementation
+# Fase 3: Context-Colored Table Rows & Collapsible Triggers Enhancement
 
 ## Analyse van Huidige Status
 
-Na grondige inspectie van de codebase blijkt:
+Na Fase 1 (Foundation) en Fase 2 (WhatsApp Glass Enhancement) is het design system consistent. De volgende logische stap is het toepassen van **context-gekleurde hover states** op tabelrijen en collapsible triggers door de hele applicatie.
 
 ### Wat al aanwezig is:
 | Component | Status | Details |
 |-----------|--------|---------|
-| Table sticky headers | Aanwezig | `bg-white/70 dark:bg-slate-900/70 backdrop-blur-md sticky top-0 z-10` |
-| Glass list item classes | Aanwezig | `.glass-list-item`, `.glass-list-item-violet`, `.glass-list-item-destructive` in CSS |
-| WhatsApp message bubbles | Basis styling | Geen premium glass shadows |
+| Table sticky headers | Volledig | `bg-white/70 dark:bg-slate-900/70 backdrop-blur-md sticky top-0 z-10` |
+| ApplicationCard | Volledig | `glass-hover-lift` + rose-tinted shadow `hsla(346,77%,50%,...)` |
+| ClientCard | Volledig | `glass-hover-lift` + slate-tinted shadow |
+| TaskCard | Volledig | `glass-task-card glass-hover-lift` + indigo-tinted shadow |
+| WhatsApp Chat Items | Volledig (Fase 2) | `glass-list-item-blue` + tactile feedback |
 
-### Wat ontbreekt:
+### Wat ontbreekt (Fase 3 scope):
 
-1. **WhatsApp Chat Item** (`WhatsAppChatItem.tsx`) - Mist glass styling
-   - Huidige hover: `hover:bg-gray-50 dark:hover:bg-slate-800`
-   - Geen `glass-list-item-blue` class
-   - Geen context-colored shadow op hover
-   - Geen active state feedback
+1. **TableRow Default Hover** - Generiek `hover:bg-muted/50` ipv context-colored
+   - Huidige: `hover:bg-muted/50` (neutral)
+   - Ontbreekt: Per-pagina context-colored hover met subtiele glow
 
-2. **WhatsApp Message Bubbles** - Kunnen premium shadows krijgen
-   - Huidige shadow: alleen `shadow-sm`
-   - Geen glass-specifieke styling
+2. **CollapsibleTrigger Hovers** - Flat `hover:bg-muted/50` styling
+   - `ProfessionalDetailModal.tsx`: 4 collapsibles met flat hover
+   - `TaskDetailModal.tsx`: 5 collapsibles met flat hover
+   - `OrganizationSection.tsx`: 1 collapsible met flat hover
+   - Ontbreekt: Glass-achtige hover met context shadow
 
-3. **Context-colored table row hovers** - Beperkt toegepast
-   - Facturatie heeft al: `hover:bg-tab-facturatie-50/50`
-   - Maar andere tabellen missen dit patroon
+3. **Tijdregistratie TableRow** - Hardcoded neutral hover
+   - `hover:bg-muted/50` op regel 544
 
 ---
 
 ## Implementatie Plan
 
-### 1. Nieuwe CSS Class: `glass-list-item-blue`
-**Bestand:** `src/index.css`
+### Optie A: CSS Utility Classes (Aanbevolen)
+Nieuwe utility classes toevoegen voor context-colored hovers:
 
-Toevoegen van WhatsApp-specifieke (Blue context) glass list item variant:
-- Subtiele blauwe shadow glow (hsl 217)
-- Consistente transitions met Spring Physics
-- Dark mode variant
+```css
+/* Context-colored table row hovers */
+.table-row-hover-rose:hover { background: hsla(346, 77%, 96%, 0.6); }
+.table-row-hover-violet:hover { background: hsla(270, 50%, 96%, 0.6); }
+.table-row-hover-amber:hover { background: hsla(38, 92%, 96%, 0.6); }
+.table-row-hover-indigo:hover { background: hsla(234, 89%, 96%, 0.6); }
+.table-row-hover-emerald:hover { background: hsla(142, 71%, 96%, 0.6); }
 
-### 2. WhatsApp Chat Item Enhancement
-**Bestand:** `src/components/whatsapp/WhatsAppChatItem.tsx`
+/* Collapsible trigger glass hovers */
+.collapsible-glass:hover {
+  background: rgba(255, 255, 255, 0.60);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+```
 
-Wijzigingen:
-- Toevoegen `glass-list-item-blue` class op hover
-- `active:scale-[0.98]` voor tactiele feedback
-- Context-colored selected state (blauw)
-- Subtiele border-left indicator voor selected state
-
-### 3. WhatsApp Message Bubble Premium Shadows
-**Bestand:** `src/components/whatsapp/WhatsAppMessageBubble.tsx`
-
-Wijzigingen:
-- Enhanced outgoing message shadow (emerald-tinted)
-- Enhanced incoming message shadow (neutral)
-- Subtle inner highlight op bubbles
-
-### 4. WhatsApp HoverCard Glass Enhancement
-**Bestand:** `src/components/whatsapp/WhatsAppChatItem.tsx`
-
-Wijzigingen:
-- Toevoegen `glass-list-item` class aan HoverCardContent
-- Subtiele blue-tinted shadow
+### Optie B: Per-Component Inline Styling
+Direct toepassen op elk component met context-specifieke kleuren.
 
 ---
 
 ## Wijzigingen per Bestand
 
-### `src/index.css` (Toevoegingen)
-```css
-/* Blue-tinted list item for WhatsApp/Communicatie context */
-.glass-list-item-blue {
-  position: relative;
-  border-radius: 0.75rem;
-  background: rgba(255, 255, 255, 0.60);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.30);
-  box-shadow: 0 2px 6px hsla(217, 91%, 60%, 0.06);
-  transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
-}
+### 1. `src/index.css` - Nieuwe Utility Classes
 
-.glass-list-item-blue:hover {
-  background: rgba(255, 255, 255, 0.80);
-  box-shadow: 0 4px 12px hsla(217, 91%, 60%, 0.12);
-}
+| Toevoeging | Doel |
+|------------|------|
+| `.table-row-hover-rose` | Recruitment tabellen (sollicitaties) |
+| `.table-row-hover-violet` | Team tabellen |
+| `.table-row-hover-amber` | Tijdregistratie/Opvolging tabellen |
+| `.table-row-hover-indigo` | Taken/Kanban tabellen |
+| `.table-row-hover-emerald` | Facturatie/Plaatsingen tabellen |
+| `.collapsible-glass` | Alle collapsible triggers |
+| `.collapsible-glass-rose` | Rose-context collapsibles |
+| `.collapsible-glass-violet` | Violet-context collapsibles |
 
-.dark .glass-list-item-blue { ... }
-.dark .glass-list-item-blue:hover { ... }
-```
+### 2. `src/components/ui/table.tsx` - Default TableRow Enhancement
 
-### `src/components/whatsapp/WhatsAppChatItem.tsx`
-| Regel | Huidige Waarde | Nieuwe Waarde |
-|-------|----------------|---------------|
-| 64 | `hover:bg-gray-50 dark:hover:bg-slate-800` | `glass-list-item-blue` |
-| 67 | `bg-blue-50 dark:bg-blue-900/30 border-l-2` | `bg-blue-50/80 dark:bg-blue-900/40 border-l-3 border-l-[#25D366]` |
-| - | (nieuw) | `active:scale-[0.98]` |
-| - | (nieuw) | `focus-visible:ring-2 focus-visible:ring-blue-500/30` |
+| Regel | Wijziging |
+|-------|-----------|
+| 53 | Voeg Spring Physics transition toe: `transition-all duration-200` |
+| 53 | Verhoog hover opacity: `hover:bg-muted/60` → betere zichtbaarheid |
 
-### `src/components/whatsapp/WhatsAppMessageBubble.tsx`
-| Type | Huidige | Nieuwe |
-|------|---------|--------|
-| Outgoing | `shadow-sm` | `shadow-[0_2px_8px_hsla(142,55%,45%,0.12)]` |
-| Incoming | `shadow-sm` | `shadow-[0_2px_8px_rgba(0,0,0,0.08)]` |
-| Inner highlight | (geen) | `inset_0_1px_0_rgba(255,255,255,0.5)` |
+### 3. `src/pages/Tijdregistratie.tsx` - Context-Colored Row
+
+| Regel | Huidige | Nieuwe |
+|-------|---------|--------|
+| 544 | `hover:bg-muted/50` | `table-row-hover-amber` |
+
+### 4. `src/components/ProfessionalDetailModal.tsx` - Glass Collapsibles
+
+| Regels | Wijziging |
+|--------|-----------|
+| 472, 511, 640, 745 | `hover:bg-muted/50` → `collapsible-glass collapsible-glass-rose` |
+
+### 5. `src/components/TaskDetailModal.tsx` - Glass Collapsibles
+
+| Regels | Wijziging |
+|--------|-----------|
+| 1034, 1058, 1104, 1140, 1224 | `hover:bg-muted/20` → `collapsible-glass collapsible-glass-indigo` |
+
+### 6. `src/components/recruitment/OrganizationSection.tsx` - Glass Collapsible
+
+| Regel | Wijziging |
+|-------|-----------|
+| 96 | `hover:bg-muted/50` → `collapsible-glass` |
 
 ---
 
 ## Visuele Veranderingen
 
-### Before & After: Chat Item
+### Before & After: Table Row
 
 ```text
 BEFORE:
-┌────────────────────────────┐
-│ [Avatar] Contact Name      │ ← Flat bg-gray-50 hover
-│          Last message...   │
-└────────────────────────────┘
+┌─────────────────────────────────────────────┐
+│ Taak Naam    │ 2:30 uur │ Vandaag           │ ← Flat gray hover
+└─────────────────────────────────────────────┘
 
 AFTER:
-┌────────────────────────────┐
-│ [Avatar] Contact Name      │ ← Glass backdrop-blur
-│          Last message...   │    + Blue shadow glow
-└────────────────────────────┘    + Active scale feedback
+┌─────────────────────────────────────────────┐
+│ Taak Naam    │ 2:30 uur │ Vandaag           │ ← Amber-tinted hover (38°)
+└─────────────────────────────────────────────┘   + Subtiele glow
 ```
 
-### Before & After: Message Bubble
+### Before & After: Collapsible Trigger
 
 ```text
 BEFORE:
-  ┌───────────────────┐
-  │ Hello!            │ ← Basic shadow-sm
-  └───────────────────┘
+┌──────────────────────────────────────────────┐
+│ ▶ Contactgegevens                    ▼      │ ← Flat muted hover
+└──────────────────────────────────────────────┘
 
 AFTER:
-  ┌───────────────────┐
-  │ Hello!            │ ← Premium emerald/blue shadow
-  └───────────────────┘   + Inner highlight
+┌──────────────────────────────────────────────┐
+│ ▶ Contactgegevens                    ▼      │ ← Glass backdrop-blur
+└──────────────────────────────────────────────┘   + Rose shadow glow
+```
+
+---
+
+## CSS Implementatie Details
+
+### Nieuwe Classes in index.css
+
+```css
+/* ============================================
+   CONTEXT-COLORED TABLE ROW HOVERS
+   Per-module semantic hover colors
+   ============================================ */
+
+.table-row-hover-rose {
+  transition: background 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.table-row-hover-rose:hover {
+  background: hsla(346, 77%, 97%, 0.7);
+}
+.dark .table-row-hover-rose:hover {
+  background: hsla(346, 50%, 15%, 0.4);
+}
+
+.table-row-hover-amber {
+  transition: background 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.table-row-hover-amber:hover {
+  background: hsla(38, 92%, 97%, 0.7);
+}
+.dark .table-row-hover-amber:hover {
+  background: hsla(38, 50%, 15%, 0.4);
+}
+
+/* Similar patterns for violet, indigo, emerald, teal, blue */
+
+/* ============================================
+   GLASS COLLAPSIBLE TRIGGERS
+   Premium hover for accordion headers
+   ============================================ */
+
+.collapsible-glass {
+  transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.collapsible-glass:hover {
+  background: rgba(255, 255, 255, 0.50);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+}
+
+.dark .collapsible-glass:hover {
+  background: rgba(30, 41, 59, 0.50);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Context-colored variants */
+.collapsible-glass-rose:hover {
+  box-shadow: 0 2px 8px hsla(346, 77%, 50%, 0.06);
+}
+
+.collapsible-glass-indigo:hover {
+  box-shadow: 0 2px 8px hsla(234, 89%, 50%, 0.06);
+}
 ```
 
 ---
 
 ## Technische Details
 
-### Performance Overwegingen
-- `backdrop-filter: blur(8px)` is licht genoeg voor smooth scrolling
-- `will-change: transform` alleen op active states
-- Spring Physics timing (0.22, 1, 0.36, 1) consistent met design system
+### Performance
+- `backdrop-filter: blur(4px)` is zeer licht (half van de 8px in WhatsApp)
+- Geen `will-change` nodig voor deze subtiele hovers
+- Spring Physics timing consistent met Fase 1 & 2
 
-### Accessibility
-- Focus states met zichtbare ring
-- `active:scale-[0.98]` biedt tactiele feedback
-- Geen flitsende animaties (conform design constraints)
+### Dark Mode
+- Alle nieuwe classes hebben dark mode variants
+- HSL saturation verlaagd naar 50% in dark mode (conform design constraints)
+
+### Toegankelijkheid
+- Hover states zijn visuele enhancement, geen functionele afhankelijkheid
+- Focus states blijven ongewijzigd (keyboard navigatie intact)
+
+---
+
+## Samenvatting Bestanden
+
+| Bestand | Type Wijziging | Aantal Edits |
+|---------|----------------|--------------|
+| `src/index.css` | Toevoegen utility classes | +50 regels |
+| `src/components/ui/table.tsx` | TableRow transition | 1 edit |
+| `src/pages/Tijdregistratie.tsx` | Context-colored hover | 1 edit |
+| `src/components/ProfessionalDetailModal.tsx` | Glass collapsibles | 4 edits |
+| `src/components/TaskDetailModal.tsx` | Glass collapsibles | 5 edits |
+| `src/components/recruitment/OrganizationSection.tsx` | Glass collapsible | 1 edit |
+
+**Totaal: 6 bestanden, ~12 edits**
 
 ---
 
 ## Verwacht Resultaat
 
 Na implementatie:
-- WhatsApp chat items met premium glass hover effect
-- Context-colored (blue) shadows voor WhatsApp module
-- Premium message bubbles met emerald/neutral shadows
-- Consistente tactiele feedback met scale transform
+- Alle tabellen hebben context-colored row hovers passend bij hun module
+- Alle collapsible sections hebben premium glass hover effect
+- Consistente Spring Physics timing door de hele applicatie
 - Volledig dark mode compatible
+- Enterprise-niveau polish in detail-modals
 
-Dit brengt de WhatsApp module op enterprise-niveau en completeert Fase 2 van de UI/UX verbeteringen.
+Dit completeert de "micro-interaction polish" laag van het design system.
