@@ -578,13 +578,13 @@ export default function Klanten() {
   const hasActiveFilters = searchQuery || bureauFilter !== 'all' || sectorFilter !== 'all';
 
   return (
-    <PageContainer contextColor="slate" className="space-y-6">
+    <PageContainer contextColor="rose" className="space-y-6">
       {/* Hero Section with PageHero */}
       <PageHero
         title="Klanten"
         subtitle={`${organizations.length} organisaties • ${totalSublocations} werklocaties`}
         icon={Building2}
-        contextColor="slate"
+        contextColor="rose"
       />
 
       {/* View Toggle */}
