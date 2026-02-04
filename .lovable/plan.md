@@ -1,150 +1,228 @@
 
 
-# KPI-Tegels Verfijning: Compacter Formaat + Enhanced Apple Glass
+# Enterprise Glass Styling - Expert Diagnose en Verfijningsplan
 
-## Probleemanalyse
+## Diagnose: Wat Werkt & Wat Ontbreekt
 
-Op basis van de screenshot zie ik de volgende verbeterpunten:
+### Wat Correct Is Geïmplementeerd
+| Component | Status | Locatie |
+|-----------|--------|---------|
+| PageContainer component | Werkt | `src/components/ui/page-container.tsx` |
+| Page-bg-* tint classes | Werkt | `src/index.css` (regel 3467-3609) |
+| Enhanced ambient mesh (Tier 2) | Werkt | `src/index.css` (regel 3614-3700+) |
+| glass-liquid-card base | Werkt | `src/index.css` (regel 626-827) |
+| Context-colored shadow variants | Werkt | `src/index.css` |
+| KPICard component met glass classes | Werkt | `src/components/ui/kpi-card.tsx` |
 
-| Issue | Impact |
-|-------|--------|
-| **KPI-tegels te breed** | Cards vullen de hele breedte, voelen "uitgesmeerd" aan |
-| **Onvoldoende "lift" effect** | Cards lijken plat te liggen op de achtergrond |
-| **Schaduw ontbreekt of is te subtiel** | Geen duidelijke scheiding tussen card en achtergrond |
-| **Glass effect niet krachtig genoeg** | Te weinig specular highlights en depth |
+### Wat NIET Werkt of Onzichtbaar Is
 
-## Oplossingsplan
-
-### Stap 1: Compacter Card Formaat
-
-**Bestand:** `src/components/ui/kpi-card.tsx`
-
-Verklein de padding en font sizes voor een strakker uiterlijk:
-
-| Element | Huidig | Nieuw |
-|---------|--------|-------|
-| CardContent padding | `p-4` | `p-3` |
-| Icon size | `h-5 w-5` | `h-4 w-4` |
-| Value font | `text-3xl` | `text-2xl` |
-| Title margin | `mb-3` | `mb-2` |
-
-### Stap 2: Enhanced Glass Effect met Floating Shadow
-
-**Bestand:** `src/components/ui/kpi-card.tsx`
-
-Voeg een prominentere schaduw en glass-laag toe:
-
-```tsx
-// In de Card className:
-cn(
-  "glass-liquid-card", // Nieuwe enhanced glass class
-  "shadow-[0_8px_30px_rgba(0,0,0,0.08),0_4px_12px_rgba(0,0,0,0.05)]",
-  "hover:shadow-[0_12px_40px_rgba(0,0,0,0.12),0_6px_16px_rgba(0,0,0,0.08)]",
-  "transition-shadow duration-300"
-)
-```
-
-### Stap 3: Nieuwe `.glass-liquid-card` Class met Lift Effect
-
-**Bestand:** `src/index.css`
-
-Maak een specifieke class voor KPI cards met meer "float" gevoel:
-
-```css
-.glass-liquid-card {
-  position: relative;
-  border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.55);
-  
-  /* 4-Layer Float Shadow System */
-  box-shadow:
-    /* Layer 1: Soft ambient glow */
-    0 4px 24px -4px rgba(0, 0, 0, 0.08),
-    /* Layer 2: Edge shadow for lift */
-    0 8px 16px -8px rgba(0, 0, 0, 0.12),
-    /* Layer 3: Subtle bottom spread */
-    0 16px 40px -12px rgba(0, 0, 0, 0.06),
-    /* Layer 4: Inner top highlight */
-    inset 0 1px 0 rgba(255, 255, 255, 0.75);
-}
-
-.glass-liquid-card:hover {
-  transform: translateY(-2px);
-  box-shadow:
-    0 6px 32px -4px rgba(0, 0, 0, 0.10),
-    0 12px 24px -8px rgba(0, 0, 0, 0.15),
-    0 24px 48px -12px rgba(0, 0, 0, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.85);
-}
-```
-
-### Stap 4: Context-Gekleurde Schaduw
-
-Voeg context-specifieke schaduwen toe per module (rose, teal, etc.):
-
-```css
-.glass-liquid-card-rose {
-  box-shadow:
-    0 4px 24px -4px hsla(345, 55%, 50%, 0.12),
-    0 8px 16px -8px hsla(345, 55%, 40%, 0.10),
-    0 16px 40px -12px hsla(345, 55%, 50%, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.75);
-}
-
-.glass-liquid-card-teal { /* Plaatsingen */ }
-.glass-liquid-card-violet { /* Professionals */ }
-/* etc. voor alle context-kleuren */
-```
-
-### Stap 5: Update KPI Grid Spacing
-
-**Bestand:** `src/pages/Sollicitaties.tsx` en andere pagina's
-
-Optioneel: pas de gap aan voor meer "ademruimte" tussen cards:
-
-```tsx
-// Van:
-<div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-
-// Naar (optioneel):
-<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-```
+| Probleem | Root Cause | Impact |
+|----------|------------|--------|
+| **Dashboard puur witte achtergrond** | `UnifiedDashboard.tsx` gebruikt GEEN PageContainer | Geen module-identiteit op hoofddashboard |
+| **Ambient mesh niet zichtbaar op dashboard tabs** | Tab containers hebben `glass-liquid-premium` die de parent ambient mesh overschrijft | Verlies van ruimtelijke diepte |
+| **KPI cards missen floating look** | Opaciteit te subtiel (0.12 in shadows) + achtergrond te wit | Cards lijken plat i.p.v. zwevend |
+| **Geen vignette op pagina's** | PageContainer heeft `withVignette = true` default maar effect te zwak | Mist 3D ruimtelijke diepte |
 
 ---
 
-## Visueel Resultaat
+## Verfijningsplan: 5 Kritieke Fixes
 
-Na implementatie:
-- **Compactere tegels** met minder padding (strakker)
-- **Duidelijke "lift"** door 4-layer shadow system
-- **Glass effect versterkt** met hogere opaciteit en inner highlight
-- **Hover animatie** die de card 2px optilt voor interactieve feedback
-- **Context-gekleurde schaduwen** die de rose/teal/violet tint subtiel doorzetten
+### Fix 1: Dashboard Voorzien van PageContainer per Tab Context
+
+**Bestand:** `src/pages/UnifiedDashboard.tsx`
+
+Het dashboard moet dynamisch de juiste PageContainer gebruiken gebaseerd op actieve tab:
+
+**Huidige situatie:**
+```tsx
+return (
+  <div className="space-y-6">
+    {/* Content zonder page-bg of ambient mesh */}
+  </div>
+);
+```
+
+**Nieuwe situatie:**
+```tsx
+import { PageContainer, ContextColor } from "@/components/ui/page-container";
+
+// Map tab naar context color
+const TAB_CONTEXT_MAP: Record<string, ContextColor> = {
+  'mijn-werk': 'indigo',
+  'kalender': 'teal', 
+  'lijst': 'slate',
+  'opvolging': 'amber',
+  'team': 'violet',
+  'recruitment': 'rose',
+};
+
+return (
+  <PageContainer 
+    contextColor={TAB_CONTEXT_MAP[activeTab] || 'indigo'} 
+    className="space-y-6"
+  >
+    {/* Bestaande content */}
+  </PageContainer>
+);
+```
+
+**Impact:** Dashboard krijgt dynamische kleur-identiteit per tab.
+
+---
+
+### Fix 2: Versterkte KPI Card Floating Effect
+
+**Bestand:** `src/index.css`
+
+Verhoog de shadow opaciteit van de glass-liquid-card classes voor meer zichtbaar "lift" effect:
+
+**Huidige waarden:**
+- Shadow layer 1: `0.08` opaciteit
+- Shadow layer 2: `0.12` opaciteit  
+- Context shadow layers: `0.12` opaciteit
+
+**Nieuwe waarden:**
+- Shadow layer 1: `0.12` opaciteit (+50%)
+- Shadow layer 2: `0.18` opaciteit (+50%)
+- Context shadow layers: `0.18` opaciteit (+50%)
+
+**Voorbeeld fix voor glass-liquid-card:**
+```css
+.glass-liquid-card {
+  box-shadow:
+    0 4px 24px -4px rgba(0, 0, 0, 0.12),  /* Was 0.08 */
+    0 8px 16px -8px rgba(0, 0, 0, 0.18),  /* Was 0.12 */
+    0 16px 40px -12px rgba(0, 0, 0, 0.10), /* Was 0.06 */
+    inset 0 1px 0 rgba(255, 255, 255, 0.85); /* Was 0.75 */
+}
+```
+
+**Impact:** Cards "zweven" duidelijk zichtbaar boven de achtergrond.
+
+---
+
+### Fix 3: Versterkte Page Vignette voor 3D Diepte
+
+**Bestand:** `src/index.css`
+
+De huidige vignette (als die bestaat) is te subtiel. Verhoog de edge-darkening:
+
+**Nieuwe/verbeterde vignette class:**
+```css
+.page-vignette {
+  position: relative;
+}
+
+.page-vignette::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(
+    ellipse 85% 65% at 50% 50%,
+    transparent 45%,
+    hsla(0, 0%, 0%, 0.035) 100%  /* Verhoogd van 0.02 */
+  );
+}
+
+.dark .page-vignette::after {
+  background: radial-gradient(
+    ellipse 85% 65% at 50% 50%,
+    transparent 45%,
+    hsla(0, 0%, 0%, 0.08) 100%
+  );
+}
+```
+
+**Impact:** Pagina's krijgen subtiele 3D "ruimte" gevoel.
+
+---
+
+### Fix 4: Tab Content Containers Transparanter Maken
+
+**Bestand:** `src/pages/UnifiedDashboard.tsx`
+
+De huidige tab containers (`glass-liquid-premium`) hebben een te hoge opaciteit waardoor de parent ambient mesh onzichtbaar wordt.
+
+**Huidige situatie:**
+```tsx
+<div className="glass-liquid-premium glass-specular-premium p-6 rounded-2xl">
+```
+
+**Nieuwe situatie:**
+```tsx
+<div className="glass-liquid-overlay rounded-2xl p-6">
+```
+
+Of: verwijder de glass wrapper volledig zodat de cards direct op de page-bg zweven:
+
+```tsx
+<div className="space-y-6">
+  {/* Content direct op PageContainer achtergrond */}
+</div>
+```
+
+**Impact:** Ambient mesh orbs worden zichtbaar door de content heen.
+
+---
+
+### Fix 5: PageContainer Ambient Mesh Visibility Boost
+
+**Bestand:** `src/index.css`
+
+De enhanced ambient mesh classes gebruiken `!important` maar de z-index kan conflicteren met content. Zorg dat ze ALTIJD zichtbaar zijn:
+
+**Toevoegen aan ambient mesh classes:**
+```css
+.glass-ambient-mesh-rose::before,
+.glass-ambient-mesh-violet::before,
+.glass-ambient-mesh-teal::before,
+/* etc. */ {
+  z-index: -1 !important;  /* Al aanwezig */
+  opacity: 1 !important;   /* Nieuw: forceer visibility */
+}
+```
+
+Optioneel: verhoog de opaciteit van de radial gradients nog verder:
+- Van `0.22` naar `0.28` voor primaire orb
+- Van `0.16` naar `0.22` voor secundaire orb
+
+---
+
+## Samenvatting Wijzigingen
+
+| Bestand | Wijziging |
+|---------|-----------|
+| `src/pages/UnifiedDashboard.tsx` | Wrap met PageContainer, dynamische contextColor per tab |
+| `src/index.css` | Verhoog glass-liquid-card shadow opaciteit (+50%) |
+| `src/index.css` | Voeg/versterk .page-vignette effect toe |
+| `src/index.css` | Optioneel: verhoog ambient mesh opaciteit |
+| `src/pages/UnifiedDashboard.tsx` | Tab containers transparanter of verwijderen |
 
 ---
 
 ## Technische Details
 
-### Bestanden te wijzigen:
+### Tab-to-Context Color Mapping
 
-| Bestand | Wijziging |
-|---------|-----------|
-| `src/components/ui/kpi-card.tsx` | Padding verkleinen, enhanced glass classes toevoegen |
-| `src/index.css` | `.glass-liquid-card` class met float shadow system |
-| `src/index.css` | Context-gekleurde card variants (`.glass-liquid-card-rose`, etc.) |
-| `src/pages/Sollicitaties.tsx` | Grid gap optioneel aanpassen |
+| Tab | contextColor | HSL Hue |
+|-----|--------------|---------|
+| Mijn Werk | indigo | 234° |
+| Kalender | teal | 174° |
+| Lijst | slate | 215° |
+| Opvolging | amber | 38° |
+| Team | violet | 270° |
+| Recruitment | rose | 345° |
 
-### Nieuwe CSS Classes:
+### Shadow Opaciteit Progression
 
-- `.glass-liquid-card` - Basisclass met enhanced glass + float shadows
-- `.glass-liquid-card-rose` - Rose context-schaduw
-- `.glass-liquid-card-teal` - Teal context-schaduw
-- `.glass-liquid-card-violet` - Violet context-schaduw
-- `.glass-liquid-card-amber` - Amber context-schaduw
-- `.glass-liquid-card-emerald` - Emerald context-schaduw
-- `.glass-liquid-card-slate` - Slate context-schaduw
-- `.glass-liquid-card-indigo` - Indigo context-schaduw
-- `.glass-liquid-card-blue` - Blue context-schaduw
+Nieuwe waarden voor optimaal floating effect:
+
+| Layer | Huidig | Nieuw | Effect |
+|-------|--------|-------|--------|
+| Ambient | 0.08 | 0.12 | +50% zichtbaarder |
+| Edge lift | 0.12 | 0.18 | +50% dieper |
+| Bottom spread | 0.06 | 0.10 | +67% grounding |
+| Context shadows | 0.12 | 0.18 | +50% kleur-glow |
 
