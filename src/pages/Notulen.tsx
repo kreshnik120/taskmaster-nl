@@ -6,6 +6,7 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { format, isToday, isThisWeek, isThisMonth } from "date-fns";
 import { nl } from "date-fns/locale";
 import { PageHero } from "@/components/ui/page-hero";
+import { PageContainer } from "@/components/ui/page-container";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -217,7 +218,7 @@ export default function Notulen() {
 
   return (
     <TooltipProvider>
-      <div className="container mx-auto py-6 space-y-6 glass-ambient-mesh-indigo">
+      <PageContainer contextColor="indigo" className="container mx-auto py-6 space-y-6">
         <PageHero
           title="Vergadernotulen"
           subtitle={`${stats.total} notulen • ${stats.draft} concept • ${stats.approved} goedgekeurd`}
@@ -432,7 +433,7 @@ export default function Notulen() {
           open={isCreateDialogOpen}
           onOpenChange={setIsCreateDialogOpen}
         />
-      </div>
+      </PageContainer>
     </TooltipProvider>
   );
 }

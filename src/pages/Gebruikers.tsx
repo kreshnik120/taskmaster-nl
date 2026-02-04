@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AdminOnly } from "@/components/auth/AdminOnly";
 import { PageHero } from "@/components/ui/page-hero";
+import { PageContainer } from "@/components/ui/page-container";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { SecurityAuditWidget } from "@/components/users/SecurityAuditWidget";
 import { Input } from "@/components/ui/input";
@@ -223,7 +224,7 @@ export default function Gebruikers() {
         </div>
       }
     >
-      <div className="space-y-6 glass-ambient-mesh-violet">
+      <PageContainer contextColor="violet" className="space-y-6">
         <PageHero
           title="Gebruikers"
           subtitle="Beheer teamleden en hun rollen"
@@ -509,7 +510,7 @@ export default function Gebruikers() {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </PageContainer>
     </AdminOnly>
   );
 }

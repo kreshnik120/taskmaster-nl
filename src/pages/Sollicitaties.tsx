@@ -33,6 +33,7 @@ import {
 
 import { SmartSublocationPicker } from "@/components/SmartSublocationPicker";
 import { KPICard } from "@/components/ui/kpi-card";
+import { PageContainer } from "@/components/ui/page-container";
 import { useProactiveMatchNotifications } from "@/hooks/useProactiveMatchNotifications";
 import { useDiplomaUpgradeNotifications } from "@/hooks/useDiplomaUpgradeNotifications";
 import { useVogVerificationNotifications } from "@/hooks/useVogVerificationNotifications";
@@ -1027,7 +1028,7 @@ const Sollicitaties = () => {
 
 
   return (
-    <div className="flex flex-col h-full space-y-6 glass-ambient-mesh-rose">
+    <PageContainer contextColor="rose" className="flex flex-col h-full space-y-6">
             {/* Compact Header - Apple Minimalism */}
             <div className="flex items-center justify-between py-4">
               <div className="flex items-center gap-4">
@@ -1416,7 +1417,7 @@ const Sollicitaties = () => {
               />
             </AlertDialogContent>
           </AlertDialog>
-    </div>
+    </PageContainer>
   );
 };
 

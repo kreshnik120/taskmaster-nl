@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { PageHero } from "@/components/ui/page-hero";
+import { PageContainer } from "@/components/ui/page-container";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -307,7 +308,7 @@ export default function Bijlagen() {
   }, [attachments]);
 
   return (
-    <div className="container mx-auto py-6 space-y-6 glass-ambient-mesh-indigo">
+    <PageContainer contextColor="indigo" className="container mx-auto py-6 space-y-6">
       <PageHero
         title="Documentenbeheer"
         subtitle={`${stats.total} documenten • ${stats.images} afbeeldingen • ${stats.pdfs} PDFs • ${stats.docs} documenten`}
@@ -601,6 +602,6 @@ export default function Bijlagen() {
         onOpenChange={(open) => !open && setPreviewAttachment(null)}
         onDownload={() => previewAttachment && downloadAttachment(previewAttachment)}
       />
-    </div>
+    </PageContainer>
   );
 }

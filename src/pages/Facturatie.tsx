@@ -26,6 +26,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { KPICard } from "@/components/ui/kpi-card";
 import { PageHero } from "@/components/ui/page-hero";
+import { PageContainer } from "@/components/ui/page-container";
 
 // Icons
 import {
@@ -240,7 +241,7 @@ export default function Facturatie() {
   };
 
   return (
-    <div className="space-y-6 p-6 glass-ambient-mesh-emerald overflow-hidden">
+    <PageContainer contextColor="emerald" className="space-y-6 p-6 overflow-hidden">
       {/* Page Header */}
       <PageHero title="Facturatie" subtitle="Beheer facturen, betalingen en herinneringen">
         <div className="flex items-center gap-2">
@@ -611,6 +612,6 @@ export default function Facturatie() {
         }}
         totalCount={count || 0}
       />
-    </div>
+    </PageContainer>
   );
 }

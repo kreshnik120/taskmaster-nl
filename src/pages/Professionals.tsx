@@ -15,6 +15,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { KPICard } from "@/components/ui/kpi-card";
 import { PageHero } from "@/components/ui/page-hero";
+import { PageContainer } from "@/components/ui/page-container";
 
 import {
   Dialog,
@@ -419,7 +420,7 @@ const Professionals = () => {
   }
 
   return (
-    <div className="space-y-6 glass-ambient-mesh-violet">
+    <PageContainer contextColor="violet" className="space-y-6">
       {/* Hero Section - Unified PageHero */}
       <PageHero
         title="Professionals"
@@ -727,7 +728,7 @@ const Professionals = () => {
         onBulkExport={handleBulkExport}
         onBulkDelete={() => setDeleteConfirmOpen(true)}
       />
-    </div>
+    </PageContainer>
   );
 };
 
