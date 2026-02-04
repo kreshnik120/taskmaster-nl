@@ -1,147 +1,78 @@
 
 
-# Plan: Voltooiing Prioriteit-Systeem (3 Ontbrekende Bestanden)
+# Plan: Voltooiing Prioriteit-Systeem - accessibility.ts
 
-## Probleem Geïdentificeerd
+## Probleem
 
-Na grondige analyse zijn er **3 bestanden** die nog NIET de centrale `usePriorityConfig` hook gebruiken:
+Er is nog **1 bestand** dat een lokale `priorityLabels` definitie bevat:
 
-| Bestand | Type Probleem |
-|---------|---------------|
-| **VerwijderdeTaken.tsx** | Lokale `priorityColors` + `priorityLabels` |
-| **AfgerondeTaken.tsx** | Lokale `priorityColors` + `priorityLabels` |
-| **EmbeddedListView.tsx** | Lokale `priorityLabels` (voor groupBy) |
+**Bestand:** `src/components/TaskListView/utils/accessibility.ts`
 
-### Extra Inconsistentie
-De lokale labels gebruiken **"Middel"** terwijl de centrale hook **"Gemiddeld"** gebruikt!
-
----
-
-## Wijzigingen Per Bestand
-
-### 1. VerwijderdeTaken.tsx
-
-**Huidige code (regels 47-59):**
-```tsx
-const priorityColors: Record<string, string> = {
-  LOW: "text-priority-low",
-  MEDIUM: "text-priority-medium",
-  HIGH: "text-priority-high",
-  CRITICAL: "text-priority-critical",
-};
-
-const priorityLabels: Record<string, string> = {
-  LOW: "Laag",
-  MEDIUM: "Middel",  // ← FOUT: moet "Gemiddeld" zijn
-  HIGH: "Hoog",
-  CRITICAL: "Kritiek",
-};
-```
-
-**Badge gebruik (regel 271-272):**
-```tsx
-<Badge variant="secondary" className={priorityColors[task.priority]}>
-  {priorityLabels[task.priority]}
-</Badge>
-```
-
-**Actie:**
-- Verwijder lokale `priorityColors` en `priorityLabels` constanten
-- Import toevoegen: `import { getPrioritySolidClass, getPriorityLabel } from '@/hooks/usePriorityConfig';`
-- Badge aanpassen naar centrale hook
-
-**Nieuwe Badge code:**
-```tsx
-<Badge className={getPrioritySolidClass(task.priority)}>
-  {getPriorityLabel(task.priority)}
-</Badge>
-```
-
----
-
-### 2. AfgerondeTaken.tsx
-
-**Huidige code (regels 39-51):**
-```tsx
-const priorityColors: Record<string, string> = {
-  LOW: "text-priority-low",
-  MEDIUM: "text-priority-medium",
-  HIGH: "text-priority-high",
-  CRITICAL: "text-priority-critical",
-};
-
-const priorityLabels: Record<string, string> = {
-  LOW: "Laag",
-  MEDIUM: "Middel",  // ← FOUT: moet "Gemiddeld" zijn
-  HIGH: "Hoog",
-  CRITICAL: "Kritiek",
-};
-```
-
-**Badge gebruik (regel 174-175):**
-```tsx
-<Badge variant="secondary" className={priorityColors[task.priority]}>
-  {priorityLabels[task.priority]}
-</Badge>
-```
-
-**Actie:**
-- Verwijder lokale `priorityColors` en `priorityLabels` constanten
-- Import toevoegen: `import { getPrioritySolidClass, getPriorityLabel } from '@/hooks/usePriorityConfig';`
-- Badge aanpassen naar centrale hook
-
-**Nieuwe Badge code:**
-```tsx
-<Badge className={getPrioritySolidClass(task.priority)}>
-  {getPriorityLabel(task.priority)}
-</Badge>
-```
-
----
-
-### 3. EmbeddedListView.tsx
-
-**Huidige code (regels 76-81):**
-```tsx
-const priorityLabels = {
-  LOW: "Laag",
-  MEDIUM: "Gemiddeld",
-  HIGH: "Hoog",
-  CRITICAL: "Kritiek",
-};
-```
-
-**Gebruik voor groupBy (regel 552):**
-```tsx
-} else if (groupBy === "priority") {
-  key = priorityLabels[task.priority as keyof typeof priorityLabels];
-}
-```
-
-**Actie:**
-- Verwijder lokale `priorityLabels` constante
-- Import toevoegen: `import { getPriorityLabel } from '@/hooks/usePriorityConfig';`
-- GroupBy aanpassen naar centrale hook
-
-**Nieuwe GroupBy code:**
-```tsx
-} else if (groupBy === "priority") {
-  key = getPriorityLabel(task.priority);
+**Huidige code (regels 29-36):**
+```typescript
+if (task.priority) {
+  const priorityLabels: Record<string, string> = {
+    CRITICAL: 'Kritiek',
+    HIGH: 'Hoog',
+    MEDIUM: 'Gemiddeld',
+    LOW: 'Laag',
+  };
+  parts.push(`prioriteit ${priorityLabels[task.priority] || task.priority}`);
 }
 ```
 
 ---
 
-## Visueel Resultaat
+## Oplossing
 
-Na implementatie: **ALLE prioriteiten** in de applicatie tonen dezelfde kleuren en labels:
+### Wijzigingen
 
-| Prioriteit | Badge Kleur | Label |
-|------------|-------------|-------|
-| LOW | Groen solid | Laag |
-| MEDIUM | Blauw solid | Gemiddeld |
-| HIGH | Amber solid | Hoog |
-| CRITICAL | Rood solid | Kritiek |
+**1. Import toevoegen (regel 1-2):**
+```typescript
+import type { TaskListTask } from '../types';
+import { getPriorityLabel } from '@/hooks/usePriorityConfig';
+```
+
+**2. Lokale priorityLabels verwijderen en vervangen (regels 29-36):**
+```typescript
+if (task.priority) {
+  parts.push(`prioriteit ${getPriorityLabel(task.priority)}`);
+}
+```
+
+---
+
+## Wat NIET gefixed hoeft te worden
+
+De volgende bestanden hebben **ANDERE prioriteit-systemen** (numeriek/score-based) en zijn correct apart:
+
+| Bestand | Systeem | Reden Behouden |
+|---------|---------|----------------|
+| HumanReviewQueue.tsx | Numeriek 1-10 | AI Review prioriteit, niet task prioriteit |
+| AlertPriorityRanker.tsx | Score 0-100 | AI Training scores, niet task prioriteit |
+
+Deze gebruiken geen LOW/MEDIUM/HIGH/CRITICAL en mogen hun eigen logica behouden.
+
+---
+
+## Resultaat Na Implementatie
+
+| Component | Status |
+|-----------|--------|
+| usePriorityConfig.ts | ✅ Centrale bron |
+| TaskListTable.tsx | ✅ |
+| TaskListVirtualized.tsx | ✅ |
+| TaskListSidePanel.tsx | ✅ |
+| TaskListCards.tsx | ✅ |
+| PriorityBadge.tsx | ✅ |
+| TaskDetailModal.tsx | ✅ |
+| TaskDialog.tsx | ✅ |
+| VerwijderdeTaken.tsx | ✅ |
+| AfgerondeTaken.tsx | ✅ |
+| EmbeddedListView.tsx | ✅ |
+| **accessibility.ts** | 🔄 → ✅ |
+
+**Totaal: 12/12 = 100% consistentie**
 
 ---
 
@@ -149,28 +80,8 @@ Na implementatie: **ALLE prioriteiten** in de applicatie tonen dezelfde kleuren 
 
 | Actie | Aantal |
 |-------|--------|
-| Bestanden aangepast | 3 |
-| Lokale constanten verwijderd | 5 |
-| Imports toegevoegd | 3 |
-| Label inconsistenties opgelost | 2 ("Middel" → "Gemiddeld") |
-
----
-
-## Resultaat Na Implementatie
-
-| Bestand | Status |
-|---------|--------|
-| usePriorityConfig.ts | ✅ Centrale bron |
-| TaskListTable.tsx | ✅ Klaar |
-| TaskListVirtualized.tsx | ✅ Klaar |
-| TaskListSidePanel.tsx | ✅ Klaar |
-| TaskListCards.tsx | ✅ Klaar |
-| PriorityBadge.tsx | ✅ Klaar |
-| TaskDetailModal.tsx | ✅ Klaar |
-| TaskDialog.tsx | ✅ Klaar |
-| **VerwijderdeTaken.tsx** | 🔄 → ✅ |
-| **AfgerondeTaken.tsx** | 🔄 → ✅ |
-| **EmbeddedListView.tsx** | 🔄 → ✅ |
-
-**Totaal: 11/11 componenten = 100% consistentie**
+| Bestanden aangepast | 1 |
+| Imports toegevoegd | 1 |
+| Lokale constanten verwijderd | 1 |
+| Regels code verwijderd | 6 |
 
