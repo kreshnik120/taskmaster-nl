@@ -62,9 +62,9 @@ export function WhatsAppChatItem({ chat, isSelected, onClick }: WhatsAppChatItem
           onClick={onClick}
           className={cn(
             "flex items-center gap-3 p-3 cursor-pointer border-b border-border/50",
-            "transition-all duration-150 ease-in-out",
-            "hover:bg-gray-50 dark:hover:bg-slate-800",
-            isSelected && "bg-blue-50 dark:bg-blue-900/30 border-l-2 border-l-primary",
+            "glass-list-item-blue",
+            "active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:outline-none",
+            isSelected && "bg-blue-50/80 dark:bg-blue-900/40 border-l-[3px] border-l-[#25D366] shadow-[0_0_12px_hsla(217,91%,60%,0.08)]",
             isMuted && "opacity-60"
           )}
         >
@@ -184,7 +184,7 @@ export function WhatsAppChatItem({ chat, isSelected, onClick }: WhatsAppChatItem
       <HoverCardContent 
         side="right" 
         align="start" 
-        className="w-64 p-3"
+        className="w-64 p-3 shadow-[0_8px_32px_hsla(217,91%,60%,0.12)]"
         sideOffset={8}
       >
         <div className="space-y-2">
