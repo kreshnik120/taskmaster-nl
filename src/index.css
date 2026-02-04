@@ -631,16 +631,16 @@ All colors MUST be HSL.
     -webkit-backdrop-filter: blur(24px) saturate(180%);
     border: 1px solid rgba(255, 255, 255, 0.55);
     
-    /* 4-Layer Float Shadow System */
+    /* ENHANCED 4-Layer Float Shadow System (+50% opacity) */
     box-shadow:
       /* Layer 1: Soft ambient glow */
-      0 4px 24px -4px rgba(0, 0, 0, 0.08),
+      0 4px 24px -4px rgba(0, 0, 0, 0.12),
       /* Layer 2: Edge shadow for lift */
-      0 8px 16px -8px rgba(0, 0, 0, 0.12),
+      0 8px 16px -8px rgba(0, 0, 0, 0.18),
       /* Layer 3: Subtle bottom spread */
-      0 16px 40px -12px rgba(0, 0, 0, 0.06),
+      0 16px 40px -12px rgba(0, 0, 0, 0.10),
       /* Layer 4: Inner top highlight */
-      inset 0 1px 0 rgba(255, 255, 255, 0.75);
+      inset 0 1px 0 rgba(255, 255, 255, 0.85);
     
     transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
                 box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1);
@@ -649,150 +649,150 @@ All colors MUST be HSL.
   .glass-liquid-card:hover {
     transform: translateY(-2px);
     box-shadow:
-      0 6px 32px -4px rgba(0, 0, 0, 0.10),
-      0 12px 24px -8px rgba(0, 0, 0, 0.15),
-      0 24px 48px -12px rgba(0, 0, 0, 0.08),
-      inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      0 6px 32px -4px rgba(0, 0, 0, 0.16),
+      0 12px 24px -8px rgba(0, 0, 0, 0.22),
+      0 24px 48px -12px rgba(0, 0, 0, 0.14),
+      inset 0 1px 0 rgba(255, 255, 255, 0.90);
   }
 
   .dark .glass-liquid-card {
     background: rgba(15, 23, 42, 0.75);
     border-color: rgba(255, 255, 255, 0.12);
     box-shadow:
-      0 4px 24px -4px rgba(0, 0, 0, 0.25),
-      0 8px 16px -8px rgba(0, 0, 0, 0.30),
-      0 16px 40px -12px rgba(0, 0, 0, 0.20),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      0 4px 24px -4px rgba(0, 0, 0, 0.35),
+      0 8px 16px -8px rgba(0, 0, 0, 0.40),
+      0 16px 40px -12px rgba(0, 0, 0, 0.30),
+      inset 0 1px 0 rgba(255, 255, 255, 0.10);
   }
 
   .dark .glass-liquid-card:hover {
     transform: translateY(-2px);
     box-shadow:
-      0 6px 32px -4px rgba(0, 0, 0, 0.35),
-      0 12px 24px -8px rgba(0, 0, 0, 0.40),
-      0 24px 48px -12px rgba(0, 0, 0, 0.25),
-      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      0 6px 32px -4px rgba(0, 0, 0, 0.45),
+      0 12px 24px -8px rgba(0, 0, 0, 0.50),
+      0 24px 48px -12px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.14);
   }
 
-  /* Context-Colored Glass Liquid Cards */
+  /* ENHANCED Context-Colored Glass Liquid Cards (+50% shadow opacity) */
   .glass-liquid-card-rose {
     box-shadow:
-      0 4px 24px -4px hsla(345, 55%, 50%, 0.12),
-      0 8px 16px -8px hsla(345, 55%, 40%, 0.10),
-      0 16px 40px -12px hsla(345, 55%, 50%, 0.06),
-      inset 0 1px 0 rgba(255, 255, 255, 0.75);
+      0 4px 24px -4px hsla(345, 55%, 50%, 0.18),
+      0 8px 16px -8px hsla(345, 55%, 40%, 0.15),
+      0 16px 40px -12px hsla(345, 55%, 50%, 0.10),
+      inset 0 1px 0 rgba(255, 255, 255, 0.85);
   }
   .glass-liquid-card-rose:hover {
     box-shadow:
-      0 6px 32px -4px hsla(345, 55%, 50%, 0.16),
-      0 12px 24px -8px hsla(345, 55%, 40%, 0.14),
-      0 24px 48px -12px hsla(345, 55%, 50%, 0.10),
-      inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      0 6px 32px -4px hsla(345, 55%, 50%, 0.24),
+      0 12px 24px -8px hsla(345, 55%, 40%, 0.20),
+      0 24px 48px -12px hsla(345, 55%, 50%, 0.14),
+      inset 0 1px 0 rgba(255, 255, 255, 0.90);
   }
 
   .glass-liquid-card-violet {
     box-shadow:
-      0 4px 24px -4px hsla(270, 45%, 55%, 0.12),
-      0 8px 16px -8px hsla(270, 45%, 45%, 0.10),
-      0 16px 40px -12px hsla(270, 45%, 55%, 0.06),
-      inset 0 1px 0 rgba(255, 255, 255, 0.75);
+      0 4px 24px -4px hsla(270, 45%, 55%, 0.18),
+      0 8px 16px -8px hsla(270, 45%, 45%, 0.15),
+      0 16px 40px -12px hsla(270, 45%, 55%, 0.10),
+      inset 0 1px 0 rgba(255, 255, 255, 0.85);
   }
   .glass-liquid-card-violet:hover {
     box-shadow:
-      0 6px 32px -4px hsla(270, 45%, 55%, 0.16),
-      0 12px 24px -8px hsla(270, 45%, 45%, 0.14),
-      0 24px 48px -12px hsla(270, 45%, 55%, 0.10),
-      inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      0 6px 32px -4px hsla(270, 45%, 55%, 0.24),
+      0 12px 24px -8px hsla(270, 45%, 45%, 0.20),
+      0 24px 48px -12px hsla(270, 45%, 55%, 0.14),
+      inset 0 1px 0 rgba(255, 255, 255, 0.90);
   }
 
   .glass-liquid-card-slate {
     box-shadow:
-      0 4px 24px -4px hsla(215, 25%, 48%, 0.12),
-      0 8px 16px -8px hsla(215, 25%, 38%, 0.10),
-      0 16px 40px -12px hsla(215, 25%, 48%, 0.06),
-      inset 0 1px 0 rgba(255, 255, 255, 0.75);
+      0 4px 24px -4px hsla(215, 25%, 48%, 0.18),
+      0 8px 16px -8px hsla(215, 25%, 38%, 0.15),
+      0 16px 40px -12px hsla(215, 25%, 48%, 0.10),
+      inset 0 1px 0 rgba(255, 255, 255, 0.85);
   }
   .glass-liquid-card-slate:hover {
     box-shadow:
-      0 6px 32px -4px hsla(215, 25%, 48%, 0.16),
-      0 12px 24px -8px hsla(215, 25%, 38%, 0.14),
-      0 24px 48px -12px hsla(215, 25%, 48%, 0.10),
-      inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      0 6px 32px -4px hsla(215, 25%, 48%, 0.24),
+      0 12px 24px -8px hsla(215, 25%, 38%, 0.20),
+      0 24px 48px -12px hsla(215, 25%, 48%, 0.14),
+      inset 0 1px 0 rgba(255, 255, 255, 0.90);
   }
 
   .glass-liquid-card-teal {
     box-shadow:
-      0 4px 24px -4px hsla(174, 42%, 43%, 0.12),
-      0 8px 16px -8px hsla(174, 42%, 33%, 0.10),
-      0 16px 40px -12px hsla(174, 42%, 43%, 0.06),
-      inset 0 1px 0 rgba(255, 255, 255, 0.75);
+      0 4px 24px -4px hsla(174, 42%, 43%, 0.18),
+      0 8px 16px -8px hsla(174, 42%, 33%, 0.15),
+      0 16px 40px -12px hsla(174, 42%, 43%, 0.10),
+      inset 0 1px 0 rgba(255, 255, 255, 0.85);
   }
   .glass-liquid-card-teal:hover {
     box-shadow:
-      0 6px 32px -4px hsla(174, 42%, 43%, 0.16),
-      0 12px 24px -8px hsla(174, 42%, 33%, 0.14),
-      0 24px 48px -12px hsla(174, 42%, 43%, 0.10),
-      inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      0 6px 32px -4px hsla(174, 42%, 43%, 0.24),
+      0 12px 24px -8px hsla(174, 42%, 33%, 0.20),
+      0 24px 48px -12px hsla(174, 42%, 43%, 0.14),
+      inset 0 1px 0 rgba(255, 255, 255, 0.90);
   }
 
   .glass-liquid-card-amber {
     box-shadow:
-      0 4px 24px -4px hsla(38, 55%, 50%, 0.12),
-      0 8px 16px -8px hsla(38, 55%, 40%, 0.10),
-      0 16px 40px -12px hsla(38, 55%, 50%, 0.06),
-      inset 0 1px 0 rgba(255, 255, 255, 0.75);
+      0 4px 24px -4px hsla(38, 55%, 50%, 0.18),
+      0 8px 16px -8px hsla(38, 55%, 40%, 0.15),
+      0 16px 40px -12px hsla(38, 55%, 50%, 0.10),
+      inset 0 1px 0 rgba(255, 255, 255, 0.85);
   }
   .glass-liquid-card-amber:hover {
     box-shadow:
-      0 6px 32px -4px hsla(38, 55%, 50%, 0.16),
-      0 12px 24px -8px hsla(38, 55%, 40%, 0.14),
-      0 24px 48px -12px hsla(38, 55%, 50%, 0.10),
-      inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      0 6px 32px -4px hsla(38, 55%, 50%, 0.24),
+      0 12px 24px -8px hsla(38, 55%, 40%, 0.20),
+      0 24px 48px -12px hsla(38, 55%, 50%, 0.14),
+      inset 0 1px 0 rgba(255, 255, 255, 0.90);
   }
 
   .glass-liquid-card-emerald {
     box-shadow:
-      0 4px 24px -4px hsla(142, 55%, 45%, 0.12),
-      0 8px 16px -8px hsla(142, 55%, 35%, 0.10),
-      0 16px 40px -12px hsla(142, 55%, 45%, 0.06),
-      inset 0 1px 0 rgba(255, 255, 255, 0.75);
+      0 4px 24px -4px hsla(142, 55%, 45%, 0.18),
+      0 8px 16px -8px hsla(142, 55%, 35%, 0.15),
+      0 16px 40px -12px hsla(142, 55%, 45%, 0.10),
+      inset 0 1px 0 rgba(255, 255, 255, 0.85);
   }
   .glass-liquid-card-emerald:hover {
     box-shadow:
-      0 6px 32px -4px hsla(142, 55%, 45%, 0.16),
-      0 12px 24px -8px hsla(142, 55%, 35%, 0.14),
-      0 24px 48px -12px hsla(142, 55%, 45%, 0.10),
-      inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      0 6px 32px -4px hsla(142, 55%, 45%, 0.24),
+      0 12px 24px -8px hsla(142, 55%, 35%, 0.20),
+      0 24px 48px -12px hsla(142, 55%, 45%, 0.14),
+      inset 0 1px 0 rgba(255, 255, 255, 0.90);
   }
 
   .glass-liquid-card-indigo {
     box-shadow:
-      0 4px 24px -4px hsla(234, 45%, 52%, 0.12),
-      0 8px 16px -8px hsla(234, 45%, 42%, 0.10),
-      0 16px 40px -12px hsla(234, 45%, 52%, 0.06),
-      inset 0 1px 0 rgba(255, 255, 255, 0.75);
+      0 4px 24px -4px hsla(234, 45%, 52%, 0.18),
+      0 8px 16px -8px hsla(234, 45%, 42%, 0.15),
+      0 16px 40px -12px hsla(234, 45%, 52%, 0.10),
+      inset 0 1px 0 rgba(255, 255, 255, 0.85);
   }
   .glass-liquid-card-indigo:hover {
     box-shadow:
-      0 6px 32px -4px hsla(234, 45%, 52%, 0.16),
-      0 12px 24px -8px hsla(234, 45%, 42%, 0.14),
-      0 24px 48px -12px hsla(234, 45%, 52%, 0.10),
-      inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      0 6px 32px -4px hsla(234, 45%, 52%, 0.24),
+      0 12px 24px -8px hsla(234, 45%, 42%, 0.20),
+      0 24px 48px -12px hsla(234, 45%, 52%, 0.14),
+      inset 0 1px 0 rgba(255, 255, 255, 0.90);
   }
 
   .glass-liquid-card-blue {
     box-shadow:
-      0 4px 24px -4px hsla(217, 91%, 60%, 0.12),
-      0 8px 16px -8px hsla(217, 91%, 50%, 0.10),
-      0 16px 40px -12px hsla(217, 91%, 60%, 0.06),
-      inset 0 1px 0 rgba(255, 255, 255, 0.75);
+      0 4px 24px -4px hsla(217, 91%, 60%, 0.18),
+      0 8px 16px -8px hsla(217, 91%, 50%, 0.15),
+      0 16px 40px -12px hsla(217, 91%, 60%, 0.10),
+      inset 0 1px 0 rgba(255, 255, 255, 0.85);
   }
   .glass-liquid-card-blue:hover {
     box-shadow:
-      0 6px 32px -4px hsla(217, 91%, 60%, 0.16),
-      0 12px 24px -8px hsla(217, 91%, 50%, 0.14),
-      0 24px 48px -12px hsla(217, 91%, 60%, 0.10),
-      inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      0 6px 32px -4px hsla(217, 91%, 60%, 0.24),
+      0 12px 24px -8px hsla(217, 91%, 50%, 0.20),
+      0 24px 48px -12px hsla(217, 91%, 60%, 0.14),
+      inset 0 1px 0 rgba(255, 255, 255, 0.90);
   }
 
   /* Dark mode context colors */
@@ -3611,116 +3611,152 @@ All colors MUST be HSL.
 /* ---- TIER 2: Enhanced Ambient Mesh ---- */
 /* Versterkte ambient orbs (opaciteit 0.18-0.28, groter bereik, zachter blur) */
 
+/* ENHANCED ambient mesh with boosted opacity (+25%) for better visibility */
 .glass-ambient-mesh-rose::before {
+  content: '' !important;
+  position: absolute !important;
   inset: -200px !important;
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(345, 48%, 70%, 0.22) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(345, 48%, 60%, 0.16) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(345, 48%, 75%, 0.10) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(345, 48%, 70%, 0.28) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(345, 48%, 60%, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(345, 48%, 75%, 0.14) 0%, transparent 65%) !important;
   filter: blur(65px) !important;
+  pointer-events: none !important;
+  z-index: -1 !important;
+  opacity: 1 !important;
 }
 
 .dark .glass-ambient-mesh-rose::before {
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(345, 48%, 30%, 0.18) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(345, 48%, 25%, 0.12) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(345, 48%, 35%, 0.08) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(345, 48%, 30%, 0.24) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(345, 48%, 25%, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(345, 48%, 35%, 0.12) 0%, transparent 65%) !important;
 }
 
 .glass-ambient-mesh-violet::before {
+  content: '' !important;
+  position: absolute !important;
   inset: -200px !important;
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(270, 45%, 70%, 0.22) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(270, 45%, 60%, 0.16) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(270, 45%, 75%, 0.10) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(270, 45%, 70%, 0.28) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(270, 45%, 60%, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(270, 45%, 75%, 0.14) 0%, transparent 65%) !important;
   filter: blur(65px) !important;
+  pointer-events: none !important;
+  z-index: -1 !important;
+  opacity: 1 !important;
 }
 
 .dark .glass-ambient-mesh-violet::before {
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(270, 45%, 30%, 0.18) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(270, 45%, 25%, 0.12) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(270, 45%, 35%, 0.08) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(270, 45%, 30%, 0.24) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(270, 45%, 25%, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(270, 45%, 35%, 0.12) 0%, transparent 65%) !important;
 }
 
 .glass-ambient-mesh-slate::before {
+  content: '' !important;
+  position: absolute !important;
   inset: -200px !important;
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(215, 25%, 70%, 0.18) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(215, 25%, 60%, 0.12) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(215, 25%, 75%, 0.08) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(215, 25%, 70%, 0.24) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(215, 25%, 60%, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(215, 25%, 75%, 0.12) 0%, transparent 65%) !important;
   filter: blur(65px) !important;
+  pointer-events: none !important;
+  z-index: -1 !important;
+  opacity: 1 !important;
 }
 
 .dark .glass-ambient-mesh-slate::before {
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(215, 25%, 25%, 0.15) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(215, 25%, 20%, 0.10) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(215, 25%, 30%, 0.06) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(215, 25%, 25%, 0.20) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(215, 25%, 20%, 0.14) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(215, 25%, 30%, 0.10) 0%, transparent 65%) !important;
 }
 
 .glass-ambient-mesh-teal::before {
+  content: '' !important;
+  position: absolute !important;
   inset: -200px !important;
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(174, 42%, 65%, 0.22) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(174, 42%, 55%, 0.16) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(174, 42%, 70%, 0.10) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(174, 42%, 65%, 0.28) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(174, 42%, 55%, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(174, 42%, 70%, 0.14) 0%, transparent 65%) !important;
   filter: blur(65px) !important;
+  pointer-events: none !important;
+  z-index: -1 !important;
+  opacity: 1 !important;
 }
 
 .dark .glass-ambient-mesh-teal::before {
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(174, 42%, 28%, 0.18) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(174, 42%, 22%, 0.12) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(174, 42%, 32%, 0.08) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(174, 42%, 28%, 0.24) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(174, 42%, 22%, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(174, 42%, 32%, 0.12) 0%, transparent 65%) !important;
 }
 
 .glass-ambient-mesh-amber::before {
+  content: '' !important;
+  position: absolute !important;
   inset: -200px !important;
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(38, 55%, 65%, 0.22) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(38, 55%, 55%, 0.16) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(38, 55%, 70%, 0.10) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(38, 55%, 65%, 0.28) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(38, 55%, 55%, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(38, 55%, 70%, 0.14) 0%, transparent 65%) !important;
   filter: blur(65px) !important;
+  pointer-events: none !important;
+  z-index: -1 !important;
+  opacity: 1 !important;
 }
 
 .dark .glass-ambient-mesh-amber::before {
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(38, 55%, 28%, 0.18) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(38, 55%, 22%, 0.12) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(38, 55%, 32%, 0.08) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(38, 55%, 28%, 0.24) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(38, 55%, 22%, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(38, 55%, 32%, 0.12) 0%, transparent 65%) !important;
 }
 
 .glass-ambient-mesh-emerald::before {
+  content: '' !important;
+  position: absolute !important;
   inset: -200px !important;
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(142, 55%, 70%, 0.22) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(142, 55%, 60%, 0.16) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(142, 55%, 75%, 0.10) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(142, 55%, 70%, 0.28) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(142, 55%, 60%, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(142, 55%, 75%, 0.14) 0%, transparent 65%) !important;
   filter: blur(65px) !important;
+  pointer-events: none !important;
+  z-index: -1 !important;
+  opacity: 1 !important;
 }
 
 .dark .glass-ambient-mesh-emerald::before {
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(142, 55%, 30%, 0.18) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(142, 55%, 25%, 0.12) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(142, 55%, 35%, 0.08) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(142, 55%, 30%, 0.24) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(142, 55%, 25%, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(142, 55%, 35%, 0.12) 0%, transparent 65%) !important;
 }
 
 .glass-ambient-mesh-indigo::before {
+  content: '' !important;
+  position: absolute !important;
   inset: -200px !important;
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(234, 45%, 70%, 0.22) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(234, 45%, 60%, 0.16) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(234, 45%, 75%, 0.10) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(234, 45%, 70%, 0.28) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(234, 45%, 60%, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(234, 45%, 75%, 0.14) 0%, transparent 65%) !important;
   filter: blur(65px) !important;
+  pointer-events: none !important;
+  z-index: -1 !important;
+  opacity: 1 !important;
 }
 
 .dark .glass-ambient-mesh-indigo::before {
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(234, 45%, 30%, 0.18) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(234, 45%, 25%, 0.12) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(234, 45%, 35%, 0.08) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(234, 45%, 30%, 0.24) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(234, 45%, 25%, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(234, 45%, 35%, 0.12) 0%, transparent 65%) !important;
 }
 
 .glass-ambient-mesh-blue {
@@ -3750,7 +3786,11 @@ All colors MUST be HSL.
 
 /* ---- TIER 3: Page Vignette & Noise Texture ---- */
 
-/* Subtiele edge darkening voor 3D diepte */
+/* ENHANCED edge darkening voor 3D diepte (+100% opacity) */
+.page-vignette {
+  position: relative;
+}
+
 .page-vignette::after {
   content: '';
   position: fixed;
@@ -3759,16 +3799,16 @@ All colors MUST be HSL.
   z-index: 0;
   background: radial-gradient(
     ellipse 85% 65% at 50% 50%,
-    transparent 55%,
-    hsla(0 0% 0% / 0.018) 100%
+    transparent 45%,
+    hsla(0 0% 0% / 0.035) 100%
   );
 }
 
 .dark .page-vignette::after {
   background: radial-gradient(
     ellipse 85% 65% at 50% 50%,
-    transparent 55%,
-    hsla(0 0% 0% / 0.08) 100%
+    transparent 45%,
+    hsla(0 0% 0% / 0.12) 100%
   );
 }
 
