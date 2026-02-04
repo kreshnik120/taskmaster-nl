@@ -631,6 +631,10 @@ All colors MUST be HSL.
     -webkit-backdrop-filter: blur(24px) saturate(180%);
     border: 1px solid rgba(255, 255, 255, 0.55);
     
+    /* P0: Performance optimizations */
+    contain: layout style paint;
+    will-change: transform;
+    
     /* ENHANCED 4-Layer Float Shadow System (+50% opacity) */
     box-shadow:
       /* Layer 1: Soft ambient glow */
@@ -2748,8 +2752,23 @@ All colors MUST be HSL.
   .glass-ambient-mesh-slate::before,
   .glass-ambient-mesh-teal::before,
   .glass-ambient-mesh-amber::before,
-  .glass-ambient-mesh-blue::before {
+  .glass-ambient-mesh-blue::before,
+  .glass-ambient-mesh-indigo::before {
     display: none;
+  }
+  
+  /* P1: Enhanced reduced motion - lighter blur for accessibility */
+  .glass-liquid-card,
+  .glass-liquid-overlay,
+  .glass-liquid-nav {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: none;
+  }
+  
+  [class*="glass-ambient-mesh-"]::before {
+    filter: blur(16px) !important;
+    opacity: 0.5 !important;
   }
 }
 
@@ -3642,6 +3661,7 @@ All colors MUST be HSL.
 /* Versterkte ambient orbs (opaciteit 0.18-0.28, groter bereik, zachter blur) */
 
 /* ENHANCED ambient mesh with boosted opacity (+25%) for better visibility */
+/* P0: Performance optimized - blur(65px) → blur(40px), contain: content, will-change: filter */
 .glass-ambient-mesh-rose::before {
   content: '' !important;
   position: absolute !important;
@@ -3650,10 +3670,12 @@ All colors MUST be HSL.
     radial-gradient(ellipse 800px 600px at 0% 0%, hsla(345, 48%, 70%, 0.28) 0%, transparent 55%),
     radial-gradient(ellipse 700px 500px at 100% 100%, hsla(345, 48%, 60%, 0.22) 0%, transparent 55%),
     radial-gradient(ellipse 500px 400px at 50% 50%, hsla(345, 48%, 75%, 0.14) 0%, transparent 65%) !important;
-  filter: blur(65px) !important;
+  filter: blur(40px) !important;
   pointer-events: none !important;
   z-index: -1 !important;
   opacity: 1 !important;
+  contain: content;
+  will-change: filter;
 }
 
 .dark .glass-ambient-mesh-rose::before {
@@ -3661,6 +3683,7 @@ All colors MUST be HSL.
     radial-gradient(ellipse 800px 600px at 0% 0%, hsla(345, 48%, 30%, 0.24) 0%, transparent 55%),
     radial-gradient(ellipse 700px 500px at 100% 100%, hsla(345, 48%, 25%, 0.18) 0%, transparent 55%),
     radial-gradient(ellipse 500px 400px at 50% 50%, hsla(345, 48%, 35%, 0.12) 0%, transparent 65%) !important;
+  filter: blur(40px) !important;
 }
 
 .glass-ambient-mesh-violet::before {
@@ -3671,10 +3694,12 @@ All colors MUST be HSL.
     radial-gradient(ellipse 800px 600px at 0% 0%, hsla(270, 45%, 70%, 0.28) 0%, transparent 55%),
     radial-gradient(ellipse 700px 500px at 100% 100%, hsla(270, 45%, 60%, 0.22) 0%, transparent 55%),
     radial-gradient(ellipse 500px 400px at 50% 50%, hsla(270, 45%, 75%, 0.14) 0%, transparent 65%) !important;
-  filter: blur(65px) !important;
+  filter: blur(40px) !important;
   pointer-events: none !important;
   z-index: -1 !important;
   opacity: 1 !important;
+  contain: content;
+  will-change: filter;
 }
 
 .dark .glass-ambient-mesh-violet::before {
@@ -3682,6 +3707,7 @@ All colors MUST be HSL.
     radial-gradient(ellipse 800px 600px at 0% 0%, hsla(270, 45%, 30%, 0.24) 0%, transparent 55%),
     radial-gradient(ellipse 700px 500px at 100% 100%, hsla(270, 45%, 25%, 0.18) 0%, transparent 55%),
     radial-gradient(ellipse 500px 400px at 50% 50%, hsla(270, 45%, 35%, 0.12) 0%, transparent 65%) !important;
+  filter: blur(40px) !important;
 }
 
 .glass-ambient-mesh-slate::before {
@@ -3692,10 +3718,12 @@ All colors MUST be HSL.
     radial-gradient(ellipse 800px 600px at 0% 0%, hsla(215, 25%, 70%, 0.24) 0%, transparent 55%),
     radial-gradient(ellipse 700px 500px at 100% 100%, hsla(215, 25%, 60%, 0.18) 0%, transparent 55%),
     radial-gradient(ellipse 500px 400px at 50% 50%, hsla(215, 25%, 75%, 0.12) 0%, transparent 65%) !important;
-  filter: blur(65px) !important;
+  filter: blur(40px) !important;
   pointer-events: none !important;
   z-index: -1 !important;
   opacity: 1 !important;
+  contain: content;
+  will-change: filter;
 }
 
 .dark .glass-ambient-mesh-slate::before {
@@ -3703,6 +3731,7 @@ All colors MUST be HSL.
     radial-gradient(ellipse 800px 600px at 0% 0%, hsla(215, 25%, 25%, 0.20) 0%, transparent 55%),
     radial-gradient(ellipse 700px 500px at 100% 100%, hsla(215, 25%, 20%, 0.14) 0%, transparent 55%),
     radial-gradient(ellipse 500px 400px at 50% 50%, hsla(215, 25%, 30%, 0.10) 0%, transparent 65%) !important;
+  filter: blur(40px) !important;
 }
 
 .glass-ambient-mesh-teal::before {
@@ -3713,10 +3742,12 @@ All colors MUST be HSL.
     radial-gradient(ellipse 800px 600px at 0% 0%, hsla(174, 42%, 65%, 0.28) 0%, transparent 55%),
     radial-gradient(ellipse 700px 500px at 100% 100%, hsla(174, 42%, 55%, 0.22) 0%, transparent 55%),
     radial-gradient(ellipse 500px 400px at 50% 50%, hsla(174, 42%, 70%, 0.14) 0%, transparent 65%) !important;
-  filter: blur(65px) !important;
+  filter: blur(40px) !important;
   pointer-events: none !important;
   z-index: -1 !important;
   opacity: 1 !important;
+  contain: content;
+  will-change: filter;
 }
 
 .dark .glass-ambient-mesh-teal::before {
@@ -3724,6 +3755,7 @@ All colors MUST be HSL.
     radial-gradient(ellipse 800px 600px at 0% 0%, hsla(174, 42%, 28%, 0.24) 0%, transparent 55%),
     radial-gradient(ellipse 700px 500px at 100% 100%, hsla(174, 42%, 22%, 0.18) 0%, transparent 55%),
     radial-gradient(ellipse 500px 400px at 50% 50%, hsla(174, 42%, 32%, 0.12) 0%, transparent 65%) !important;
+  filter: blur(40px) !important;
 }
 
 .glass-ambient-mesh-amber::before {
@@ -3734,10 +3766,12 @@ All colors MUST be HSL.
     radial-gradient(ellipse 800px 600px at 0% 0%, hsla(38, 55%, 65%, 0.28) 0%, transparent 55%),
     radial-gradient(ellipse 700px 500px at 100% 100%, hsla(38, 55%, 55%, 0.22) 0%, transparent 55%),
     radial-gradient(ellipse 500px 400px at 50% 50%, hsla(38, 55%, 70%, 0.14) 0%, transparent 65%) !important;
-  filter: blur(65px) !important;
+  filter: blur(40px) !important;
   pointer-events: none !important;
   z-index: -1 !important;
   opacity: 1 !important;
+  contain: content;
+  will-change: filter;
 }
 
 .dark .glass-ambient-mesh-amber::before {
@@ -3745,6 +3779,7 @@ All colors MUST be HSL.
     radial-gradient(ellipse 800px 600px at 0% 0%, hsla(38, 55%, 28%, 0.24) 0%, transparent 55%),
     radial-gradient(ellipse 700px 500px at 100% 100%, hsla(38, 55%, 22%, 0.18) 0%, transparent 55%),
     radial-gradient(ellipse 500px 400px at 50% 50%, hsla(38, 55%, 32%, 0.12) 0%, transparent 65%) !important;
+  filter: blur(40px) !important;
 }
 
 .glass-ambient-mesh-emerald::before {
@@ -3755,10 +3790,12 @@ All colors MUST be HSL.
     radial-gradient(ellipse 800px 600px at 0% 0%, hsla(142, 55%, 70%, 0.28) 0%, transparent 55%),
     radial-gradient(ellipse 700px 500px at 100% 100%, hsla(142, 55%, 60%, 0.22) 0%, transparent 55%),
     radial-gradient(ellipse 500px 400px at 50% 50%, hsla(142, 55%, 75%, 0.14) 0%, transparent 65%) !important;
-  filter: blur(65px) !important;
+  filter: blur(40px) !important;
   pointer-events: none !important;
   z-index: -1 !important;
   opacity: 1 !important;
+  contain: content;
+  will-change: filter;
 }
 
 .dark .glass-ambient-mesh-emerald::before {
@@ -3766,6 +3803,7 @@ All colors MUST be HSL.
     radial-gradient(ellipse 800px 600px at 0% 0%, hsla(142, 55%, 30%, 0.24) 0%, transparent 55%),
     radial-gradient(ellipse 700px 500px at 100% 100%, hsla(142, 55%, 25%, 0.18) 0%, transparent 55%),
     radial-gradient(ellipse 500px 400px at 50% 50%, hsla(142, 55%, 35%, 0.12) 0%, transparent 65%) !important;
+  filter: blur(40px) !important;
 }
 
 .glass-ambient-mesh-indigo::before {
@@ -3776,10 +3814,12 @@ All colors MUST be HSL.
     radial-gradient(ellipse 800px 600px at 0% 0%, hsla(234, 45%, 70%, 0.28) 0%, transparent 55%),
     radial-gradient(ellipse 700px 500px at 100% 100%, hsla(234, 45%, 60%, 0.22) 0%, transparent 55%),
     radial-gradient(ellipse 500px 400px at 50% 50%, hsla(234, 45%, 75%, 0.14) 0%, transparent 65%) !important;
-  filter: blur(65px) !important;
+  filter: blur(40px) !important;
   pointer-events: none !important;
   z-index: -1 !important;
   opacity: 1 !important;
+  contain: content;
+  will-change: filter;
 }
 
 .dark .glass-ambient-mesh-indigo::before {
@@ -3787,6 +3827,7 @@ All colors MUST be HSL.
     radial-gradient(ellipse 800px 600px at 0% 0%, hsla(234, 45%, 30%, 0.24) 0%, transparent 55%),
     radial-gradient(ellipse 700px 500px at 100% 100%, hsla(234, 45%, 25%, 0.18) 0%, transparent 55%),
     radial-gradient(ellipse 500px 400px at 50% 50%, hsla(234, 45%, 35%, 0.12) 0%, transparent 65%) !important;
+  filter: blur(40px) !important;
 }
 
 .glass-ambient-mesh-blue {
@@ -3804,7 +3845,9 @@ All colors MUST be HSL.
     radial-gradient(ellipse 500px 400px at 50% 50%, hsla(217, 91%, 70%, 0.10) 0%, transparent 65%);
   pointer-events: none;
   z-index: -1;
-  filter: blur(65px);
+  filter: blur(40px);
+  contain: content;
+  will-change: filter;
 }
 
 .dark .glass-ambient-mesh-blue::before {
@@ -3812,6 +3855,7 @@ All colors MUST be HSL.
     radial-gradient(ellipse 800px 600px at 0% 0%, hsla(217, 91%, 28%, 0.18) 0%, transparent 55%),
     radial-gradient(ellipse 700px 500px at 100% 100%, hsla(217, 91%, 22%, 0.12) 0%, transparent 55%),
     radial-gradient(ellipse 500px 400px at 50% 50%, hsla(217, 91%, 32%, 0.08) 0%, transparent 65%);
+  filter: blur(40px);
 }
 
 /* ---- TIER 3: Page Vignette & Noise Texture ---- */
