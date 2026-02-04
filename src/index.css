@@ -2330,6 +2330,38 @@ All colors MUST be HSL.
 }
 
 /* ============================================
+   GLASS LIST ITEM - BLUE (WhatsApp Context)
+   Context-colored list items for Communicatie
+   ============================================ */
+
+.glass-list-item-blue {
+  position: relative;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 2px 6px hsla(217, 91%, 60%, 0.05);
+  transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.glass-list-item-blue:hover {
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 4px 16px hsla(217, 91%, 60%, 0.10);
+  border-color: hsla(217, 91%, 60%, 0.15);
+}
+
+.dark .glass-list-item-blue {
+  background: rgba(30, 41, 59, 0.55);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 2px 6px hsla(217, 91%, 30%, 0.08);
+}
+
+.dark .glass-list-item-blue:hover {
+  background: rgba(30, 41, 59, 0.75);
+  box-shadow: 0 4px 16px hsla(217, 91%, 40%, 0.12);
+  border-color: hsla(217, 91%, 50%, 0.15);
+}
+
+/* ============================================
    PHASE 17: RESPONSIVE & PERFORMANCE
    Mobile optimizations for glassmorphism
    ============================================ */

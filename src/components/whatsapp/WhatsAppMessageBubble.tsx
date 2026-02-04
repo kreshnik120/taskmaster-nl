@@ -69,10 +69,10 @@ export function WhatsAppMessageBubble({ message, isGroupChat = false }: WhatsApp
       >
         <div
           className={cn(
-            "max-w-[75%] px-3 py-2 rounded-2xl shadow-sm",
+            "max-w-[75%] px-3 py-2 rounded-2xl",
             isOutgoing 
-              ? "bg-[#dcf8c6] dark:bg-emerald-900 rounded-br-none text-foreground" 
-              : "bg-white dark:bg-slate-800 rounded-bl-none border border-border text-foreground",
+              ? "bg-[#dcf8c6] dark:bg-emerald-900 rounded-br-none text-foreground shadow-[0_2px_8px_hsla(142,55%,45%,0.12),inset_0_1px_0_rgba(255,255,255,0.5)]" 
+              : "bg-white dark:bg-slate-800 rounded-bl-none border border-border text-foreground shadow-[0_2px_8px_rgba(0,0,0,0.06),inset_0_1px_0_rgba(255,255,255,0.6)]",
             // Animation classes for new messages
             isNew && isOutgoing && "animate-message-send",
             isNew && !isOutgoing && "animate-message-receive"
