@@ -19,6 +19,7 @@ import { KPICard } from "@/components/ui/kpi-card";
 import { InterviewDetails } from "@/types/recruitment";
 import { Progress } from "@/components/ui/progress";
 import { ToastAction } from "@/components/ui/toast";
+import { getAssigneeColor, PRIORITY_INDICATOR_DOTS } from "@/hooks/useAssigneeColor";
 
 // Type from useMySubtasks hook
 type SubtaskFromHook = ReturnType<typeof useMySubtasks>['subtasks'][number];
@@ -815,11 +816,12 @@ export default function EmbeddedCalendarView() {
                       </div>
                     )}
                     
-                    {/* Tasks */}
+                    {/* Tasks - colored by assignee */}
                     {dayTasks.map((task) => {
                       const isInterview = isInterviewTask(task);
                       const taskIsOverdue = isOverdue(task);
                       const priority = task.priority?.toLowerCase() || 'medium';
+                      const assigneeColor = getAssigneeColor(task.assignee_id);
                       
                       return (
                         <DraggableTask key={task.id} task={task}>
@@ -829,18 +831,32 @@ export default function EmbeddedCalendarView() {
                             className={cn(
                               "p-2 rounded-lg border-l-2 cursor-pointer transition-all duration-150",
                               "hover:shadow-sm hover:scale-[1.01]",
-                              isInterview ? INTERVIEW_STYLES.bg : PRIORITY_BG[priority],
-                              isInterview ? INTERVIEW_STYLES.border : PRIORITY_BORDERS[priority],
+                              // Use interview styles if interview, otherwise use assignee color
+                              isInterview ? INTERVIEW_STYLES.bg : assigneeColor.bg,
+                              isInterview ? INTERVIEW_STYLES.border : assigneeColor.border,
                               taskIsOverdue && "ring-1 ring-red-500/30"
                             )}
                           >
                             <div className="flex items-start gap-2">
+                              {/* Assignee color dot */}
                               <span className={cn(
                                 "w-1.5 h-1.5 rounded-full mt-1.5 shrink-0",
-                                isInterview ? INTERVIEW_STYLES.dot : PRIORITY_DOTS[priority]
+                                isInterview ? INTERVIEW_STYLES.dot : assigneeColor.dot
                               )} />
                               <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium truncate">{task.title}</p>
+                                <div className="flex items-center gap-1">
+                                  <p className="text-xs font-medium truncate flex-1">{task.title}</p>
+                                  {/* Priority indicator - small dot */}
+                                  {(priority === 'high' || priority === 'critical') && (
+                                    <span 
+                                      className={cn(
+                                        "w-1.5 h-1.5 rounded-full shrink-0",
+                                        PRIORITY_INDICATOR_DOTS[priority]
+                                      )}
+                                      title={priority === 'critical' ? 'Kritiek' : 'Hoge prioriteit'}
+                                    />
+                                  )}
+                                </div>
                                 {task.start_at && (
                                   <p className="text-[10px] text-muted-foreground mt-0.5">
                                     {format(parseISO(task.start_at), 'HH:mm')}
