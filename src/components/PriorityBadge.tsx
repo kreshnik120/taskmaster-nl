@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { getPriorityConfig, getPriorityTextClass, getPriorityOptions, type PriorityLevel } from "@/hooks/usePriorityConfig";
 
 interface PriorityBadgeProps {
   taskId: string;
@@ -12,37 +11,14 @@ interface PriorityBadgeProps {
   size?: "sm" | "md" | "lg";
 }
 
-const priorityConfig = {
-  LOW: {
-    label: "Laag",
-    color: "text-muted-foreground",
-    icon: ArrowDown,
-  },
-  MEDIUM: {
-    label: "Gemiddeld",
-    color: "text-foreground",
-    icon: Minus,
-  },
-  HIGH: {
-    label: "Hoog",
-    color: "text-foreground font-semibold",
-    icon: ArrowUp,
-  },
-  CRITICAL: {
-    label: "Kritiek",
-    color: "text-foreground font-bold",
-    icon: ArrowUp,
-  },
-};
-
 export function PriorityBadge({ taskId, priority, editable = true, size = "md" }: PriorityBadgeProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const { toast } = useToast();
 
-  const currentPriority = priority?.toUpperCase() || "MEDIUM";
-  const config = priorityConfig[currentPriority as keyof typeof priorityConfig] || priorityConfig.MEDIUM;
+  const config = getPriorityConfig(priority);
   const Icon = config.icon;
+  const priorityOptions = getPriorityOptions();
 
   const sizeClasses = {
     sm: "text-xs px-2 py-0.5 gap-1",
@@ -61,14 +37,14 @@ export function PriorityBadge({ taskId, priority, editable = true, size = "md" }
     try {
       const { error } = await supabase
         .from("tasks")
-        .update({ priority: newPriority as "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" })
+        .update({ priority: newPriority as PriorityLevel })
         .eq("id", taskId);
 
       if (error) throw error;
 
       toast({
         title: "Prioriteit bijgewerkt",
-        description: `Prioriteit gewijzigd naar ${priorityConfig[newPriority as keyof typeof priorityConfig].label}`,
+        description: `Prioriteit gewijzigd naar ${getPriorityConfig(newPriority).label}`,
       });
     } catch (error) {
       console.error("Error updating priority:", error);
@@ -85,7 +61,7 @@ export function PriorityBadge({ taskId, priority, editable = true, size = "md" }
 
   if (!editable) {
     return (
-      <div className={`${config.color} ${sizeClasses[size]} inline-flex items-center gap-1.5`}>
+      <div className={`${getPriorityTextClass(priority)} ${sizeClasses[size]} inline-flex items-center gap-1.5`}>
         <Icon size={iconSizes[size]} className="shrink-0" />
         <span className="text-xs">{config.label}</span>
       </div>
@@ -93,9 +69,10 @@ export function PriorityBadge({ taskId, priority, editable = true, size = "md" }
   }
 
   if (isEditing) {
+    const currentValue = (priority?.toUpperCase() || "MEDIUM") as PriorityLevel;
     return (
       <Select
-        value={currentPriority}
+        value={currentValue}
         onValueChange={handlePriorityChange}
         disabled={isUpdating}
         onOpenChange={(open) => !open && setIsEditing(false)}
@@ -105,13 +82,13 @@ export function PriorityBadge({ taskId, priority, editable = true, size = "md" }
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {Object.entries(priorityConfig).map(([key, value]) => {
-            const ItemIcon = value.icon;
+          {priorityOptions.map((option) => {
+            const ItemIcon = option.icon;
             return (
-              <SelectItem key={key} value={key}>
+              <SelectItem key={option.value} value={option.value}>
                 <div className="flex items-center gap-2">
                   <ItemIcon size={14} />
-                  <span>{value.label}</span>
+                  <span>{option.label}</span>
                 </div>
               </SelectItem>
             );
@@ -123,7 +100,7 @@ export function PriorityBadge({ taskId, priority, editable = true, size = "md" }
 
   return (
     <div
-      className={`${config.color} ${sizeClasses[size]} inline-flex items-center gap-1.5 cursor-pointer hover:opacity-70 transition-opacity`}
+      className={`${getPriorityTextClass(priority)} ${sizeClasses[size]} inline-flex items-center gap-1.5 cursor-pointer hover:opacity-70 transition-opacity`}
       onClick={() => setIsEditing(true)}
     >
       <Icon size={iconSizes[size]} className="shrink-0" />

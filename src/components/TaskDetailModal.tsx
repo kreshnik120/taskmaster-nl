@@ -108,20 +108,8 @@ interface TaskDetailModalProps {
   onTaskUpdated: () => void;
 }
 
-const priorityConfig = {
-  LOW: { label: "Laag", variant: "outline" as const, color: "bg-priority-low" },
-  MEDIUM: { label: "Normaal", variant: "secondary" as const, color: "bg-priority-medium" },
-  HIGH: { label: "Hoog", variant: "default" as const, color: "bg-priority-high" },
-  CRITICAL: { label: "Kritiek", variant: "destructive" as const, color: "bg-priority-critical" },
-};
-
-// Fase 1: Priority Badge Amber Kleursysteem
-const PRIORITY_BADGE_STYLES: Record<string, string> = {
-  LOW: "bg-emerald-500/15 text-emerald-700 border-emerald-400/30 backdrop-blur-sm dark:bg-emerald-500/20 dark:text-emerald-400 dark:border-emerald-500/20",
-  MEDIUM: "bg-blue-500/15 text-blue-700 border-blue-400/30 backdrop-blur-sm dark:bg-blue-500/20 dark:text-blue-400 dark:border-blue-500/20",
-  HIGH: "bg-amber-500/15 text-amber-700 border-amber-400/30 backdrop-blur-sm dark:bg-amber-500/20 dark:text-amber-400 dark:border-amber-500/20",
-  CRITICAL: "bg-red-500/15 text-red-700 border-red-400/30 backdrop-blur-sm dark:bg-red-500/20 dark:text-red-400 dark:border-red-500/20"
-};
+// Import priority configuration from central hook
+import { getPriorityConfig, getPriorityBadgeClass } from "@/hooks/usePriorityConfig";
 
 export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: TaskDetailModalProps) {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -642,7 +630,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   // Early return NA alle hooks - voldoet aan Rules of Hooks
   if (!task) return null;
 
-  const priorityInfo = priorityConfig[task.priority as keyof typeof priorityConfig] || priorityConfig.MEDIUM;
+  const priorityInfo = getPriorityConfig(task.priority);
   
   // Calculate progress
   const completedCount = subtasks.filter(s => s.status === 'completed').length;
@@ -993,7 +981,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                 <div className="grid grid-cols-[100px_1fr] gap-y-3 gap-x-4 px-3">
                   {/* Priority - Fase 1: Amber kleursysteem */}
                   <span className="text-sm text-muted-foreground/80">Prioriteit</span>
-                  <Badge className={cn("border w-fit", PRIORITY_BADGE_STYLES[task.priority] || PRIORITY_BADGE_STYLES.MEDIUM)}>
+                  <Badge className={cn("border w-fit", getPriorityBadgeClass(task.priority))}>
                     {priorityInfo.label}
                   </Badge>
 

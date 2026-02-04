@@ -16,12 +16,13 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { toast } from "sonner";
-import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, ArrowDown, Minus, ArrowUp, AlertCircle, CalendarIcon, Paperclip } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, CalendarIcon, Paperclip } from "lucide-react";
 import { SubtaskManager } from "./SubtaskManager";
 import { TaskAttachmentUpload, uploadTaskAttachments } from "./TaskAttachmentUpload";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { getPriorityOptions, type PriorityLevel } from "@/hooks/usePriorityConfig";
 
 const taskSchema = z.object({
   title: z.string().min(1, "Titel is verplicht").max(200, "Titel mag maximaal 200 karakters zijn"),
@@ -53,12 +54,16 @@ interface Profile {
   email: string | null;
 }
 
-const PRIORITIES = [
-  { value: "LOW" as const, label: "Laag", icon: ArrowDown, color: "text-muted-foreground" },
-  { value: "MEDIUM" as const, label: "Gemiddeld", icon: Minus, color: "text-blue-600" },
-  { value: "HIGH" as const, label: "Hoog", icon: ArrowUp, color: "text-orange-600" },
-  { value: "CRITICAL" as const, label: "Kritiek", icon: AlertCircle, color: "text-red-600" },
-];
+// Priority options derived from central configuration
+const PRIORITIES = getPriorityOptions().map(opt => ({
+  value: opt.value,
+  label: opt.label,
+  icon: opt.icon,
+  color: opt.value === 'LOW' ? 'text-emerald-600 dark:text-emerald-400' :
+         opt.value === 'MEDIUM' ? 'text-blue-600 dark:text-blue-400' :
+         opt.value === 'HIGH' ? 'text-amber-600 dark:text-amber-400' :
+         'text-red-600 dark:text-red-400'
+}));
 
 interface Attachment {
   id: string;

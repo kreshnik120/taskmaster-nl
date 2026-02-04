@@ -4,6 +4,7 @@ import { AlertTriangle, Calendar, User } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { getPrioritySolidClass, getPriorityLabel } from '@/hooks/usePriorityConfig';
 import { generateTaskAriaLabel } from './utils/accessibility';
 import type { TaskListTask } from './types';
 
@@ -11,20 +12,6 @@ interface TaskListCardsProps {
   tasks: TaskListTask[];
   onTaskSelect?: (task: TaskListTask) => void;
 }
-
-const PRIORITY_COLORS: Record<string, string> = {
-  CRITICAL: 'bg-destructive text-destructive-foreground',
-  HIGH: 'bg-orange-500 text-white',
-  MEDIUM: 'bg-yellow-500 text-black',
-  LOW: 'bg-secondary text-secondary-foreground',
-};
-
-const PRIORITY_LABELS: Record<string, string> = {
-  CRITICAL: 'Kritiek',
-  HIGH: 'Hoog',
-  MEDIUM: 'Gemiddeld',
-  LOW: 'Laag',
-};
 
 function formatDueDate(dateString: string | null): string {
   if (!dateString) return '-';
@@ -71,9 +58,9 @@ export function TaskListCards({ tasks, onTaskSelect }: TaskListCardsProps) {
               <div className="flex items-start justify-between gap-2 mb-2">
                 <h3 className="font-medium line-clamp-2 flex-1">{task.title}</h3>
                 <Badge
-                  className={`shrink-0 ${PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.MEDIUM}`}
+                  className={`shrink-0 ${getPrioritySolidClass(task.priority)}`}
                 >
-                  {PRIORITY_LABELS[task.priority] || task.priority}
+                  {getPriorityLabel(task.priority)}
                 </Badge>
               </div>
 

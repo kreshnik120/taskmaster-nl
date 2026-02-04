@@ -5,6 +5,7 @@ import { nl } from 'date-fns/locale';
 import { X, User, Calendar, AlertTriangle, Edit, Trash2, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getAssigneeColor } from '@/hooks/useAssigneeColor';
+import { getPrioritySolidClass, getPriorityLabel } from '@/hooks/usePriorityConfig';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -18,20 +19,6 @@ interface TaskListSidePanelProps {
   onEdit?: (task: TaskListTask) => void;
   onDelete?: (task: TaskListTask) => void;
 }
-
-const PRIORITY_COLORS: Record<string, string> = {
-  CRITICAL: 'bg-destructive text-destructive-foreground',
-  HIGH: 'bg-orange-500 text-white',
-  MEDIUM: 'bg-yellow-500 text-black',
-  LOW: 'bg-secondary text-secondary-foreground',
-};
-
-const PRIORITY_LABELS: Record<string, string> = {
-  CRITICAL: 'Kritiek',
-  HIGH: 'Hoog',
-  MEDIUM: 'Gemiddeld',
-  LOW: 'Laag',
-};
 
 function getInitials(name: string | null | undefined): string {
   if (!name) return '?';
@@ -149,8 +136,8 @@ export function TaskListSidePanel({
                 {/* Priority */}
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Prioriteit</span>
-                  <Badge className={cn(PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.MEDIUM)}>
-                    {PRIORITY_LABELS[task.priority] || task.priority}
+                  <Badge className={getPrioritySolidClass(task.priority)}>
+                    {getPriorityLabel(task.priority)}
                   </Badge>
                 </div>
 

@@ -16,6 +16,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { getAssigneeColor } from '@/hooks/useAssigneeColor';
+import { getPrioritySolidClass, getPriorityLabel } from '@/hooks/usePriorityConfig';
 import { generateTaskAriaLabel } from './utils/accessibility';
 import type { TaskListTask } from './types';
 
@@ -29,20 +30,6 @@ interface TaskListVirtualizedProps {
   isAllSelected: boolean;
   isPartiallySelected: boolean;
 }
-
-const PRIORITY_COLORS: Record<string, string> = {
-  CRITICAL: 'bg-destructive text-destructive-foreground',
-  HIGH: 'bg-orange-500 text-white',
-  MEDIUM: 'bg-yellow-500 text-black',
-  LOW: 'bg-secondary text-secondary-foreground',
-};
-
-const PRIORITY_LABELS: Record<string, string> = {
-  CRITICAL: 'Kritiek',
-  HIGH: 'Hoog',
-  MEDIUM: 'Gemiddeld',
-  LOW: 'Laag',
-};
 
 function getInitials(name: string | null | undefined): string {
   if (!name) return '?';
@@ -235,10 +222,10 @@ export function TaskListVirtualized({
                 <Badge
                   className={cn(
                     'text-xs whitespace-nowrap',
-                    PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.MEDIUM
+                    getPrioritySolidClass(task.priority)
                   )}
                 >
-                  {PRIORITY_LABELS[task.priority] || task.priority}
+                  {getPriorityLabel(task.priority)}
                 </Badge>
               </TableCell>
               <TableCell role="gridcell">
