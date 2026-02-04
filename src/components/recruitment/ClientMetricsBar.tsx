@@ -144,13 +144,14 @@ export function ClientMetricsBar({
               <TooltipTrigger asChild>
                 <button
                   onClick={() => onMetricClick?.(metric.key)}
-                  className={`group flex flex-col items-center justify-center p-6 rounded-xl 
+                  className={`group flex flex-col items-center justify-center p-4 rounded-xl 
+                    glass-liquid-card
                     bg-gradient-to-br ${colors.gradient}
-                    backdrop-blur-sm border border-white/50 dark:border-white/10 
+                    backdrop-blur-xl border border-white/60 dark:border-white/15 
                     border-t-4 ${colors.border}
-                    hover:shadow-lg ${colors.shadow} hover:scale-[1.02] transition-all duration-200 cursor-pointer`}
+                    cursor-pointer`}
                 >
-                  <span className={`text-3xl font-bold ${colors.text}`}>
+                  <span className={`text-2xl font-bold ${colors.text}`}>
                     {metric.label === "Match Ready" ? `${animatedMatch}%` : metric.value}
                   </span>
                   <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">

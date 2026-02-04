@@ -19,12 +19,12 @@ interface StatCardProps {
 }
 
 function StatCard({ title, value, icon, variant = 'default', isLoading }: StatCardProps) {
-  // Glass card styles with context-colored shadows
+  // Glass liquid card styles with context-colored shadows
   const variantStyles = {
-    default: 'glass-card-violet glass-hover-lift',
-    warning: 'bg-destructive/10 border-destructive/20 glass-hover-lift shadow-[0_2px_6px_hsla(0,84%,60%,0.08),0_8px_24px_hsla(0,84%,60%,0.12)]',
-    success: 'bg-green-500/10 border-green-500/20 glass-hover-lift shadow-[0_2px_6px_hsla(142,71%,45%,0.08),0_8px_24px_hsla(142,71%,45%,0.12)]',
-    info: 'bg-primary/10 border-primary/20 glass-hover-lift shadow-[0_2px_6px_hsla(221,83%,53%,0.08),0_8px_24px_hsla(221,83%,53%,0.12)]',
+    default: 'glass-liquid-card glass-liquid-card-violet',
+    warning: 'glass-liquid-card glass-liquid-card-rose bg-destructive/10 border-destructive/20',
+    success: 'glass-liquid-card glass-liquid-card-emerald bg-green-500/10 border-green-500/20',
+    info: 'glass-liquid-card glass-liquid-card-blue bg-primary/10 border-primary/20',
   };
 
   const iconStyles = {
@@ -35,18 +35,18 @@ function StatCard({ title, value, icon, variant = 'default', isLoading }: StatCa
   };
 
   return (
-    <Card className={cn("rounded-xl", variantStyles[variant])}>
-      <CardContent className="p-4 sm:p-6">
+    <Card className={cn("rounded-xl border-0", variantStyles[variant])}>
+      <CardContent className="p-3 sm:p-4">
         <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
+          <div className="space-y-0.5">
+            <p className="text-xs font-medium text-muted-foreground">{title}</p>
             {isLoading ? (
-              <div className="h-8 w-16 bg-muted animate-pulse rounded" />
+              <div className="h-6 w-12 bg-muted animate-pulse rounded" />
             ) : (
-              <p className="text-2xl sm:text-3xl font-bold">{value}</p>
+              <p className="text-xl sm:text-2xl font-bold">{value}</p>
             )}
           </div>
-          <div className={cn("p-2 rounded-full glass-layer-1 backdrop-blur-sm", iconStyles[variant])}>
+          <div className={cn("p-1.5 rounded-full glass-layer-1 backdrop-blur-sm", iconStyles[variant])}>
             {icon}
           </div>
         </div>

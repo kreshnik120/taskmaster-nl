@@ -172,6 +172,25 @@ export function KPICard({
   const config = variantConfig[variant];
   const isMinimal = variant === "minimal";
 
+  // Map variant to glass-liquid-card color class
+  const liquidCardColorMap: Record<string, string> = {
+    count: "glass-liquid-card-blue",
+    success: "glass-liquid-card-emerald",
+    time: "glass-liquid-card-amber",
+    urgent: "glass-liquid-card-amber",
+    personal: "glass-liquid-card-violet",
+    facturatie: "glass-liquid-card-emerald",
+    rose: "glass-liquid-card-rose",
+    violet: "glass-liquid-card-violet",
+    slate: "glass-liquid-card-slate",
+    teal: "glass-liquid-card-teal",
+    amber: "glass-liquid-card-amber",
+    blue: "glass-liquid-card-blue",
+    indigo: "glass-liquid-card-indigo",
+  };
+
+  const liquidCardClass = liquidCardColorMap[variant] || "glass-liquid-card";
+
   return (
     <Card
       className={cn(
@@ -179,16 +198,15 @@ export function KPICard({
         isMinimal 
           ? "border-0 bg-background shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)]"
           : cn(
-              "glass-specular-premium glass-noise-texture",
-              "bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm",
-              "border border-white/50 dark:border-white/10",
+              // NEW: glass-liquid-card for enhanced Apple Glass effect
+              "glass-liquid-card",
+              liquidCardClass,
+              "bg-white/75 dark:bg-slate-900/70 backdrop-blur-xl",
+              "border border-white/60 dark:border-white/15",
               config.borderColor,
-              "border-t-4",
-              // Responsive shadow: lighter on mobile, full effect on desktop
-              "shadow-sm md:shadow-none",
-              config.shadowColor
+              "border-t-4"
             ),
-        onClick && "cursor-pointer glass-hover-lift",
+        onClick && "cursor-pointer",
         isActive && `ring-2 ring-offset-2 ${config.ringColor}`,
         className
       )}
@@ -196,33 +214,37 @@ export function KPICard({
     >
       {!isMinimal && (
         <div className={cn(
-          "absolute inset-0 bg-gradient-to-br opacity-90",
+          "absolute inset-0 bg-gradient-to-br opacity-80",
           config.gradient
         )} />
       )}
       
-      <CardContent className={cn("relative", isMinimal ? "p-4" : "p-4")}>
-        <div className="flex items-start justify-between mb-3">
+      {/* Compact padding: p-3 instead of p-4 */}
+      <CardContent className={cn("relative", isMinimal ? "p-3" : "p-3")}>
+        {/* Reduced margin: mb-2 instead of mb-3 */}
+        <div className="flex items-start justify-between mb-2">
           <div className="flex items-center gap-2">
             {isMinimal && config.accentDot && (
               <span className={cn("h-2 w-2 rounded-full", config.accentDot)} />
             )}
-            <Icon className={cn(isMinimal ? "h-4 w-4" : "h-5 w-5", config.iconColor)} />
+            {/* Smaller icon: h-4 w-4 instead of h-5 w-5 */}
+            <Icon className={cn(isMinimal ? "h-4 w-4" : "h-4 w-4", config.iconColor)} />
           </div>
         </div>
         
-        <div className="space-y-1">
+        <div className="space-y-0.5">
+          {/* Smaller font: text-2xl instead of text-3xl */}
           <div className={cn(
             "font-bold tabular-nums",
-            isMinimal ? "text-2xl text-foreground" : cn("text-3xl", config.textColor)
+            isMinimal ? "text-xl text-foreground" : cn("text-2xl", config.textColor)
           )}>
             {animatedValue}{suffix}
           </div>
-          <div className="text-sm font-medium text-muted-foreground">
+          <div className="text-xs font-medium text-muted-foreground">
             {title}
           </div>
           {subtitle && (
-            <div className="text-xs text-muted-foreground/80">
+            <div className="text-[10px] text-muted-foreground/80">
               {subtitle}
             </div>
           )}
