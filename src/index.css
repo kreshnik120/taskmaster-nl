@@ -3247,3 +3247,331 @@ All colors MUST be HSL.
   background: hsl(var(--sidebar-background)) !important;
   backdrop-filter: blur(20px) !important;
 }
+
+/* ============================================
+   PHASE 15: ENTERPRISE PAGE BACKGROUND SYSTEM
+   3-Tier visuele hiërarchie voor module identiteit
+   ============================================ */
+
+/* ---- TIER 1: Page Background Tints ---- */
+/* Subtiele context-specifieke kleurtint voor volledige pagina achtergrond */
+
+.page-bg-rose {
+  background: linear-gradient(
+    165deg,
+    hsl(345 48% 98%) 0%,
+    hsl(345 20% 99%) 40%,
+    hsl(0 0% 100%) 100%
+  );
+}
+
+.dark .page-bg-rose {
+  background: linear-gradient(
+    165deg,
+    hsl(345 30% 8%) 0%,
+    hsl(345 15% 6%) 40%,
+    hsl(222 47% 11%) 100%
+  );
+}
+
+.page-bg-violet {
+  background: linear-gradient(
+    165deg,
+    hsl(270 45% 98%) 0%,
+    hsl(270 20% 99%) 40%,
+    hsl(0 0% 100%) 100%
+  );
+}
+
+.dark .page-bg-violet {
+  background: linear-gradient(
+    165deg,
+    hsl(270 30% 8%) 0%,
+    hsl(270 15% 6%) 40%,
+    hsl(222 47% 11%) 100%
+  );
+}
+
+.page-bg-slate {
+  background: linear-gradient(
+    165deg,
+    hsl(215 25% 97%) 0%,
+    hsl(215 15% 98%) 40%,
+    hsl(0 0% 100%) 100%
+  );
+}
+
+.dark .page-bg-slate {
+  background: linear-gradient(
+    165deg,
+    hsl(215 20% 8%) 0%,
+    hsl(215 12% 6%) 40%,
+    hsl(222 47% 11%) 100%
+  );
+}
+
+.page-bg-teal {
+  background: linear-gradient(
+    165deg,
+    hsl(174 42% 97%) 0%,
+    hsl(174 20% 98%) 40%,
+    hsl(0 0% 100%) 100%
+  );
+}
+
+.dark .page-bg-teal {
+  background: linear-gradient(
+    165deg,
+    hsl(174 30% 7%) 0%,
+    hsl(174 15% 5%) 40%,
+    hsl(222 47% 11%) 100%
+  );
+}
+
+.page-bg-amber {
+  background: linear-gradient(
+    165deg,
+    hsl(38 55% 97%) 0%,
+    hsl(38 25% 98%) 40%,
+    hsl(0 0% 100%) 100%
+  );
+}
+
+.dark .page-bg-amber {
+  background: linear-gradient(
+    165deg,
+    hsl(38 35% 7%) 0%,
+    hsl(38 18% 5%) 40%,
+    hsl(222 47% 11%) 100%
+  );
+}
+
+.page-bg-emerald {
+  background: linear-gradient(
+    165deg,
+    hsl(142 55% 97%) 0%,
+    hsl(142 25% 98%) 40%,
+    hsl(0 0% 100%) 100%
+  );
+}
+
+.dark .page-bg-emerald {
+  background: linear-gradient(
+    165deg,
+    hsl(142 35% 6%) 0%,
+    hsl(142 18% 4%) 40%,
+    hsl(222 47% 11%) 100%
+  );
+}
+
+.page-bg-indigo {
+  background: linear-gradient(
+    165deg,
+    hsl(234 45% 98%) 0%,
+    hsl(234 20% 99%) 40%,
+    hsl(0 0% 100%) 100%
+  );
+}
+
+.dark .page-bg-indigo {
+  background: linear-gradient(
+    165deg,
+    hsl(234 30% 8%) 0%,
+    hsl(234 15% 6%) 40%,
+    hsl(222 47% 11%) 100%
+  );
+}
+
+.page-bg-blue {
+  background: linear-gradient(
+    165deg,
+    hsl(217 91% 98%) 0%,
+    hsl(217 40% 99%) 40%,
+    hsl(0 0% 100%) 100%
+  );
+}
+
+.dark .page-bg-blue {
+  background: linear-gradient(
+    165deg,
+    hsl(217 50% 7%) 0%,
+    hsl(217 25% 5%) 40%,
+    hsl(222 47% 11%) 100%
+  );
+}
+
+/* ---- TIER 2: Enhanced Ambient Mesh ---- */
+/* Versterkte ambient orbs (opaciteit 0.18-0.28, groter bereik, zachter blur) */
+
+.glass-ambient-mesh-rose::before {
+  inset: -200px !important;
+  background: 
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(345, 48%, 70%, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(345, 48%, 60%, 0.16) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(345, 48%, 75%, 0.10) 0%, transparent 65%) !important;
+  filter: blur(65px) !important;
+}
+
+.dark .glass-ambient-mesh-rose::before {
+  background: 
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(345, 48%, 30%, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(345, 48%, 25%, 0.12) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(345, 48%, 35%, 0.08) 0%, transparent 65%) !important;
+}
+
+.glass-ambient-mesh-violet::before {
+  inset: -200px !important;
+  background: 
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(270, 45%, 70%, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(270, 45%, 60%, 0.16) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(270, 45%, 75%, 0.10) 0%, transparent 65%) !important;
+  filter: blur(65px) !important;
+}
+
+.dark .glass-ambient-mesh-violet::before {
+  background: 
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(270, 45%, 30%, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(270, 45%, 25%, 0.12) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(270, 45%, 35%, 0.08) 0%, transparent 65%) !important;
+}
+
+.glass-ambient-mesh-slate::before {
+  inset: -200px !important;
+  background: 
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(215, 25%, 70%, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(215, 25%, 60%, 0.12) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(215, 25%, 75%, 0.08) 0%, transparent 65%) !important;
+  filter: blur(65px) !important;
+}
+
+.dark .glass-ambient-mesh-slate::before {
+  background: 
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(215, 25%, 25%, 0.15) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(215, 25%, 20%, 0.10) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(215, 25%, 30%, 0.06) 0%, transparent 65%) !important;
+}
+
+.glass-ambient-mesh-teal::before {
+  inset: -200px !important;
+  background: 
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(174, 42%, 65%, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(174, 42%, 55%, 0.16) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(174, 42%, 70%, 0.10) 0%, transparent 65%) !important;
+  filter: blur(65px) !important;
+}
+
+.dark .glass-ambient-mesh-teal::before {
+  background: 
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(174, 42%, 28%, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(174, 42%, 22%, 0.12) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(174, 42%, 32%, 0.08) 0%, transparent 65%) !important;
+}
+
+.glass-ambient-mesh-amber::before {
+  inset: -200px !important;
+  background: 
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(38, 55%, 65%, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(38, 55%, 55%, 0.16) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(38, 55%, 70%, 0.10) 0%, transparent 65%) !important;
+  filter: blur(65px) !important;
+}
+
+.dark .glass-ambient-mesh-amber::before {
+  background: 
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(38, 55%, 28%, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(38, 55%, 22%, 0.12) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(38, 55%, 32%, 0.08) 0%, transparent 65%) !important;
+}
+
+.glass-ambient-mesh-emerald::before {
+  inset: -200px !important;
+  background: 
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(142, 55%, 70%, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(142, 55%, 60%, 0.16) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(142, 55%, 75%, 0.10) 0%, transparent 65%) !important;
+  filter: blur(65px) !important;
+}
+
+.dark .glass-ambient-mesh-emerald::before {
+  background: 
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(142, 55%, 30%, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(142, 55%, 25%, 0.12) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(142, 55%, 35%, 0.08) 0%, transparent 65%) !important;
+}
+
+.glass-ambient-mesh-indigo::before {
+  inset: -200px !important;
+  background: 
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(234, 45%, 70%, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(234, 45%, 60%, 0.16) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(234, 45%, 75%, 0.10) 0%, transparent 65%) !important;
+  filter: blur(65px) !important;
+}
+
+.dark .glass-ambient-mesh-indigo::before {
+  background: 
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(234, 45%, 30%, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(234, 45%, 25%, 0.12) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(234, 45%, 35%, 0.08) 0%, transparent 65%) !important;
+}
+
+.glass-ambient-mesh-blue {
+  position: relative;
+  overflow: visible;
+}
+
+.glass-ambient-mesh-blue::before {
+  content: '';
+  position: absolute;
+  inset: -200px;
+  background: 
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(217, 91%, 65%, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(217, 91%, 55%, 0.16) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(217, 91%, 70%, 0.10) 0%, transparent 65%);
+  pointer-events: none;
+  z-index: -1;
+  filter: blur(65px);
+}
+
+.dark .glass-ambient-mesh-blue::before {
+  background: 
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(217, 91%, 28%, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(217, 91%, 22%, 0.12) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(217, 91%, 32%, 0.08) 0%, transparent 65%);
+}
+
+/* ---- TIER 3: Page Vignette & Noise Texture ---- */
+
+/* Subtiele edge darkening voor 3D diepte */
+.page-vignette::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(
+    ellipse 85% 65% at 50% 50%,
+    transparent 55%,
+    hsla(0 0% 0% / 0.018) 100%
+  );
+}
+
+.dark .page-vignette::after {
+  background: radial-gradient(
+    ellipse 85% 65% at 50% 50%,
+    transparent 55%,
+    hsla(0 0% 0% / 0.08) 100%
+  );
+}
+
+/* Micro-noise texture overlay voor materiaal-realisme */
+.page-noise-texture::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  opacity: 0.012;
+  mix-blend-mode: overlay;
+}

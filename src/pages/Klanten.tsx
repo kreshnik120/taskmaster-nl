@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import NewClientDialog from "@/components/NewClientDialog";
 import { KPICard } from "@/components/ui/kpi-card";
 import { PageHero } from "@/components/ui/page-hero";
+import { PageContainer } from "@/components/ui/page-container";
 import { OrganizationCardSimple, OrganizationCardSimpleSkeleton } from "@/components/organization/OrganizationCardSimple";
 import { ClientGroupingToggle } from "@/components/recruitment/ClientGroupingToggle";
 import { DensityToggle } from "@/components/recruitment/DensityToggle";
@@ -577,7 +578,7 @@ export default function Klanten() {
   const hasActiveFilters = searchQuery || bureauFilter !== 'all' || sectorFilter !== 'all';
 
   return (
-    <div className="space-y-6 glass-ambient-mesh-slate">
+    <PageContainer contextColor="slate" className="space-y-6">
       {/* Hero Section with PageHero */}
       <PageHero
         title="Klanten"
@@ -933,6 +934,6 @@ export default function Klanten() {
           setIsLocationModalOpen(true);
         }}
       />
-    </div>
+    </PageContainer>
   );
 }

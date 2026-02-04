@@ -14,6 +14,7 @@ import { PlacementDetailModal } from "@/components/PlacementDetailModal";
 import { motion } from "framer-motion";
 import { KPICard } from "@/components/ui/kpi-card";
 import { PageHero } from "@/components/ui/page-hero";
+import { PageContainer } from "@/components/ui/page-container";
 import { PlacementEvaluationKPIs } from "@/components/recruitment/PlacementEvaluationKPIs";
 import { AdminOnly } from "@/components/auth/AdminOnly";
 
@@ -179,7 +180,7 @@ export default function Plaatsingen() {
   // getStatusLabel removed - unused
 
   return (
-    <div className="space-y-6 glass-ambient-mesh-teal">
+    <PageContainer contextColor="teal" className="space-y-6">
       {/* Hero Section - Unified PageHero */}
       <PageHero
         title="Plaatsingen"
@@ -398,6 +399,6 @@ export default function Plaatsingen() {
         onOpenChange={setDetailModalOpen}
         onStatusChange={updateStatus}
       />
-    </div>
+    </PageContainer>
   );
 }

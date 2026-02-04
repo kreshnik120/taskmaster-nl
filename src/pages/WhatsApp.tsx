@@ -10,6 +10,7 @@ import { WhatsAppConnectionStatus } from "@/components/whatsapp/WhatsAppConnecti
 import { WhatsAppErrorBoundary } from "@/components/whatsapp/WhatsAppErrorBoundary";
 import { WhatsAppCommandPalette } from "@/components/whatsapp/WhatsAppCommandPalette";
 import { WhatsAppKeyboardHelp } from "@/components/whatsapp/WhatsAppKeyboardHelp";
+import { PageContainer } from "@/components/ui/page-container";
 import { useWhatsAppChats } from "@/hooks/whatsapp/useWhatsAppChats";
 import { useWhatsAppRealtimeStatus } from "@/hooks/whatsapp/useWhatsAppRealtimeStatus";
 import { useUpdateChatStatus } from "@/hooks/whatsapp/useUpdateChatStatus";
@@ -226,7 +227,7 @@ export default function WhatsApp() {
 
   return (
     <WhatsAppErrorBoundary>
-      <div className="flex h-[calc(100vh-4rem)] glass-ambient-mesh-blue">
+      <PageContainer contextColor="blue" className="flex h-[calc(100vh-4rem)]">
         {/* Connection Status - fixed position */}
         <div className="fixed top-20 right-4 z-50">
           <WhatsAppConnectionStatus 
@@ -333,7 +334,7 @@ export default function WhatsApp() {
         open={keyboardHelpOpen}
         onOpenChange={setKeyboardHelpOpen}
       />
-      </div>
+      </PageContainer>
     </WhatsAppErrorBoundary>
   );
 }

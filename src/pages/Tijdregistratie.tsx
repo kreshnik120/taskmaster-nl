@@ -16,6 +16,7 @@ import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { KPICard } from "@/components/ui/kpi-card";
 import { PageHero } from "@/components/ui/page-hero";
+import { PageContainer } from "@/components/ui/page-container";
 
 interface Task {
   id: string;
@@ -359,7 +360,7 @@ const Tijdregistratie = () => {
   }
 
   return (
-    <div className="space-y-6 glass-ambient-mesh-amber">
+    <PageContainer contextColor="amber" className="space-y-6">
       {/* Hero Section with PageHero */}
       <PageHero
         title="Tijdregistratie"
@@ -581,7 +582,7 @@ const Tijdregistratie = () => {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   );
 };
 
