@@ -6,7 +6,17 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { getTabColors } from "@/lib/constants/designTokens";
+import { PageContainer, ContextColor } from "@/components/ui/page-container";
 
+// Tab-to-Context Color Mapping for dynamic PageContainer
+const TAB_CONTEXT_MAP: Record<string, ContextColor> = {
+  'mijn-werk': 'indigo',
+  'kalender': 'teal', 
+  'lijst': 'slate',
+  'opvolging': 'amber',
+  'team': 'violet',
+  'recruitment': 'rose',
+};
 // Tab 1: Mijn Werk - Components
 import { TodayFocusCard } from "@/components/dashboard/TodayFocusCard";
 import { UpcomingRemindersWidget } from "@/components/UpcomingRemindersWidget";
@@ -123,7 +133,11 @@ export default function UnifiedDashboard() {
   };
 
   return (
-    <div className="space-y-6">
+    <PageContainer 
+      contextColor={TAB_CONTEXT_MAP[activeTab] || 'indigo'} 
+      className="space-y-6 p-6"
+      withVignette={true}
+    >
       {/* Page Header - Dynamic Color */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -268,12 +282,9 @@ export default function UnifiedDashboard() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Tab 1: Mijn Werk */}
+        {/* Tab 1: Mijn Werk - Transparent container for ambient mesh visibility */}
         <TabsContent value="mijn-werk" className="mt-6">
-          <div className={cn(
-            "glass-liquid-premium glass-specular-premium p-6 rounded-2xl space-y-6",
-            getTabColors('mijn-werk').shadowClass
-          )}>
+          <div className="space-y-6">
             <div className="grid gap-6 md:grid-cols-2">
               <TodayFocusCard />
               <UpcomingRemindersWidget />
@@ -284,12 +295,9 @@ export default function UnifiedDashboard() {
           </div>
         </TabsContent>
 
-        {/* Tab 2: Team Overzicht */}
+        {/* Tab 2: Team Overzicht - Transparent container */}
         <TabsContent value="team" className="mt-6">
-          <div className={cn(
-            "glass-liquid-premium glass-specular-premium p-6 rounded-2xl space-y-6",
-            getTabColors('team').shadowClass
-          )}>
+          <div className="space-y-6">
             <DashboardHeader isLoading={statsLoading} />
             
             {statsError ? (
@@ -332,12 +340,9 @@ export default function UnifiedDashboard() {
           </div>
         </TabsContent>
 
-        {/* Tab 3: Recruitment */}
+        {/* Tab 3: Recruitment - Transparent container */}
         <TabsContent value="recruitment" className="mt-6">
-          <div className={cn(
-            "glass-liquid-premium glass-specular-premium p-6 rounded-2xl space-y-6",
-            getTabColors('recruitment').shadowClass
-          )}>
+          <div className="space-y-6">
             <RecruitmentKPIs />
             {urgencyApplications.length > 0 && (
               <UrgencyActionPanel applications={urgencyApplications} />
@@ -345,36 +350,27 @@ export default function UnifiedDashboard() {
           </div>
         </TabsContent>
 
-        {/* Tab 4: Lijst */}
+        {/* Tab 4: Lijst - Transparent container */}
         <TabsContent value="lijst" className="mt-6">
-          <div className={cn(
-            "glass-liquid-premium glass-specular-premium p-6 rounded-2xl",
-            getTabColors('lijst').shadowClass
-          )}>
+          <div className="space-y-6">
             <Suspense fallback={<TabLoadingFallback />}>
               <EmbeddedListView />
             </Suspense>
           </div>
         </TabsContent>
 
-        {/* Tab 5: Kalender */}
+        {/* Tab 5: Kalender - Transparent container */}
         <TabsContent value="kalender" className="mt-6">
-          <div className={cn(
-            "glass-liquid-premium glass-specular-premium p-6 rounded-2xl",
-            getTabColors('kalender').shadowClass
-          )}>
+          <div className="space-y-6">
             <Suspense fallback={<TabLoadingFallback />}>
               <EmbeddedCalendarView />
             </Suspense>
           </div>
         </TabsContent>
 
-        {/* Tab 6: Opvolging */}
+        {/* Tab 6: Opvolging - Transparent container */}
         <TabsContent value="opvolging" className="mt-6">
-          <div className={cn(
-            "glass-liquid-premium glass-specular-premium p-6 rounded-2xl",
-            getTabColors('opvolging').shadowClass
-          )}>
+          <div className="space-y-6">
             <Suspense fallback={<TabLoadingFallback />}>
               <EmbeddedOpvolgingView />
             </Suspense>
@@ -391,6 +387,6 @@ export default function UnifiedDashboard() {
           onTaskUpdated={handleTaskUpdated}
         />
       )}
-    </div>
+    </PageContainer>
   );
 }
