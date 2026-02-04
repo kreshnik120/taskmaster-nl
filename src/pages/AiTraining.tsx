@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
+import { PageContainer } from "@/components/ui/page-container";
 // SidebarProvider, SidebarTrigger, AppSidebar removed - unused
 import { Loader2, CheckCircle, Target, TrendingUp, BarChart3, Coins, Settings, Database, MessageSquare } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -171,7 +172,7 @@ const AiTraining = () => {
   return (
     <>
       <ValidationOnboardingWizard />
-      <div className="space-y-6">
+      <PageContainer contextColor="violet" className="space-y-6">
             <div>
               <h1 className="text-2xl font-semibold">AI Training</h1>
               <p className="text-muted-foreground text-sm">
@@ -452,7 +453,7 @@ const AiTraining = () => {
                 </div>
               </TabsContent>
             </Tabs>
-          </div>
+      </PageContainer>
     </>
   );
 };

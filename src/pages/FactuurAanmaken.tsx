@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { format, addDays } from "date-fns";
+import { PageContainer } from "@/components/ui/page-container";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -163,7 +164,7 @@ export default function FactuurAanmaken() {
   };
 
   return (
-    <div className="container mx-auto py-6 max-w-3xl">
+    <PageContainer contextColor="emerald" className="container mx-auto py-6 max-w-3xl">
       <div className="flex items-center gap-4 mb-6">
         <Button variant="ghost" size="icon" onClick={() => navigate("/facturatie")}>
           <ArrowLeft className="h-4 w-4" />
@@ -534,6 +535,6 @@ export default function FactuurAanmaken() {
           </CardFooter>
         </Card>
       )}
-    </div>
+    </PageContainer>
   );
 }
