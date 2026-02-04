@@ -45,11 +45,11 @@ export function PageHero({
         <div className="space-y-1.5">
           <div className="flex items-center gap-3">
             {Icon && (
-              <div className={cn(
+<div className={cn(
                 "p-2 rounded-xl",
                 "bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm",
                 "border border-white/40 dark:border-white/10",
-                "glass-inner-glow-3layer"
+                "glass-inner-glow-3layer glass-specular-premium"
               )}>
                 <Icon className={cn("h-5 w-5", iconColorClass)} />
               </div>

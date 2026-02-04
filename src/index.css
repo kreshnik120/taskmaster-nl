@@ -918,6 +918,75 @@ All colors MUST be HSL.
     box-shadow: 0 0 0 2px hsla(234, 45%, 52%, 0.4);
   }
 
+  /* ============================================
+     CONTEXT-AWARE FOCUS RINGS
+     Spring Physics focus met module-specifieke kleuren
+     ============================================ */
+
+  .focus-ring-rose:focus-visible {
+    --tw-ring-color: hsla(345, 48%, 52%, 0.25);
+    border-color: hsla(345, 48%, 52%, 0.5);
+    box-shadow: 
+      0 0 0 3px hsla(345, 48%, 52%, 0.1),
+      inset 0 1px 2px rgba(0,0,0,0.06);
+  }
+
+  .focus-ring-violet:focus-visible {
+    --tw-ring-color: hsla(270, 45%, 55%, 0.25);
+    border-color: hsla(270, 45%, 55%, 0.5);
+    box-shadow: 
+      0 0 0 3px hsla(270, 45%, 55%, 0.1),
+      inset 0 1px 2px rgba(0,0,0,0.06);
+  }
+
+  .focus-ring-teal:focus-visible {
+    --tw-ring-color: hsla(174, 42%, 43%, 0.25);
+    border-color: hsla(174, 42%, 43%, 0.5);
+    box-shadow: 
+      0 0 0 3px hsla(174, 42%, 43%, 0.1),
+      inset 0 1px 2px rgba(0,0,0,0.06);
+  }
+
+  .focus-ring-emerald:focus-visible {
+    --tw-ring-color: hsla(142, 55%, 45%, 0.25);
+    border-color: hsla(142, 55%, 45%, 0.5);
+    box-shadow: 
+      0 0 0 3px hsla(142, 55%, 45%, 0.1),
+      inset 0 1px 2px rgba(0,0,0,0.06);
+  }
+
+  .focus-ring-amber:focus-visible {
+    --tw-ring-color: hsla(38, 55%, 50%, 0.25);
+    border-color: hsla(38, 55%, 50%, 0.5);
+    box-shadow: 
+      0 0 0 3px hsla(38, 55%, 50%, 0.1),
+      inset 0 1px 2px rgba(0,0,0,0.06);
+  }
+
+  .focus-ring-indigo:focus-visible {
+    --tw-ring-color: hsla(234, 45%, 52%, 0.25);
+    border-color: hsla(234, 45%, 52%, 0.5);
+    box-shadow: 
+      0 0 0 3px hsla(234, 45%, 52%, 0.1),
+      inset 0 1px 2px rgba(0,0,0,0.06);
+  }
+
+  .focus-ring-slate:focus-visible {
+    --tw-ring-color: hsla(215, 25%, 48%, 0.25);
+    border-color: hsla(215, 25%, 48%, 0.5);
+    box-shadow: 
+      0 0 0 3px hsla(215, 25%, 48%, 0.1),
+      inset 0 1px 2px rgba(0,0,0,0.06);
+  }
+
+  .focus-ring-blue:focus-visible {
+    --tw-ring-color: hsla(217, 91%, 60%, 0.25);
+    border-color: hsla(217, 91%, 60%, 0.5);
+    box-shadow: 
+      0 0 0 3px hsla(217, 91%, 60%, 0.1),
+      inset 0 1px 2px rgba(0,0,0,0.06);
+  }
+
   /* Subtle animated shimmer - premium cards */
   @keyframes glass-shimmer {
     0%, 100% {
@@ -3530,7 +3599,7 @@ All colors MUST be HSL.
   transform: translateX(-100%) rotate(35deg);
   animation: liquid-glass-sweep 15s ease-in-out infinite;
   pointer-events: none;
-  z-index: -1; /* GEFIXED: Was z-index: 1 */
+  z-index: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -207,10 +207,11 @@ export function KPICard({
         "relative overflow-hidden transition-all duration-200",
         isMinimal 
           ? "border-0 bg-background shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)]"
-          : cn(
+: cn(
               // NEW: glass-liquid-card for enhanced Apple Glass effect
               "glass-liquid-card",
               liquidCardClass,
+              "glass-light-sweep",
               "bg-white/75 dark:bg-slate-900/70 backdrop-blur-xl",
               "border border-white/60 dark:border-white/15",
               config.borderColor,
