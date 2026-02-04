@@ -719,7 +719,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto glass-layer-2 glass-light-bleed">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
