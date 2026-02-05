@@ -96,6 +96,7 @@ export default function EmbeddedListView() {
   const [loading, setLoading] = useState(true);
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterAssignee, setFilterAssignee] = useState<string>("all");
   const [groupBy, setGroupBy] = useState<string>("none");
   const [editingAction, setEditingAction] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState<string>("");
@@ -502,6 +503,16 @@ export default function EmbeddedListView() {
       if (filterStatus === "completed" && !task.completed_at) return false;
       if (filterStatus === "active" && task.completed_at) return false;
       if (filterStatus === "accepted" && !task.accepted_by) return false;
+      
+      // Filter op medewerker (alleen actief bij "Alle taken" mode)
+      if (!showOnlyMyTasks && filterAssignee !== "all") {
+        if (filterAssignee === "unassigned") {
+          if (task.assignee_id) return false;
+        } else {
+          if (task.assignee_id !== filterAssignee) return false;
+        }
+      }
+      
       return true;
     });
 
@@ -529,7 +540,7 @@ export default function EmbeddedListView() {
     }
 
     return filtered;
-  }, [tasks, filterPriority, filterStatus, sortColumn, sortDirection, debouncedSearchQuery]);
+  }, [tasks, filterPriority, filterStatus, filterAssignee, showOnlyMyTasks, sortColumn, sortDirection, debouncedSearchQuery]);
 
   const groupedTasks = () => {
     if (groupBy === "none") return { "Alle taken": filteredTasks };
@@ -755,6 +766,26 @@ export default function EmbeddedListView() {
                 <SelectItem value="active">Actief</SelectItem>
                 <SelectItem value="accepted">Geaccepteerd</SelectItem>
                 <SelectItem value="completed">Afgerond</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex-1">
+            <label className="text-sm font-medium mb-2 block">
+              Filter op medewerker
+            </label>
+            <Select value={filterAssignee} onValueChange={setFilterAssignee}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-popover z-50">
+                <SelectItem value="all">Alle medewerkers</SelectItem>
+                <SelectItem value="unassigned">Niet toegewezen</SelectItem>
+                {profiles.map((profile) => (
+                  <SelectItem key={profile.id} value={profile.id}>
+                    {profile.name || 'Onbekend'}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
