@@ -23,7 +23,7 @@ export function useUnreadNotifications() {
         .from("recruiter_notifications")
         .select("*")
         .is("read_at", null)
-        .in("notification_type", ["diploma_upgrade", "vog_verified", "subtask_assignment"])
+        .in("notification_type", ["diploma_upgrade", "vog_verified", "subtask_assignment", "task_assigned"])
         .order("created_at", { ascending: false })
         .limit(20);
 
@@ -42,7 +42,7 @@ export function useUnreadNotifications() {
           event: "INSERT",
           schema: "public",
           table: "recruiter_notifications",
-          filter: "notification_type=in.(diploma_upgrade,vog_verified,subtask_assignment)",
+          filter: "notification_type=in.(diploma_upgrade,vog_verified,subtask_assignment,task_assigned)",
         },
         () => {
           queryClient.invalidateQueries({ queryKey: ["unread-notifications"] });
