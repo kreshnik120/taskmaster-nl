@@ -1,220 +1,191 @@
 
-# Fase 5: Premium Polish - Animated Effects & Tactile Feedback
+# Kritieke Mobile Bug Fix: Content Clipping en Layout Problemen
 
-## Overzicht
+## Probleemanalyse
 
-Dit is de verfijningsfase die de "Apple visionOS" premium-esthetiek versterkt door strategische animaties en interactie-feedback toe te voegen aan de belangrijkste UI-elementen.
+Op basis van de screenshot die je hebt gedeeld, zie ik de volgende kritieke problemen op mobiele apparaten:
 
----
+### Waargenomen Bugs
+1. **Tekst afgesneden aan linkerkant** - "Vand**ag** Focus" ipv "Vandaag Focus"
+2. **Content schuift buiten het scherm** - taaktitels beginnen vóór de linkerrand
+3. **Kanban kolommen incorrect** - "Acti..." afgesneden
+4. **Veel lege ruimte rechts** - asymmetrische layout
 
-## Huidige Status (Audit Resultaten)
+### Technische Oorzaak
 
-| Element | Status | Actie Nodig |
-|---------|--------|-------------|
-| Button `active:scale-[0.98]` | Aanwezig | Geen |
-| `glass-light-sweep` CSS | Gedefinieerd (15s animatie) | Toepassen op KPI cards |
-| `glass-specular-premium` | Gedefinieerd, z-index gefixed | Toepassen op PageHero icon |
-| Input focus rings | Indigo hardcoded | Context-aware maken |
-| KPI card hover | Alleen shadow lift | Light sweep toevoegen |
+Na grondig onderzoek van de CSS heb ik de exacte oorzaak gevonden:
 
----
+De `.glass-ambient-mesh-indigo` class (gebruikt op de "Mijn Werk" tab) heeft een pseudo-element dat **200px buiten de container** uitstrekt:
 
-## Wijzigingen
-
-### 1. KPI Card - Animated Light Sweep
-
-**Bestand:** `src/components/ui/kpi-card.tsx`
-
-**Wijziging:** Voeg `glass-light-sweep` toe aan non-minimal KPI cards voor een subtiele 15s animated light reflection.
-
-**Huidige code (regel 210-218):**
-```tsx
-: cn(
-    "glass-liquid-card",
-    liquidCardClass,
-    "bg-white/75 dark:bg-slate-900/70 backdrop-blur-xl",
-    "border border-white/60 dark:border-white/15",
-    config.borderColor,
-    "border-t-4"
-  ),
-```
-
-**Nieuwe code:**
-```tsx
-: cn(
-    "glass-liquid-card",
-    liquidCardClass,
-    "glass-light-sweep",
-    "bg-white/75 dark:bg-slate-900/70 backdrop-blur-xl",
-    "border border-white/60 dark:border-white/15",
-    config.borderColor,
-    "border-t-4"
-  ),
-```
-
----
-
-### 2. PageHero Icon Container - Specular Premium
-
-**Bestand:** `src/components/ui/page-hero.tsx`
-
-**Wijziging:** Voeg `glass-specular-premium` toe aan de icon container voor extra materiaal-realisme.
-
-**Huidige code (regel 48-52):**
-```tsx
-<div className={cn(
-  "p-2 rounded-xl",
-  "bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm",
-  "border border-white/40 dark:border-white/10",
-  "glass-inner-glow-3layer"
-)}>
-```
-
-**Nieuwe code:**
-```tsx
-<div className={cn(
-  "p-2 rounded-xl",
-  "bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm",
-  "border border-white/40 dark:border-white/10",
-  "glass-inner-glow-3layer glass-specular-premium"
-)}>
-```
-
----
-
-### 3. Context-Aware Focus Rings voor Inputs
-
-**Bestand:** `src/index.css`
-
-**Wijziging:** Nieuwe utility classes voor context-gekleurde focus rings met Spring Physics.
-
-**Locatie:** Na de bestaande `.glass-focus-ring` definitie (rond regel 918)
-
-**Toe te voegen:**
 ```css
-/* ============================================
-   CONTEXT-AWARE FOCUS RINGS
-   Spring Physics focus met module-specifieke kleuren
-   ============================================ */
-
-.focus-ring-rose:focus-visible {
-  --tw-ring-color: hsla(345, 48%, 52%, 0.25);
-  border-color: hsla(345, 48%, 52%, 0.5);
-  box-shadow: 
-    0 0 0 3px hsla(345, 48%, 52%, 0.1),
-    inset 0 1px 2px rgba(0,0,0,0.06);
-}
-
-.focus-ring-violet:focus-visible {
-  --tw-ring-color: hsla(270, 45%, 55%, 0.25);
-  border-color: hsla(270, 45%, 55%, 0.5);
-  box-shadow: 
-    0 0 0 3px hsla(270, 45%, 55%, 0.1),
-    inset 0 1px 2px rgba(0,0,0,0.06);
-}
-
-.focus-ring-teal:focus-visible {
-  --tw-ring-color: hsla(174, 42%, 43%, 0.25);
-  border-color: hsla(174, 42%, 43%, 0.5);
-  box-shadow: 
-    0 0 0 3px hsla(174, 42%, 43%, 0.1),
-    inset 0 1px 2px rgba(0,0,0,0.06);
-}
-
-.focus-ring-emerald:focus-visible {
-  --tw-ring-color: hsla(142, 55%, 45%, 0.25);
-  border-color: hsla(142, 55%, 45%, 0.5);
-  box-shadow: 
-    0 0 0 3px hsla(142, 55%, 45%, 0.1),
-    inset 0 1px 2px rgba(0,0,0,0.06);
-}
-
-.focus-ring-amber:focus-visible {
-  --tw-ring-color: hsla(38, 55%, 50%, 0.25);
-  border-color: hsla(38, 55%, 50%, 0.5);
-  box-shadow: 
-    0 0 0 3px hsla(38, 55%, 50%, 0.1),
-    inset 0 1px 2px rgba(0,0,0,0.06);
-}
-
-.focus-ring-indigo:focus-visible {
-  --tw-ring-color: hsla(234, 45%, 52%, 0.25);
-  border-color: hsla(234, 45%, 52%, 0.5);
-  box-shadow: 
-    0 0 0 3px hsla(234, 45%, 52%, 0.1),
-    inset 0 1px 2px rgba(0,0,0,0.06);
-}
-
-.focus-ring-slate:focus-visible {
-  --tw-ring-color: hsla(215, 25%, 48%, 0.25);
-  border-color: hsla(215, 25%, 48%, 0.5);
-  box-shadow: 
-    0 0 0 3px hsla(215, 25%, 48%, 0.1),
-    inset 0 1px 2px rgba(0,0,0,0.06);
-}
-
-.focus-ring-blue:focus-visible {
-  --tw-ring-color: hsla(217, 91%, 60%, 0.25);
-  border-color: hsla(217, 91%, 60%, 0.5);
-  box-shadow: 
-    0 0 0 3px hsla(217, 91%, 60%, 0.1),
-    inset 0 1px 2px rgba(0,0,0,0.06);
+/* Regel 4006-4020 in index.css */
+.glass-ambient-mesh-indigo::before {
+  inset: -200px !important;  /* ← PROBLEEM: te groot voor mobiel */
 }
 ```
 
+**Waarom alleen op mobiel?**
+- De viewport is 390px breed
+- Het pseudo-element strekt 200px naar links + 200px naar rechts uit
+- Totale breedte: 790px (meer dan 2x de viewport)
+- Dit veroorzaakt horizontale scroll en content verschuiving
+
+**Waarom alleen indigo?**
+Alle andere ambient mesh kleuren zijn gecorrigeerd in twee plaatsen:
+1. `overflow: hidden` groep (regel 2623-2630) - **indigo ontbreekt**
+2. Mobile optimization query (regel 2666-2676) - **indigo ontbreekt**
+
 ---
 
-### 4. Glass Light Sweep z-index Fix
+## Oplossing
 
-**Bestand:** `src/index.css`
-
-**Wijziging:** Verhoog z-index naar 0 (was -1) zodat de sweep zichtbaar is boven de achtergrond gradient maar onder de content.
-
-**Locatie:** Regel 3533
+### Wijziging 1: Voeg indigo toe aan overflow control (regel 2622-2631)
 
 **Huidige code:**
 ```css
-z-index: -1; /* GEFIXED: Was z-index: 1 */
+/* Overflow control for ambient mesh containers */
+.glass-ambient-mesh-emerald,
+.glass-ambient-mesh-rose,
+.glass-ambient-mesh-violet,
+.glass-ambient-mesh-slate,
+.glass-ambient-mesh-teal,
+.glass-ambient-mesh-amber,
+.glass-ambient-mesh-blue {
+  overflow: hidden;
+}
 ```
 
 **Nieuwe code:**
 ```css
-z-index: 0;
+/* Overflow control for ambient mesh containers */
+.glass-ambient-mesh-emerald,
+.glass-ambient-mesh-rose,
+.glass-ambient-mesh-violet,
+.glass-ambient-mesh-slate,
+.glass-ambient-mesh-teal,
+.glass-ambient-mesh-amber,
+.glass-ambient-mesh-blue,
+.glass-ambient-mesh-indigo {
+  overflow: hidden;
+}
 ```
 
 ---
 
-## Samenvatting
+### Wijziging 2: Voeg indigo toe aan GPU optimization (regel 2633-2643)
 
-| Bestand | Wijziging | Impact |
-|---------|-----------|--------|
-| `kpi-card.tsx` | +glass-light-sweep class | Animated premium effect op alle KPI cards |
-| `page-hero.tsx` | +glass-specular-premium class | Materiaal-realisme op page icons |
-| `index.css` | +8 focus-ring-[color] utilities | Context-aware form focus states |
-| `index.css` | z-index: -1 → 0 | Light sweep zichtbaar maken |
+**Huidige code:**
+```css
+/* GPU optimization hints */
+.glass-ambient-mesh-emerald::before,
+.glass-ambient-mesh-rose::before,
+.glass-ambient-mesh-violet::before,
+.glass-ambient-mesh-slate::before,
+.glass-ambient-mesh-teal::before,
+.glass-ambient-mesh-amber::before,
+.glass-ambient-mesh-blue::before {
+  will-change: auto;
+  contain: strict;
+}
+```
+
+**Nieuwe code:**
+```css
+/* GPU optimization hints */
+.glass-ambient-mesh-emerald::before,
+.glass-ambient-mesh-rose::before,
+.glass-ambient-mesh-violet::before,
+.glass-ambient-mesh-slate::before,
+.glass-ambient-mesh-teal::before,
+.glass-ambient-mesh-amber::before,
+.glass-ambient-mesh-blue::before,
+.glass-ambient-mesh-indigo::before {
+  will-change: auto;
+  contain: strict;
+}
+```
 
 ---
 
-## Visueel Effect
+### Wijziging 3: Voeg indigo toe aan mobile optimization (regel 2665-2676)
 
-De `glass-light-sweep` animatie creëert een subtiele lichtreflectie die elke 15 seconden over de KPI cards beweegt:
-- Simuleert zonlicht dat over een glazen oppervlak beweegt
-- Versterkt de "levende" materiaal-kwaliteit
-- Respecteert `prefers-reduced-motion` voor accessibility
+**Huidige code:**
+```css
+/* Smaller ambient mesh on mobile */
+.glass-ambient-mesh::before,
+.glass-ambient-mesh-emerald::before,
+.glass-ambient-mesh-rose::before,
+.glass-ambient-mesh-violet::before,
+.glass-ambient-mesh-slate::before,
+.glass-ambient-mesh-teal::before,
+.glass-ambient-mesh-amber::before,
+.glass-ambient-mesh-blue::before {
+  inset: -50px;
+  filter: blur(30px);
+}
+```
+
+**Nieuwe code:**
+```css
+/* Smaller ambient mesh on mobile */
+.glass-ambient-mesh::before,
+.glass-ambient-mesh-emerald::before,
+.glass-ambient-mesh-rose::before,
+.glass-ambient-mesh-violet::before,
+.glass-ambient-mesh-slate::before,
+.glass-ambient-mesh-teal::before,
+.glass-ambient-mesh-amber::before,
+.glass-ambient-mesh-blue::before,
+.glass-ambient-mesh-indigo::before {
+  inset: -50px !important;  /* !important nodig om regel 4009 te overrulen */
+  filter: blur(30px) !important;
+}
+```
+
+---
+
+### Wijziging 4: Fix de base indigo definitie (regel 3641-3644)
+
+**Huidige code:**
+```css
+.glass-ambient-mesh-indigo {
+  position: relative;
+  overflow: visible;  /* ← PROBLEEM */
+}
+```
+
+**Nieuwe code:**
+```css
+.glass-ambient-mesh-indigo {
+  position: relative;
+  overflow: hidden;  /* Consistent met andere ambient mesh classes */
+}
+```
+
+---
+
+## Impact
+
+| Probleem | Status na fix |
+|----------|---------------|
+| Tekst afgesneden links | ✅ Opgelost |
+| Content buiten scherm | ✅ Opgelost |
+| Kanban kolommen | ✅ Correct zichtbaar |
+| Lege ruimte rechts | ✅ Gecorrigeerd |
+| Ambient mesh effect | ✅ Behouden (verkleind op mobiel) |
 
 ---
 
 ## Technische Details
 
-**Performance:** 
-- CSS-only animatie (geen JavaScript)
-- `will-change: transform` impliciet via translate
-- Pseudo-element met `pointer-events: none`
+### Waarom `overflow: hidden` werkt
 
-**Dark Mode:**
-- Light sweep werkt in beide modes (wit licht op donker glas = subtiel)
-- Focus rings gebruiken HSL met lage saturatie
+Het pseudo-element met `inset: -200px` blijft bestaan, maar de parent container met `overflow: hidden` verbergt alles wat buiten de container valt. Het visuele effect blijft behouden omdat het centrale deel van het pseudo-element (binnen de container) nog steeds zichtbaar is.
 
-**Accessibility:**
-- `prefers-reduced-motion` disables animaties automatisch
-- Focus states blijven volledig zichtbaar
+### Waarom `!important` nodig is in de media query
+
+De latere definitie op regel 4009 gebruikt `!important`. Om dit te overrulen in de media query voor mobiel, moeten we ook `!important` gebruiken vanwege CSS specificiteitregels.
+
+### Consistentie
+
+Na deze fix zijn alle 8 ambient mesh kleuren (emerald, rose, violet, slate, teal, amber, blue, **indigo**) consistent behandeld met dezelfde overflow, GPU optimization en mobile optimization regels.
