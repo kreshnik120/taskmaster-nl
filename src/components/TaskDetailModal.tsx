@@ -90,6 +90,13 @@ interface Task {
     name: string | null;
     email: string | null;
   } | null;
+  // Reporter/creator info
+  reporter_id?: string | null;
+  created_at?: string;
+  reporter?: {
+    name: string | null;
+    email: string | null;
+  } | null;
 }
 
 interface LinkedApplication {
@@ -658,20 +665,8 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
           .eq('id', nextPending.id);
       }
       
-      // 3. Log naar action history voor audit trail
-      const { data: { user } } = await supabase.auth.getUser();
+      // Trigger log_subtask_status_trigger handles audit trail automatically
       const completedSubtask = subtasks.find(s => s.id === subtaskId);
-      
-      await supabase
-        .from('task_action_history')
-        .insert({
-          task_id: task.id,
-          action_text: `Subtaak voltooid: ${completedSubtask?.title || 'Onbekend'}`,
-          action_type: 'status_change',
-          completed_at: new Date().toISOString(),
-          completed_by: user?.id,
-          is_current: false
-        });
       
       toast({
         title: "Subtaak voltooid",
@@ -992,6 +987,24 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                       <div className="flex items-center gap-2">
                         <User className="h-4 w-4 text-muted-foreground/60" />
                         <span className="text-sm">{task.profiles.name || task.profiles.email}</span>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Reporter/Creator Info */}
+                  {task.reporter_id && (
+                    <>
+                      <span className="text-sm text-muted-foreground/80">Aangemaakt door</span>
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-muted-foreground/60" />
+                        <span className="text-sm font-medium">
+                          {task.reporter?.name || task.reporter?.email || 'Onbekend'}
+                        </span>
+                        {task.created_at && (
+                          <span className="text-xs text-muted-foreground">
+                            op {format(parseISO(task.created_at), "d MMM yyyy 'om' HH:mm", { locale: nl })}
+                          </span>
+                        )}
                       </div>
                     </>
                   )}
