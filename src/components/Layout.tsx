@@ -8,6 +8,7 @@ import { SecurityAlertBell } from "@/components/notifications/SecurityAlertBell"
 import { supabase } from "@/integrations/supabase/client";
 import { useOAuthGuard } from "@/hooks/useOAuthGuard";
 import { Loader2 } from "lucide-react";
+ import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 
 export const Layout = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -60,6 +61,7 @@ export const Layout = () => {
 
   return (
     <SidebarProvider>
+       <ImpersonationBanner />
       <div className="flex min-h-screen w-full">
         <AppSidebar />
         <main className="flex-1 overflow-auto">

@@ -534,3 +534,13 @@ verify_jwt = false
 verify_jwt = false
 # Purpose: Proxy to MCP server (mcp.abcito.io) for WhatsApp integration
 # Auth: JWT validation done in-code for granular control
+ 
+ # -----------------------------------------------------------------------------
+ # ADMIN IMPERSONATION
+ # -----------------------------------------------------------------------------
+ 
+ [functions.impersonate-user]
+ verify_jwt = false
+ # Purpose: Admin-only function to impersonate other users via magic link
+ # Auth: JWT validated in-code, only admins can use
+ # Audit: All actions logged to admin_impersonation_log table

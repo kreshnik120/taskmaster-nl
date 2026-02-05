@@ -46,9 +46,20 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
-  RefreshCw
+   RefreshCw,
+   UserCheck
 } from "lucide-react";
 import { toast } from "sonner";
+ import {
+   AlertDialog,
+   AlertDialogAction,
+   AlertDialogCancel,
+   AlertDialogContent,
+   AlertDialogDescription,
+   AlertDialogFooter,
+   AlertDialogHeader,
+   AlertDialogTitle,
+ } from "@/components/ui/alert-dialog";
 import { format, formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
 
@@ -82,6 +93,7 @@ export default function Gebruikers() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState<'admin' | 'manager' | 'user'>('user');
+   const [impersonateTarget, setImpersonateTarget] = useState<{ id: string; email: string; name: string } | null>(null);
   const queryClient = useQueryClient();
 
   // Fetch users
@@ -214,6 +226,48 @@ export default function Gebruikers() {
     });
   };
 
+   // Impersonate user mutation
+   const impersonateMutation = useMutation({
+     mutationFn: async (targetUserId: string) => {
+       const { data: session } = await supabase.auth.getSession();
+       
+       const { data, error } = await supabase.functions.invoke("impersonate-user", {
+         body: { action: "start_impersonation", target_user_id: targetUserId },
+         headers: {
+           Authorization: `Bearer ${session.session?.access_token}`,
+         },
+       });
+ 
+       if (error) throw error;
+       if (!data.success) throw new Error(data.error || 'Impersonatie mislukt');
+       return data;
+     },
+     onSuccess: async (data) => {
+       // Get current admin user ID
+       const { data: { user } } = await supabase.auth.getUser();
+       if (user) {
+         // Store impersonation state
+         localStorage.setItem('original_admin_id', user.id);
+         localStorage.setItem('impersonating_as', data.target_email);
+       }
+       
+       toast.success(`Bezig met inloggen als ${data.target_name}...`);
+       
+       // Redirect to magic link
+       window.location.href = data.magic_link;
+     },
+     onError: (error: Error) => {
+       toast.error(error.message || "Kon niet impersoneren");
+       setImpersonateTarget(null);
+     },
+   });
+ 
+   const handleImpersonateConfirm = () => {
+     if (impersonateTarget) {
+       impersonateMutation.mutate(impersonateTarget.id);
+     }
+   };
+ 
   return (
     <AdminOnly
       fallback={
@@ -455,13 +509,28 @@ export default function Gebruikers() {
                               </SelectContent>
                             </Select>
                           ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setEditingUserId(user.id)}
-                            >
-                              Rol wijzigen
-                            </Button>
+                             <div className="flex items-center gap-1">
+                               <Button
+                                 variant="outline"
+                                 size="sm"
+                                 onClick={() => setEditingUserId(user.id)}
+                               >
+                                 Rol wijzigen
+                               </Button>
+                               <Button
+                                 variant="ghost"
+                                 size="icon"
+                                 className="h-8 w-8"
+                                 onClick={() => setImpersonateTarget({
+                                   id: user.id,
+                                   email: user.email,
+                                   name: user.raw_user_meta_data?.name || user.email
+                                 })}
+                                 title="Inloggen als deze gebruiker"
+                               >
+                                 <UserCheck className="h-4 w-4" />
+                               </Button>
+                             </div>
                           )}
                         </TableCell>
                       </TableRow>
@@ -511,6 +580,43 @@ export default function Gebruikers() {
           </CardContent>
         </Card>
       </PageContainer>
+       
+       {/* Impersonation Confirmation Dialog */}
+       <AlertDialog open={!!impersonateTarget} onOpenChange={(open) => !open && setImpersonateTarget(null)}>
+         <AlertDialogContent>
+           <AlertDialogHeader>
+             <AlertDialogTitle>Inloggen als andere gebruiker</AlertDialogTitle>
+             <AlertDialogDescription>
+               Je staat op het punt om in te loggen als{" "}
+               <span className="font-semibold">{impersonateTarget?.name}</span>{" "}
+               ({impersonateTarget?.email}).
+               <br /><br />
+               Je krijgt volledige toegang tot hun account. Een banner zal zichtbaar zijn zodat je weet dat je impersoneert.
+               <br /><br />
+               Deze actie wordt gelogd voor beveiligingsdoeleinden.
+             </AlertDialogDescription>
+           </AlertDialogHeader>
+           <AlertDialogFooter>
+             <AlertDialogCancel>Annuleren</AlertDialogCancel>
+             <AlertDialogAction
+               onClick={handleImpersonateConfirm}
+               disabled={impersonateMutation.isPending}
+             >
+               {impersonateMutation.isPending ? (
+                 <>
+                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                   Bezig...
+                 </>
+               ) : (
+                 <>
+                   <UserCheck className="mr-2 h-4 w-4" />
+                   Inloggen als {impersonateTarget?.name?.split(' ')[0] || 'gebruiker'}
+                 </>
+               )}
+             </AlertDialogAction>
+           </AlertDialogFooter>
+         </AlertDialogContent>
+       </AlertDialog>
     </AdminOnly>
   );
 }
