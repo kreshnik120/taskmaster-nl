@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+ import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -17,6 +18,7 @@ import { nl } from "date-fns/locale";
 import { KPICard } from "@/components/ui/kpi-card";
 import { PageHero } from "@/components/ui/page-hero";
 import { PageContainer } from "@/components/ui/page-container";
+ import { TijdregistratieCards } from "@/components/tijdregistratie/TijdregistratieCards";
 
 interface Task {
   id: string;
@@ -62,6 +64,7 @@ const Tijdregistratie = () => {
   const [filterPeriod, setFilterPeriod] = useState<string>("today");
   const [totalMinutes, setTotalMinutes] = useState(0);
   const navigate = useNavigate();
+   const isMobile = useIsMobile();
   
   // Gebruik centrale hook voor globale timer state
   const { activeTimers, currentTime } = useActiveTimers();
@@ -521,64 +524,70 @@ const Tijdregistratie = () => {
           </div>
 
           <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Taak</TableHead>
-                  <TableHead>Start</TableHead>
-                  <TableHead>Eind</TableHead>
-                  <TableHead>Duur</TableHead>
-                  <TableHead>Notitie</TableHead>
-                  <TableHead className="w-[70px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {timeEntries.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                      Geen tijdregistraties gevonden
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  timeEntries.map((entry) => (
-                    <TableRow key={entry.id} className="table-row-hover-amber">
-                      <TableCell className="font-medium">
-                        {entry.tasks?.title || "Onbekende taak"}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {format(new Date(entry.start), "dd MMM HH:mm", { locale: nl })}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {entry.end ? (
-                          format(new Date(entry.end), "dd MMM HH:mm", { locale: nl })
-                        ) : (
-                          <span className="text-primary">Loopt...</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm">
-                          {entry.duration_min ? formatMinutes(entry.duration_min) : "-"}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {entry.note || "-"}
-                      </TableCell>
-                      <TableCell>
-                        {entry.end && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => deleteEntry(entry.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+             {timeEntries.length === 0 ? (
+               <div className="text-center text-muted-foreground py-8">
+                 Geen tijdregistraties gevonden
+               </div>
+             ) : isMobile ? (
+               <div className="p-4">
+                 <TijdregistratieCards
+                   entries={timeEntries.filter(e => e.end !== null)}
+                   onDelete={deleteEntry}
+                   formatMinutes={formatMinutes}
+                 />
+               </div>
+             ) : (
+               <Table>
+                 <TableHeader>
+                   <TableRow>
+                     <TableHead>Taak</TableHead>
+                     <TableHead>Start</TableHead>
+                     <TableHead>Eind</TableHead>
+                     <TableHead>Duur</TableHead>
+                     <TableHead>Notitie</TableHead>
+                     <TableHead className="w-[70px]"></TableHead>
+                   </TableRow>
+                 </TableHeader>
+                 <TableBody>
+                   {timeEntries.map((entry) => (
+                     <TableRow key={entry.id} className="table-row-hover-amber">
+                       <TableCell className="font-medium">
+                         {entry.tasks?.title || "Onbekende taak"}
+                       </TableCell>
+                       <TableCell className="text-sm text-muted-foreground">
+                         {format(new Date(entry.start), "dd MMM HH:mm", { locale: nl })}
+                       </TableCell>
+                       <TableCell className="text-sm text-muted-foreground">
+                         {entry.end ? (
+                           format(new Date(entry.end), "dd MMM HH:mm", { locale: nl })
+                         ) : (
+                           <span className="text-primary">Loopt...</span>
+                         )}
+                       </TableCell>
+                       <TableCell>
+                         <span className="text-sm">
+                           {entry.duration_min ? formatMinutes(entry.duration_min) : "-"}
+                         </span>
+                       </TableCell>
+                       <TableCell className="text-sm text-muted-foreground">
+                         {entry.note || "-"}
+                       </TableCell>
+                       <TableCell>
+                         {entry.end && (
+                           <Button
+                             variant="outline"
+                             size="sm"
+                             onClick={() => deleteEntry(entry.id)}
+                           >
+                             <Trash2 className="h-4 w-4" />
+                           </Button>
+                         )}
+                       </TableCell>
+                     </TableRow>
+                   ))}
+                 </TableBody>
+               </Table>
+             )}
           </div>
         </CardContent>
       </Card>

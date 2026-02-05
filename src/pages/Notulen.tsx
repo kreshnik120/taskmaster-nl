@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+ import { useIsMobile } from "@/hooks/use-mobile";
 import { useMeetingMinutes, MeetingMinute } from "@/hooks/useMeetingMinutes";
 import { MeetingMinuteDetail } from "@/components/notulen/MeetingMinuteDetail";
 import { CreateMeetingMinuteDialog } from "@/components/notulen/CreateMeetingMinuteDialog";
@@ -42,6 +43,7 @@ import {
   ChevronRight,
   Users,
 } from "lucide-react";
+ import { NotulenCards } from "@/components/notulen/NotulenCards";
 
 const PAGE_SIZE = 10;
 
@@ -102,6 +104,8 @@ function getTypeBadge(type: string | null) {
 }
 
 export default function Notulen() {
+   const isMobile = useIsMobile();
+ 
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
@@ -318,6 +322,16 @@ export default function Notulen() {
                   : "Maak je eerste vergadernotulen aan"}
               </p>
             </div>
+           ) : isMobile ? (
+             <div className="p-4">
+               <NotulenCards
+                 minutes={paginatedMinutes}
+                 onSelectMinute={(minute) => {
+                   setSelectedMinute(minute);
+                   setIsDetailOpen(true);
+                 }}
+               />
+             </div>
           ) : (
             <>
               <Table>

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
+ import { useIsMobile } from "@/hooks/use-mobile";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { format, differenceInDays } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -47,6 +48,7 @@ import {
 
 // Facturatie Components
 import { FactuurExportDialog } from "@/components/facturatie";
+ import { FacturatieCards } from "@/components/facturatie/FacturatieCards";
 
 // Hooks & Types
 import { useFacturen } from "@/hooks/facturatie/useFacturen";
@@ -109,6 +111,7 @@ function SkeletonRow() {
 // Main component
 export default function Facturatie() {
   const navigate = useNavigate();
+   const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -457,6 +460,13 @@ export default function Facturatie() {
                 </Button>
               </div>
             </div>
+           ) : isMobile ? (
+             <div className="p-4">
+               <FacturatieCards
+                 facturen={facturen}
+                 onSelectFactuur={(factuur) => navigate(`/facturatie/${factuur.id}`)}
+               />
+             </div>
           ) : (
             <Table>
               <TableHeader>

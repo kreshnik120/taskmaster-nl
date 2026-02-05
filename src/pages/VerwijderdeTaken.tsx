@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+ import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { useNavigate } from "react-router-dom";
@@ -31,6 +32,7 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 import { useGreeting } from "@/hooks/useGreeting";
+ import { VerwijderdeTakenCards } from "@/components/verwijderd/VerwijderdeTakenCards";
 
 const log = logger.create('VerwijderdeTaken');
 
@@ -54,6 +56,7 @@ const VerwijderdeTaken = () => {
   const [user, setUser] = useState<any>(null);
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const navigate = useNavigate();
+   const isMobile = useIsMobile();
 
   // Get personalized greeting
   const displayName = user?.user_metadata?.name || user?.email?.split('@')[0];
@@ -229,6 +232,22 @@ const VerwijderdeTaken = () => {
                 <div className="text-center py-8 text-muted-foreground">
                   Geen verwijderde taken gevonden
                 </div>
+               ) : isMobile ? (
+                 <VerwijderdeTakenCards
+                   tasks={tasks.filter(task => {
+                     if (filterPriority === "all") return true;
+                     if (filterPriority === "CRITICAL") return task.priority === "CRITICAL";
+                     if (filterPriority === "RECENT") {
+                       const deletedDate = new Date(task.deleted_at);
+                       const threeDaysAgo = new Date();
+                       threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+                       return deletedDate >= threeDaysAgo;
+                     }
+                     return true;
+                   })}
+                   onRestore={handleRestore}
+                   onDelete={openDeleteDialog}
+                 />
               ) : (
                 <Table>
                   <TableHeader>

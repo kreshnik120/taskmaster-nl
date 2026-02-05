@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+ import { useIsMobile } from "@/hooks/use-mobile";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { logger } from "@/lib/logger";
 import { supabase } from "@/integrations/supabase/client";
@@ -44,6 +45,7 @@ import { format, formatDistanceToNow, isToday, isThisWeek, isThisMonth } from "d
 import { nl } from "date-fns/locale";
 import { getFileCategory, getFileCategoryLabel, getFileCategoryColor, canPreview, formatFileSize, FileCategory } from "@/lib/fileHelpers";
 import { cn } from "@/lib/utils";
+ import { BijlagenCards } from "@/components/bijlagen/BijlagenCards";
 
 const log = logger.create('Bijlagen');
 
@@ -83,6 +85,7 @@ export default function Bijlagen() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+   const isMobile = useIsMobile();
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -397,6 +400,17 @@ export default function Bijlagen() {
                   : "Upload bijlagen bij taken om ze hier te zien"}
               </p>
             </div>
+           ) : isMobile ? (
+             <div className="p-4">
+               <BijlagenCards
+                 attachments={paginatedAttachments}
+                 onPreview={setPreviewAttachment}
+                 onDownload={downloadAttachment}
+                 onDelete={handleDeleteClick}
+                 onNavigateToTask={navigateToTask}
+                 deletingId={deletingId}
+               />
+             </div>
           ) : (
             <Table>
               <TableHeader>
