@@ -10,7 +10,7 @@ import { KPICard } from "@/components/ui/kpi-card";
 import { Badge } from "@/components/ui/badge";
 import { format, formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Loader2, Plus, Check, Edit2, Clock, Trash2, ArrowUp, ArrowDown, User, Search, UserPlus, CheckCircle2, X, ListTodo, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
+ import { Loader2, Plus, Check, Edit2, Clock, Trash2, ArrowUp, ArrowDown, User, Users, Search, UserPlus, CheckCircle2, X, ListTodo, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -610,12 +610,34 @@ export default function EmbeddedListView() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <div className="mb-4">
-          <p className="text-sm text-muted-foreground">
+        <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <p className="text-sm text-muted-foreground flex-1">
             {filteredTasks.length} taken
             {tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length > 0 && 
               ` • ${tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length} hoge prioriteit`}
           </p>
+          
+          {/* Mijn taken / Alle taken Toggle */}
+          <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-lg">
+            <Button 
+              variant={showOnlyMyTasks ? "default" : "ghost"} 
+              size="sm"
+              onClick={() => setShowOnlyMyTasks(true)}
+              className="gap-1.5 h-8 px-3 text-sm"
+            >
+              <User className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Mijn taken</span>
+            </Button>
+            <Button 
+              variant={!showOnlyMyTasks ? "default" : "ghost"} 
+              size="sm"
+              onClick={() => setShowOnlyMyTasks(false)}
+              className="gap-1.5 h-8 px-3 text-sm"
+            >
+              <Users className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Alle taken</span>
+            </Button>
+          </div>
         </div>
 
         {/* Search Bar */}
