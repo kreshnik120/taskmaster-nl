@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, memo, useCallback } from "react";
+ import { useIsMobile } from "@/hooks/use-mobile";
 import { logger } from "@/lib/logger";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -30,6 +31,7 @@ import { useActiveTimers } from "@/hooks/useActiveTimers";
 import { useGlobalTaskFilter } from "@/hooks/useGlobalTaskFilter";
 import { getAssigneeColor } from "@/hooks/useAssigneeColor";
 import { getPriorityLabel } from "@/hooks/usePriorityConfig";
+ import { EmbeddedListCards } from "@/components/dashboard/EmbeddedListCards";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -121,6 +123,7 @@ export default function EmbeddedListView() {
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+   const isMobile = useIsMobile();
   
   // Hook for assigned subtasks
   const { subtasks: mySubtasks } = useMySubtasks(globalFilterUserId);
@@ -919,7 +922,21 @@ export default function EmbeddedListView() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="rounded-lg border bg-card relative overflow-auto max-h-[calc(100vh-450px)]">
+               isMobile ? (
+                 <EmbeddedListCards
+                   tasks={groupTasks}
+                   selectedTaskIds={selectedTaskIds}
+                   onToggleSelection={toggleTaskSelection}
+                   onTaskClick={handleTaskClick}
+                   onAcceptTask={handleAcceptTask}
+                   onToggleComplete={handleToggleComplete}
+                   openDeleteDialog={openDeleteDialog}
+                   activeTimers={activeTimers}
+                   getRunningTime={getRunningTime}
+                   globalFilterUserId={globalFilterUserId}
+                 />
+               ) : (
+               <div className="rounded-lg border bg-card relative overflow-auto max-h-[calc(100vh-450px)]">
                 <Table>
                   <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
                     <TableRow>
@@ -1159,6 +1176,7 @@ export default function EmbeddedListView() {
                   </TableBody>
                 </Table>
               </div>
+               )
             )}
           </div>
         ))}
