@@ -1,251 +1,265 @@
 
-# Uitgebreid Mobile Responsive Herstelplan
+# Admin Impersonation Feature voor Kreshnik
 
-## Samenvatting van het Onderzoek
+## Overzicht
 
-Ik heb alle pagina's systematisch getest op een mobiel viewport (390x844 - iPhone standaard). Hieronder de resultaten per pagina met **bewijs uit screenshots en code-analyse**.
+Deze feature stelt admin Kreshnik in staat om tijdelijk in te loggen als elke andere gebruiker, zonder hun wachtwoord te weten. Dit is een krachtige ondersteuningsfunctie die vaak wordt gebruikt voor:
 
----
-
-## Geïdentificeerde Problemen per Pagina
-
-### Categorie A: KRITIEK - Tabellen zonder Mobiele Kaartweergave
-
-Deze pagina's tonen **volledige tabellen op mobiel** die horizontaal scrollen en onbruikbaar zijn:
-
-| Pagina | Component | Kolommen | Status |
-|--------|-----------|----------|--------|
-| Dashboard > Lijst | `EmbeddedListView.tsx` | 11 kolommen | **KRITIEK** - Leonie's probleem |
-| Notulen | `Notulen.tsx` | 6 kolommen | **KRITIEK** - Titel/Type/Datum afgesneden |
-| Facturatie | `Facturatie.tsx` | 8 kolommen | **KRITIEK** - Bedragen niet leesbaar |
-| Bijlagen | `Bijlagen.tsx` | 6 kolommen | **KRITIEK** - Bestandsnamen afgesneden |
-| Verwijderde Taken | `VerwijderdeTaken.tsx` | 5 kolommen | **HOOG** - Actieknoppen buiten scherm |
-| Tijdregistratie | `Tijdregistratie.tsx` | 5 kolommen | **HOOG** - Timer tabel overflow |
-
-### Categorie B: GOED - Al Responsive
-
-| Pagina | Reden |
-|--------|-------|
-| Sollicitaties | Kanban met horizontale scroll + kaarten |
-| Plaatsingen | Gebruikt Card-based layout (geen tabel) |
-| Dashboard > Mijn Werk | Kaartweergave + ambient mesh fix |
-| Dashboard > Kalender | Responsive dag/weekweergave |
-| Dashboard > Opvolging | Kaart-based focus taken |
+- **Troubleshooting**: Problemen zien zoals de gebruiker ze ervaart
+- **Support**: Taken namens een gebruiker uitvoeren
+- **Testing**: Features testen vanuit verschillende rollen
 
 ---
 
-## Technische Oplossing: Mobile Card Pattern
+## Beveiligingsarchitectuur
 
-### Patroon dat We Implementeren
+### Waarom dit veilig is
 
-Zoals `TaskListView.tsx` al correct doet:
+1. **Alleen admins** kunnen impersoneren (server-side verificatie)
+2. **Audit logging** van elke impersonation actie
+3. **Visuele indicator** zodat admin weet dat ze impersoneren
+4. **Eenvoudig stoppen** - één klik om terug te keren
+5. **Geen wachtwoorden blootgesteld** - gebruikt admin API tokens
+
+### Flow Diagram
 
 ```text
-// Code pattern (vereenvoudigd)
-const isMobile = useIsMobile();
-
-return isMobile 
-  ? <MobileCardView data={tasks} />  // Touch-friendly kaarten
-  : <DesktopTableView data={tasks} /> // Desktop tabel
+┌─────────────────┐      ┌──────────────────────┐      ┌────────────────┐
+│  Admin klikt    │ ──▶  │   Edge Function      │ ──▶  │  Genereer      │
+│  "Login als..." │      │   (admin check)      │      │  magic link    │
+└─────────────────┘      └──────────────────────┘      └────────────────┘
+                                                              │
+                                                              ▼
+┌─────────────────┐      ┌──────────────────────┐      ┌────────────────┐
+│  Admin ziet     │ ◀──  │   localStorage:      │ ◀──  │  Redirect met  │
+│  impersonation  │      │   impersonating_as   │      │  magic link    │
+│  banner         │      │   original_admin_id  │      └────────────────┘
+└─────────────────┘      └──────────────────────┘
 ```
 
-### Stap 1: Nieuwe Herbruikbare Component - `MobileTableCards.tsx`
+---
 
-Maak een generieke kaart-component die elke tabel kan vervangen:
+## Implementatie
 
-**Bestand:** `src/components/ui/mobile-table-cards.tsx`
+### Stap 1: Database - Audit Tabel
+
+Nieuwe tabel voor het loggen van impersonation acties:
+
+```sql
+-- Audit log for admin impersonation actions
+CREATE TABLE public.admin_impersonation_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  admin_user_id UUID NOT NULL REFERENCES auth.users(id),
+  target_user_id UUID NOT NULL REFERENCES auth.users(id),
+  action TEXT NOT NULL, -- 'start' | 'stop'
+  admin_email TEXT,
+  target_email TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Enable RLS (only admins can read)
+ALTER TABLE public.admin_impersonation_log ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Only admins can view logs
+CREATE POLICY "Admins can view impersonation logs"
+  ON public.admin_impersonation_log
+  FOR SELECT
+  TO authenticated
+  USING (public.has_role(auth.uid(), 'admin'));
+```
+
+---
+
+### Stap 2: Edge Function - `impersonate-user`
+
+Nieuwe edge function: `supabase/functions/impersonate-user/index.ts`
+
+**Functionaliteit:**
+- Verificeert dat aanvrager admin is
+- Genereert een magic link voor de target gebruiker via Supabase Admin API
+- Logt de actie naar `admin_impersonation_log`
+- Retourneert de magic link URL
+
+**Acties:**
+- `start_impersonation`: Genereer magic link voor target user
+- `stop_impersonation`: Log dat admin terug is (informatief)
+
+**Veiligheidsmaatregelen:**
+- Admin check via `user_roles` tabel met service role key
+- Voorkomt dat admin zichzelf impersonereert
+- Rate limiting via Supabase (standaard)
+
+---
+
+### Stap 3: Frontend - Gebruikers Pagina Update
+
+**Bestand:** `src/pages/Gebruikers.tsx`
+
+Toevoegen aan elke gebruikersrij:
+- **"Inloggen als..." knop** naast "Rol wijzigen"
+- Alleen zichtbaar voor admins
+- Opent een bevestigingsdialog
+
+**Nieuwe mutation:**
+```typescript
+const impersonateMutation = useMutation({
+  mutationFn: async (userId: string) => {
+    const { data, error } = await supabase.functions.invoke("impersonate-user", {
+      body: { action: "start_impersonation", target_user_id: userId }
+    });
+    if (error) throw error;
+    return data;
+  },
+  onSuccess: (data) => {
+    // Sla originele admin ID op
+    localStorage.setItem('original_admin_id', currentUser.id);
+    localStorage.setItem('impersonating_as', data.target_email);
+    
+    // Redirect naar magic link
+    window.location.href = data.magic_link;
+  }
+});
+```
+
+---
+
+### Stap 4: Impersonation Banner Component
+
+**Nieuw bestand:** `src/components/ImpersonationBanner.tsx`
+
+Een sticky banner bovenaan het scherm die toont:
+- "Je bekijkt de app als [Naam] (email@example.nl)"
+- Rode/oranje waarschuwingskleur
+- "Stop impersonation" knop
+
+**Gedrag:**
+- Controleert `localStorage.getItem('impersonating_as')`
+- Bij "Stop" knop: logout + redirect naar admin login
+- Verwijdert localStorage items
+
+---
+
+### Stap 5: Banner Integratie in Layout
+
+**Bestand:** `src/App.tsx` of `src/layouts/AppLayout.tsx`
+
+Voeg de `ImpersonationBanner` toe bovenaan de app layout:
+
+```tsx
+<ImpersonationBanner />
+<SidebarProvider>
+  ...rest of app
+</SidebarProvider>
+```
+
+---
+
+## UI Preview
+
+### Gebruikers Tabel (Admin View)
 
 ```text
-+-----------------------------------------------+
-| [Icon] Primaire Tekst           [Badge]       |
-| Secundaire tekst                              |
-| [Meta 1] · [Meta 2] · [Meta 3]                |
-| [Actie 1] [Actie 2]                          |
-+-----------------------------------------------+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ Naam          │ Email               │ Rol        │ Actie                 │
+├──────────────────────────────────────────────────────────────────────────┤
+│ Leonie P.     │ l.patti...@cito...  │ 🟢 USER   │ [Rol wijzigen] [👤↗] │
+│ Erik          │ erik@abczorg.nl     │ 🔴 ADMIN  │ [Rol wijzigen] [👤↗] │
+│ Dion          │ d.caro@abczorg.nl   │ 🟢 USER   │ [Rol wijzigen] [👤↗] │
+└──────────────────────────────────────────────────────────────────────────┘
+
+[👤↗] = "Inloggen als..." knop met tooltip
 ```
 
-Eigenschappen:
-- Glassmorphism styling consistent met design system
-- Touch targets van minimaal 44x44px
-- Swipe-acties (optioneel)
-- Toegankelijkheid met `role="list"` en `role="listitem"`
-
----
-
-### Stap 2: Fix per Pagina
-
-#### 2.1 EmbeddedListView.tsx (Dashboard > Lijst) - PRIORITEIT 1
-
-**Wijzigingen:**
-1. Import `useIsMobile` hook
-2. Maak `EmbeddedListCards.tsx` component
-3. Conditionele rendering: kaarten op mobiel, tabel op desktop
-
-**Mobiele kaart toont:**
-- Titel (prominent)
-- Eigenaar (avatar + naam)
-- Prioriteit (badge)
-- Deadline (met urgentie-kleur)
-- Actieknoppen (Accepteren, Voltooien, Verwijderen)
-
----
-
-#### 2.2 Notulen.tsx - PRIORITEIT 2
-
-**Huidige structuur (6 kolommen):**
-- Titel | Type | Datum | Deelnemers | Status | Acties
-
-**Mobiele kaart toont:**
-- Titel (hoofdtekst)
-- Type badge + Status badge (inline)
-- Datum + Deelnemers (meta-regel)
-- Tap om te openen
-
-**Wijzigingen:**
-1. Import `useIsMobile`
-2. Maak `NotulenCards.tsx` 
-3. Conditionele rendering
-
----
-
-#### 2.3 Facturatie.tsx - PRIORITEIT 2
-
-**Huidige structuur (8 kolommen):**
-- Factuurnummer | Opdrachtgever | Datum | Vervaldatum | Status | Totaal | Openstaand | Acties
-
-**Mobiele kaart toont:**
-- Factuurnummer + Status badge
-- Opdrachtgever naam
-- Totaal bedrag (prominent)
-- Datum + Vervaldatum (meta)
-- Openstaand bedrag indien > 0
-
-**Wijzigingen:**
-1. Import `useIsMobile`
-2. Maak `FacturatieCards.tsx`
-3. Conditionele rendering
-
----
-
-#### 2.4 Bijlagen.tsx - PRIORITEIT 3
-
-**Huidige structuur (6 kolommen):**
-- Bestand | Taak | Type | Grootte | Geüpload | Acties
-
-**Mobiele kaart toont:**
-- Bestandsnaam + type icon
-- Gekoppelde taak
-- Grootte + upload datum (meta)
-- Preview/Download knoppen
-
----
-
-#### 2.5 VerwijderdeTaken.tsx - PRIORITEIT 3
-
-**Huidige structuur (5 kolommen):**
-- Taak | Organisatie | Prioriteit | Verwijderd op | Acties
-
-**Mobiele kaart toont:**
-- Taaknaam
-- Organisatie + Prioriteit badge
-- Verwijderdatum
-- Herstel/Definitief verwijderen knoppen
-
----
-
-#### 2.6 Tijdregistratie.tsx - PRIORITEIT 3
-
-**Huidige structuur (5 kolommen):**
-- Taak | Datum | Tijd | Duur | Acties
-
-**Mobiele kaart toont:**
-- Taaknaam
-- Datum + Tijdsbereik
-- Duur (prominent)
-- Notitie (indien aanwezig)
-- Verwijder knop
-
----
-
-## Preventieve Maatregelen
-
-### Maatregel 1: Design System Regel
-
-**Nieuwe conventie in `src/lib/constants/designTokens.ts`:**
+### Impersonation Banner
 
 ```text
-// Mobile breakpoint constants
-export const MOBILE_BREAKPOINT = 768;
-
-// Minimum touch target size (WCAG 2.1 AA)
-export const MIN_TOUCH_TARGET = 44;
-
-// Table column limits for responsive design
-export const MAX_MOBILE_TABLE_COLUMNS = 3;
+┌─────────────────────────────────────────────────────────────────────────┐
+│ ⚠️  Je bekijkt de app als Leonie Pattipeilohy (l.patti...@citozorg.nl)  │
+│                                                     [Stop Impersonation] │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Maatregel 2: Tabel Wrapper Component
-
-**Nieuw bestand:** `src/components/ui/responsive-table.tsx`
-
-Een wrapper die automatisch detecteert of er meer dan 3 kolommen zijn en een waarschuwing logt tijdens development, of automatisch naar kaartweergave switcht.
-
-### Maatregel 3: Code Review Checklist
-
-Bij elke nieuwe tabel:
-1. Gebruik `useIsMobile()` hook
-2. Maak mobiele kaart-alternatief
-3. Test op 390px viewport
-4. Controleer touch targets (min 44px)
-
 ---
 
-## Implementatie Volgorde
+## Bestanden die worden aangemaakt/gewijzigd
 
-| Fase | Pagina's | Geschatte Tijd |
-|------|----------|----------------|
-| 1 | EmbeddedListView (Leonie's probleem) | Direct |
-| 2 | Notulen + Facturatie | Daarna |
-| 3 | Bijlagen + VerwijderdeTaken + Tijdregistratie | Vervolgens |
-| 4 | Preventieve componenten + Design tokens | Afsluitend |
+### Nieuwe Bestanden
 
----
+| Bestand | Doel |
+|---------|------|
+| `supabase/functions/impersonate-user/index.ts` | Edge function voor magic link generatie |
+| `src/components/ImpersonationBanner.tsx` | Visuele indicator + stop knop |
 
-## Verwachte Resultaten
+### Gewijzigde Bestanden
 
-| Metriek | Vóór | Na |
-|---------|------|-----|
-| Pagina's met mobiele tabel-overflow | 6 | 0 |
-| Horizontale scroll vereist | Ja | Nee |
-| Touch-friendly interface | Gedeeltelijk | Volledig |
-| Leonie's probleem | Niet opgelost | Opgelost |
+| Bestand | Wijziging |
+|---------|-----------|
+| `src/pages/Gebruikers.tsx` | "Inloggen als..." knop + bevestigingsdialog |
+| `src/App.tsx` | ImpersonationBanner integratie |
+
+### Database Migratie
+
+| Wijziging | Details |
+|-----------|---------|
+| Nieuwe tabel | `admin_impersonation_log` voor audit trail |
+| RLS Policy | Alleen admins kunnen logs bekijken |
 
 ---
 
 ## Technische Details
 
-### useIsMobile Hook (bestaand)
+### Magic Link Generatie (Supabase Admin API)
 
-Locatie: `src/hooks/use-mobile.tsx`
-Breakpoint: 768px
+```typescript
+// In edge function
+const { data, error } = await adminClient.auth.admin.generateLink({
+  type: 'magiclink',
+  email: targetUserEmail,
+  options: {
+    redirectTo: `${origin}/dashboard`
+  }
+});
+```
 
-Huidige gebruikers:
-- `TaskListView.tsx` (correct)
-- `WhatsApp.tsx` (correct)
-- `sidebar.tsx` (correct)
+Dit genereert een eenmalige login link die direct werkt zonder wachtwoord.
 
-Pagina's die dit MOETEN gebruiken:
-- `EmbeddedListView.tsx` (ontbreekt)
-- `Notulen.tsx` (ontbreekt)
-- `Facturatie.tsx` (ontbreekt)
-- `Bijlagen.tsx` (ontbreekt)
-- `VerwijderdeTaken.tsx` (ontbreekt)
-- `Tijdregistratie.tsx` (ontbreekt)
+### Audit Log Entry
 
-### Consistentie met Bestaand Patroon
+```typescript
+await adminClient.from('admin_impersonation_log').insert({
+  admin_user_id: adminUserId,
+  target_user_id: targetUserId,
+  action: 'start',
+  admin_email: adminEmail,
+  target_email: targetEmail
+});
+```
 
-`TaskListCards.tsx` is het referentiepatroon:
-- Role="list" voor accessibility
-- Glass styling met `glass-hover-lift`
-- Responsive metadata layout
-- Touch-friendly actieknoppen
+### LocalStorage Keys
+
+| Key | Doel |
+|-----|------|
+| `original_admin_id` | ID van de admin om terug te kunnen keren |
+| `impersonating_as` | Email van de gebruiker die we impersoneren |
+
+---
+
+## Beperkingen & Overwegingen
+
+1. **Magic links verlopen** - Standaard na 24 uur (Supabase config)
+2. **Sessie is echt** - Admin heeft volledige toegang als target user
+3. **Geen nested impersonation** - Als admin A als user B inlogt, kan B niet als C inloggen
+4. **Audit trail** - Alle acties zijn te traceren naar de originele admin
+
+---
+
+## Samenvatting
+
+Deze feature geeft Kreshnik (en andere admins) de mogelijkheid om:
+
+1. ✅ Op de Gebruikers pagina te klikken op "Inloggen als..."
+2. ✅ Bevestigen dat ze willen impersoneren
+3. ✅ Automatisch ingelogd worden als die gebruiker
+4. ✅ Een duidelijke banner zien dat ze impersoneren
+5. ✅ Met één klik terug te keren naar hun eigen account
+6. ✅ Volledig audit trail van alle impersonation acties
