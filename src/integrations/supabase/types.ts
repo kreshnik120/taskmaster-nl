@@ -5996,6 +5996,7 @@ export type Database = {
           created_by: string | null
           id: string
           is_current: boolean | null
+          metadata: Json | null
           order_index: number | null
           task_id: string
         }
@@ -6008,6 +6009,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           is_current?: boolean | null
+          metadata?: Json | null
           order_index?: number | null
           task_id: string
         }
@@ -6020,6 +6022,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           is_current?: boolean | null
+          metadata?: Json | null
           order_index?: number | null
           task_id?: string
         }

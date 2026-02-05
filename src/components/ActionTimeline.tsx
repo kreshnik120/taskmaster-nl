@@ -20,7 +20,12 @@ import {
   ArrowDown,
   Download,
   Copy,
-  ClipboardCheck
+  ClipboardCheck,
+  MessageSquare,
+  FileText,
+  UserPlus,
+  Paperclip,
+  FileX
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -49,13 +54,29 @@ import {
 export interface ActionHistoryItem {
   id: string;
   action_text: string;
-  action_type: 'followup' | 'note' | 'status_change';
+  action_type: 'followup' | 'note' | 'status_change' | 'description_change' | 
+               'assignment_change' | 'attachment_added' | 'attachment_removed' | 'task_created';
   created_at: string;
   created_by_name?: string;
   completed_at?: string | null;
   completed_by_name?: string;
   is_current: boolean;
 }
+
+// Icon mapping for action types
+const getActionIcon = (actionType: string) => {
+  switch (actionType) {
+    case 'followup': return <ArrowRight className="h-4 w-4 text-orange-600" />;
+    case 'note': return <MessageSquare className="h-4 w-4 text-gray-600" />;
+    case 'status_change': return <CheckCircle2 className="h-4 w-4 text-green-600" />;
+    case 'description_change': return <FileText className="h-4 w-4 text-blue-600" />;
+    case 'assignment_change': return <UserPlus className="h-4 w-4 text-purple-600" />;
+    case 'attachment_added': return <Paperclip className="h-4 w-4 text-cyan-600" />;
+    case 'attachment_removed': return <FileX className="h-4 w-4 text-red-600" />;
+    case 'task_created': return <Plus className="h-4 w-4 text-emerald-600" />;
+    default: return <Circle className="h-4 w-4 text-gray-400" />;
+  }
+};
 
 export interface ActiveSubtaskInfo {
   id: string;
@@ -921,9 +942,9 @@ export function ActionTimeline({
                 key={action.id} 
                 className="relative flex items-start gap-3 group rounded-lg -mx-2 px-2 py-1.5 hover:bg-muted/30 transition-colors"
               >
-                {/* Status icon */}
-                <div className="relative z-10 h-6 w-6 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center shrink-0 ring-2 ring-background">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                {/* Status icon - dynamic based on action type */}
+                <div className="relative z-10 h-6 w-6 rounded-full bg-muted flex items-center justify-center shrink-0 ring-2 ring-background">
+                  {getActionIcon(action.action_type)}
                 </div>
 
                 {/* Content */}
