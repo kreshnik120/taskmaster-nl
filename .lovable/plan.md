@@ -1,53 +1,70 @@
 
-# Fix: Ontbrekende "Mijn Taken / Alle Taken" Toggle in Lijstweergave
 
-## Probleem Samenvatting
+# Fix: Consistentie "Mijn taken / Alle taken" Toggle
 
-Leonie ziet correct maar 1 taak omdat:
-1. De filter `showOnlyMyTasks` staat standaard op **TRUE**
-2. Er is maar **1 taak aan haar toegewezen** in de database
-3. De EmbeddedListView **mist de toggle** om naar "Alle Taken" te wisselen
+## Huidige Status
 
-Dit is **geen data probleem** - het is een **ontbrekende UI-functie**.
-
----
-
-## Database Verificatie
-
-| Metriek | Waarde |
-|---------|--------|
-| Totaal actieve taken | 52 |
-| Taken toegewezen aan Leonie | 1 |
-| Subtaken toegewezen aan Leonie | 1 |
-| Filter `showOnlyMyTasks` | true (standaard) |
+| Tab | Gebruikt Filter Hook | Heeft Toggle UI | Gedrag |
+|-----|---------------------|-----------------|--------|
+| Lijst | ✅ Ja | ✅ Ja (net toegevoegd) | Correct |
+| Kalender | ✅ Ja | ✅ Ja | Correct |
+| **Opvolging** | ❌ Nee | ❌ Nee | **Inconsistent** |
+| Mijn Werk | N.v.t. | N.v.t. | Altijd persoonlijk (OK) |
 
 ---
 
-## Vergelijking met andere Views
+## Probleem
 
-| Component | "Mijn/Alle" Toggle | Status |
-|-----------|-------------------|--------|
-| EmbeddedCalendarView | Ja (regels 620-641) | Werkt |
-| MyTasksFlowSection | N.v.t. (altijd mijn taken) | OK |
-| **EmbeddedListView** | **NEE - ONTBREEKT** | **BUG** |
+De **Opvolging** tab gebruikt `useTasksQuery` direct zonder de globale filter hook. Dit betekent:
+- Opvolging toont **altijd alle taken** van het hele team
+- Dit is inconsistent met Lijst en Kalender
+- Als Leonie daar kijkt, ziet ze taken van anderen zonder toggle optie
 
 ---
 
 ## Oplossing
 
-### Wijziging: Voeg toggle toe aan EmbeddedListView.tsx
+### Wijziging: EmbeddedOpvolgingView.tsx
 
-Voeg de "Mijn taken / Alle taken" toggle toe in de header sectie, exact zoals EmbeddedCalendarView dat doet.
+Voeg dezelfde toggle toe als bij Lijst en Kalender:
 
-**Locatie**: Na de filter sectie (rond regel 698), vóór de KPI cards
+1. **Import toevoegen**: `useGlobalTaskFilter` hook + `Users` icon
+2. **Filter toepassen**: Tasks filteren op basis van `showOnlyMyTasks` state
+3. **Toggle UI toevoegen**: Dezelfde button group als andere views
 
-**Toe te voegen code**:
+---
+
+## Implementatie Details
+
+### Stap 1: Imports toevoegen
 
 ```text
-// Voeg deze imports toe aan het begin:
-import { Users } from "lucide-react";
+import { useGlobalTaskFilter } from "@/hooks/useGlobalTaskFilter";
+import { User, Users } from "lucide-react"; // Users toevoegen
+```
 
-// Voeg de toggle toe in de header sectie:
+### Stap 2: Hook gebruiken
+
+```text
+const { showOnlyMyTasks, setShowOnlyMyTasks, userId } = useGlobalTaskFilter();
+```
+
+### Stap 3: Tasks filteren
+
+Na het ophalen van tasks, filter op basis van de globale state:
+
+```text
+// Filter tasks based on global "Mijn taken" setting
+const filteredTasks = showOnlyMyTasks && userId
+  ? tasks.filter(t => t.assignee_id === userId)
+  : tasks;
+```
+
+### Stap 4: Toggle UI toevoegen
+
+In de header sectie (rond regel 214-222), voeg toggle toe:
+
+```text
 <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-lg">
   <Button 
     variant={showOnlyMyTasks ? "default" : "ghost"} 
@@ -70,55 +87,47 @@ import { Users } from "lucide-react";
 </div>
 ```
 
----
+### Stap 5: Alle referenties naar `tasks` vervangen door `filteredTasks`
 
-## Implementatie Details
-
-### Stap 1: Import toevoegen
-
-Voeg `Users` icon toe aan de bestaande lucide-react imports (regel 13).
-
-### Stap 2: Toggle UI toevoegen
-
-Plaats de toggle in de header sectie, vóór de filters maar na de tekst "X taken • X hoge prioriteit".
-
-**Exacte locatie**: Tussen regels 618-619 (na de `</div>` van de header tekst, vóór de search bar).
-
-Alternatief: Naast de KPI cards op dezelfde rij, rechts uitgelijnd.
-
-### Stap 3: Layout aanpassen
-
-Zorg dat de toggle responsive is:
-- Desktop: "Mijn taken" / "Alle taken" met tekst
-- Mobiel: Alleen icons (User / Users)
+Vervang in de berekeningen en rendering:
+- `tasksWithNextAction`
+- `overdueTasks`
+- `upcomingTasks`
+- `allFocusTasks`
+- Tekst "X taken uit Y taken"
 
 ---
 
 ## Verwacht Resultaat
 
-Na deze fix kan Leonie:
-
-1. ✅ De toggle zien in de Lijstweergave
-2. ✅ Klikken op "Alle taken" om alle 52 taken te zien
-3. ✅ Terugschakelen naar "Mijn taken" voor haar persoonlijke view
-4. ✅ Consistente ervaring met de Kalenderweergave
+| Aspect | Vóór | Na |
+|--------|------|-----|
+| Opvolging filter | Altijd alle taken | Keuze mijn/alle |
+| Consistentie tussen tabs | Nee | Ja |
+| Globale filter sync | Nee | Ja (localStorage) |
 
 ---
 
-## Impact
+## Volledig Consistent Na Deze Fix
 
-| Aspect | Vóór | Na |
-|--------|------|-----|
-| Toggle zichtbaar in Lijst | Nee | Ja |
-| Leonie kan alle taken zien | Nee | Ja |
-| Consistentie met Kalender | Nee | Ja |
-| UX voor alle gebruikers | Beperkt | Volledig |
+| Tab | Toggle | Globale State | Status |
+|-----|--------|---------------|--------|
+| Mijn Werk | N.v.t. | N.v.t. | OK |
+| Kalender | ✅ | ✅ | OK |
+| Lijst | ✅ | ✅ | OK |
+| Opvolging | ✅ | ✅ | **Wordt gefixed** |
+| Team | N.v.t. | N.v.t. | OK (altijd team) |
+| Recruitment | N.v.t. | N.v.t. | OK |
 
 ---
 
 ## Technische Samenvatting
 
-- **Bestand**: `src/components/dashboard/EmbeddedListView.tsx`
-- **Wijziging**: Toggle UI toevoegen + Users icon import
-- **Risico**: Laag (bestaande hook werkt al correct)
-- **Test**: Login als Leonie, verificeer toggle werkt
+- **Bestand**: `src/components/dashboard/EmbeddedOpvolgingView.tsx`
+- **Wijzigingen**: 
+  - Import `useGlobalTaskFilter` + `User`, `Users` icons
+  - Filter tasks met globale state
+  - Toggle UI in header
+- **Risico**: Laag (dezelfde logica als andere views)
+- **Test**: Toggle in Lijst → Naar Opvolging → Zelfde filter actief
+
