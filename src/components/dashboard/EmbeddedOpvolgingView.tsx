@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { format, differenceInDays } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Loader2, Clock, AlertCircle, Calendar, CheckCircle2, TrendingUp, Check } from "lucide-react";
+import { Loader2, Clock, AlertCircle, Calendar, CheckCircle2, TrendingUp, Check, User, Users } from "lucide-react";
 import confetti from "canvas-confetti";
 import { toast as sonnerToast } from "sonner";
 import { Progress } from "@/components/ui/progress";
@@ -15,6 +15,7 @@ import { useAiScoring } from "@/hooks/useAiScoring";
 import { KPICard } from "@/components/ui/kpi-card";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { useTasksQuery } from "@/hooks/useTasksQuery";
+import { useGlobalTaskFilter } from "@/hooks/useGlobalTaskFilter";
 import { supabase } from "@/integrations/supabase/client";
 
 type FilterType = "achterstallig" | "deze-week" | "met-actie" | null;
@@ -26,6 +27,9 @@ type FilterType = "achterstallig" | "deze-week" | "met-actie" | null;
 export default function EmbeddedOpvolgingView() {
   // Use shared TanStack Query hook for tasks (shared with Dashboard)
   const { data: tasks = [], isLoading: loading, refetch: refetchTasks } = useTasksQuery();
+  
+  // Global task filter for "Mijn taken / Alle taken" consistency
+  const { showOnlyMyTasks, setShowOnlyMyTasks, userId } = useGlobalTaskFilter();
   
   const [activeFilter, setActiveFilter] = useState<FilterType>(null);
   
@@ -41,6 +45,11 @@ export default function EmbeddedOpvolgingView() {
     loading: scoringLoading,
     getScoreForTask
   } = useAiScoring(tasks, true);
+
+  // Filter tasks based on global "Mijn taken" setting
+  const filteredTasks = showOnlyMyTasks && userId
+    ? tasks.filter(t => t.assignee_id === userId)
+    : tasks;
 
   // === COMPLETION HANDLERS ===
   const handleCompleteTask = async (taskId: string, taskTitle: string) => {
@@ -123,18 +132,18 @@ export default function EmbeddedOpvolgingView() {
   };
 
 
-  const tasksWithNextAction = tasks.filter((t) => t.next_action);
-  const overdueTasks = tasks.filter(
+  const tasksWithNextAction = filteredTasks.filter((t) => t.next_action);
+  const overdueTasks = filteredTasks.filter(
     (t) => t.due_at && new Date(t.due_at) < new Date()
   );
-  const upcomingTasks = tasks.filter(
+  const upcomingTasks = filteredTasks.filter(
     (t) =>
       t.due_at &&
       new Date(t.due_at) >= new Date() &&
       differenceInDays(new Date(t.due_at), new Date()) <= 7
   );
 
-  const allFocusTasks = [...tasks]
+  const allFocusTasks = [...filteredTasks]
     .map((task) => {
       const scoreData = getScoreForTask(task.id);
       return {
@@ -212,13 +221,37 @@ export default function EmbeddedOpvolgingView() {
     <div className="space-y-6">
       {/* Minimal Hero Section - simplified for embedded use */}
       <div className="space-y-4">
-        <div className="space-y-2">
-          <p className="text-muted-foreground">
-            {scoringLoading 
-              ? `AI analyseert ${tasks.length} taken...`
-              : `${focusTasks.length} prioriteiten uit ${tasks.length} taken`
-            }
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="space-y-1">
+            <p className="text-muted-foreground">
+              {scoringLoading 
+                ? `AI analyseert ${filteredTasks.length} taken...`
+                : `${focusTasks.length} prioriteiten uit ${filteredTasks.length} taken`
+              }
+            </p>
+          </div>
+          
+          {/* Mijn taken / Alle taken toggle */}
+          <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-lg">
+            <Button 
+              variant={showOnlyMyTasks ? "default" : "ghost"} 
+              size="sm"
+              onClick={() => setShowOnlyMyTasks(true)}
+              className="gap-1.5 h-8 px-3 text-sm"
+            >
+              <User className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Mijn taken</span>
+            </Button>
+            <Button 
+              variant={!showOnlyMyTasks ? "default" : "ghost"} 
+              size="sm"
+              onClick={() => setShowOnlyMyTasks(false)}
+              className="gap-1.5 h-8 px-3 text-sm"
+            >
+              <Users className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Alle taken</span>
+            </Button>
+          </div>
         </div>
         
         {/* AI Context - clean card */}
