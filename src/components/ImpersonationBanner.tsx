@@ -38,15 +38,16 @@
        const { data: { session } } = await supabase.auth.getSession();
        
        if (session && originalAdminId) {
-         // Log the stop action (fire and forget)
-         await supabase.functions.invoke('impersonate-user', {
-           body: {
-             action: 'stop_impersonation',
-             target_user_id: session.user.id
-           }
-         }).catch(() => {
-           // Ignore errors, just proceed with logout
-         });
+          // Log the stop action (fire and forget)
+          await supabase.functions.invoke('impersonate-user', {
+            body: {
+              action: 'stop_impersonation',
+              target_user_id: session.user.id,
+              original_admin_id: originalAdminId
+            }
+          }).catch(() => {
+            // Ignore errors, just proceed with logout
+          });
        }
  
        // Clear impersonation state
