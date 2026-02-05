@@ -533,23 +533,64 @@ export default function EmbeddedListView() {
   const groupedTasks = () => {
     if (groupBy === "none") return { "Alle taken": filteredTasks };
 
-    const groups: Record<string, Task[]> = {};
+   // Interface voor groepen met sorteerbare datum
+   interface GroupData {
+     displayKey: string;
+     sortKey: number; // timestamp voor sortering
+     tasks: Task[];
+   }
+
+   const groupsMap: Map<string, GroupData> = new Map();
+
     filteredTasks.forEach((task) => {
-      let key = "Ongegroepeerd";
-      
+     let displayKey = "Ongegroepeerd";
+     let sortKey = Number.MAX_SAFE_INTEGER; // Ongegroepeerd komt altijd laatst
+
       if (groupBy === "start" && task.start_at) {
-        key = `START: ${format(new Date(task.start_at), "dd-MM-yy", { locale: nl })}`;
+       const date = new Date(task.start_at);
+       displayKey = `START: ${format(date, "dd-MM-yy", { locale: nl })}`;
+       sortKey = date.getTime();
       } else if (groupBy === "due" && task.due_at) {
-        key = `EIND: ${format(new Date(task.due_at), "dd-MM-yy", { locale: nl })}`;
+       const date = new Date(task.due_at);
+       displayKey = `EIND: ${format(date, "dd-MM-yy", { locale: nl })}`;
+       sortKey = date.getTime();
       } else if (groupBy === "priority") {
-        key = getPriorityLabel(task.priority);
+       // Prioriteit sortering: CRITICAL=0, HIGH=1, MEDIUM=2, LOW=3
+       const priorityOrder: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+       displayKey = getPriorityLabel(task.priority);
+       sortKey = priorityOrder[task.priority] ?? 4;
       }
 
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(task);
+     const existing = groupsMap.get(displayKey);
+     if (existing) {
+       existing.tasks.push(task);
+     } else {
+       groupsMap.set(displayKey, { displayKey, sortKey, tasks: [task] });
+     }
     });
 
-    return groups;
+   // Sorteer groepen: oplopend (oudste eerst), "Ongegroepeerd" laatst
+   const sortedGroups = Array.from(groupsMap.values()).sort((a, b) => a.sortKey - b.sortKey);
+
+   // Sorteer taken BINNEN elke groep ook op datum (indien datum-groepering)
+   if (groupBy === "start" || groupBy === "due") {
+     const dateField = groupBy === "start" ? "start_at" : "due_at";
+     sortedGroups.forEach(group => {
+       group.tasks.sort((a, b) => {
+         const dateA = a[dateField] ? new Date(a[dateField] as string).getTime() : Number.MAX_SAFE_INTEGER;
+         const dateB = b[dateField] ? new Date(b[dateField] as string).getTime() : Number.MAX_SAFE_INTEGER;
+         return dateA - dateB;
+       });
+     });
+   }
+
+   // Converteer terug naar Record voor bestaande rendering
+   const result: Record<string, Task[]> = {};
+   sortedGroups.forEach(group => {
+     result[group.displayKey] = group.tasks;
+   });
+
+   return result;
   };
 
   const groups = groupedTasks();
