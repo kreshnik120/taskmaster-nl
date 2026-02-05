@@ -1,119 +1,185 @@
 
 
-# Verfijnd Plan: Filter op Medewerker Toevoegen
+# Plan: Persoonlijke Kolom Titels voor "Mijn Werk" Flow
 
-## ✅ Verificatie Huidige Structuur
+## Probleem
 
-Na grondige analyse is bevestigd dat het plan **naadloos aansluit** op de bestaande code:
-
-| Aspect | Huidige Status | Compatibiliteit |
-|--------|----------------|-----------------|
-| `profiles` state (regel 102) | ✅ Beschikbaar | Kan hergebruikt worden |
-| `loadProfiles()` functie (regel 147-159) | ✅ Laadt alle profielen | Perfecte databron |
-| Filter state pattern | `filterPriority`, `filterStatus` als strings | Zelfde pattern volgen |
-| Filter UI locatie (regel 708-760) | 3 kolommen in flex container | Voeg 4e kolom toe |
-| `filteredTasks` useMemo (regel 491-532) | Filter op priority, status, search | Voeg assignee filter toe |
-| "Mijn taken" toggle (regel 660-680) | Database-niveau filtering | Werkt onafhankelijk |
+In de "Mijn Werk" tab kan elke medewerker de Kanban kolom titels **niet** aanpassen. De kolommen tonen de standaard titels (Start., Actie uitgezet, etc.) terwijl de team Kanban (/kanban) wél persoonlijke titels ondersteunt.
 
 ---
 
-## Implementatie Details
+## Huidige Situatie
 
-### Stap 1: Nieuwe State Toevoegen
+| View | Persoonlijke Titels | Database Tabel |
+|------|---------------------|----------------|
+| Team Kanban (/kanban) | ✅ Werkt | `user_column_preferences` |
+| Mijn Werk Flow | ❌ Niet geïmplementeerd | - |
 
-**Locatie**: Rond regel 98 (bij andere filter states)
+De `user_column_preferences` tabel bestaat al en bevat al data van gebruikers die titels hebben aangepast in de team Kanban.
+
+---
+
+## Oplossing
+
+De bestaande `user_column_preferences` functionaliteit hergebruiken in `MyTasksFlowSection.tsx`.
+
+### Wat Wordt Aangepast
 
 ```text
-const [filterAssignee, setFilterAssignee] = useState<string>("all");
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           MIJN WERK FLOW                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                   │
+│  │ [✏️ Start.] │  │ [✏️ Opgepakt]│  │ [✏️ Wachten] │ <- Bewerkbaar!    │
+│  │      1       │  │      0       │  │      2       │                   │
+│  ├──────────────┤  ├──────────────┤  ├──────────────┤                   │
+│  │              │  │              │  │              │                   │
+│  │   Taak 1     │  │              │  │   Taak 3     │                   │
+│  │              │  │              │  │              │                   │
+│  └──────────────┘  └──────────────┘  └──────────────┘                   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
----
+### Gedrag
 
-### Stap 2: Filter UI Toevoegen
-
-**Locatie**: Na de status filter (regel 759-760)
-
-Een vierde `<div className="flex-1">` toevoegen:
-
-```text
-<div className="flex-1">
-  <label className="text-sm font-medium mb-2 block">
-    Filter op medewerker
-  </label>
-  <Select value={filterAssignee} onValueChange={setFilterAssignee}>
-    <SelectTrigger>
-      <SelectValue />
-    </SelectTrigger>
-    <SelectContent className="bg-popover z-50">
-      <SelectItem value="all">Alle medewerkers</SelectItem>
-      <SelectItem value="unassigned">Niet toegewezen</SelectItem>
-      {profiles.map((profile) => (
-        <SelectItem key={profile.id} value={profile.id}>
-          {profile.name || 'Onbekend'}
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
-</div>
-```
-
-**Let op**: `bg-popover z-50` toegevoegd voor correcte dropdown weergave (conform useful-context richtlijnen).
+1. **Hover** over kolom titel toont potloodje (✏️)
+2. **Klik** op titel opent inline input veld
+3. **Enter** slaat de nieuwe naam op naar `user_column_preferences`
+4. **Escape** annuleert wijziging
+5. Opgeslagen namen zijn **per gebruiker** - andere teamleden zien hun eigen titels
 
 ---
 
-### Stap 3: Filter Logica Toevoegen
+## Technische Implementatie
 
-**Locatie**: In `filteredTasks` useMemo (regel 492-506)
+### Stap 1: Column Interface Uitbreiden
 
-Voeg toe **na** de huidige filter checks (rond regel 505):
+Voeg `originalName` toe aan de Column interface (regel 96-101):
 
 ```text
-// Filter op medewerker (alleen actief bij "Alle taken" mode)
-if (!showOnlyMyTasks && filterAssignee !== "all") {
-  if (filterAssignee === "unassigned") {
-    if (task.assignee_id) return false;
-  } else {
-    if (task.assignee_id !== filterAssignee) return false;
-  }
+interface Column {
+  id: string;
+  name: string;          // Persoonlijke naam (of default)
+  originalName: string;  // Standaard naam voor terugval
+  status: string;
+  order: number;
 }
 ```
 
----
+### Stap 2: User Preferences Laden in loadData()
 
-### Stap 4: useMemo Dependencies Bijwerken
-
-**Locatie**: Regel 532
-
-Voeg `filterAssignee` en `showOnlyMyTasks` toe aan de dependency array:
+Pas `loadData()` aan om persoonlijke voorkeuren te mergen (regel 229-267):
 
 ```text
-}, [tasks, filterPriority, filterStatus, filterAssignee, showOnlyMyTasks, sortColumn, sortDirection, debouncedSearchQuery]);
+// Laad persoonlijke kolom voorkeuren
+const { data: prefsData } = await supabase
+  .from("user_column_preferences")
+  .select("column_id, custom_name")
+  .eq("user_id", user.id);
+
+const prefsMap = new Map(
+  (prefsData || []).map(p => [p.column_id, p.custom_name])
+);
+
+// Merge kolommen met persoonlijke voorkeuren
+const mergedColumns = (columnsData || []).map(col => ({
+  ...col,
+  originalName: col.name,
+  name: prefsMap.get(col.id) || col.name,
+}));
+
+setColumns(mergedColumns);
 ```
 
----
+### Stap 3: Update Functie Toevoegen
 
-## Gedrag Matrix
-
-| "Mijn taken" Toggle | Medewerker Filter | Resultaat |
-|---------------------|-------------------|-----------|
-| Mijn taken (actief) | Elke waarde | Alleen jouw taken (toggle wint, filter genegeerd) |
-| Alle taken | Alle medewerkers | Alle taken van het team |
-| Alle taken | "Jan" | Alleen Jan's taken |
-| Alle taken | Niet toegewezen | Taken zonder assignee |
-
----
-
-## Visuele Layout (Na Implementatie)
+Nieuwe functie `handleUpdateColumnName`:
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                              [Mijn taken] [Alle taken]                              │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│ [🔍 Zoek taken... (Cmd+K)                                                       ]   │
-├────────────────┬────────────────┬────────────────┬────────────────┬─────────────────┤
-│ Groepeer op    │ Filter priorit.│ Filter status  │ Filter medewerk.                │
-│ [Startdatum ▼] │ [Alle prior. ▼]│ [Alle stat. ▼] │ [Alle medewerk.▼]               │
-└────────────────┴────────────────┴────────────────┴──────────────────────────────────┘
+const handleUpdateColumnName = async (columnId: string, newName: string) => {
+  if (!user) return;
+  
+  try {
+    const { error } = await supabase
+      .from("user_column_preferences")
+      .upsert({
+        user_id: user.id,
+        column_id: columnId,
+        custom_name: newName,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'user_id,column_id'
+      });
+
+    if (error) throw error;
+
+    // Optimistic update
+    setColumns(prev => prev.map(col =>
+      col.id === columnId ? { ...col, name: newName } : col
+    ));
+
+    toast.success("Kolomnaam opgeslagen");
+  } catch (error) {
+    console.error("Error updating column name:", error);
+    toast.error("Fout bij opslaan kolomnaam");
+  }
+};
+```
+
+### Stap 4: Bewerkbare Kolom Header UI
+
+Pas de CardTitle aan (regel 707-712) om inline editing te ondersteunen:
+
+```text
+// Voeg state toe per kolom
+const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
+const [editingName, setEditingName] = useState("");
+
+// In de render loop:
+<CardTitle className="text-sm font-medium flex items-center justify-between group">
+  {editingColumnId === column.id ? (
+    <Input
+      value={editingName}
+      onChange={(e) => setEditingName(e.target.value)}
+      onBlur={() => {
+        if (editingName.trim() && editingName !== column.name) {
+          handleUpdateColumnName(column.id, editingName.trim());
+        }
+        setEditingColumnId(null);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          if (editingName.trim() && editingName !== column.name) {
+            handleUpdateColumnName(column.id, editingName.trim());
+          }
+          setEditingColumnId(null);
+        }
+        if (e.key === 'Escape') {
+          setEditingColumnId(null);
+        }
+      }}
+      className="h-6 text-sm py-0"
+      autoFocus
+      maxLength={50}
+    />
+  ) : (
+    <span 
+      className="truncate cursor-pointer hover:text-foreground/80 flex items-center gap-1.5"
+      onClick={() => {
+        setEditingColumnId(column.id);
+        setEditingName(column.name);
+      }}
+    >
+      {column.name}
+      <Pencil className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+    </span>
+  )}
+  <Badge variant="glass" className="ml-2 text-xs">
+    {total}
+  </Badge>
+</CardTitle>
 ```
 
 ---
@@ -122,35 +188,36 @@ Voeg `filterAssignee` en `showOnlyMyTasks` toe aan de dependency array:
 
 | Bestaande Functionaliteit | Impact |
 |---------------------------|--------|
-| Groepering (datum/prioriteit) | ✅ Ongewijzigd |
-| Priority filter | ✅ Ongewijzigd |
-| Status filter | ✅ Ongewijzigd |
-| Zoekfunctie | ✅ Ongewijzigd |
-| "Mijn taken" toggle | ✅ Ongewijzigd, neemt voorrang |
-| Kolom sortering | ✅ Ongewijzigd |
-| Bulk acties | ✅ Ongewijzigd |
-| KPI kaarten | ✅ Ongewijzigd |
+| Team Kanban voorkeuren | ✅ Dezelfde tabel, sync automatisch |
+| Drag-and-drop | ✅ Ongewijzigd |
+| Realtime updates | ✅ Ongewijzigd |
+| Sortering en zoeken | ✅ Ongewijzigd |
+| Keyboard shortcuts | ✅ Ongewijzigd |
 
 ---
 
-## Technische Samenvatting
+## Voordelen
 
-| Item | Details |
-|------|---------|
-| **Bestand** | `src/components/dashboard/EmbeddedListView.tsx` |
-| **Nieuwe state** | `filterAssignee: string` (default "all") |
-| **UI locatie** | Regel 760 (na status filter) |
-| **Filter logica** | Regel 505 (in filteredTasks useMemo) |
-| **Databron** | Bestaande `profiles` state |
-| **Risico** | Laag - alleen additieve wijzigingen |
+1. **Consistentie**: Dezelfde voorkeuren werken nu in zowel Mijn Werk als Team Kanban
+2. **Geen migratie**: Bestaande voorkeuren uit team Kanban zijn direct zichtbaar
+3. **Per gebruiker**: Elke medewerker ziet zijn eigen titels
+4. **Eenvoudig**: Klik op titel om te bewerken
 
 ---
 
-## Test Scenario's
+## Bestanden
 
-1. **Met "Mijn taken" actief**: Medewerker filter wordt genegeerd → Alleen eigen taken zichtbaar
-2. **Met "Alle taken" + "Jan"**: Alleen Jan's taken verschijnen
-3. **Met "Alle taken" + "Niet toegewezen"**: Alleen taken zonder assignee
-4. **Combinatie met prioriteit filter**: Beide filters werken samen (AND logica)
-5. **Combinatie met groepering**: Groepen bevatten alleen gefilterde taken
+| Bestand | Wijziging |
+|---------|-----------|
+| `src/components/dashboard/MyTasksFlowSection.tsx` | Column interface, loadData(), handleUpdateColumnName(), CardTitle UI |
+
+---
+
+## Database
+
+Geen wijzigingen nodig - de `user_column_preferences` tabel bestaat al en heeft de juiste structuur:
+- `user_id` (UUID)
+- `column_id` (UUID)
+- `custom_name` (text)
+- `is_collapsed` (boolean)
 
