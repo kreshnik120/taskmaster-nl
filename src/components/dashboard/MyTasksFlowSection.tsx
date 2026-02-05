@@ -56,7 +56,8 @@ import {
   Sparkles,
   Lightbulb,
   Zap,
-  Target
+  Target,
+  Pencil
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -96,6 +97,7 @@ interface Task {
 interface Column {
   id: string;
   name: string;
+  originalName: string;
   status: string;
   order: number;
 }
@@ -138,6 +140,10 @@ export function MyTasksFlowSection() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  
+  // Column name editing state
+  const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
 
   // Optional drag context (used when wrapped in DragContextProvider)
   const dragContext = useDragContextOptional();
@@ -238,7 +244,25 @@ export function MyTasksFlowSection() {
         .order("order");
 
       if (columnsError) throw columnsError;
-      setColumns(columnsData || []);
+      
+      // Load user column preferences for personal titles
+      const { data: prefsData } = await supabase
+        .from("user_column_preferences")
+        .select("column_id, custom_name")
+        .eq("user_id", user.id);
+
+      const prefsMap = new Map(
+        (prefsData || []).map(p => [p.column_id, p.custom_name])
+      );
+
+      // Merge columns with personal preferences
+      const mergedColumns = (columnsData || []).map(col => ({
+        ...col,
+        originalName: col.name,
+        name: prefsMap.get(col.id) || col.name,
+      }));
+
+      setColumns(mergedColumns);
 
       // Load MY tasks only (filtered on current user)
       const { data: tasksData, error: tasksError } = await supabase
@@ -485,6 +509,36 @@ export function MyTasksFlowSection() {
     loadData();
   };
 
+  // Handle column name update (persoonlijke kolom titels)
+  const handleUpdateColumnName = async (columnId: string, newName: string) => {
+    if (!user) return;
+    
+    try {
+      const { error } = await supabase
+        .from("user_column_preferences")
+        .upsert({
+          user_id: user.id,
+          column_id: columnId,
+          custom_name: newName,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id,column_id'
+        });
+
+      if (error) throw error;
+
+      // Optimistic update
+      setColumns(prev => prev.map(col =>
+        col.id === columnId ? { ...col, name: newName } : col
+      ));
+
+      toast.success("Kolomnaam opgeslagen");
+    } catch (error) {
+      console.error("Error updating column name:", error);
+      toast.error("Fout bij opslaan kolomnaam");
+    }
+  };
+
   // Total task count
   const totalTaskCount = tasks.length;
 
@@ -704,8 +758,45 @@ export function MyTasksFlowSection() {
                   <DroppableColumn key={column.id} column={column}>
                     <Card className="h-full min-h-[200px] glass-kanban-column-enhanced border-t-2 border-t-tab-mijn-werk-400/80 dark:border-t-tab-mijn-werk-600/80">
                       <CardHeader className="pb-2 pt-3 px-3 bg-gradient-to-b from-white/60 to-transparent dark:from-slate-800/60 dark:to-transparent border-b border-white/30 dark:border-white/10 rounded-t-xl">
-                        <CardTitle className="text-sm font-medium flex items-center justify-between">
-                          <span className="truncate">{column.name}</span>
+                        <CardTitle className="text-sm font-medium flex items-center justify-between group">
+                          {editingColumnId === column.id ? (
+                            <Input
+                              value={editingName}
+                              onChange={(e) => setEditingName(e.target.value)}
+                              onBlur={() => {
+                                if (editingName.trim() && editingName !== column.name) {
+                                  handleUpdateColumnName(column.id, editingName.trim());
+                                }
+                                setEditingColumnId(null);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  if (editingName.trim() && editingName !== column.name) {
+                                    handleUpdateColumnName(column.id, editingName.trim());
+                                  }
+                                  setEditingColumnId(null);
+                                }
+                                if (e.key === 'Escape') {
+                                  setEditingColumnId(null);
+                                }
+                              }}
+                              className="h-6 text-sm py-0 px-1.5 min-w-0 flex-1"
+                              autoFocus
+                              maxLength={50}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          ) : (
+                            <span 
+                              className="truncate cursor-pointer hover:text-foreground/80 flex items-center gap-1.5 transition-colors"
+                              onClick={() => {
+                                setEditingColumnId(column.id);
+                                setEditingName(column.name);
+                              }}
+                            >
+                              {column.name}
+                              <Pencil className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                            </span>
+                          )}
                           <Badge variant="glass" className="ml-2 text-xs shadow-[0_1px_4px_hsla(234,45%,52%,0.08)] bg-white/70 dark:bg-slate-800/70">
                             {total}
                           </Badge>
