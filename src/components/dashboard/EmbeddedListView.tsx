@@ -31,6 +31,7 @@ import { useActiveTimers } from "@/hooks/useActiveTimers";
 import { useGlobalTaskFilter } from "@/hooks/useGlobalTaskFilter";
 import { getAssigneeColor } from "@/hooks/useAssigneeColor";
 import { getPriorityLabel } from "@/hooks/usePriorityConfig";
+ import { PRIORITY_ORDER, PRIORITY_DEFAULT } from "@/lib/constants/priorities";
  import { EmbeddedListCards } from "@/components/dashboard/EmbeddedListCards";
 import {
   AlertDialog,
@@ -555,10 +556,8 @@ export default function EmbeddedListView() {
        displayKey = `EIND: ${format(date, "dd-MM-yy", { locale: nl })}`;
        sortKey = date.getTime();
       } else if (groupBy === "priority") {
-       // Prioriteit sortering: CRITICAL=0, HIGH=1, MEDIUM=2, LOW=3
-       const priorityOrder: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
        displayKey = getPriorityLabel(task.priority);
-       sortKey = priorityOrder[task.priority] ?? 4;
+        sortKey = PRIORITY_ORDER[task.priority] ?? PRIORITY_DEFAULT;
       }
 
      const existing = groupsMap.get(displayKey);

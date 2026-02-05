@@ -64,19 +64,13 @@ import { User } from "@supabase/supabase-js";
 import { useRealtimeChannel } from "@/hooks/useRealtimeChannel";
 import { useAgentRouter } from "@/hooks/useAgentRouter";
 import { useDragContextOptional } from "@/hooks/useDragContext";
+ import { PRIORITY_ORDER, PRIORITY_DEFAULT } from "@/lib/constants/priorities";
 
 // ENTERPRISE CONFIG
 const MAX_VISIBLE_TASKS = 5;
 const COLUMNS_TO_SHOW: ("BACKLOG" | "READY" | "DOING" | "BLOCKED" | "REVIEW")[] = [
   "BACKLOG", "READY", "DOING", "BLOCKED", "REVIEW"
 ];
-
-const priorityRank: Record<string, number> = {
-  'CRITICAL': 4,
-  'HIGH': 3,
-  'MEDIUM': 2,
-  'LOW': 1,
-};
 
 interface Task {
   id: string;
@@ -308,9 +302,9 @@ export function MyTasksFlowSection() {
         return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
       }
       if (sortBy === 'priority') {
-        const rankA = priorityRank[a.priority] || 0;
-        const rankB = priorityRank[b.priority] || 0;
-        return sortDirection === 'asc' ? rankA - rankB : rankB - rankA;
+         const rankA = PRIORITY_ORDER[a.priority] ?? PRIORITY_DEFAULT;
+         const rankB = PRIORITY_ORDER[b.priority] ?? PRIORITY_DEFAULT;
+         return sortDirection === 'asc' ? rankA - rankB : rankB - rankA;
       }
       if (sortBy === 'created_at') {
         const dateA = new Date(a.created_at).getTime();
