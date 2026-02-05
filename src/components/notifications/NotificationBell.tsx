@@ -27,6 +27,12 @@ export function NotificationBell({ onNotificationClick }: NotificationBellProps)
     
     markAsRead(notification.id);
     
+    // Handle task assignment - navigate to task list with task highlight
+    if (notification.notification_type === 'task_assigned' && taskId) {
+      navigate(`/dashboard?tab=lijst&taskId=${taskId}`);
+      return;
+    }
+    
     // Handle subtask assignment - navigate to task list with task highlight
     if (notification.notification_type === 'subtask_assignment' && taskId) {
       navigate(`/dashboard?tab=lijst&taskId=${taskId}&highlight=subtask`);
@@ -43,6 +49,7 @@ export function NotificationBell({ onNotificationClick }: NotificationBellProps)
       case "diploma_upgrade": return "🎓";
       case "vog_verified": return "📜";
       case "subtask_assignment": return "📋";
+      case "task_assigned": return "📌";
       default: return "🔔";
     }
   };
