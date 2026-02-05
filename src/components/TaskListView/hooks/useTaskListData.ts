@@ -2,14 +2,7 @@ import { useMemo } from 'react';
 import { useTasksQuery } from '@/hooks/useTasksQuery';
 import { startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import type { TaskListTask, TaskListDataOptions, TaskListDataResult, TaskListFilters, QuickFilter } from '../types';
-
-// Priority order for sorting
-const PRIORITY_ORDER: Record<string, number> = {
-  CRITICAL: 0,
-  HIGH: 1,
-  MEDIUM: 2,
-  LOW: 3
-};
+ import { PRIORITY_ORDER, PRIORITY_DEFAULT } from '@/lib/constants/priorities';
 
 /**
  * Check if a task matches a quick filter
@@ -56,8 +49,8 @@ function sortTasks(tasks: TaskListTask[], filters: TaskListFilters): TaskListTas
   sorted.sort((a, b) => {
     switch (sortBy) {
       case 'priority': {
-        const priorityA = PRIORITY_ORDER[a.priority] ?? 4;
-        const priorityB = PRIORITY_ORDER[b.priority] ?? 4;
+         const priorityA = PRIORITY_ORDER[a.priority] ?? PRIORITY_DEFAULT;
+         const priorityB = PRIORITY_ORDER[b.priority] ?? PRIORITY_DEFAULT;
         return (priorityA - priorityB) * multiplier;
       }
       case 'created_at': {

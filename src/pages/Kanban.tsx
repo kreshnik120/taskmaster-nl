@@ -19,6 +19,7 @@ import { useGreeting } from "@/hooks/useGreeting";
 import { useRealtimeChannel } from "@/hooks/useRealtimeChannel";
 
 import { logger } from "@/lib/logger";
+ import { PRIORITY_ORDER, PRIORITY_DEFAULT } from "@/lib/constants/priorities";
 
 const log = logger.create('Kanban');
 
@@ -100,14 +101,6 @@ const Kanban = () => {
   });
   
   const searchInputRef = useRef<HTMLInputElement>(null);
-  
-  // Priority ranking voor sortering
-  const priorityRank: Record<string, number> = {
-    'CRITICAL': 4,
-    'HIGH': 3,
-    'MEDIUM': 2,
-    'LOW': 1,
-  };
   const navigate = useNavigate();
   const { taskId } = useParams();
   
@@ -466,8 +459,8 @@ const Kanban = () => {
         }
         
         if (sortBy === 'priority') {
-          const rankA = priorityRank[a.priority] || 0;
-          const rankB = priorityRank[b.priority] || 0;
+           const rankA = PRIORITY_ORDER[a.priority] ?? PRIORITY_DEFAULT;
+           const rankB = PRIORITY_ORDER[b.priority] ?? PRIORITY_DEFAULT;
           return sortDirection === 'asc' ? rankA - rankB : rankB - rankA;
         }
         
@@ -569,8 +562,8 @@ const Kanban = () => {
         }
         
         if (sortBy === 'priority') {
-          const rankA = priorityRank[a.parent_task?.priority || 'LOW'] || 0;
-          const rankB = priorityRank[b.parent_task?.priority || 'LOW'] || 0;
+           const rankA = PRIORITY_ORDER[a.parent_task?.priority || 'LOW'] ?? PRIORITY_DEFAULT;
+           const rankB = PRIORITY_ORDER[b.parent_task?.priority || 'LOW'] ?? PRIORITY_DEFAULT;
           return sortDirection === 'asc' ? rankA - rankB : rankB - rankA;
         }
         
