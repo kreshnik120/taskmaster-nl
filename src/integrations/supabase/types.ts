@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_impersonation_log: {
+        Row: {
+          action: string
+          admin_email: string | null
+          admin_user_id: string
+          created_at: string | null
+          id: string
+          target_email: string | null
+          target_user_id: string
+        }
+        Insert: {
+          action: string
+          admin_email?: string | null
+          admin_user_id: string
+          created_at?: string | null
+          id?: string
+          target_email?: string | null
+          target_user_id: string
+        }
+        Update: {
+          action?: string
+          admin_email?: string | null
+          admin_user_id?: string
+          created_at?: string | null
+          id?: string
+          target_email?: string | null
+          target_user_id?: string
+        }
+        Relationships: []
+      }
       agent_actions: {
         Row: {
           action_description: string | null
