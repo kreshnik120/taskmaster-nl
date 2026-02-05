@@ -1,133 +1,177 @@
 
 
-# Fix: Consistentie "Mijn taken / Alle taken" Toggle
+# Fix: Logische Sortering bij Groepering op Datum
 
-## Huidige Status
+## Probleem Analyse
 
-| Tab | Gebruikt Filter Hook | Heeft Toggle UI | Gedrag |
-|-----|---------------------|-----------------|--------|
-| Lijst | ✅ Ja | ✅ Ja (net toegevoegd) | Correct |
-| Kalender | ✅ Ja | ✅ Ja | Correct |
-| **Opvolging** | ❌ Nee | ❌ Nee | **Inconsistent** |
-| Mijn Werk | N.v.t. | N.v.t. | Altijd persoonlijk (OK) |
+Wanneer gebruikers (zoals Leonie) groeperen op "Startdatum", toont de huidige implementatie de groepen in **willekeurige volgorde** in plaats van chronologisch. Dit komt door:
+
+1. **Object keys zijn niet gesorteerd** - `Object.entries()` retourneert entries in invoegvolgorde
+2. **Geen datum-gebaseerde sortering** - De groep-sleutels zijn strings (bijv. "START: 25-01-26") die niet correct sorteren
+3. **"Ongegroepeerd" positie** - Taken zonder datum verschijnen op een willekeurige plek
 
 ---
 
-## Probleem
+## Huidige Code (Probleem)
 
-De **Opvolging** tab gebruikt `useTasksQuery` direct zonder de globale filter hook. Dit betekent:
-- Opvolging toont **altijd alle taken** van het hele team
-- Dit is inconsistent met Lijst en Kalender
-- Als Leonie daar kijkt, ziet ze taken van anderen zonder toggle optie
+```javascript
+const groupedTasks = () => {
+  const groups: Record<string, Task[]> = {};
+  filteredTasks.forEach((task) => {
+    let key = "Ongegroepeerd";
+    if (groupBy === "start" && task.start_at) {
+      key = `START: ${format(...)}`;  // String-gebaseerde key
+    }
+    // ... geen sortering
+  });
+  return groups;  // Ongesorteerd object
+};
+```
 
 ---
 
 ## Oplossing
 
-### Wijziging: EmbeddedOpvolgingView.tsx
+### Strategie
 
-Voeg dezelfde toggle toe als bij Lijst en Kalender:
-
-1. **Import toevoegen**: `useGlobalTaskFilter` hook + `Users` icon
-2. **Filter toepassen**: Tasks filteren op basis van `showOnlyMyTasks` state
-3. **Toggle UI toevoegen**: Dezelfde button group als andere views
-
----
-
-## Implementatie Details
-
-### Stap 1: Imports toevoegen
-
-```text
-import { useGlobalTaskFilter } from "@/hooks/useGlobalTaskFilter";
-import { User, Users } from "lucide-react"; // Users toevoegen
-```
-
-### Stap 2: Hook gebruiken
-
-```text
-const { showOnlyMyTasks, setShowOnlyMyTasks, userId } = useGlobalTaskFilter();
-```
-
-### Stap 3: Tasks filteren
-
-Na het ophalen van tasks, filter op basis van de globale state:
-
-```text
-// Filter tasks based on global "Mijn taken" setting
-const filteredTasks = showOnlyMyTasks && userId
-  ? tasks.filter(t => t.assignee_id === userId)
-  : tasks;
-```
-
-### Stap 4: Toggle UI toevoegen
-
-In de header sectie (rond regel 214-222), voeg toggle toe:
-
-```text
-<div className="flex items-center gap-1 bg-muted/50 p-1 rounded-lg">
-  <Button 
-    variant={showOnlyMyTasks ? "default" : "ghost"} 
-    size="sm"
-    onClick={() => setShowOnlyMyTasks(true)}
-    className="gap-1.5 h-8 px-3 text-sm"
-  >
-    <User className="h-3.5 w-3.5" />
-    <span className="hidden sm:inline">Mijn taken</span>
-  </Button>
-  <Button 
-    variant={!showOnlyMyTasks ? "default" : "ghost"} 
-    size="sm"
-    onClick={() => setShowOnlyMyTasks(false)}
-    className="gap-1.5 h-8 px-3 text-sm"
-  >
-    <Users className="h-3.5 w-3.5" />
-    <span className="hidden sm:inline">Alle taken</span>
-  </Button>
-</div>
-```
-
-### Stap 5: Alle referenties naar `tasks` vervangen door `filteredTasks`
-
-Vervang in de berekeningen en rendering:
-- `tasksWithNextAction`
-- `overdueTasks`
-- `upcomingTasks`
-- `allFocusTasks`
-- Tekst "X taken uit Y taken"
+1. **Bewaar originele datums** - Gebruik een Map of array met zowel de sorteersleutel (timestamp) als de display-sleutel
+2. **Sorteer groepen chronologisch** - Oudste datum eerst (ascending)
+3. **Sorteer taken binnen groepen** - Ook op datum binnen elke groep
+4. **"Ongegroepeerd" altijd laatst** - Taken zonder datum komen aan het einde
 
 ---
 
-## Verwacht Resultaat
+## Implementatie
 
-| Aspect | Vóór | Na |
-|--------|------|-----|
-| Opvolging filter | Altijd alle taken | Keuze mijn/alle |
-| Consistentie tussen tabs | Nee | Ja |
-| Globale filter sync | Nee | Ja (localStorage) |
+### Wijziging: `groupedTasks()` Functie Verbeteren
+
+**Bestand**: `src/components/dashboard/EmbeddedListView.tsx`
+
+**Nieuwe logica**:
+
+```text
+const groupedTasks = () => {
+  if (groupBy === "none") return { "Alle taken": filteredTasks };
+
+  // Interface voor groepen met sorteerbare datum
+  interface GroupData {
+    displayKey: string;
+    sortKey: number; // timestamp voor sortering
+    tasks: Task[];
+  }
+
+  const groupsMap: Map<string, GroupData> = new Map();
+
+  filteredTasks.forEach((task) => {
+    let displayKey = "Ongegroepeerd";
+    let sortKey = Number.MAX_SAFE_INTEGER; // Ongegroepeerd komt laatst
+
+    if (groupBy === "start" && task.start_at) {
+      const date = new Date(task.start_at);
+      displayKey = `START: ${format(date, "dd-MM-yy", { locale: nl })}`;
+      sortKey = date.getTime();
+    } else if (groupBy === "due" && task.due_at) {
+      const date = new Date(task.due_at);
+      displayKey = `EIND: ${format(date, "dd-MM-yy", { locale: nl })}`;
+      sortKey = date.getTime();
+    } else if (groupBy === "priority") {
+      // Prioriteit sortering: CRITICAL=0, HIGH=1, MEDIUM=2, LOW=3
+      const priorityOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+      displayKey = getPriorityLabel(task.priority);
+      sortKey = priorityOrder[task.priority] ?? 4;
+    }
+
+    const existing = groupsMap.get(displayKey);
+    if (existing) {
+      existing.tasks.push(task);
+    } else {
+      groupsMap.set(displayKey, { displayKey, sortKey, tasks: [task] });
+    }
+  });
+
+  // Sorteer groepen: oplopend (oudste eerst), "Ongegroepeerd" laatst
+  const sortedGroups = Array.from(groupsMap.values()).sort((a, b) => a.sortKey - b.sortKey);
+
+  // Sorteer taken BINNEN elke groep ook op datum (indien datum-groepering)
+  if (groupBy === "start" || groupBy === "due") {
+    const dateField = groupBy === "start" ? "start_at" : "due_at";
+    sortedGroups.forEach(group => {
+      group.tasks.sort((a, b) => {
+        const dateA = a[dateField] ? new Date(a[dateField]).getTime() : Number.MAX_SAFE_INTEGER;
+        const dateB = b[dateField] ? new Date(b[dateField]).getTime() : Number.MAX_SAFE_INTEGER;
+        return dateA - dateB;
+      });
+    });
+  }
+
+  // Converteer terug naar Record voor bestaande rendering
+  const result: Record<string, Task[]> = {};
+  sortedGroups.forEach(group => {
+    result[group.displayKey] = group.tasks;
+  });
+
+  return result;
+};
+```
 
 ---
 
-## Volledig Consistent Na Deze Fix
+## Verwachte Resultaat
 
-| Tab | Toggle | Globale State | Status |
-|-----|--------|---------------|--------|
-| Mijn Werk | N.v.t. | N.v.t. | OK |
-| Kalender | ✅ | ✅ | OK |
-| Lijst | ✅ | ✅ | OK |
-| Opvolging | ✅ | ✅ | **Wordt gefixed** |
-| Team | N.v.t. | N.v.t. | OK (altijd team) |
-| Recruitment | N.v.t. | N.v.t. | OK |
+### Vóór (Willekeurig)
+
+```text
+START: 02-02-26
+  └── Taak 123
+START: 25-01-26
+  └── Taak 59
+START: 26-01-26
+  └── Taak 88
+Ongegroepeerd
+  └── Taak 124, 125
+```
+
+### Na (Chronologisch)
+
+```text
+START: 25-01-26     ← Oudste eerst
+  └── Taak 59
+START: 26-01-26
+  └── Taak 88
+START: 02-02-26
+  └── Taak 123
+Ongegroepeerd       ← Altijd laatst
+  └── Taak 124, 125
+```
+
+---
+
+## Sorteervolgorde per Groepeertype
+
+| Groepeer op | Sorteervolgorde |
+|-------------|-----------------|
+| Startdatum | Oudste datum eerst (ascending) |
+| Einddatum | Oudste datum eerst (ascending) |
+| Prioriteit | CRITICAL → HIGH → MEDIUM → LOW |
+| Geen | Standaard volgorde (sequence_number) |
+
+---
+
+## Taken Binnen Groepen
+
+Ook de taken **binnen** elke groep worden gesorteerd:
+- Bij datum-groepering: op de relevante datum (start_at of due_at)
+- Bij prioriteit-groepering: bestaande sortering behouden
 
 ---
 
 ## Technische Samenvatting
 
-- **Bestand**: `src/components/dashboard/EmbeddedOpvolgingView.tsx`
-- **Wijzigingen**: 
-  - Import `useGlobalTaskFilter` + `User`, `Users` icons
-  - Filter tasks met globale state
-  - Toggle UI in header
-- **Risico**: Laag (dezelfde logica als andere views)
-- **Test**: Toggle in Lijst → Naar Opvolging → Zelfde filter actief
+| Aspect | Details |
+|--------|---------|
+| **Bestand** | `src/components/dashboard/EmbeddedListView.tsx` |
+| **Functie** | `groupedTasks()` (regels 533-553) |
+| **Wijziging** | Chronologische sortering + taken binnen groepen sorteren |
+| **Risico** | Laag - alleen sorteerlogica wijzigt, geen data-wijzigingen |
+| **Test** | Groepeer op Startdatum → Controleer 25-01 < 26-01 < 02-02 |
 
