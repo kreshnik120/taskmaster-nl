@@ -25,7 +25,9 @@ import {
   FileText,
   UserPlus,
   Paperclip,
-  FileX
+  FileX,
+  CalendarIcon,
+  Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -50,6 +52,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 export interface ActionHistoryItem {
   id: string;
@@ -134,6 +141,13 @@ export function ActionTimeline({
   // Export state
   const [copiedToClipboard, setCopiedToClipboard] = useState(false);
   
+  // NEW: Assignment state for extended action form
+  const [showAssignee, setShowAssignee] = useState(false);
+  const [selectedAssignee, setSelectedAssignee] = useState<string | null>(null);
+  const [actionDueDate, setActionDueDate] = useState<Date | null>(null);
+  const [isCreatingAction, setIsCreatingAction] = useState(false);
+  const [teamMembers, setTeamMembers] = useState<Array<{id: string; name: string; email: string}>>([]);
+  
   // Filter state with localStorage initialization
   const [showFilters, setShowFilters] = useState(() => {
     try {
@@ -191,6 +205,42 @@ export function ActionTimeline({
   });
   
   const { toast } = useToast();
+
+  // Load team members for assignment dropdown
+  useEffect(() => {
+    const loadTeamMembers = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get task's org_id
+      const { data: task } = await supabase
+        .from('tasks')
+        .select('org_id')
+        .eq('id', taskId)
+        .single();
+
+      if (!task?.org_id) return;
+
+      // Get all users in the same organization
+      const { data: members } = await supabase
+        .from('user_organizations')
+        .select('user_id, profiles!inner(id, name, email)')
+        .eq('org_id', task.org_id);
+
+      if (members) {
+        setTeamMembers(
+          members
+            .filter(m => m.profiles && m.user_id !== user.id)
+            .map(m => ({
+              id: (m.profiles as any).id,
+              name: (m.profiles as any).name || (m.profiles as any).email || 'Onbekend',
+              email: (m.profiles as any).email || ''
+            }))
+        );
+      }
+    };
+    loadTeamMembers();
+  }, [taskId]);
 
   const completedActions = actionHistory
     .filter(a => a.completed_at)
@@ -354,55 +404,92 @@ export function ActionTimeline({
 
   const handleAddAction = async () => {
     if (!newActionText.trim()) return;
-    setIsSubmitting(true);
+    setIsCreatingAction(true);
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Niet ingelogd');
 
-      if (currentAction) {
-        const { data: existing } = await supabase
-          .from('task_action_history')
-          .select('id')
+      if (showAssignee && selectedAssignee) {
+        // MET TOEWIJZING → Maak subtask aan
+        const { data: existingSubtasks } = await supabase
+          .from('subtasks')
+          .select('order')
           .eq('task_id', taskId)
-          .eq('action_text', currentAction)
+          .order('order', { ascending: false })
           .limit(1);
 
-        if (existing && existing.length > 0) {
-          await supabase
+        const nextOrder = (existingSubtasks?.[0]?.order || 0) + 1;
+
+        const { error } = await supabase
+          .from('subtasks')
+          .insert({
+            task_id: taskId,
+            title: newActionText.trim(),
+            status: 'active',
+            order: nextOrder,
+            assignee_id: selectedAssignee,
+            due_at: actionDueDate?.toISOString() || null
+          });
+
+        if (error) throw error;
+
+        toast({
+          title: "Actie toegewezen",
+          description: "Collega ontvangt een notificatie",
+        });
+
+      } else {
+        // ZONDER TOEWIJZING → Bestaande flow (task_action_history)
+        if (currentAction) {
+          const { data: existing } = await supabase
             .from('task_action_history')
-            .update({ 
-              completed_at: new Date().toISOString(), 
-              completed_by: user?.id 
-            })
-            .eq('id', existing[0].id);
-        } else {
-          await supabase
-            .from('task_action_history')
-            .insert({
-              task_id: taskId,
-              action_text: currentAction,
-              action_type: 'followup',
-              completed_at: new Date().toISOString(),
-              completed_by: user?.id,
-              is_current: false
-            });
+            .select('id')
+            .eq('task_id', taskId)
+            .eq('action_text', currentAction)
+            .limit(1);
+
+          if (existing && existing.length > 0) {
+            await supabase
+              .from('task_action_history')
+              .update({ 
+                completed_at: new Date().toISOString(), 
+                completed_by: user.id 
+              })
+              .eq('id', existing[0].id);
+          } else {
+            await supabase
+              .from('task_action_history')
+              .insert({
+                task_id: taskId,
+                action_text: currentAction,
+                action_type: 'followup',
+                completed_at: new Date().toISOString(),
+                completed_by: user.id,
+                is_current: false
+              });
+          }
         }
+
+        const { error } = await supabase
+          .from('tasks')
+          .update({ next_action: newActionText.trim() })
+          .eq('id', taskId);
+
+        if (error) throw error;
+
+        toast({
+          title: "Actie toegevoegd",
+          description: "De nieuwe vervolgactie is ingesteld."
+        });
       }
 
-      const { error } = await supabase
-        .from('tasks')
-        .update({ next_action: newActionText.trim() })
-        .eq('id', taskId);
-
-      if (error) throw error;
-
+      // Reset all state
       setNewActionText("");
+      setShowAssignee(false);
+      setSelectedAssignee(null);
+      setActionDueDate(null);
       setIsAdding(false);
-      
-      toast({
-        title: "Actie toegevoegd",
-        description: "De nieuwe vervolgactie is ingesteld."
-      });
 
       onActionAdded?.();
     } catch (error) {
@@ -413,7 +500,7 @@ export function ActionTimeline({
         variant: "destructive"
       });
     } finally {
-      setIsSubmitting(false);
+      setIsCreatingAction(false);
     }
   };
 
@@ -1228,41 +1315,145 @@ export function ActionTimeline({
             </div>
           )}
 
-          {/* Nieuwe actie toevoegen */}
+          {/* Nieuwe actie toevoegen - Uitgebreide form */}
           {isAdding && (
             <div className="relative flex items-start gap-3">
               <div className="relative z-10 h-6 w-6 rounded-full bg-muted/50 flex items-center justify-center shrink-0 ring-2 ring-background">
                 <Plus className="h-3.5 w-3.5 text-muted-foreground" />
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <Input
+              <div className="flex-1 min-w-0 space-y-3">
+                {/* Actie tekst */}
+                <div>
+                  <Label htmlFor="action-text" className="text-xs text-muted-foreground">
+                    Wat moet er gebeuren?
+                  </Label>
+                  <Textarea
+                    id="action-text"
                     value={newActionText}
                     onChange={(e) => setNewActionText(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Nieuwe vervolgactie..."
-                    className="h-9 text-sm"
+                    placeholder="Beschrijf de vervolgactie..."
+                    className="mt-1.5 min-h-[80px]"
                     autoFocus
-                    disabled={isSubmitting}
+                    disabled={isCreatingAction}
                   />
+                </div>
+
+                {/* Toewijzing toggle */}
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="assign-toggle"
+                    checked={showAssignee}
+                    onCheckedChange={(checked) => {
+                      setShowAssignee(checked === true);
+                      if (!checked) {
+                        setSelectedAssignee(null);
+                        setActionDueDate(null);
+                      }
+                    }}
+                    disabled={isCreatingAction}
+                  />
+                  <Label htmlFor="assign-toggle" className="text-sm cursor-pointer">
+                    Toewijzen aan collega
+                  </Label>
+                </div>
+
+                {/* Toewijzing opties */}
+                {showAssignee && (
+                  <div className="space-y-3 pl-6 border-l-2 border-primary/20">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Toewijzen aan</Label>
+                      <Select 
+                        value={selectedAssignee || ""} 
+                        onValueChange={setSelectedAssignee}
+                        disabled={isCreatingAction}
+                      >
+                        <SelectTrigger className="mt-1.5">
+                          <SelectValue placeholder="Selecteer collega..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {teamMembers.length === 0 ? (
+                            <SelectItem value="no-members" disabled>
+                              Geen teamleden gevonden
+                            </SelectItem>
+                          ) : (
+                            teamMembers.map((member) => (
+                              <SelectItem key={member.id} value={member.id}>
+                                <div className="flex items-center gap-2">
+                                  <User className="h-4 w-4" />
+                                  {member.name}
+                                </div>
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Deadline (optioneel)</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button 
+                            variant="outline" 
+                            className={cn(
+                              "w-full mt-1.5 justify-start text-left font-normal",
+                              !actionDueDate && "text-muted-foreground"
+                            )}
+                            disabled={isCreatingAction}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {actionDueDate
+                              ? format(actionDueDate, "d MMM yyyy", { locale: nl })
+                              : "Selecteer datum..."}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <CalendarComponent
+                            mode="single"
+                            selected={actionDueDate || undefined}
+                            onSelect={(date) => setActionDueDate(date || null)}
+                            locale={nl}
+                            initialFocus
+                            className="p-3 pointer-events-auto"
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                )}
+
+                {/* Buttons */}
+                <div className="flex justify-end gap-2 pt-2">
                   <Button
+                    variant="outline"
                     size="sm"
-                    className="h-9 shrink-0"
-                    onClick={handleAddAction}
-                    disabled={!newActionText.trim() || isSubmitting}
-                  >
-                    {isSubmitting ? "..." : "Toevoegen"}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-9 px-2 shrink-0"
                     onClick={() => {
                       setIsAdding(false);
                       setNewActionText("");
+                      setShowAssignee(false);
+                      setSelectedAssignee(null);
+                      setActionDueDate(null);
                     }}
+                    disabled={isCreatingAction}
                   >
                     Annuleren
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleAddAction}
+                    disabled={!newActionText.trim() || isCreatingAction || (showAssignee && !selectedAssignee)}
+                  >
+                    {isCreatingAction ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Toevoegen...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Actie Toevoegen
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>
