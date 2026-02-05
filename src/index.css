@@ -2626,7 +2626,8 @@ All colors MUST be HSL.
 .glass-ambient-mesh-slate,
 .glass-ambient-mesh-teal,
 .glass-ambient-mesh-amber,
-.glass-ambient-mesh-blue {
+.glass-ambient-mesh-blue,
+.glass-ambient-mesh-indigo {
   overflow: hidden;
 }
 
@@ -2637,7 +2638,8 @@ All colors MUST be HSL.
 .glass-ambient-mesh-slate::before,
 .glass-ambient-mesh-teal::before,
 .glass-ambient-mesh-amber::before,
-.glass-ambient-mesh-blue::before {
+.glass-ambient-mesh-blue::before,
+.glass-ambient-mesh-indigo::before {
   will-change: auto;
   contain: strict;
 }
@@ -2670,9 +2672,10 @@ All colors MUST be HSL.
   .glass-ambient-mesh-slate::before,
   .glass-ambient-mesh-teal::before,
   .glass-ambient-mesh-amber::before,
-  .glass-ambient-mesh-blue::before {
-    inset: -50px;
-    filter: blur(30px);
+  .glass-ambient-mesh-blue::before,
+  .glass-ambient-mesh-indigo::before {
+    inset: -50px !important;
+    filter: blur(30px) !important;
   }
 
   /* Lighter shadows on mobile */
@@ -3640,7 +3643,7 @@ All colors MUST be HSL.
 /* Indigo Ambient Mesh for Dashboard/Mijn Werk */
 .glass-ambient-mesh-indigo {
   position: relative;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .glass-ambient-mesh-indigo::before {
