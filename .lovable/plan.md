@@ -1,84 +1,35 @@
 
-# Unified Actie Systeem - Implementatieplan
+# Fix: Ontbrekende Items Unified Actie Systeem
 
-## Overzicht
-
-Dit plan implementeert een complete audit trail voor taken met automatische logging en notificaties bij toewijzingen en wijzigingen.
+Dit plan implementeert de 4 ontbrekende items uit de verificatie.
 
 ---
 
-## Fase 1: Database Migratie
+## Fix 1: TaskDetailModal - Reporter Info UI
 
-Voer de volledige SQL migratie uit die de volgende elementen bevat:
+### 1.1 Uitbreiden Task Interface (regel 76-93)
 
-| Component | Beschrijving |
-|-----------|--------------|
-| **Constraint uitbreiding** | `action_type` CHECK voor nieuwe types: `description_change`, `assignment_change`, `attachment_added`, `attachment_removed`, `task_created` |
-| **Metadata kolom** | JSONB kolom voor extra context per actie |
-| **5 nieuwe triggers** | `notify_task_assignment`, `log_task_description_change`, `log_attachment_added`, `log_attachment_removed`, `log_subtask_status_change` |
-| **2 indexes** | Performance indexes op `action_type` en `created_at` |
+Voeg `reporter_id`, `created_at` en `reporter` toe aan de interface:
 
-De migratie zorgt ervoor dat:
-- Toewijzing wijzigingen automatisch een notificatie sturen naar de nieuwe assignee
-- Beschrijving wijzigingen, bijlage toe/verwijderingen en subtaak status wijzigingen automatisch in het actieverloop verschijnen
-
----
-
-## Fase 2: UI Wijzigingen
-
-### 2.1 ActionTimeline - Iconen per Action Type
-
-**Bestand:** `src/components/ActionTimeline.tsx`
-
-Nieuwe imports toevoegen:
-```typescript
-import { 
-  MessageSquare, 
-  FileText, 
-  UserPlus, 
-  Paperclip, 
-  FileX 
-} from "lucide-react";
-```
-
-Nieuwe functie voor icoon mapping:
-```typescript
-const getActionIcon = (actionType: string) => {
-  switch (actionType) {
-    case 'followup': return <ArrowRight className="h-4 w-4 text-orange-600" />;
-    case 'note': return <MessageSquare className="h-4 w-4 text-gray-600" />;
-    case 'status_change': return <CheckCircle2 className="h-4 w-4 text-green-600" />;
-    case 'description_change': return <FileText className="h-4 w-4 text-blue-600" />;
-    case 'assignment_change': return <UserPlus className="h-4 w-4 text-purple-600" />;
-    case 'attachment_added': return <Paperclip className="h-4 w-4 text-cyan-600" />;
-    case 'attachment_removed': return <FileX className="h-4 w-4 text-red-600" />;
-    case 'task_created': return <Plus className="h-4 w-4 text-emerald-600" />;
-    default: return <Circle className="h-4 w-4 text-gray-400" />;
-  }
-};
-```
-
-Update de `ActionHistoryItem` interface:
-```typescript
-export interface ActionHistoryItem {
-  id: string;
-  action_text: string;
-  action_type: 'followup' | 'note' | 'status_change' | 'description_change' | 
-               'assignment_change' | 'attachment_added' | 'attachment_removed' | 'task_created';
-  // ... rest blijft hetzelfde
-}
-```
-
-Update rendering van action items om dynamische iconen te tonen in plaats van vaste `CheckCircle2`.
-
-### 2.2 TaskDetailModal - Reporter/Creator Info
-
-**Bestand:** `src/components/TaskDetailModal.tsx`
-
-Uitbreiden van de Task interface:
 ```typescript
 interface Task {
-  // ... bestaande velden
+  id: string;
+  title: string;
+  description: string | null;
+  priority: string;
+  start_at: string | null;
+  due_at: string | null;
+  next_action: string | null;
+  assignee_id: string | null;
+  application_id: string | null;
+  recruitment_action_type: string | null;
+  category?: string | null;
+  interview_details?: InterviewDetails | null;
+  profiles: {
+    name: string | null;
+    email: string | null;
+  } | null;
+  // NIEUW: Reporter info
   reporter_id?: string | null;
   created_at?: string;
   reporter?: {
@@ -88,7 +39,10 @@ interface Task {
 }
 ```
 
-Toevoegen in "Basis informatie" sectie (na assignee info):
+### 1.2 Reporter Info toevoegen in UI (na regel 996)
+
+In de "Basis informatie" sectie, voeg toe NA de assignee info:
+
 ```tsx
 {/* Reporter/Creator Info */}
 {task.reporter_id && (
@@ -109,72 +63,74 @@ Toevoegen in "Basis informatie" sectie (na assignee info):
 )}
 ```
 
-### 2.3 NotificationBell - Task Assigned Handling
+---
 
-**Bestand:** `src/components/notifications/NotificationBell.tsx`
+## Fix 2: Verwijder Dubbele Subtask Logging (regels 661-674)
 
-Uitbreiden van `getNotificationIcon`:
+De handmatige insert naar `task_action_history` bij subtask voltooiing moet verwijderd worden, omdat de database trigger `log_subtask_status_trigger` dit nu automatisch doet.
+
+**Verwijder deze code:**
 ```typescript
-const getNotificationIcon = (type: string) => {
-  switch (type) {
-    case "diploma_upgrade": return "🎓";
-    case "vog_verified": return "📜";
-    case "subtask_assignment": return "📋";
-    case "task_assigned": return "📌";  // NIEUW
-    default: return "🔔";
-  }
-};
+// 3. Log naar action history voor audit trail
+const { data: { user } } = await supabase.auth.getUser();
+const completedSubtask = subtasks.find(s => s.id === subtaskId);
+
+await supabase
+  .from('task_action_history')
+  .insert({
+    task_id: task.id,
+    action_text: `Subtaak voltooid: ${completedSubtask?.title || 'Onbekend'}`,
+    action_type: 'status_change',
+    completed_at: new Date().toISOString(),
+    completed_by: user?.id,
+    is_current: false
+  });
 ```
 
-Uitbreiden van `handleNotificationClick`:
+**Houd wel:** toast en loadSubtasks/loadActionHistory calls.
+
+---
+
+## Fix 3: NotificationBell Filter - Voeg task_assigned toe
+
+### 3.1 Update Query Filter (useUnreadNotifications.ts, regel 26)
+
+Van:
 ```typescript
-// Handle task assignment - navigate to task list with task highlight
-if (notification.notification_type === 'task_assigned' && taskId) {
-  navigate(`/dashboard?tab=lijst&taskId=${taskId}`);
-  return;
-}
+.in("notification_type", ["diploma_upgrade", "vog_verified", "subtask_assignment"])
+```
+
+Naar:
+```typescript
+.in("notification_type", ["diploma_upgrade", "vog_verified", "subtask_assignment", "task_assigned"])
+```
+
+### 3.2 Update Realtime Filter (regel 45)
+
+Van:
+```typescript
+filter: "notification_type=in.(diploma_upgrade,vog_verified,subtask_assignment)",
+```
+
+Naar:
+```typescript
+filter: "notification_type=in.(diploma_upgrade,vog_verified,subtask_assignment,task_assigned)",
 ```
 
 ---
 
-## Fase 3: Query Uitbreidingen
-
-### TaskDetailModal of relevante queries
-
-Waar taken worden opgehaald met reporter info:
-```typescript
-const { data: task } = await supabase
-  .from('tasks')
-  .select(`
-    *,
-    profiles:assignee_id(name, email),
-    reporter:reporter_id(name, email),
-    organization:org_id(name)
-  `)
-  .eq('id', taskId)
-  .single();
-```
-
----
-
-## Bestanden die worden gewijzigd
+## Samenvatting Wijzigingen
 
 | Bestand | Wijziging |
 |---------|-----------|
-| **Database** | Nieuwe migratie met constraints, kolom, triggers en indexes |
-| `src/components/ActionTimeline.tsx` | Iconen per action_type, interface uitbreiding |
-| `src/components/TaskDetailModal.tsx` | Reporter/creator info in basis informatie |
-| `src/components/notifications/NotificationBell.tsx` | `task_assigned` notificatie handling |
+| `src/components/TaskDetailModal.tsx` | Interface uitbreiden, reporter UI toevoegen, dubbele logging verwijderen |
+| `src/hooks/useUnreadNotifications.ts` | `task_assigned` toevoegen aan query en realtime filter |
 
 ---
 
-## Verwacht Resultaat
+## Verwacht Resultaat Na Fixes
 
-Na implementatie:
-- ✅ Toewijzing aan collega → notificatie + gelogd in actieverloop
-- ✅ Beschrijving wijzigen → gelogd in actieverloop
-- ✅ Bijlage toevoegen/verwijderen → gelogd in actieverloop
-- ✅ Subtaak voltooien → consistent gelogd (via trigger)
-- ✅ Reporter/creator zichtbaar in taakdetail
-- ✅ Iconen per action type in actieverloop
-- ✅ Nieuwe `task_assigned` notificatie klikbaar naar taak
+- ✅ Reporter naam zichtbaar in taakdetail ("Aangemaakt door: [naam]")
+- ✅ Created_at datum zichtbaar ("op [datum]")
+- ✅ Geen dubbele entries in actieverloop bij subtaak voltooien
+- ✅ `task_assigned` notificaties verschijnen in NotificationBell
