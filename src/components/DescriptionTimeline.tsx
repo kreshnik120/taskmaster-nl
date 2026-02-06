@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
-import { FileText, Plus, Minus, Edit3, ChevronDown, Eye, RotateCcw, Loader2 } from "lucide-react";
+import { FileText, Plus, Minus, Edit3, Eye, RotateCcw, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { DiffView } from "@/components/DiffView";
 
 interface DescriptionChangeEntry {
   id: string;
@@ -339,7 +340,7 @@ export function DescriptionTimeline({
                 {getChangeBadge(selectedEntry.metadata?.change_type)}
               </div>
 
-              {/* Content comparison */}
+              {/* Content comparison with DiffView */}
               {selectedEntry.metadata?.change_type === 'added' ? (
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium text-emerald-600">Toegevoegde beschrijving:</h4>
@@ -371,44 +372,28 @@ export function DescriptionTimeline({
                   )}
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {/* Old version */}
+                <div className="space-y-3">
+                  {/* Inline diff view */}
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-medium text-muted-foreground">Oude versie:</h4>
-                      {selectedEntry.metadata?.old_description && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={() => handleRestoreClick(selectedEntry.metadata!.old_description!)}
-                        >
-                          <RotateCcw className="h-3 w-3 mr-1" />
-                          Terugzetten
-                        </Button>
-                      )}
-                    </div>
-                    <div className="bg-muted/30 border border-border rounded-lg p-3">
-                      <p className="text-sm whitespace-pre-wrap text-muted-foreground">
-                        {selectedEntry.metadata?.old_description || 'Geen inhoud'}
-                      </p>
-                    </div>
+                    <h4 className="text-sm font-medium">Wijzigingen:</h4>
+                    <DiffView
+                      oldText={selectedEntry.metadata?.old_description}
+                      newText={selectedEntry.metadata?.new_description}
+                    />
                   </div>
 
-                  {/* Arrow indicator */}
-                  <div className="flex justify-center">
-                    <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                  </div>
-
-                  {/* New version */}
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-medium text-emerald-600">Nieuwe versie:</h4>
-                    <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-lg p-3">
-                      <p className="text-sm whitespace-pre-wrap">
-                        {selectedEntry.metadata?.new_description || 'Geen inhoud'}
-                      </p>
-                    </div>
-                  </div>
+                  {/* Restore button */}
+                  {selectedEntry.metadata?.old_description && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => handleRestoreClick(selectedEntry.metadata!.old_description!)}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5 mr-2" />
+                      Terugzetten naar vorige versie
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
