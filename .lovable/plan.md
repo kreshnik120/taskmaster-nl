@@ -1,85 +1,149 @@
 
 
-# Bugfix: Description Opslaan en Continuous Refresh
+# Bugfix: Beschrijving Opslaan & Refresh Problemen
 
-## Geïdentificeerde Problemen
+## Geanalyseerde Problemen
 
-### Probleem 1: Dubbele Database Entries
-Er zijn **twee triggers** op de `tasks` tabel die dezelfde functie `log_task_description_change` aanroepen:
+Na grondige analyse van de code en network requests heb ik **4 root causes** geïdentificeerd:
 
-| Trigger Naam | Status |
-|--------------|--------|
-| `log_task_description_change` | Actief |
-| `log_task_description_trigger` | Actief (DUPLICAAT) |
+### Probleem 1: Dubbele Save Requests ✅
+De network logs tonen 2x dezelfde PATCH request op exact hetzelfde moment:
+```
+Request: PATCH .../tasks?id=eq.bd9e94dd... Time: 04:23:07
+Request: PATCH .../tasks?id=eq.bd9e94dd... Time: 04:23:07
+```
 
-Dit veroorzaakt dat elke beschrijvingswijziging **2x wordt opgeslagen** in de history.
+**Oorzaak:** De auto-save timer (2 sec) wordt NIET geannuleerd wanneer je op "Opslaan" klikt.
 
-### Probleem 2: UI Update na Opslaan
-Na het opslaan van een beschrijving:
-1. `InlineDescriptionEditor` roept `onSaved()` aan
-2. Dit sluit de editor (`setIsEditingDescription(false)`)
-3. `onTaskUpdated()` wordt aangeroepen, maar de `task` prop in TaskDetailModal wordt NIET vernieuwd
-4. De oude beschrijving blijft zichtbaar tot een volledige pagina-refresh
+| Code locatie | Probleem |
+|--------------|----------|
+| Regel 61-63 | Auto-save start timer |
+| Regel 177 | Handmatige klik roept `handleSave()` aan |
+| Regel 73 | Check `!hasChanges` faalt omdat state nog niet bijgewerkt is |
 
-### Probleem 3: Continuous Refresh
-- De dubbele database inserts triggeren de realtime subscription meerdere keren
-- Dit veroorzaakt cascade-invalidaties in de query cache
+### Probleem 2: Beschrijving "Eronder" Weergave
+`DescriptionWithDiff.tsx` toont recente wijzigingen als **apart blok onder de tekst** (regels 165-199). Dit is visuele feedback, maar:
+- Na opslaan wordt `latestDescriptionChange` niet bijgewerkt
+- De diff berekening gebruikt de oude `metadata.old_description` vs de nieuwe tekst
+- Dit creëert een "connector" + blok onder de bestaande tekst
+
+### Probleem 3: "Kan niet meer opslaan drukken"
+Na eerste save:
+1. `isSaving` wordt `false` (regel 100)
+2. `hasChanges` wordt NIET gereset → blijft `true` van originele vergelijking
+3. Effect op regel 49-51 berekent opnieuw: `value !== description` 
+4. Maar `description` prop is nog de OUDE waarde → `hasChanges = false` → knop disabled
+
+### Probleem 4: localDescription synchroniseert niet met DescriptionWithDiff
+- `localDescription` wordt gezet na save
+- Maar `latestDescriptionChange` komt van `DescriptionTimeline` die niet ververst
 
 ---
 
-## Oplossing
+## Oplossingsplan
 
-### Stap 1: Verwijder Dubbele Trigger
-**Database migratie** om de duplicate trigger te verwijderen:
-
-```sql
-DROP TRIGGER IF EXISTS log_task_description_trigger ON public.tasks;
-```
-
-### Stap 2: Lokale Task State in TaskDetailModal
-Voeg een lokale state toe om de task description bij te werken na opslaan, zodat de UI direct de nieuwe waarde toont zonder te wachten op cache invalidatie.
-
-**Wijziging in `TaskDetailModal.tsx`:**
-- Voeg `localDescription` state toe
-- Update deze state wanneer de description wordt opgeslagen
-- Gebruik deze state voor weergave in plaats van `task.description`
-
-### Stap 3: Directe Cache Update (Optioneel)
-Als alternatief voor lokale state, kunnen we de TanStack Query cache direct updaten na opslaan via `queryClient.setQueryData`.
-
----
-
-## Technische Details
-
-### Database Migratie
-**Nieuw bestand:** Migration om dubbele trigger te verwijderen
-
-```sql
--- Verwijder de duplicate trigger die dubbele inserts veroorzaakt
-DROP TRIGGER IF EXISTS log_task_description_trigger ON public.tasks;
-```
-
-### Code Wijzigingen
-
-**Bestand:** `src/components/TaskDetailModal.tsx`
-
-Toevoegen van lokale beschrijving state:
-- Nieuwe state: `localDescription`
-- Synchroniseer met `task.description` wanneer task verandert
-- Update na succesvolle save in `onSaved` callback
+### Fix 1: Cancel Auto-Save Timer bij Handmatige Save
 
 **Bestand:** `src/components/InlineDescriptionEditor.tsx`
 
-Aanpassing van de `onSaved` callback om de nieuwe beschrijving door te geven:
-- Wijzig `onSaved: () => void` naar `onSaved: (newDescription: string) => void`
+**Wijziging:** In `handleSave()` functie, voeg timer cancel toe:
+
+```typescript
+const handleSave = async () => {
+  // NIEUW: Cancel pending auto-save
+  if (saveTimeoutRef.current) {
+    clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = null;
+  }
+  
+  if (!hasChanges || isSaving) return;
+  // ... rest blijft hetzelfde
+};
+```
+
+### Fix 2: Reset hasChanges na Succesvolle Save
+
+**Bestand:** `src/components/InlineDescriptionEditor.tsx`
+
+**Wijziging:** Na succesvolle save, update de interne "original" waarde zodat `hasChanges` correct is:
+
+```typescript
+// Voeg toe na setIsSaving(true):
+const originalValue = useRef(description || "");
+
+// In handleSave success:
+originalValue.current = savedValue; // Update reference
+setHasChanges(false); // Expliciet reset
+```
+
+### Fix 3: Force Refresh van DescriptionTimeline na Save
+
+**Bestand:** `src/components/TaskDetailModal.tsx`
+
+**Wijziging:** Voeg een refresh trigger toe voor de timeline:
+
+```typescript
+const [descriptionVersion, setDescriptionVersion] = useState(0);
+
+// In onSaved callback:
+onSaved={(newDescription) => {
+  setLocalDescription(newDescription || null);
+  setDescriptionVersion(v => v + 1); // Force timeline refresh
+  setIsEditingDescription(false);
+  onTaskUpdated();
+}}
+```
+
+**En in DescriptionTimeline:**
+```typescript
+<DescriptionTimeline 
+  taskId={task.id}
+  key={descriptionVersion} // Force remount op save
+  onCountChange={setDescriptionHistoryCount}
+  ...
+/>
+```
+
+### Fix 4: Clear latestDescriptionChange tijdens Editing
+
+**Bestand:** `src/components/TaskDetailModal.tsx`
+
+**Wijziging:** Reset de highlight wanneer de gebruiker begint met editen:
+
+```typescript
+onClick={() => {
+  if (!isEditingDescription) {
+    setLatestDescriptionChange(null); // Clear stale highlight
+    setIsEditingDescription(true);
+  }
+}}
+```
+
+---
+
+## Technische Wijzigingen Samenvatting
+
+| Bestand | Actie | Regels |
+|---------|-------|--------|
+| `InlineDescriptionEditor.tsx` | Cancel timer + reset hasChanges | 72-75, 90-92 |
+| `TaskDetailModal.tsx` | Add version state + clear highlight | 148, 1120, 1127 |
 
 ---
 
 ## Verwacht Resultaat
 
-Na deze fix:
-1. Beschrijvingen worden **1x opgeslagen** (niet dubbel)
-2. Na opslaan is de nieuwe tekst **direct zichtbaar** in de UI
-3. Geen continuous refresh meer door cascade-triggers
-4. Realtime sync blijft werken voor updates van andere gebruikers
+Na implementatie:
+
+| Scenario | Gedrag |
+|----------|--------|
+| Klik op "Opslaan" | 1x PATCH request, geen dubbele |
+| Na opslaan | Nieuwe tekst direct zichtbaar, geen "eronder" |
+| Opnieuw editen | Knop "Opslaan" werkt correct |
+| Refresh | Beschrijving blijft correct |
+
+---
+
+## Database Status
+
+De duplicate trigger `log_task_description_trigger` is al verwijderd via de vorige migratie. ✅
 
