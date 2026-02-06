@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -47,6 +47,8 @@ import { ActionTimeline, ActionHistoryItem, ActiveSubtaskInfo } from "./ActionTi
 import { DescriptionTimeline, type DescriptionChangeEntry } from "./DescriptionTimeline";
 import { DescriptionWithDiff } from "./DescriptionWithDiff";
 import { TaskMeetingMinutesSection } from "./tasks/TaskMeetingMinutesSection";
+import { InlineDescriptionEditor } from "./InlineDescriptionEditor";
+import { TextSelectionMenu } from "./TextSelectionMenu";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -145,6 +147,9 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   const [loadingActions, setLoadingActions] = useState(false);
   const [descriptionHistoryCount, setDescriptionHistoryCount] = useState(0);
   const [latestDescriptionChange, setLatestDescriptionChange] = useState<DescriptionChangeEntry | null>(null);
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [teamMembers, setTeamMembers] = useState<Array<{id: string; name: string; email: string}>>([]);
+  const descriptionRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
   const { isLoading: timerLoading, elapsedTime, startTimer, stopTimer, isTimerActive } = useTaskTimer(task?.id || null);
@@ -187,6 +192,44 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   }, [open, isTimerActive, startTimer, stopTimer]);
 
   // Load subtasks, attachments, actions and application when task changes
+  // Load team members for assignment dropdowns
+  useEffect(() => {
+    const loadTeamMembers = async () => {
+      if (!task?.id || !open) return;
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get task's org_id
+      const { data: taskData } = await supabase
+        .from('tasks')
+        .select('org_id')
+        .eq('id', task.id)
+        .single();
+
+      if (!taskData?.org_id) return;
+
+      // Get all users in the same organization
+      const { data: members } = await supabase
+        .from('user_organizations')
+        .select('user_id, profiles!inner(id, name, email)')
+        .eq('org_id', taskData.org_id);
+
+      if (members) {
+        setTeamMembers(
+          members
+            .filter(m => m.profiles && m.user_id !== user.id)
+            .map(m => ({
+              id: (m.profiles as any).id,
+              name: (m.profiles as any).name || (m.profiles as any).email || 'Onbekend',
+              email: (m.profiles as any).email || ''
+            }))
+        );
+      }
+    };
+    loadTeamMembers();
+  }, [task?.id, open]);
+
   useEffect(() => {
     if (task?.id && open) {
       loadSubtasks();
@@ -1065,11 +1108,72 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                 </CollapsibleTrigger>
                 {/* Fase 6: bg subtieler + Fase 8: pt-3 */}
                 <CollapsibleContent className="pt-3 animate-accordion-down">
-                  <div className="bg-muted/30 dark:bg-muted/20 rounded-xl p-4 mx-3">
-                    <DescriptionWithDiff
-                      currentDescription={task.description}
-                      latestChange={latestDescriptionChange}
-                    />
+                  <div 
+                    ref={descriptionRef}
+                    className="bg-muted/30 dark:bg-muted/20 rounded-xl p-4 mx-3 relative group/desc cursor-text"
+                    onClick={() => !isEditingDescription && setIsEditingDescription(true)}
+                  >
+                    {isEditingDescription ? (
+                      <InlineDescriptionEditor
+                        taskId={task.id}
+                        description={task.description}
+                        onSaved={() => {
+                          setIsEditingDescription(false);
+                          onTaskUpdated();
+                        }}
+                        onCancel={() => setIsEditingDescription(false)}
+                      />
+                    ) : (
+                      <>
+                        <DescriptionWithDiff
+                          currentDescription={task.description}
+                          latestChange={latestDescriptionChange}
+                        />
+                        {/* Hover edit indicator */}
+                        <div className="absolute top-2 right-2 opacity-0 group-hover/desc:opacity-100 transition-opacity">
+                          <Edit className="h-4 w-4 text-muted-foreground/60" />
+                        </div>
+                        {/* Text selection menu */}
+                        <TextSelectionMenu
+                          containerRef={descriptionRef}
+                          onCreateSubtask={async (text) => {
+                            // Add subtask with selected text
+                            const { data: existingSubtasks } = await supabase
+                              .from('subtasks')
+                              .select('order')
+                              .eq('task_id', task.id)
+                              .order('order', { ascending: false })
+                              .limit(1);
+
+                            const nextOrder = (existingSubtasks?.[0]?.order || 0) + 1;
+                            const { data: { user } } = await supabase.auth.getUser();
+
+                            await supabase
+                              .from('subtasks')
+                              .insert({
+                                task_id: task.id,
+                                title: text,
+                                status: 'pending',
+                                order: nextOrder,
+                                assignee_id: user?.id
+                              });
+
+                            toast({ title: "Subtaak aangemaakt", description: `"${text}"` });
+                            loadSubtasks();
+                          }}
+                          onCreateAction={async (text) => {
+                            // Set as next action
+                            await supabase
+                              .from('tasks')
+                              .update({ next_action: text })
+                              .eq('id', task.id);
+
+                            toast({ title: "Actie ingesteld", description: `"${text}"` });
+                            onTaskUpdated();
+                          }}
+                        />
+                      </>
+                    )}
                   </div>
                   {/* Description Timeline - shows edit history */}
                   <div className="mx-3">
@@ -1158,6 +1262,34 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                         onCompleteStep={handleCompleteStep}
                         onSkipStep={handleSkipStep}
                         onResetStep={handleResetStep}
+                        onAddSubtask={async (title, assigneeId, dueDate) => {
+                          const { data: existingSubtasks } = await supabase
+                            .from('subtasks')
+                            .select('order')
+                            .eq('task_id', task.id)
+                            .order('order', { ascending: false })
+                            .limit(1);
+
+                          const nextOrder = (existingSubtasks?.[0]?.order || 0) + 1;
+                          const { data: { user } } = await supabase.auth.getUser();
+
+                          const { error } = await supabase
+                            .from('subtasks')
+                            .insert({
+                              task_id: task.id,
+                              title,
+                              status: 'pending',
+                              order: nextOrder,
+                              assignee_id: assigneeId || user?.id,
+                              due_at: dueDate?.toISOString() || null
+                            });
+
+                          if (error) throw error;
+                          
+                          toast({ title: "Processtap toegevoegd" });
+                          loadSubtasks();
+                        }}
+                        teamMembers={teamMembers}
                       />
                     </div>
                   )}
