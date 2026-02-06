@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { FileText, Plus, Minus, Edit3, Eye, RotateCcw, Loader2 } from "lucide-react";
@@ -201,6 +201,21 @@ export function DescriptionTimeline({
     }
   };
 
+  // Determine if the latest entry is already shown inline (within 24 hours)
+  const isLatestShowingInline = useMemo(() => {
+    if (entries.length === 0) return false;
+    const latestEntry = entries[0];
+    const changeTime = new Date(latestEntry.created_at).getTime();
+    const now = Date.now();
+    const twentyFourHours = 24 * 60 * 60 * 1000;
+    return (now - changeTime) < twentyFourHours;
+  }, [entries]);
+
+  // Filter entries: if the first one is shown inline, start from index 1
+  const visibleEntries = useMemo(() => {
+    return isLatestShowingInline ? entries.slice(1) : entries;
+  }, [entries, isLatestShowingInline]);
+
   if (loading) {
     return (
       <div className={cn("text-sm text-muted-foreground", className)}>
@@ -209,8 +224,9 @@ export function DescriptionTimeline({
     );
   }
 
-  if (entries.length === 0) {
-    return null; // Don't show anything if there's no history
+  // If no visible entries remain, don't show the timeline section
+  if (visibleEntries.length === 0) {
+    return null;
   }
 
   return (
@@ -221,14 +237,14 @@ export function DescriptionTimeline({
           <Separator className="flex-1" />
           <span className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
             <FileText className="h-3 w-3" />
-            Verloop ({entries.length})
+            {isLatestShowingInline ? 'Meer verloop' : 'Verloop'} ({visibleEntries.length})
           </span>
           <Separator className="flex-1" />
         </div>
 
         {/* Timeline entries with fade-in animation */}
         <div className="space-y-2">
-          {entries.map((entry, index) => {
+          {visibleEntries.map((entry, index) => {
             const hasContent = entry.metadata?.old_description || entry.metadata?.new_description;
             
             return (
@@ -245,7 +261,7 @@ export function DescriptionTimeline({
                   )}>
                     {getChangeIcon(entry.metadata?.change_type)}
                   </div>
-                  {index < entries.length - 1 && (
+                  {index < visibleEntries.length - 1 && (
                     <div className="w-px h-4 bg-border/50 mt-1" />
                   )}
                 </div>
