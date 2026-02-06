@@ -1,202 +1,197 @@
 
-# Plan: Slimme Diff View voor Beschrijving Wijzigingen
+# Plan: Inline Diff Highlighting voor Beschrijving
 
 ## Het Probleem
 
-In de huidige implementatie worden bij een "modified" beschrijving beide volledige versies getoond:
+In de huidige weergave staat "Test" onderaan de beschrijving als gewone tekst - er is **geen visuele indicatie** dat dit recent is toegevoegd:
 
 ```text
-┌─────────────────────────────────────┐
-│ Oude versie:                        │
-│ ┌─────────────────────────────────┐ │
-│ │ 11-02 wil ik starten met...     │ │
-│ │ Werven uitzendkracht...         │ │
-│ │ Zo kan ik de kaartenbak...      │ │
-│ └─────────────────────────────────┘ │
-│              ↓                      │
-│ Nieuwe versie:                      │
-│ ┌─────────────────────────────────┐ │
-│ │ 11-02 wil ik starten met...     │ │  ← Dezelfde tekst!
-│ │ Werven uitzendkracht...         │ │  ← Weer dezelfde tekst!
-│ │ Zo kan ik de kaartenbak...      │ │  ← Nogmaals!
-│ │ Test                            │ │  ← Alleen dit is nieuw
-│ └─────────────────────────────────┘ │
-└─────────────────────────────────────┘
+┌────────────────────────────────────────────┐
+│ 11-02 wil ik starten met ingeschreven      │
+│ kandidaten binnen Citozorg & Abc zorg.     │
+│ Werven uitzendkracht of constructie.       │
+│                                            │
+│ Zo kan ik de kaartenbak opschonen...       │
+│                                            │
+│ Test    ← Geen indicatie dat dit nieuw is! │
+└────────────────────────────────────────────┘
 ```
 
-**Probleem:** Visueel redundant - je ziet dezelfde content twee keer terwijl alleen "Test" is toegevoegd.
+## De Oplossing: Smart Description Rendering
+
+De beschrijving zelf renderen met de **meest recente wijzigingen inline gehighlighted**:
+
+```text
+┌────────────────────────────────────────────┐
+│ 11-02 wil ik starten met ingeschreven      │
+│ kandidaten binnen Citozorg & Abc zorg.     │
+│ Werven uitzendkracht of constructie.       │
+│                                            │
+│ Zo kan ik de kaartenbak opschonen...       │
+│                                            │
+│ [Test]  ← Groen gemarkeerd als toevoeging! │
+└────────────────────────────────────────────┘
+```
 
 ---
 
-## De Oplossing: Inline Diff View
+## Wat verandert er?
 
-In plaats van twee aparte blokken, tonen we **één gecombineerde view** die verschillen benadrukt:
+### Huidige Flow
+1. Beschrijving wordt als plain tekst getoond
+2. Gebruiker moet op "Bekijk wijziging" klikken
+3. Dialog opent met diff view
+4. Pas daar ziet de gebruiker wat er is veranderd
 
-```text
-┌─────────────────────────────────────┐
-│ Wijzigingen:                        │
-│ ┌─────────────────────────────────┐ │
-│ │ 11-02 wil ik starten met...     │ │
-│ │ Werven uitzendkracht...         │ │
-│ │ Zo kan ik de kaartenbak...      │ │
-│ │                                 │ │
-│ │ [+Test]  ← Groen gemarkeerd     │ │
-│ └─────────────────────────────────┘ │
-└─────────────────────────────────────┘
-```
-
-**Voordelen:**
-- Direct zichtbaar wat er is veranderd
-- Geen dubbele content
-- Compacter en overzichtelijker
-- Professionele GitHub-achtige diff weergave
+### Nieuwe Flow
+1. Beschrijving toont direct de **laatste wijziging gehighlighted**
+2. Toevoegingen: groene achtergrond
+3. Verwijderingen: rode doorgestreepte tekst (optioneel zichtbaar)
+4. Na X seconden of bij hover: subtiele fade-out van highlighting
+5. "Bekijk wijziging" blijft beschikbaar voor volledige historie
 
 ---
 
 ## Technische Aanpak
 
-### Optie 1: Eigen Simpele Diff Logica (Aanbevolen)
-
-Implementeer een lichtgewicht diff helper zonder externe dependencies:
+### 1. DescriptionTimeline uitbreiden met data export
 
 ```typescript
-function getTextDiff(oldText: string, newText: string) {
-  // Vergelijk teksten en retourneer:
-  // - unchanged: tekst die hetzelfde is
-  // - added: nieuwe tekst (groen)
-  // - removed: verwijderde tekst (rood, doorgestreept)
+interface DescriptionTimelineProps {
+  taskId: string;
+  onCountChange?: (count: number) => void;
+  onLatestChange?: (change: DescriptionChangeEntry | null) => void; // NIEUW
 }
 ```
 
-**Voordelen:**
-- Geen extra package dependencies
-- Volledige controle over styling
-- Snelle implementatie
+Deze nieuwe prop stuurt de meest recente wijziging naar de parent component.
 
-### Optie 2: react-string-diff Package
+### 2. TaskDetailModal: Description met Diff renderen
 
-Gebruik bestaande library voor complexere diffs:
-
+In plaats van:
 ```typescript
-import StringDiff from 'react-string-diff';
-
-<StringDiff 
-  oldValue={oldDescription} 
-  newValue={newDescription}
-  method={DiffMethod.Words}
-/>
+<p className="text-sm whitespace-pre-wrap">{task.description}</p>
 ```
 
-**Voordelen:**
-- Beproefde logica
-- Woord-niveau diff mogelijk
+Wordt het:
+```typescript
+{latestDescriptionChange ? (
+  <DescriptionWithDiff
+    currentDescription={task.description}
+    latestChange={latestDescriptionChange}
+    showFreshIndicator={isRecentChange}
+  />
+) : (
+  <p className="text-sm whitespace-pre-wrap">{task.description}</p>
+)}
+```
+
+### 3. Nieuwe Component: DescriptionWithDiff
+
+Component die de huidige beschrijving rendert met recente wijzigingen gehighlighted:
+
+- Gebruikt de bestaande `DiffView` logic intern
+- Toont alleen de meest recente toevoeging/verwijdering
+- Heeft een subtiele "recent" indicator (glow/pulse) die na 10 seconden verdwijnt
+- Optionele toggle om "verwijderde tekst" te tonen/verbergen
 
 ---
 
-## UI Design
+## Visual Design
 
-### Nieuwe Diff Component
+### Toevoegingen (meest voorkomend)
 
 ```text
 ┌─────────────────────────────────────────────────┐
-│  📝 Beschrijving wijziging                      │
-├─────────────────────────────────────────────────┤
-│  6 feb om 02:08 • Kreshnik • [Gewijzigd]        │
+│ 11-02 wil ik starten met ingeschreven           │
+│ kandidaten binnen Citozorg & Abc zorg.          │
+│ Werven uitzendkracht of constructie.            │
 │                                                 │
-│  ┌───────────────────────────────────────────┐  │
-│  │ 11-02 wil ik starten met ingeschreven     │  │
-│  │ kandidaten binnen Citozorg & Abc zorg.    │  │
-│  │ Werven uitzendkracht of constructie.      │  │
-│  │                                           │  │
-│  │ Zo kan ik de kaartenbak opschonen en de   │  │
-│  │ tijd nemen om apart te zitten in kleine   │  │
-│  │ kantoor                                   │  │
-│  │                                           │  │
-│  │ [+Test]                                   │  │  ← Groen highlight
-│  └───────────────────────────────────────────┘  │
+│ Zo kan ik de kaartenbak opschonen en de         │
+│ tijd nemen om apart te zitten in kleine kantoor │
 │                                                 │
-│  [Terugzetten naar vorige versie]               │
+│ ┌──────────────────────────────────────────┐    │
+│ │ Test                                     │    │ ← Emerald border + subtle glow
+│ └──────────────────────────────────────────┘    │
+│                           [Recent toegevoegd ●] │ ← Subtiele indicator
 └─────────────────────────────────────────────────┘
 ```
 
-### Styling Regels
+### Styling Specificaties
 
-| Type | Styling |
-|------|---------|
-| Ongewijzigd | Normale tekst |
-| Toegevoegd | `bg-emerald-100 text-emerald-800` met `+` prefix |
-| Verwijderd | `bg-red-100 text-red-600 line-through` met `-` prefix |
-
----
-
-## Implementatie Stappen
-
-### Stap 1: Diff Helper Functie
-Nieuwe utility: `src/lib/textDiff.ts`
-- Functie om twee strings te vergelijken
-- Retourneert array van diff segments
-- Ondersteunt woord-niveau vergelijking
-
-### Stap 2: DiffView Component
-Nieuwe component: `src/components/DiffView.tsx`
-- Accepteert oldText en newText props
-- Rendert inline diff met kleuren
-- Herbruikbaar voor andere toepassingen
-
-### Stap 3: DescriptionTimeline Aanpassen
-Update: `src/components/DescriptionTimeline.tsx`
-- Vervang de twee aparte blokken door DiffView
-- Behoud "Terugzetten" functionaliteit
-- Fallback naar oude weergave als diff te complex is
+| Element | Styling |
+|---------|---------|
+| Toegevoegde tekst | `bg-emerald-50 border-l-2 border-emerald-400 pl-2` |
+| "Recent" indicator | `text-emerald-600 text-xs` met fade-out na 10s |
+| Verwijderde tekst (optioneel) | `bg-red-50/50 line-through text-muted-foreground` |
 
 ---
 
-## Wijzigingen Overzicht
+## Implementatie Details
+
+### Bestanden die aangepast worden
 
 | Bestand | Wijziging |
 |---------|-----------|
-| `src/lib/textDiff.ts` | **NIEUW** - Diff utility functies |
-| `src/components/DiffView.tsx` | **NIEUW** - Visuele diff component |
-| `src/components/DescriptionTimeline.tsx` | Integreer DiffView in detail dialog |
+| `src/components/DescriptionTimeline.tsx` | Nieuwe `onLatestChange` prop |
+| `src/components/TaskDetailModal.tsx` | State voor latestChange + conditionale rendering |
+| `src/components/DescriptionWithDiff.tsx` | **NIEUW** - Component voor inline diff display |
 
----
+### DescriptionWithDiff Props
 
-## Alternatieve Aanpak: Side-by-Side met Scroll Sync
-
-Als je de twee-blokken weergave wilt behouden maar verbeteren:
-
-```text
-┌──────────────────┬──────────────────┐
-│ Oude versie      │ Nieuwe versie    │
-├──────────────────┼──────────────────┤
-│ tekst regel 1    │ tekst regel 1    │
-│ tekst regel 2    │ tekst regel 2    │
-│                  │ [+Test]          │  ← Highlight
-└──────────────────┴──────────────────┘
+```typescript
+interface DescriptionWithDiffProps {
+  currentDescription: string;
+  latestChange: DescriptionChangeEntry | null;
+  showRecent?: boolean; // Toon "recent toegevoegd" indicator
+  highlightDuration?: number; // Milliseconden voor fade-out (default: 10000)
+}
 ```
 
-Dit is complexer maar geeft meer context bij grote wijzigingen.
+### Logic Flow
+
+1. Component ontvangt `currentDescription` en `latestChange`
+2. Als `latestChange.metadata.change_type === 'added'`:
+   - Zoek de toegevoegde tekst in currentDescription
+   - Highlight dat gedeelte met emerald styling
+3. Als `change_type === 'modified'`:
+   - Gebruik `computeWordDiff` om segmenten te vinden
+   - Highlight alleen de `added` segmenten in de huidige tekst
+4. "Recent" indicator verdwijnt na configureerbare tijd
+
+### Edge Cases
+
+- **Geen history**: Render als normale tekst
+- **Wijziging is complete rewrite**: Toon normale tekst (geen highlight)
+- **Verwijdering**: Optioneel tonen als doorgestreepte tekst onder de huidige beschrijving
 
 ---
 
-## Aanbeveling
+## Optionele Verfijning: Fade-out Animatie
 
-**Ik raad Optie 1 aan**: Eigen simpele diff logica met inline view.
+De "recent toegevoegd" highlighting kan na X seconden subtiel vervagen:
 
-**Waarom?**
-- Geen extra dependencies
-- Perfekt voor korte teksten zoals beschrijvingen
-- Sneller te implementeren
-- Volledig aangepast aan jullie design system
+```css
+.diff-highlight-fresh {
+  animation: highlight-fade 10s ease-out forwards;
+}
+
+@keyframes highlight-fade {
+  0% { background-color: rgb(209 250 229); } /* emerald-100 */
+  100% { background-color: transparent; }
+}
+```
 
 ---
 
-## Geschatte Tijd
+## Samenvatting
 
-| Onderdeel | Tijd |
-|-----------|------|
-| textDiff utility | 20 min |
-| DiffView component | 25 min |
-| DescriptionTimeline update | 15 min |
-| Testen en polish | 15 min |
-| **Totaal** | ~1.25 uur |
+| Onderdeel | Beschrijving |
+|-----------|-------------|
+| Kern verbetering | Recente wijzigingen direct zichtbaar in beschrijving |
+| Nieuwe component | `DescriptionWithDiff.tsx` |
+| Styling | Emerald border/background voor toevoegingen |
+| UX feature | "Recent" indicator met automatische fade-out |
+| Bestaande functie | "Bekijk wijziging" blijft voor volledige historie |
+
+Dit zorgt ervoor dat gebruikers **direct kunnen zien wat er recent is veranderd** zonder extra klikken!
