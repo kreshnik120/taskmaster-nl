@@ -1,149 +1,123 @@
 
+# Bugfix: Beschrijving Weergave - Volledige Tekst + Geen Dubbele Entries
 
-# Bugfix: Beschrijving Opslaan & Refresh Problemen
+## Probleem Analyse
 
-## Geanalyseerde Problemen
+### Probleem 1: Verkeerde Diff Weergave
+De `DescriptionWithDiff` component toont de beschrijving in TWEE delen:
+1. Bovenaan: alleen de ongewijzigde tekst
+2. Onderaan: alleen de toegevoegde tekst als apart blok
 
-Na grondige analyse van de code en network requests heb ik **4 root causes** geïdentificeerd:
+Dit komt door de logica in regels 150-162 die de "added" segmenten overslaat in de hoofdtekst.
 
-### Probleem 1: Dubbele Save Requests ✅
-De network logs tonen 2x dezelfde PATCH request op exact hetzelfde moment:
-```
-Request: PATCH .../tasks?id=eq.bd9e94dd... Time: 04:23:07
-Request: PATCH .../tasks?id=eq.bd9e94dd... Time: 04:23:07
-```
+**Gewenst gedrag:** De volledige huidige beschrijving inline tonen, met een subtiele highlight op de recent toegevoegde tekst.
 
-**Oorzaak:** De auto-save timer (2 sec) wordt NIET geannuleerd wanneer je op "Opslaan" klikt.
+### Probleem 2: Dubbele Database Entries
+De database toont nog steeds dubbele entries met exact dezelfde timestamp:
 
-| Code locatie | Probleem |
-|--------------|----------|
-| Regel 61-63 | Auto-save start timer |
-| Regel 177 | Handmatige klik roept `handleSave()` aan |
-| Regel 73 | Check `!hasChanges` faalt omdat state nog niet bijgewerkt is |
+| Timestamp | old_description | new_description |
+|-----------|----------------|-----------------|
+| 04:18:29 | ...Test test | ...Test hallo |
+| 04:18:29 | ...Test test | ...Test hallo |
+| 04:18:12 | ...Test | ...Test test |
+| 04:18:12 | ...Test | ...Test test |
 
-### Probleem 2: Beschrijving "Eronder" Weergave
-`DescriptionWithDiff.tsx` toont recente wijzigingen als **apart blok onder de tekst** (regels 165-199). Dit is visuele feedback, maar:
-- Na opslaan wordt `latestDescriptionChange` niet bijgewerkt
-- De diff berekening gebruikt de oude `metadata.old_description` vs de nieuwe tekst
-- Dit creëert een "connector" + blok onder de bestaande tekst
-
-### Probleem 3: "Kan niet meer opslaan drukken"
-Na eerste save:
-1. `isSaving` wordt `false` (regel 100)
-2. `hasChanges` wordt NIET gereset → blijft `true` van originele vergelijking
-3. Effect op regel 49-51 berekent opnieuw: `value !== description` 
-4. Maar `description` prop is nog de OUDE waarde → `hasChanges = false` → knop disabled
-
-### Probleem 4: localDescription synchroniseert niet met DescriptionWithDiff
-- `localDescription` wordt gezet na save
-- Maar `latestDescriptionChange` komt van `DescriptionTimeline` die niet ververst
+De eerder verwijderde trigger was mogelijk niet de enige. Er is waarschijnlijk nog een andere bron van duplicates.
 
 ---
 
-## Oplossingsplan
+## Oplossing
 
-### Fix 1: Cancel Auto-Save Timer bij Handmatige Save
+### Fix 1: DescriptionWithDiff - Inline Weergave
 
-**Bestand:** `src/components/InlineDescriptionEditor.tsx`
+**Bestand:** `src/components/DescriptionWithDiff.tsx`
 
-**Wijziging:** In `handleSave()` functie, voeg timer cancel toe:
+Wijzig de render logica zodat ALLE segmenten inline worden getoond, met toegevoegde tekst gemarkeerd met een subtiele highlight:
 
-```typescript
-const handleSave = async () => {
-  // NIEUW: Cancel pending auto-save
-  if (saveTimeoutRef.current) {
-    clearTimeout(saveTimeoutRef.current);
-    saveTimeoutRef.current = null;
-  }
-  
-  if (!hasChanges || isSaving) return;
-  // ... rest blijft hetzelfde
-};
+```text
+VOOR:
+┌──────────────────────────────────────────────┐
+│ 11-02 wil ik starten met...kleine kantoor   │
+│                                              │
+│          ▼ (connector)                       │
+│ ┌────────────────────────────────────────┐  │
+│ │ Test hallo hee                         │  │
+│ └────────────────────────────────────────┘  │
+└──────────────────────────────────────────────┘
+
+NA:
+┌──────────────────────────────────────────────┐
+│ 11-02 wil ik starten met...kleine kantoor   │
+│                                              │
+│ [Test hallo hee] ← highlight achtergrond     │
+│                                              │
+│ (kleine badge: Gewijzigd door Kreshnik)      │
+└──────────────────────────────────────────────┘
 ```
 
-### Fix 2: Reset hasChanges na Succesvolle Save
-
-**Bestand:** `src/components/InlineDescriptionEditor.tsx`
-
-**Wijziging:** Na succesvolle save, update de interne "original" waarde zodat `hasChanges` correct is:
+**Code wijziging:**
+Vervang de aparte blokken-logica met inline highlighting:
 
 ```typescript
-// Voeg toe na setIsSaving(true):
-const originalValue = useRef(description || "");
-
-// In handleSave success:
-originalValue.current = savedValue; // Update reference
-setHasChanges(false); // Expliciet reset
+// Voor modified type: toon alles inline met highlights
+return (
+  <div className={cn("text-sm leading-relaxed", className)}>
+    <p className="whitespace-pre-wrap">
+      {segments.map((segment, index) => {
+        if (segment.type === 'added') {
+          return (
+            <span 
+              key={index} 
+              className="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 px-0.5 rounded-sm"
+            >
+              {segment.text}
+            </span>
+          );
+        }
+        return <span key={index}>{segment.text}</span>;
+      })}
+    </p>
+    {/* Compacte footer met wijzigingsinfo */}
+    <div className="mt-2 text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+      <Edit3 className="h-3 w-3" />
+      <span>Gewijzigd door {latestChange?.created_by_name}</span>
+      <span>•</span>
+      <span>{formatRelativeTime(latestChange?.created_at || '')}</span>
+    </div>
+  </div>
+);
 ```
 
-### Fix 3: Force Refresh van DescriptionTimeline na Save
+### Fix 2: Database Duplicate Check
 
-**Bestand:** `src/components/TaskDetailModal.tsx`
+Controleer of er een andere trigger of functie is die duplicates veroorzaakt.
 
-**Wijziging:** Voeg een refresh trigger toe voor de timeline:
+**Database check:** Zoek naar alle triggers op de tasks tabel
 
-```typescript
-const [descriptionVersion, setDescriptionVersion] = useState(0);
-
-// In onSaved callback:
-onSaved={(newDescription) => {
-  setLocalDescription(newDescription || null);
-  setDescriptionVersion(v => v + 1); // Force timeline refresh
-  setIsEditingDescription(false);
-  onTaskUpdated();
-}}
+```sql
+SELECT trigger_name, event_manipulation, action_statement 
+FROM information_schema.triggers 
+WHERE event_object_table = 'tasks';
 ```
 
-**En in DescriptionTimeline:**
-```typescript
-<DescriptionTimeline 
-  taskId={task.id}
-  key={descriptionVersion} // Force remount op save
-  onCountChange={setDescriptionHistoryCount}
-  ...
-/>
-```
-
-### Fix 4: Clear latestDescriptionChange tijdens Editing
-
-**Bestand:** `src/components/TaskDetailModal.tsx`
-
-**Wijziging:** Reset de highlight wanneer de gebruiker begint met editen:
-
-```typescript
-onClick={() => {
-  if (!isEditingDescription) {
-    setLatestDescriptionChange(null); // Clear stale highlight
-    setIsEditingDescription(true);
-  }
-}}
-```
+**Indien nog duplicates gevonden:** Voeg een UNIQUE constraint toe of deduplicatie logica in de trigger.
 
 ---
 
-## Technische Wijzigingen Samenvatting
+## Technische Wijzigingen
 
-| Bestand | Actie | Regels |
-|---------|-------|--------|
-| `InlineDescriptionEditor.tsx` | Cancel timer + reset hasChanges | 72-75, 90-92 |
-| `TaskDetailModal.tsx` | Add version state + clear highlight | 148, 1120, 1127 |
+| Bestand | Wijziging | Regels |
+|---------|-----------|--------|
+| `DescriptionWithDiff.tsx` | Vervang aparte blokken met inline highlights | 150-200 |
+| Database | Check/fix duplicate triggers | n/a |
 
 ---
 
 ## Verwacht Resultaat
 
-Na implementatie:
-
 | Scenario | Gedrag |
 |----------|--------|
-| Klik op "Opslaan" | 1x PATCH request, geen dubbele |
-| Na opslaan | Nieuwe tekst direct zichtbaar, geen "eronder" |
-| Opnieuw editen | Knop "Opslaan" werkt correct |
-| Refresh | Beschrijving blijft correct |
-
----
-
-## Database Status
-
-De duplicate trigger `log_task_description_trigger` is al verwijderd via de vorige migratie. ✅
-
+| Beschrijving bekijken | Volledige tekst inline, met highlight op recente toevoegingen |
+| Highlight stijl | Subtiele groene achtergrond op nieuwe woorden |
+| Na 10 seconden | Highlight vervaagt, alleen tekst blijft |
+| Database | 1 entry per wijziging, geen duplicates |
