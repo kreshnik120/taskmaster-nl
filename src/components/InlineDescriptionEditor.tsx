@@ -156,50 +156,33 @@ export function InlineDescriptionEditor({
       </div>
 
       {/* Action bar */}
-      <div className="flex items-center justify-between text-xs">
-        <div className="flex items-center gap-3 text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 rounded bg-muted/50 border border-border/50 font-mono text-[10px]">
-              Ctrl+Enter
-            </kbd>
-            <span>Opslaan</span>
+      <div className="flex items-center justify-end gap-3 text-sm">
+        {hasChanges && !isSaving && (
+          <span className="text-amber-600 dark:text-amber-400 text-xs mr-auto">
+            Niet-opgeslagen wijzigingen
           </span>
-          <span className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 rounded bg-muted/50 border border-border/50 font-mono text-[10px]">
-              Esc
-            </kbd>
-            <span>Annuleren</span>
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {hasChanges && !isSaving && (
-            <span className="text-amber-600 dark:text-amber-400">
-              Niet-opgeslagen wijzigingen
-            </span>
+        )}
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={isSaving}
+          className="px-3 py-1.5 rounded-md hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Annuleren
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={!hasChanges || isSaving}
+          className={cn(
+            "px-3 py-1.5 rounded-md transition-colors font-medium",
+            hasChanges && !isSaving
+              ? "bg-primary text-primary-foreground hover:bg-primary/90"
+              : "bg-muted text-muted-foreground cursor-not-allowed"
           )}
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={isSaving}
-            className="p-1.5 rounded-md hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <X className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!hasChanges || isSaving}
-            className={cn(
-              "p-1.5 rounded-md transition-colors",
-              hasChanges && !isSaving
-                ? "bg-primary/10 text-primary hover:bg-primary/20"
-                : "text-muted-foreground/50 cursor-not-allowed"
-            )}
-          >
-            <Check className="h-4 w-4" />
-          </button>
-        </div>
+        >
+          Opslaan
+        </button>
       </div>
     </div>
   );
