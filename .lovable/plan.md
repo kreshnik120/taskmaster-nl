@@ -1,123 +1,115 @@
 
-# Bugfix: Beschrijving Weergave - Volledige Tekst + Geen Dubbele Entries
+# Plan: Beschrijving Historie Verfijning & Deduplicatie
 
 ## Probleem Analyse
 
-### Probleem 1: Verkeerde Diff Weergave
-De `DescriptionWithDiff` component toont de beschrijving in TWEE delen:
-1. Bovenaan: alleen de ongewijzigde tekst
-2. Onderaan: alleen de toegevoegde tekst als apart blok
+Op basis van de afbeeldingen en database-analyse:
 
-Dit komt door de logica in regels 150-162 die de "added" segmenten overslaat in de hoofdtekst.
+### Huidige Situatie
+| Issue | Detail |
+|-------|--------|
+| Duplicaten in database | Entries met identieke timestamps komen dubbel voor (bijv. `04:18:29` heeft 2 rijen) |
+| Lange lijst | Elke kleine wijziging = aparte rij met "Bekijk wijziging" link |
+| Visuele ruis | Veel "Gewijzigd" badges maken de timeline onoverzichtelijk |
 
-**Gewenst gedrag:** De volledige huidige beschrijving inline tonen, met een subtiele highlight op de recent toegevoegde tekst.
-
-### Probleem 2: Dubbele Database Entries
-De database toont nog steeds dubbele entries met exact dezelfde timestamp:
-
-| Timestamp | old_description | new_description |
-|-----------|----------------|-----------------|
-| 04:18:29 | ...Test test | ...Test hallo |
-| 04:18:29 | ...Test test | ...Test hallo |
-| 04:18:12 | ...Test | ...Test test |
-| 04:18:12 | ...Test | ...Test test |
-
-De eerder verwijderde trigger was mogelijk niet de enige. Er is waarschijnlijk nog een andere bron van duplicates.
+### Database Status
+```
+Task bd9e94dd: 7 description_change entries → 3 zijn duplicaten
+```
 
 ---
 
-## Oplossing
+## Oplossing: Drie-Staps Verfijning
 
-### Fix 1: DescriptionWithDiff - Inline Weergave
+### Stap 1: Database Opschoning - Verwijder Duplicaten
 
-**Bestand:** `src/components/DescriptionWithDiff.tsx`
+**SQL Migratie:**
+```sql
+-- Verwijder duplicate entries (behoud alleen de eerste per timestamp)
+DELETE FROM task_action_history 
+WHERE id NOT IN (
+  SELECT DISTINCT ON (task_id, created_at, action_type) id
+  FROM task_action_history
+  WHERE action_type = 'description_change'
+  ORDER BY task_id, created_at, action_type, id
+) AND action_type = 'description_change';
+```
 
-Wijzig de render logica zodat ALLE segmenten inline worden getoond, met toegevoegde tekst gemarkeerd met een subtiele highlight:
+### Stap 2: UI Verfijning - Wijzigingen Groeperen
+
+**Bestand:** `src/components/DescriptionTimeline.tsx`
+
+**Concept:** Wijzigingen binnen 5 minuten van dezelfde gebruiker samenvoegen tot één item
 
 ```text
 VOOR:
-┌──────────────────────────────────────────────┐
-│ 11-02 wil ik starten met...kleine kantoor   │
-│                                              │
-│          ▼ (connector)                       │
-│ ┌────────────────────────────────────────┐  │
-│ │ Test hallo hee                         │  │
-│ └────────────────────────────────────────┘  │
-└──────────────────────────────────────────────┘
+┌─────────────────────────────────────────────┐
+│ ⏱ 6 feb om 05:18 • Kreshnik    [Gewijzigd] │
+│   Bekijk wijziging                          │
+├─────────────────────────────────────────────┤
+│ ⏱ 6 feb om 05:18 • Kreshnik    [Gewijzigd] │
+│   Bekijk wijziging                          │
+├─────────────────────────────────────────────┤
+│ ⏱ 6 feb om 05:18 • Kreshnik    [Gewijzigd] │
+│   Bekijk wijziging                          │
+└─────────────────────────────────────────────┘
 
-NA:
-┌──────────────────────────────────────────────┐
-│ 11-02 wil ik starten met...kleine kantoor   │
-│                                              │
-│ [Test hallo hee] ← highlight achtergrond     │
-│                                              │
-│ (kleine badge: Gewijzigd door Kreshnik)      │
-└──────────────────────────────────────────────┘
+NA (Gegroepeerd):
+┌─────────────────────────────────────────────┐
+│ ⏱ 6 feb om 05:18 • Kreshnik                │
+│   3 wijzigingen               [Bekijk alle] │
+└─────────────────────────────────────────────┘
 ```
 
-**Code wijziging:**
-Vervang de aparte blokken-logica met inline highlighting:
+**Logica toevoegen:**
+- Groepeer entries binnen 5 minuten van dezelfde `created_by_name`
+- Toon alleen de eerste en laatste staat (begin→eind)
+- Badge toont aantal wijzigingen in de groep
+- Klik opent detail dialog met volledige diff
 
-```typescript
-// Voor modified type: toon alles inline met highlights
-return (
-  <div className={cn("text-sm leading-relaxed", className)}>
-    <p className="whitespace-pre-wrap">
-      {segments.map((segment, index) => {
-        if (segment.type === 'added') {
-          return (
-            <span 
-              key={index} 
-              className="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 px-0.5 rounded-sm"
-            >
-              {segment.text}
-            </span>
-          );
-        }
-        return <span key={index}>{segment.text}</span>;
-      })}
-    </p>
-    {/* Compacte footer met wijzigingsinfo */}
-    <div className="mt-2 text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-      <Edit3 className="h-3 w-3" />
-      <span>Gewijzigd door {latestChange?.created_by_name}</span>
-      <span>•</span>
-      <span>{formatRelativeTime(latestChange?.created_at || '')}</span>
-    </div>
-  </div>
-);
-```
+### Stap 3: Compactere Weergave
 
-### Fix 2: Database Duplicate Check
-
-Controleer of er een andere trigger of functie is die duplicates veroorzaakt.
-
-**Database check:** Zoek naar alle triggers op de tasks tabel
-
-```sql
-SELECT trigger_name, event_manipulation, action_statement 
-FROM information_schema.triggers 
-WHERE event_object_table = 'tasks';
-```
-
-**Indien nog duplicates gevonden:** Voeg een UNIQUE constraint toe of deduplicatie logica in de trigger.
+**Wijzigingen:**
+1. Verwijder individuele "Bekijk wijziging" links voor gegroepeerde items
+2. Voeg collapse/expand toe voor lange historie (max 3 items standaard, "+X meer" knop)
+3. Smaller timeline design met minder padding
 
 ---
 
-## Technische Wijzigingen
+## Technische Implementatie
 
-| Bestand | Wijziging | Regels |
-|---------|-----------|--------|
-| `DescriptionWithDiff.tsx` | Vervang aparte blokken met inline highlights | 150-200 |
-| Database | Check/fix duplicate triggers | n/a |
+### Database Migratie
+| Actie | SQL |
+|-------|-----|
+| Verwijder duplicaten | `DELETE WHERE id NOT IN (SELECT DISTINCT ON...)` |
+| Voeg dedup check toe aan trigger | `IF NOT EXISTS (SELECT ... WHERE created_at > NOW() - INTERVAL '5 seconds')` |
+
+### Code Wijzigingen
+
+**Bestand: `src/components/DescriptionTimeline.tsx`**
+
+| Wijziging | Regels (ca.) |
+|-----------|--------------|
+| Nieuwe `groupEntries()` functie | 120-160 |
+| Bijgewerkte render voor groepen | 247-340 |
+| Collapse/expand state | 66-70 |
+| Nieuwe GroupedEntryView component | 180-220 |
 
 ---
 
 ## Verwacht Resultaat
 
-| Scenario | Gedrag |
-|----------|--------|
-| Beschrijving bekijken | Volledige tekst inline, met highlight op recente toevoegingen |
-| Highlight stijl | Subtiele groene achtergrond op nieuwe woorden |
-| Na 10 seconden | Highlight vervaagt, alleen tekst blijft |
-| Database | 1 entry per wijziging, geen duplicates |
+| Scenario | Voor | Na |
+|----------|------|-----|
+| 7 wijzigingen | 7 losse rijen | 2-3 gegroepeerde items |
+| Duplicaten | Zichtbaar | Verwijderd |
+| Visuele impact | Overweldigend | Compact & overzichtelijk |
+
+---
+
+## Implementatie Volgorde
+
+1. **Database migratie** - Verwijder bestaande duplicaten
+2. **Trigger update** - Voorkom toekomstige duplicaten met 5-seconden check
+3. **DescriptionTimeline.tsx** - Voeg groepering toe
+4. **UI polish** - Collapse/expand en compactere stijl
