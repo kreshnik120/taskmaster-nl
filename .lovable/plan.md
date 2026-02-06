@@ -2,6 +2,20 @@
 
 # Enterprise Task Flow Verfijning - Implementatieplan
 
+## ✅ GEÏMPLEMENTEERD (6 feb 2026)
+
+### Nieuwe Componenten
+| Component | Locatie | Status |
+|-----------|---------|--------|
+| `InlineDescriptionEditor.tsx` | src/components/ | ✅ Klaar |
+| `QuickSubtaskInput.tsx` | src/components/ | ✅ Klaar |
+| `UnifiedActionHub.tsx` | src/components/ | ✅ Klaar |
+| `TextSelectionMenu.tsx` | src/components/ | ✅ Klaar |
+| `useTextSelection.ts` | src/hooks/ | ✅ Klaar |
+| `actionParser.ts` | src/lib/ | ✅ Klaar |
+
+---
+
 ## Analyse: Huidige Architectuur
 
 De bestaande codebase is uitstekend gestructureerd met:

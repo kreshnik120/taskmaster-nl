@@ -1,4 +1,5 @@
-import { CheckCircle2, Circle, Clock, SkipForward, User, Calendar, ArrowRight } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle2, Circle, Clock, SkipForward, User, Calendar, ArrowRight, Plus } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -8,6 +9,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { QuickSubtaskInput } from "./QuickSubtaskInput";
 
 interface Subtask {
   id: string;
@@ -22,11 +24,19 @@ interface Subtask {
   } | null;
 }
 
+interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+}
+
 interface ProcessTimelineProps {
   subtasks: Subtask[];
   onCompleteStep: (subtaskId: string) => void;
   onSkipStep: (subtaskId: string) => void;
   onResetStep?: (subtaskId: string) => void;
+  onAddSubtask?: (title: string, assigneeId?: string, dueDate?: Date) => Promise<void>;
+  teamMembers?: TeamMember[];
   compact?: boolean;
 }
 
@@ -35,11 +45,22 @@ export function ProcessTimeline({
   onCompleteStep, 
   onSkipStep,
   onResetStep,
+  onAddSubtask,
+  teamMembers = [],
   compact = false 
 }: ProcessTimelineProps) {
+  const [isAddingSubtask, setIsAddingSubtask] = useState(false);
+  
   const sortedSubtasks = [...subtasks].sort((a, b) => a.order - b.order);
   const completedCount = sortedSubtasks.filter(s => s.status === 'completed').length;
   const totalCount = sortedSubtasks.length;
+
+  const handleAddSubtask = async (title: string, assigneeId?: string, dueDate?: Date) => {
+    if (onAddSubtask) {
+      await onAddSubtask(title, assigneeId, dueDate);
+      setIsAddingSubtask(false);
+    }
+  };
 
   const handleIconClick = (subtask: Subtask) => {
     if (subtask.status === 'completed' || subtask.status === 'skipped') {
@@ -238,6 +259,41 @@ export function ProcessTimeline({
             </div>
           </div>
         ))}
+
+          {/* Quick add subtask */}
+          {onAddSubtask && !compact && (
+            <div className="flex gap-3">
+              {/* Connector */}
+              <div className="flex flex-col items-center">
+                <div className="h-4 w-4 flex items-center justify-center">
+                  <Plus className="h-3 w-3 text-muted-foreground/50" />
+                </div>
+              </div>
+
+              {/* Add form or trigger */}
+              {isAddingSubtask ? (
+                <QuickSubtaskInput
+                  onSubmit={handleAddSubtask}
+                  onCancel={() => setIsAddingSubtask(false)}
+                  teamMembers={teamMembers}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsAddingSubtask(true)}
+                  className={cn(
+                    "flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-sm",
+                    "text-muted-foreground hover:text-foreground",
+                    "border border-dashed border-border/60 hover:border-primary/30",
+                    "hover:bg-muted/30 transition-colors"
+                  )}
+                >
+                  <Plus className="h-4 w-4" />
+                  Stap toevoegen
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </TooltipProvider>
