@@ -142,6 +142,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   });
   const [actionHistory, setActionHistory] = useState<ActionHistoryItem[]>([]);
   const [loadingActions, setLoadingActions] = useState(false);
+  const [descriptionHistoryCount, setDescriptionHistoryCount] = useState(0);
   const { toast } = useToast();
   const navigate = useNavigate();
   const { isLoading: timerLoading, elapsedTime, startTimer, stopTimer, isTimerActive } = useTaskTimer(task?.id || null);
@@ -1049,6 +1050,11 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                   <div className="flex items-center gap-2">
                     <FileText className="h-5 w-5 text-primary/80" />
                     <h3 className="font-semibold text-foreground">Beschrijving</h3>
+                    {descriptionHistoryCount > 0 && (
+                      <Badge variant="secondary" className="ml-2">
+                        {descriptionHistoryCount}
+                      </Badge>
+                    )}
                   </div>
                   <ChevronDown className={cn(
                     "h-4 w-4 text-muted-foreground/60 transition-transform duration-200",
@@ -1062,7 +1068,11 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                   </div>
                   {/* Description Timeline - shows edit history */}
                   <div className="mx-3">
-                    <DescriptionTimeline taskId={task.id} />
+                    <DescriptionTimeline 
+                      taskId={task.id}
+                      onCountChange={setDescriptionHistoryCount}
+                      onDescriptionRestore={() => onTaskUpdated()}
+                    />
                   </div>
                 </CollapsibleContent>
               </Collapsible>

@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
-import { FileText, Plus, Minus, Edit3, ChevronDown, Eye } from "lucide-react";
+import { FileText, Plus, Minus, Edit3, ChevronDown, Eye, RotateCcw, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,18 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface DescriptionChangeEntry {
   id: string;
@@ -37,17 +48,33 @@ interface DescriptionChangeEntry {
 interface DescriptionTimelineProps {
   taskId: string;
   className?: string;
+  onDescriptionRestore?: (description: string) => void;
+  onCountChange?: (count: number) => void;
 }
 
-export function DescriptionTimeline({ taskId, className }: DescriptionTimelineProps) {
+export function DescriptionTimeline({ 
+  taskId, 
+  className, 
+  onDescriptionRestore,
+  onCountChange 
+}: DescriptionTimelineProps) {
   const [entries, setEntries] = useState<DescriptionChangeEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedEntry, setSelectedEntry] = useState<DescriptionChangeEntry | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [descriptionToRestore, setDescriptionToRestore] = useState<string | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     loadDescriptionHistory();
   }, [taskId]);
+
+  // Notify parent of count changes
+  useEffect(() => {
+    onCountChange?.(entries.length);
+  }, [entries.length, onCountChange]);
 
   const loadDescriptionHistory = async () => {
     setLoading(true);
@@ -123,6 +150,50 @@ export function DescriptionTimeline({ taskId, className }: DescriptionTimelinePr
     setDialogOpen(true);
   };
 
+  const handleRestoreClick = useCallback((description: string) => {
+    setDescriptionToRestore(description);
+    setRestoreConfirmOpen(true);
+  }, []);
+
+  const handleRestoreConfirm = async () => {
+    if (!descriptionToRestore) return;
+    
+    setRestoring(true);
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({ description: descriptionToRestore })
+        .eq('id', taskId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Beschrijving hersteld",
+        description: "De eerdere versie is teruggezet."
+      });
+
+      // Close dialogs and refresh
+      setRestoreConfirmOpen(false);
+      setDialogOpen(false);
+      setDescriptionToRestore(null);
+      
+      // Notify parent if callback provided
+      onDescriptionRestore?.(descriptionToRestore);
+      
+      // Reload history to include the new change
+      loadDescriptionHistory();
+    } catch (error) {
+      console.error('Error restoring description:', error);
+      toast({
+        title: "Fout",
+        description: "Kon de beschrijving niet herstellen.",
+        variant: "destructive"
+      });
+    } finally {
+      setRestoring(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className={cn("text-sm text-muted-foreground", className)}>
@@ -148,7 +219,7 @@ export function DescriptionTimeline({ taskId, className }: DescriptionTimelinePr
           <Separator className="flex-1" />
         </div>
 
-        {/* Timeline entries */}
+        {/* Timeline entries with fade-in animation */}
         <div className="space-y-2">
           {entries.map((entry, index) => {
             const hasContent = entry.metadata?.old_description || entry.metadata?.new_description;
@@ -156,13 +227,14 @@ export function DescriptionTimeline({ taskId, className }: DescriptionTimelinePr
             return (
               <div 
                 key={entry.id}
-                className="flex items-start gap-2 text-sm group"
+                className="flex items-start gap-2 text-sm group animate-in fade-in-0 slide-in-from-bottom-2 duration-300"
+                style={{ animationDelay: `${index * 50}ms` }}
               >
                 {/* Timeline indicator */}
                 <div className="flex flex-col items-center">
                   <div className={cn(
                     "w-6 h-6 rounded-full flex items-center justify-center",
-                    "bg-muted/50 group-hover:bg-muted transition-colors"
+                    "bg-muted/50 group-hover:bg-muted transition-colors duration-200"
                   )}>
                     {getChangeIcon(entry.metadata?.change_type)}
                   </div>
@@ -191,7 +263,7 @@ export function DescriptionTimeline({ taskId, className }: DescriptionTimelinePr
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-6 px-2 mt-1 text-xs text-primary/80 hover:text-primary"
+                          className="h-6 px-2 mt-1 text-xs text-primary/80 hover:text-primary transition-colors duration-200"
                           onClick={() => handleViewChange(entry)}
                         >
                           <Eye className="h-3 w-3 mr-1" />
@@ -285,12 +357,37 @@ export function DescriptionTimeline({ taskId, className }: DescriptionTimelinePr
                       {selectedEntry.metadata.old_description || 'Geen inhoud'}
                     </p>
                   </div>
+                  {/* Restore button for removed descriptions */}
+                  {selectedEntry.metadata.old_description && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full mt-2"
+                      onClick={() => handleRestoreClick(selectedEntry.metadata!.old_description!)}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5 mr-2" />
+                      Terugzetten naar oude versie
+                    </Button>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-4">
                   {/* Old version */}
                   <div className="space-y-2">
-                    <h4 className="text-sm font-medium text-muted-foreground">Oude versie:</h4>
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-medium text-muted-foreground">Oude versie:</h4>
+                      {selectedEntry.metadata?.old_description && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => handleRestoreClick(selectedEntry.metadata!.old_description!)}
+                        >
+                          <RotateCcw className="h-3 w-3 mr-1" />
+                          Terugzetten
+                        </Button>
+                      )}
+                    </div>
                     <div className="bg-muted/30 border border-border rounded-lg p-3">
                       <p className="text-sm whitespace-pre-wrap text-muted-foreground">
                         {selectedEntry.metadata?.old_description || 'Geen inhoud'}
@@ -318,6 +415,38 @@ export function DescriptionTimeline({ taskId, className }: DescriptionTimelinePr
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Restore Confirmation Dialog */}
+      <AlertDialog open={restoreConfirmOpen} onOpenChange={setRestoreConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Beschrijving terugzetten?</AlertDialogTitle>
+            <AlertDialogDescription>
+              De huidige beschrijving wordt vervangen door de geselecteerde versie. 
+              Deze actie wordt opgeslagen in het verloop.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={restoring}>Annuleren</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleRestoreConfirm}
+              disabled={restoring}
+            >
+              {restoring ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Herstellen...
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Terugzetten
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
