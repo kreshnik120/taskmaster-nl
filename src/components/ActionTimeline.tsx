@@ -242,8 +242,9 @@ export function ActionTimeline({
     loadTeamMembers();
   }, [taskId]);
 
+  // Filter out description_change actions - these are shown in DescriptionTimeline
   const completedActions = actionHistory
-    .filter(a => a.completed_at)
+    .filter(a => a.completed_at && a.action_type !== 'description_change')
     .sort((a, b) => new Date(a.completed_at!).getTime() - new Date(b.completed_at!).getTime());
 
   // Extract unique users from action history
