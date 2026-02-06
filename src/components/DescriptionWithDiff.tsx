@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { computeWordDiff, type DiffSegment } from "@/lib/textDiff";
 import { cn } from "@/lib/utils";
+import { Plus, Edit3, ChevronDown } from "lucide-react";
 
 interface DescriptionChangeMetadata {
   old_description?: string | null;
@@ -11,6 +12,7 @@ interface DescriptionChangeMetadata {
 interface LatestChange {
   metadata?: DescriptionChangeMetadata;
   created_at: string;
+  created_by_name?: string;
 }
 
 interface DescriptionWithDiffProps {
@@ -18,6 +20,20 @@ interface DescriptionWithDiffProps {
   latestChange: LatestChange | null;
   highlightDuration?: number; // ms before fade starts (default: 10000)
   className?: string;
+}
+
+function formatRelativeTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  
+  if (diffMins < 1) return 'zojuist';
+  if (diffMins < 60) return `${diffMins} min geleden`;
+  if (diffHours < 24) return `${diffHours} uur geleden`;
+  return `${diffDays} dag${diffDays > 1 ? 'en' : ''} geleden`;
 }
 
 export function DescriptionWithDiff({ 
@@ -75,6 +91,18 @@ export function DescriptionWithDiff({
     return null;
   }, [latestChange, currentDescription, isRecentChange]);
 
+  // Separate unchanged and added segments
+  const { unchangedSegments, addedSegments } = useMemo(() => {
+    if (!segments) {
+      return { unchangedSegments: [], addedSegments: [] };
+    }
+    
+    return {
+      unchangedSegments: segments.filter(s => s.type === 'unchanged'),
+      addedSegments: segments.filter(s => s.type === 'added')
+    };
+  }, [segments]);
+
   // If no segments to highlight, render plain text
   if (!segments || !showHighlight) {
     return (
@@ -84,49 +112,93 @@ export function DescriptionWithDiff({
     );
   }
 
-  return (
-    <div className={cn("text-sm whitespace-pre-wrap leading-relaxed", className)}>
-      {segments.map((segment, index) => (
-        <HighlightedSegment 
-          key={index} 
-          segment={segment} 
-          animate={isRecentChange}
-        />
-      ))}
-    </div>
-  );
-}
+  const changeType = latestChange?.metadata?.change_type;
+  const isFullyAdded = changeType === 'added';
+  const ChangeIcon = changeType === 'added' ? Plus : Edit3;
 
-interface HighlightedSegmentProps {
-  segment: DiffSegment;
-  animate?: boolean;
-}
-
-function HighlightedSegment({ segment, animate }: HighlightedSegmentProps) {
-  if (segment.type === 'added') {
+  // For fully added descriptions, show everything in the highlight box
+  if (isFullyAdded) {
     return (
-      <span 
-        className={cn(
-          "bg-emerald-100/80 dark:bg-emerald-900/40",
-          "border-l-2 border-emerald-500 pl-1",
-          "text-emerald-900 dark:text-emerald-100",
-          "rounded-r-sm",
-          animate && "animate-in fade-in-0 duration-500"
-        )}
-      >
-        {segment.text}
-      </span>
+      <div className={cn("text-sm leading-relaxed", className)}>
+        {/* Highlighted additions box */}
+        <div className="animate-in fade-in-0 slide-in-from-top-2 duration-300">
+          <div className="border-l-2 border-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-r-lg overflow-hidden">
+            {/* Header */}
+            <div className="px-3 py-1.5 bg-emerald-100/50 dark:bg-emerald-900/30 border-b border-emerald-200/50 dark:border-emerald-800/50 flex items-center gap-2">
+              <ChangeIcon className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+              <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                Toegevoegd door {latestChange?.created_by_name || 'Onbekend'}
+              </span>
+              <span className="text-xs text-emerald-600/70 dark:text-emerald-400/70">•</span>
+              <span className="text-xs text-emerald-600/70 dark:text-emerald-400/70">
+                {formatRelativeTime(latestChange?.created_at || '')}
+              </span>
+            </div>
+            
+            {/* Content */}
+            <div className="px-3 py-2 whitespace-pre-wrap">
+              <span className="text-emerald-900 dark:text-emerald-100">
+                {currentDescription}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
     );
   }
 
-  if (segment.type === 'removed') {
-    // Removed text is not shown in the current description
-    // since the current description doesn't contain it anymore
-    return null;
-  }
+  // For modified descriptions, show unchanged text first, then connector and additions
+  return (
+    <div className={cn("text-sm leading-relaxed", className)}>
+      {/* Render all segments inline, but separate additions for the box */}
+      <div className="whitespace-pre-wrap">
+        {segments.map((segment, index) => {
+          if (segment.type === 'unchanged') {
+            return <span key={index}>{segment.text}</span>;
+          }
+          // Skip added segments here, they go in the box below
+          return null;
+        })}
+      </div>
 
-  // Unchanged text
-  return <span>{segment.text}</span>;
+      {/* Only show connector and box if there are additions */}
+      {addedSegments.length > 0 && (
+        <div className="animate-in fade-in-0 slide-in-from-top-2 duration-300">
+          {/* Visuele connector */}
+          <div className="flex flex-col items-start my-2">
+            <div className="flex flex-col items-center ml-4">
+              <div className="w-px h-3 bg-gradient-to-b from-transparent to-emerald-400 dark:to-emerald-500" />
+              <ChevronDown className="h-3 w-3 text-emerald-500 dark:text-emerald-400 -mt-1" />
+            </div>
+          </div>
+
+          {/* Highlighted additions box */}
+          <div className="border-l-2 border-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-r-lg overflow-hidden">
+            {/* Header */}
+            <div className="px-3 py-1.5 bg-emerald-100/50 dark:bg-emerald-900/30 border-b border-emerald-200/50 dark:border-emerald-800/50 flex items-center gap-2">
+              <ChangeIcon className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+              <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                Gewijzigd door {latestChange?.created_by_name || 'Onbekend'}
+              </span>
+              <span className="text-xs text-emerald-600/70 dark:text-emerald-400/70">•</span>
+              <span className="text-xs text-emerald-600/70 dark:text-emerald-400/70">
+                {formatRelativeTime(latestChange?.created_at || '')}
+              </span>
+            </div>
+            
+            {/* Content */}
+            <div className="px-3 py-2 whitespace-pre-wrap">
+              {addedSegments.map((segment, index) => (
+                <span key={index} className="text-emerald-900 dark:text-emerald-100">
+                  {segment.text}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default DescriptionWithDiff;
