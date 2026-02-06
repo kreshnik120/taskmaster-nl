@@ -24,6 +24,7 @@ export function InlineDescriptionEditor({
   const [hasChanges, setHasChanges] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const originalValueRef = useRef(description || ""); // Track original for proper hasChanges
   const { toast } = useToast();
 
   // Auto-focus and resize on mount
@@ -70,6 +71,12 @@ export function InlineDescriptionEditor({
   }, [value, hasChanges]);
 
   const handleSave = async () => {
+    // FIX 1: Cancel pending auto-save timer to prevent duplicate requests
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+
     if (!hasChanges || isSaving) return;
 
     setIsSaving(true);
@@ -82,6 +89,10 @@ export function InlineDescriptionEditor({
       if (error) throw error;
 
       const savedValue = value.trim() || "";
+      
+      // FIX 2: Update original reference and reset hasChanges
+      originalValueRef.current = savedValue;
+      setHasChanges(false);
       
       toast({
         title: "Beschrijving opgeslagen",

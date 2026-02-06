@@ -149,6 +149,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   const [latestDescriptionChange, setLatestDescriptionChange] = useState<DescriptionChangeEntry | null>(null);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [localDescription, setLocalDescription] = useState<string | null>(null);
+  const [descriptionVersion, setDescriptionVersion] = useState(0); // FIX 3: Force timeline refresh
   const [teamMembers, setTeamMembers] = useState<Array<{id: string; name: string; email: string}>>([]);
   const descriptionRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -1117,7 +1118,13 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                   <div 
                     ref={descriptionRef}
                     className="bg-muted/30 dark:bg-muted/20 rounded-xl p-4 mx-3 relative group/desc cursor-text"
-                    onClick={() => !isEditingDescription && setIsEditingDescription(true)}
+                    onClick={() => {
+                      if (!isEditingDescription) {
+                        // FIX 4: Clear stale highlight when starting to edit
+                        setLatestDescriptionChange(null);
+                        setIsEditingDescription(true);
+                      }
+                    }}
                   >
                     {isEditingDescription ? (
                       <InlineDescriptionEditor
@@ -1125,6 +1132,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                         description={localDescription ?? task.description}
                         onSaved={(newDescription) => {
                           setLocalDescription(newDescription || null);
+                          setDescriptionVersion(v => v + 1); // FIX 3: Force timeline refresh
                           setIsEditingDescription(false);
                           onTaskUpdated();
                         }}
@@ -1186,6 +1194,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                   <div className="mx-3">
                     <DescriptionTimeline 
                       taskId={task.id}
+                      key={descriptionVersion} // FIX 3: Force remount on save
                       onCountChange={setDescriptionHistoryCount}
                       onLatestChange={setLatestDescriptionChange}
                       onDescriptionRestore={() => onTaskUpdated()}
