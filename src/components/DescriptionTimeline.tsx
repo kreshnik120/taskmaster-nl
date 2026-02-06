@@ -31,7 +31,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { DiffView } from "@/components/DiffView";
 
-interface DescriptionChangeEntry {
+// DescriptionChangeEntry is now exported from the function definition below
+
+export interface DescriptionChangeEntry {
   id: string;
   action_text: string;
   created_at: string;
@@ -51,13 +53,15 @@ interface DescriptionTimelineProps {
   className?: string;
   onDescriptionRestore?: (description: string) => void;
   onCountChange?: (count: number) => void;
+  onLatestChange?: (change: DescriptionChangeEntry | null) => void;
 }
 
 export function DescriptionTimeline({ 
   taskId, 
   className, 
   onDescriptionRestore,
-  onCountChange 
+  onCountChange,
+  onLatestChange
 }: DescriptionTimelineProps) {
   const [entries, setEntries] = useState<DescriptionChangeEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,10 +76,12 @@ export function DescriptionTimeline({
     loadDescriptionHistory();
   }, [taskId]);
 
-  // Notify parent of count changes
+  // Notify parent of count changes and latest change
   useEffect(() => {
     onCountChange?.(entries.length);
-  }, [entries.length, onCountChange]);
+    // Send the most recent change (first in array since sorted desc)
+    onLatestChange?.(entries.length > 0 ? entries[0] : null);
+  }, [entries, onCountChange, onLatestChange]);
 
   const loadDescriptionHistory = async () => {
     setLoading(true);
