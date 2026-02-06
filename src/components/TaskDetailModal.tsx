@@ -44,7 +44,8 @@ import { ReminderDialog } from "./ReminderDialog";
 import { ProcessTimeline } from "./ProcessTimeline";
 import { AttachmentPreviewModal } from "./AttachmentPreviewModal";
 import { ActionTimeline, ActionHistoryItem, ActiveSubtaskInfo } from "./ActionTimeline";
-import { DescriptionTimeline } from "./DescriptionTimeline";
+import { DescriptionTimeline, type DescriptionChangeEntry } from "./DescriptionTimeline";
+import { DescriptionWithDiff } from "./DescriptionWithDiff";
 import { TaskMeetingMinutesSection } from "./tasks/TaskMeetingMinutesSection";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -143,6 +144,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   const [actionHistory, setActionHistory] = useState<ActionHistoryItem[]>([]);
   const [loadingActions, setLoadingActions] = useState(false);
   const [descriptionHistoryCount, setDescriptionHistoryCount] = useState(0);
+  const [latestDescriptionChange, setLatestDescriptionChange] = useState<DescriptionChangeEntry | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
   const { isLoading: timerLoading, elapsedTime, startTimer, stopTimer, isTimerActive } = useTaskTimer(task?.id || null);
@@ -1064,13 +1066,17 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                 {/* Fase 6: bg subtieler + Fase 8: pt-3 */}
                 <CollapsibleContent className="pt-3 animate-accordion-down">
                   <div className="bg-muted/30 dark:bg-muted/20 rounded-xl p-4 mx-3">
-                    <p className="text-sm whitespace-pre-wrap leading-relaxed">{task.description}</p>
+                    <DescriptionWithDiff
+                      currentDescription={task.description}
+                      latestChange={latestDescriptionChange}
+                    />
                   </div>
                   {/* Description Timeline - shows edit history */}
                   <div className="mx-3">
                     <DescriptionTimeline 
                       taskId={task.id}
                       onCountChange={setDescriptionHistoryCount}
+                      onLatestChange={setLatestDescriptionChange}
                       onDescriptionRestore={() => onTaskUpdated()}
                     />
                   </div>
