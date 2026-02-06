@@ -1,197 +1,227 @@
 
-# Plan: Inline Diff Highlighting voor Beschrijving
 
-## Het Probleem
+# Plan: Label + Visuele Connector voor Diff Highlights
 
-In de huidige weergave staat "Test" onderaan de beschrijving als gewone tekst - er is **geen visuele indicatie** dat dit recent is toegevoegd:
-
-```text
-┌────────────────────────────────────────────┐
-│ 11-02 wil ik starten met ingeschreven      │
-│ kandidaten binnen Citozorg & Abc zorg.     │
-│ Werven uitzendkracht of constructie.       │
-│                                            │
-│ Zo kan ik de kaartenbak opschonen...       │
-│                                            │
-│ Test    ← Geen indicatie dat dit nieuw is! │
-└────────────────────────────────────────────┘
-```
-
-## De Oplossing: Smart Description Rendering
-
-De beschrijving zelf renderen met de **meest recente wijzigingen inline gehighlighted**:
+## Huidige Situatie
 
 ```text
 ┌────────────────────────────────────────────┐
 │ 11-02 wil ik starten met ingeschreven      │
 │ kandidaten binnen Citozorg & Abc zorg.     │
-│ Werven uitzendkracht of constructie.       │
+│ ...                                        │
 │                                            │
-│ Zo kan ik de kaartenbak opschonen...       │
-│                                            │
-│ [Test]  ← Groen gemarkeerd als toevoeging! │
+│ Test    ← Geen context, geen visuele flow  │
 └────────────────────────────────────────────┘
 ```
 
 ---
 
-## Wat verandert er?
+## Nieuwe Weergave met Label + Connector
 
-### Huidige Flow
-1. Beschrijving wordt als plain tekst getoond
-2. Gebruiker moet op "Bekijk wijziging" klikken
-3. Dialog opent met diff view
-4. Pas daar ziet de gebruiker wat er is veranderd
-
-### Nieuwe Flow
-1. Beschrijving toont direct de **laatste wijziging gehighlighted**
-2. Toevoegingen: groene achtergrond
-3. Verwijderingen: rode doorgestreepte tekst (optioneel zichtbaar)
-4. Na X seconden of bij hover: subtiele fade-out van highlighting
-5. "Bekijk wijziging" blijft beschikbaar voor volledige historie
+```text
+┌────────────────────────────────────────────────────┐
+│ 11-02 wil ik starten met ingeschreven              │
+│ kandidaten binnen Citozorg & Abc zorg.             │
+│ Werven uitzendkracht of constructie.               │
+│                                                    │
+│ Zo kan ik de kaartenbak opschonen en de            │
+│ tijd nemen om apart te zitten in kleine kantoor    │
+│                                                    │
+│          ┆                                         │
+│          ▼                                         │  ← Visuele connector
+│ ┌──────────────────────────────────────────────┐   │
+│ │ ✏️ Gewijzigd door Kreshnik • 2 uur geleden   │   │  ← Header met naam
+│ ├──────────────────────────────────────────────┤   │
+│ │ Test                                         │   │  ← Gehighlighte toevoeging
+│ └──────────────────────────────────────────────┘   │
+└────────────────────────────────────────────────────┘
+```
 
 ---
 
-## Technische Aanpak
+## Visuele Connector Opties
 
-### 1. DescriptionTimeline uitbreiden met data export
+### Optie A: Gestippelde Lijn met Pijl (Aanbevolen)
+```text
+          ┆
+          ▼
+┌─────────────────────────────┐
+│ Gewijzigd door Kreshnik     │
+```
+- Subtiel maar duidelijk
+- Past bij het design systeem
+
+### Optie B: Gradient Fade Lijn
+```text
+      ════════════════════
+          ↓ Toegevoegd
+┌─────────────────────────────┐
+```
+- Modernere look
+- Iets meer visuele impact
+
+### Optie C: Bracket/Haak Stijl
+```text
+    ┌─────────────────────────────┐
+    │ ➕ Gewijzigd door Kreshnik   │
+```
+- Minimalistische approach
+- Focus op de content
+
+---
+
+## Technische Implementatie
+
+### DescriptionWithDiff.tsx Aanpassingen
+
+**1. Interface uitbreiden met created_by_name:**
 
 ```typescript
-interface DescriptionTimelineProps {
-  taskId: string;
-  onCountChange?: (count: number) => void;
-  onLatestChange?: (change: DescriptionChangeEntry | null) => void; // NIEUW
+interface LatestChange {
+  metadata?: DescriptionChangeMetadata;
+  created_at: string;
+  created_by_name?: string;  // NIEUW
 }
 ```
 
-Deze nieuwe prop stuurt de meest recente wijziging naar de parent component.
+**2. Helper functie voor relatieve tijd:**
 
-### 2. TaskDetailModal: Description met Diff renderen
-
-In plaats van:
 ```typescript
-<p className="text-sm whitespace-pre-wrap">{task.description}</p>
+function formatRelativeTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  
+  if (diffMins < 1) return 'zojuist';
+  if (diffMins < 60) return `${diffMins} min geleden`;
+  if (diffHours < 24) return `${diffHours} uur geleden`;
+  return `${diffDays} dag${diffDays > 1 ? 'en' : ''} geleden`;
+}
 ```
 
-Wordt het:
-```typescript
-{latestDescriptionChange ? (
-  <DescriptionWithDiff
-    currentDescription={task.description}
-    latestChange={latestDescriptionChange}
-    showFreshIndicator={isRecentChange}
-  />
-) : (
-  <p className="text-sm whitespace-pre-wrap">{task.description}</p>
-)}
+**3. Nieuwe render structuur:**
+
+```tsx
+// Voor added/modified changes met highlights
+return (
+  <div className={cn("text-sm whitespace-pre-wrap leading-relaxed", className)}>
+    {/* Ongewijzigde tekst eerst */}
+    {segments.map((segment, index) => {
+      if (segment.type === 'unchanged') {
+        return <span key={index}>{segment.text}</span>;
+      }
+      return null;
+    })}
+    
+    {/* Visuele connector */}
+    <div className="flex flex-col items-start my-3">
+      <div className="flex flex-col items-center ml-4">
+        <div className="w-px h-3 bg-gradient-to-b from-transparent to-emerald-400" />
+        <ChevronDown className="h-3 w-3 text-emerald-500 -mt-1" />
+      </div>
+    </div>
+    
+    {/* Highlighted additions box */}
+    <div className="border-l-2 border-emerald-400 bg-emerald-50/50 rounded-r-lg overflow-hidden">
+      {/* Header */}
+      <div className="px-3 py-1.5 bg-emerald-100/50 border-b border-emerald-200/50 flex items-center gap-2">
+        <Plus className="h-3 w-3 text-emerald-600" />
+        <span className="text-xs font-medium text-emerald-700">
+          Gewijzigd door {latestChange?.created_by_name || 'Onbekend'}
+        </span>
+        <span className="text-xs text-emerald-600/70">•</span>
+        <span className="text-xs text-emerald-600/70">
+          {formatRelativeTime(latestChange?.created_at)}
+        </span>
+      </div>
+      
+      {/* Content */}
+      <div className="px-3 py-2">
+        {addedSegments.map((segment, index) => (
+          <span key={index} className="text-emerald-900">
+            {segment.text}
+          </span>
+        ))}
+      </div>
+    </div>
+  </div>
+);
 ```
-
-### 3. Nieuwe Component: DescriptionWithDiff
-
-Component die de huidige beschrijving rendert met recente wijzigingen gehighlighted:
-
-- Gebruikt de bestaande `DiffView` logic intern
-- Toont alleen de meest recente toevoeging/verwijdering
-- Heeft een subtiele "recent" indicator (glow/pulse) die na 10 seconden verdwijnt
-- Optionele toggle om "verwijderde tekst" te tonen/verbergen
 
 ---
 
-## Visual Design
-
-### Toevoegingen (meest voorkomend)
-
-```text
-┌─────────────────────────────────────────────────┐
-│ 11-02 wil ik starten met ingeschreven           │
-│ kandidaten binnen Citozorg & Abc zorg.          │
-│ Werven uitzendkracht of constructie.            │
-│                                                 │
-│ Zo kan ik de kaartenbak opschonen en de         │
-│ tijd nemen om apart te zitten in kleine kantoor │
-│                                                 │
-│ ┌──────────────────────────────────────────┐    │
-│ │ Test                                     │    │ ← Emerald border + subtle glow
-│ └──────────────────────────────────────────┘    │
-│                           [Recent toegevoegd ●] │ ← Subtiele indicator
-└─────────────────────────────────────────────────┘
-```
-
-### Styling Specificaties
+## Visuele Styling Details
 
 | Element | Styling |
 |---------|---------|
-| Toegevoegde tekst | `bg-emerald-50 border-l-2 border-emerald-400 pl-2` |
-| "Recent" indicator | `text-emerald-600 text-xs` met fade-out na 10s |
-| Verwijderde tekst (optioneel) | `bg-red-50/50 line-through text-muted-foreground` |
+| Connector lijn | `w-px h-3 bg-gradient-to-b from-transparent to-emerald-400` |
+| Pijl icoon | `ChevronDown` van Lucide, `text-emerald-500` |
+| Header achtergrond | `bg-emerald-100/50` met subtiele border |
+| Naam tekst | `text-xs font-medium text-emerald-700` |
+| Tijd tekst | `text-xs text-emerald-600/70` |
+| Content box | `border-l-2 border-emerald-400 bg-emerald-50/50` |
 
 ---
 
-## Implementatie Details
-
-### Bestanden die aangepast worden
+## Bestanden die Aangepast Worden
 
 | Bestand | Wijziging |
 |---------|-----------|
-| `src/components/DescriptionTimeline.tsx` | Nieuwe `onLatestChange` prop |
-| `src/components/TaskDetailModal.tsx` | State voor latestChange + conditionale rendering |
-| `src/components/DescriptionWithDiff.tsx` | **NIEUW** - Component voor inline diff display |
-
-### DescriptionWithDiff Props
-
-```typescript
-interface DescriptionWithDiffProps {
-  currentDescription: string;
-  latestChange: DescriptionChangeEntry | null;
-  showRecent?: boolean; // Toon "recent toegevoegd" indicator
-  highlightDuration?: number; // Milliseconden voor fade-out (default: 10000)
-}
-```
-
-### Logic Flow
-
-1. Component ontvangt `currentDescription` en `latestChange`
-2. Als `latestChange.metadata.change_type === 'added'`:
-   - Zoek de toegevoegde tekst in currentDescription
-   - Highlight dat gedeelte met emerald styling
-3. Als `change_type === 'modified'`:
-   - Gebruik `computeWordDiff` om segmenten te vinden
-   - Highlight alleen de `added` segmenten in de huidige tekst
-4. "Recent" indicator verdwijnt na configureerbare tijd
-
-### Edge Cases
-
-- **Geen history**: Render als normale tekst
-- **Wijziging is complete rewrite**: Toon normale tekst (geen highlight)
-- **Verwijdering**: Optioneel tonen als doorgestreepte tekst onder de huidige beschrijving
+| `src/components/DescriptionWithDiff.tsx` | Visuele connector + header label toevoegen |
+| `src/components/DescriptionTimeline.tsx` | Geen wijziging nodig - `created_by_name` zit al in entries |
 
 ---
 
-## Optionele Verfijning: Fade-out Animatie
+## Animatie Verfijningen
 
-De "recent toegevoegd" highlighting kan na X seconden subtiel vervagen:
+De connector en box verschijnen met een subtiele animatie:
 
-```css
-.diff-highlight-fresh {
-  animation: highlight-fade 10s ease-out forwards;
-}
+```tsx
+<div className="animate-in fade-in-0 slide-in-from-top-2 duration-300">
+  {/* Connector + Box */}
+</div>
+```
 
-@keyframes highlight-fade {
-  0% { background-color: rgb(209 250 229); } /* emerald-100 */
-  100% { background-color: transparent; }
-}
+En na de `highlightDuration` (10 seconden) fade de kleuren subtiel uit naar neutraal:
+
+```tsx
+// Na timeout: 
+// bg-emerald-50/50 → bg-muted/30
+// border-emerald-400 → border-muted
+// text-emerald-700 → text-muted-foreground
 ```
 
 ---
 
-## Samenvatting
+## Resultaat
 
-| Onderdeel | Beschrijving |
-|-----------|-------------|
-| Kern verbetering | Recente wijzigingen direct zichtbaar in beschrijving |
-| Nieuwe component | `DescriptionWithDiff.tsx` |
-| Styling | Emerald border/background voor toevoegingen |
-| UX feature | "Recent" indicator met automatische fade-out |
-| Bestaande functie | "Bekijk wijziging" blijft voor volledige historie |
+```text
+┌─────────────────────────────────────────────────────┐
+│ 11-02 wil ik starten met ingeschreven               │
+│ kandidaten binnen Citozorg & Abc zorg.              │
+│ Werven uitzendkracht of constructie.                │
+│                                                     │
+│ Zo kan ik de kaartenbak opschonen en de             │
+│ tijd nemen om apart te zitten in kleine kantoor     │
+│                                                     │
+│            ┆                                        │
+│            ▼                                        │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ ✚ Gewijzigd door Kreshnik • 2 uur geleden       │ │
+│ ├─────────────────────────────────────────────────┤ │
+│ │ Test                                            │ │
+│ └─────────────────────────────────────────────────┘ │
+│                                                     │
+│ ─────────── Verloop (2) ───────────                 │
+└─────────────────────────────────────────────────────┘
+```
 
-Dit zorgt ervoor dat gebruikers **direct kunnen zien wat er recent is veranderd** zonder extra klikken!
+Dit geeft een professionele, duidelijke flow die direct laat zien:
+- **Wie** de wijziging maakte
+- **Wanneer** (relatieve tijd)
+- **Wat** er precies is toegevoegd
+- **Visuele hiërarchie** door de connector
+
