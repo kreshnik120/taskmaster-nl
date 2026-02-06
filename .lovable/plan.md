@@ -1,227 +1,135 @@
 
-
-# Plan: Label + Visuele Connector voor Diff Highlights
+# Plan: Verloop Sectie Slimmer Tonen
 
 ## Huidige Situatie
 
-```text
-┌────────────────────────────────────────────┐
-│ 11-02 wil ik starten met ingeschreven      │
-│ kandidaten binnen Citozorg & Abc zorg.     │
-│ ...                                        │
-│                                            │
-│ Test    ← Geen context, geen visuele flow  │
-└────────────────────────────────────────────┘
-```
-
----
-
-## Nieuwe Weergave met Label + Connector
+Nu wordt de recente wijziging **twee keer** getoond:
+1. **Inline in de beschrijving** - met de mooie groene box + connector + "Gewijzigd door Kreshnik"
+2. **In de Verloop sectie eronder** - dezelfde informatie nogmaals
 
 ```text
 ┌────────────────────────────────────────────────────┐
 │ 11-02 wil ik starten met ingeschreven              │
 │ kandidaten binnen Citozorg & Abc zorg.             │
-│ Werven uitzendkracht of constructie.               │
-│                                                    │
-│ Zo kan ik de kaartenbak opschonen en de            │
-│ tijd nemen om apart te zitten in kleine kantoor    │
 │                                                    │
 │          ┆                                         │
-│          ▼                                         │  ← Visuele connector
+│          ▼                                         │
 │ ┌──────────────────────────────────────────────┐   │
-│ │ ✏️ Gewijzigd door Kreshnik • 2 uur geleden   │   │  ← Header met naam
+│ │ ✚ Gewijzigd door Kreshnik • 2 uur geleden    │   │  ← Prima, dit is wat we willen
 │ ├──────────────────────────────────────────────┤   │
-│ │ Test                                         │   │  ← Gehighlighte toevoeging
+│ │ Test                                         │   │
 │ └──────────────────────────────────────────────┘   │
+│                                                    │
+│ ─────────── Verloop (2) ───────────                │  ← Dubbel/overbodig?
+│ ○ 6 feb • Kreshnik • [Gewijzigd]                   │
+│ ○ 5 feb • Kreshnik • [Toegevoegd]                  │
 └────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Visuele Connector Opties
+## Oplossing: Slim Verbergen van Verloop
 
-### Optie A: Gestippelde Lijn met Pijl (Aanbevolen)
-```text
-          ┆
-          ▼
-┌─────────────────────────────┐
-│ Gewijzigd door Kreshnik     │
-```
-- Subtiel maar duidelijk
-- Past bij het design systeem
+### Gedrag
 
-### Optie B: Gradient Fade Lijn
-```text
-      ════════════════════
-          ↓ Toegevoegd
-┌─────────────────────────────┐
-```
-- Modernere look
-- Iets meer visuele impact
+| Situatie | Actie |
+|----------|-------|
+| 0 wijzigingen | Geen Verloop tonen (bestaand gedrag) |
+| 1 wijziging + recent (<24 uur) + inline getoond | **Verloop verbergen** - info is al inline zichtbaar |
+| 1 wijziging + niet recent (>24 uur) | Verloop tonen - voor historie |
+| 2+ wijzigingen | Verloop altijd tonen - voor volledige historie |
 
-### Optie C: Bracket/Haak Stijl
+### Nieuwe Weergave (1 recente wijziging)
+
 ```text
-    ┌─────────────────────────────┐
-    │ ➕ Gewijzigd door Kreshnik   │
+┌────────────────────────────────────────────────────┐
+│ 11-02 wil ik starten met ingeschreven              │
+│ kandidaten binnen Citozorg & Abc zorg.             │
+│                                                    │
+│          ┆                                         │
+│          ▼                                         │
+│ ┌──────────────────────────────────────────────┐   │
+│ │ ✚ Gewijzigd door Kreshnik • 2 uur geleden    │   │
+│ ├──────────────────────────────────────────────┤   │
+│ │ Test                                         │   │
+│ └──────────────────────────────────────────────┘   │
+│                                                    │
+│        [Geen Verloop - al inline getoond]          │
+└────────────────────────────────────────────────────┘
 ```
-- Minimalistische approach
-- Focus op de content
+
+### Nieuwe Weergave (2+ wijzigingen)
+
+```text
+┌────────────────────────────────────────────────────┐
+│ 11-02 wil ik starten met ingeschreven              │
+│ ...                                                │
+│                                                    │
+│          ┆                                         │
+│          ▼                                         │
+│ ┌──────────────────────────────────────────────┐   │
+│ │ ✚ Gewijzigd door Kreshnik • 2 uur geleden    │   │
+│ ├──────────────────────────────────────────────┤   │
+│ │ Test                                         │   │
+│ └──────────────────────────────────────────────┘   │
+│                                                    │
+│ ─────────── Meer verloop (1) ───────────           │  ← Alleen oudere entries
+│ ○ 5 feb • Jan • [Toegevoegd]                       │
+└────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Technische Implementatie
 
-### DescriptionWithDiff.tsx Aanpassingen
+### Bestand: `src/components/DescriptionTimeline.tsx`
 
-**1. Interface uitbreiden met created_by_name:**
+**Optie 1: Eerste entry niet tonen als recent**
 
 ```typescript
-interface LatestChange {
-  metadata?: DescriptionChangeMetadata;
-  created_at: string;
-  created_by_name?: string;  // NIEUW
+// Bepaal of de meest recente wijziging al inline wordt getoond
+const isLatestShowingInline = useMemo(() => {
+  if (entries.length === 0) return false;
+  const latestEntry = entries[0];
+  const changeTime = new Date(latestEntry.created_at).getTime();
+  const now = Date.now();
+  const twentyFourHours = 24 * 60 * 60 * 1000;
+  return (now - changeTime) < twentyFourHours;
+}, [entries]);
+
+// Filter entries: als de eerste inline wordt getoond, begin bij index 1
+const visibleEntries = isLatestShowingInline ? entries.slice(1) : entries;
+
+// Als er geen visible entries zijn, toon niets
+if (visibleEntries.length === 0) {
+  return null;
 }
 ```
 
-**2. Helper functie voor relatieve tijd:**
+**Optie 2: Label aanpassen als eerste entry inline is**
 
 ```typescript
-function formatRelativeTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-  
-  if (diffMins < 1) return 'zojuist';
-  if (diffMins < 60) return `${diffMins} min geleden`;
-  if (diffHours < 24) return `${diffHours} uur geleden`;
-  return `${diffDays} dag${diffDays > 1 ? 'en' : ''} geleden`;
-}
-```
-
-**3. Nieuwe render structuur:**
-
-```tsx
-// Voor added/modified changes met highlights
-return (
-  <div className={cn("text-sm whitespace-pre-wrap leading-relaxed", className)}>
-    {/* Ongewijzigde tekst eerst */}
-    {segments.map((segment, index) => {
-      if (segment.type === 'unchanged') {
-        return <span key={index}>{segment.text}</span>;
-      }
-      return null;
-    })}
-    
-    {/* Visuele connector */}
-    <div className="flex flex-col items-start my-3">
-      <div className="flex flex-col items-center ml-4">
-        <div className="w-px h-3 bg-gradient-to-b from-transparent to-emerald-400" />
-        <ChevronDown className="h-3 w-3 text-emerald-500 -mt-1" />
-      </div>
-    </div>
-    
-    {/* Highlighted additions box */}
-    <div className="border-l-2 border-emerald-400 bg-emerald-50/50 rounded-r-lg overflow-hidden">
-      {/* Header */}
-      <div className="px-3 py-1.5 bg-emerald-100/50 border-b border-emerald-200/50 flex items-center gap-2">
-        <Plus className="h-3 w-3 text-emerald-600" />
-        <span className="text-xs font-medium text-emerald-700">
-          Gewijzigd door {latestChange?.created_by_name || 'Onbekend'}
-        </span>
-        <span className="text-xs text-emerald-600/70">•</span>
-        <span className="text-xs text-emerald-600/70">
-          {formatRelativeTime(latestChange?.created_at)}
-        </span>
-      </div>
-      
-      {/* Content */}
-      <div className="px-3 py-2">
-        {addedSegments.map((segment, index) => (
-          <span key={index} className="text-emerald-900">
-            {segment.text}
-          </span>
-        ))}
-      </div>
-    </div>
-  </div>
-);
+// In plaats van "Verloop (2)" toon "Meer verloop (1)"
+<span className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+  <FileText className="h-3 w-3" />
+  {isLatestShowingInline ? 'Meer verloop' : 'Verloop'} ({visibleEntries.length})
+</span>
 ```
 
 ---
 
-## Visuele Styling Details
-
-| Element | Styling |
-|---------|---------|
-| Connector lijn | `w-px h-3 bg-gradient-to-b from-transparent to-emerald-400` |
-| Pijl icoon | `ChevronDown` van Lucide, `text-emerald-500` |
-| Header achtergrond | `bg-emerald-100/50` met subtiele border |
-| Naam tekst | `text-xs font-medium text-emerald-700` |
-| Tijd tekst | `text-xs text-emerald-600/70` |
-| Content box | `border-l-2 border-emerald-400 bg-emerald-50/50` |
-
----
-
-## Bestanden die Aangepast Worden
+## Samenvatting Wijzigingen
 
 | Bestand | Wijziging |
 |---------|-----------|
-| `src/components/DescriptionWithDiff.tsx` | Visuele connector + header label toevoegen |
-| `src/components/DescriptionTimeline.tsx` | Geen wijziging nodig - `created_by_name` zit al in entries |
+| `src/components/DescriptionTimeline.tsx` | Logica toevoegen om de eerste entry te verbergen als die al inline wordt getoond |
 
----
+### Gedragsflow
 
-## Animatie Verfijningen
+1. `DescriptionWithDiff` toont de laatste wijziging inline (als <24 uur)
+2. `DescriptionTimeline` detecteert dit via dezelfde 24-uur check
+3. Als de eerste entry inline wordt getoond → filter die uit de timeline
+4. Als er dan 0 entries overblijven → toon geen Verloop sectie
+5. Als er 1+ entries overblijven → toon "Meer verloop (X)"
 
-De connector en box verschijnen met een subtiele animatie:
-
-```tsx
-<div className="animate-in fade-in-0 slide-in-from-top-2 duration-300">
-  {/* Connector + Box */}
-</div>
-```
-
-En na de `highlightDuration` (10 seconden) fade de kleuren subtiel uit naar neutraal:
-
-```tsx
-// Na timeout: 
-// bg-emerald-50/50 → bg-muted/30
-// border-emerald-400 → border-muted
-// text-emerald-700 → text-muted-foreground
-```
-
----
-
-## Resultaat
-
-```text
-┌─────────────────────────────────────────────────────┐
-│ 11-02 wil ik starten met ingeschreven               │
-│ kandidaten binnen Citozorg & Abc zorg.              │
-│ Werven uitzendkracht of constructie.                │
-│                                                     │
-│ Zo kan ik de kaartenbak opschonen en de             │
-│ tijd nemen om apart te zitten in kleine kantoor     │
-│                                                     │
-│            ┆                                        │
-│            ▼                                        │
-│ ┌─────────────────────────────────────────────────┐ │
-│ │ ✚ Gewijzigd door Kreshnik • 2 uur geleden       │ │
-│ ├─────────────────────────────────────────────────┤ │
-│ │ Test                                            │ │
-│ └─────────────────────────────────────────────────┘ │
-│                                                     │
-│ ─────────── Verloop (2) ───────────                 │
-└─────────────────────────────────────────────────────┘
-```
-
-Dit geeft een professionele, duidelijke flow die direct laat zien:
-- **Wie** de wijziging maakte
-- **Wanneer** (relatieve tijd)
-- **Wat** er precies is toegevoegd
-- **Visuele hiërarchie** door de connector
-
+Dit elimineert de duplicatie en houdt de UI schoon!
