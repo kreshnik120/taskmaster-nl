@@ -1,122 +1,193 @@
 
+# Plan: Slimme Diff View voor Beschrijving Wijzigingen
 
-# Plan: Verbeteringen Beschrijving Verloop
+## Het Probleem
 
-## Overzicht Verbeteringen
-
-Dit plan implementeert **4 verbeteringen** aan de Beschrijving Verloop functionaliteit:
-
-1. **Filter Optimalisatie** - `description_change` expliciet uitsluiten uit ActionTimeline
-2. **Header Badge** - Teller toevoegen aan "Beschrijving" header met wijzigingsaantal
-3. **Herstel Functie** - "Terugzetten" knop om eerdere versie te herstellen
-4. **Visuele Polish** - Consistentie met ActionTimeline verbeteren
-
----
-
-## Wat verandert er?
-
-### 1. Filter Optimalisatie
-
-**Huidige situatie:** ActionTimeline filtert impliciet op `completed_at` waardoor description_change entries meestal niet verschijnen, maar dit is niet expliciet.
-
-**Na verbetering:** Expliciete filter zodat `description_change` entries nooit in ActionTimeline verschijnen:
+In de huidige implementatie worden bij een "modified" beschrijving beide volledige versies getoond:
 
 ```text
-ActionTimeline (Actieverloop)
-├── followup ✓
-├── note ✓
-├── status_change ✓
-├── description_change ✗ (expliciet uitgefilterd)
-├── assignment_change ✓
-└── ...
+┌─────────────────────────────────────┐
+│ Oude versie:                        │
+│ ┌─────────────────────────────────┐ │
+│ │ 11-02 wil ik starten met...     │ │
+│ │ Werven uitzendkracht...         │ │
+│ │ Zo kan ik de kaartenbak...      │ │
+│ └─────────────────────────────────┘ │
+│              ↓                      │
+│ Nieuwe versie:                      │
+│ ┌─────────────────────────────────┐ │
+│ │ 11-02 wil ik starten met...     │ │  ← Dezelfde tekst!
+│ │ Werven uitzendkracht...         │ │  ← Weer dezelfde tekst!
+│ │ Zo kan ik de kaartenbak...      │ │  ← Nogmaals!
+│ │ Test                            │ │  ← Alleen dit is nieuw
+│ └─────────────────────────────────┘ │
+└─────────────────────────────────────┘
 ```
+
+**Probleem:** Visueel redundant - je ziet dezelfde content twee keer terwijl alleen "Test" is toegevoegd.
 
 ---
 
-### 2. Header Badge met Wijzigingsaantal
+## De Oplossing: Inline Diff View
 
-**Huidige situatie:** Beschrijving header toont alleen "Beschrijving"
-
-**Na verbetering:** Header toont aantal wijzigingen als badge
+In plaats van twee aparte blokken, tonen we **één gecombineerde view** die verschillen benadrukt:
 
 ```text
-┌────────────────────────────────────────────┐
-│  📄 Beschrijving              [3]    [▼]   │
-│                               ^^^          │
-│                     Nieuwe badge met count │
-└────────────────────────────────────────────┘
+┌─────────────────────────────────────┐
+│ Wijzigingen:                        │
+│ ┌─────────────────────────────────┐ │
+│ │ 11-02 wil ik starten met...     │ │
+│ │ Werven uitzendkracht...         │ │
+│ │ Zo kan ik de kaartenbak...      │ │
+│ │                                 │ │
+│ │ [+Test]  ← Groen gemarkeerd     │ │
+│ └─────────────────────────────────┘ │
+└─────────────────────────────────────┘
 ```
+
+**Voordelen:**
+- Direct zichtbaar wat er is veranderd
+- Geen dubbele content
+- Compacter en overzichtelijker
+- Professionele GitHub-achtige diff weergave
 
 ---
 
-### 3. Herstel Functie (Terugzetten)
+## Technische Aanpak
 
-**Na verbetering:** In de detail dialog krijg je een "Terugzetten" knop
+### Optie 1: Eigen Simpele Diff Logica (Aanbevolen)
+
+Implementeer een lichtgewicht diff helper zonder externe dependencies:
+
+```typescript
+function getTextDiff(oldText: string, newText: string) {
+  // Vergelijk teksten en retourneer:
+  // - unchanged: tekst die hetzelfde is
+  // - added: nieuwe tekst (groen)
+  // - removed: verwijderde tekst (rood, doorgestreept)
+}
+```
+
+**Voordelen:**
+- Geen extra package dependencies
+- Volledige controle over styling
+- Snelle implementatie
+
+### Optie 2: react-string-diff Package
+
+Gebruik bestaande library voor complexere diffs:
+
+```typescript
+import StringDiff from 'react-string-diff';
+
+<StringDiff 
+  oldValue={oldDescription} 
+  newValue={newDescription}
+  method={DiffMethod.Words}
+/>
+```
+
+**Voordelen:**
+- Beproefde logica
+- Woord-niveau diff mogelijk
+
+---
+
+## UI Design
+
+### Nieuwe Diff Component
 
 ```text
-┌─────────────────────────────────────────────┐
-│  Beschrijving wijziging                     │
-├─────────────────────────────────────────────┤
-│  5 feb om 16:12 • Erik • Gewijzigd          │
-│                                             │
-│  Oude versie:                               │
-│  ┌─────────────────────────────────────┐    │
-│  │ De oude tekst stond hier...        │    │
-│  └─────────────────────────────────────┘    │
-│                                             │
-│  Nieuwe versie:                             │
-│  ┌─────────────────────────────────────┐    │
-│  │ De nieuwe tekst staat hier...      │    │
-│  └─────────────────────────────────────┘    │
-│                                             │
-│  [Terugzetten naar oude versie]             │
-│   ^^^^^^^^^^^^^^^^^^^^^^^^^^^               │
-│        Nieuwe knop                          │
-└─────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│  📝 Beschrijving wijziging                      │
+├─────────────────────────────────────────────────┤
+│  6 feb om 02:08 • Kreshnik • [Gewijzigd]        │
+│                                                 │
+│  ┌───────────────────────────────────────────┐  │
+│  │ 11-02 wil ik starten met ingeschreven     │  │
+│  │ kandidaten binnen Citozorg & Abc zorg.    │  │
+│  │ Werven uitzendkracht of constructie.      │  │
+│  │                                           │  │
+│  │ Zo kan ik de kaartenbak opschonen en de   │  │
+│  │ tijd nemen om apart te zitten in kleine   │  │
+│  │ kantoor                                   │  │
+│  │                                           │  │
+│  │ [+Test]                                   │  │  ← Groen highlight
+│  └───────────────────────────────────────────┘  │
+│                                                 │
+│  [Terugzetten naar vorige versie]               │
+└─────────────────────────────────────────────────┘
 ```
 
----
+### Styling Regels
 
-### 4. Visuele Polish
-
-**Verbeteringen:**
-- Subtielere hover animaties consistent met ActionTimeline
-- Betere spacing en padding
-- Fade-in animatie voor timeline items
-- Verbeterde dark mode contrast
+| Type | Styling |
+|------|---------|
+| Ongewijzigd | Normale tekst |
+| Toegevoegd | `bg-emerald-100 text-emerald-800` met `+` prefix |
+| Verwijderd | `bg-red-100 text-red-600 line-through` met `-` prefix |
 
 ---
 
-## Technische Wijzigingen
+## Implementatie Stappen
 
-### Bestanden die aangepast worden:
+### Stap 1: Diff Helper Functie
+Nieuwe utility: `src/lib/textDiff.ts`
+- Functie om twee strings te vergelijken
+- Retourneert array van diff segments
+- Ondersteunt woord-niveau vergelijking
+
+### Stap 2: DiffView Component
+Nieuwe component: `src/components/DiffView.tsx`
+- Accepteert oldText en newText props
+- Rendert inline diff met kleuren
+- Herbruikbaar voor andere toepassingen
+
+### Stap 3: DescriptionTimeline Aanpassen
+Update: `src/components/DescriptionTimeline.tsx`
+- Vervang de twee aparte blokken door DiffView
+- Behoud "Terugzetten" functionaliteit
+- Fallback naar oude weergave als diff te complex is
+
+---
+
+## Wijzigingen Overzicht
 
 | Bestand | Wijziging |
 |---------|-----------|
-| `src/components/ActionTimeline.tsx` | Filter `description_change` expliciet uit |
-| `src/components/TaskDetailModal.tsx` | Badge met description history count aan header toevoegen |
-| `src/components/DescriptionTimeline.tsx` | Herstel functie + visuele polish |
-
-### DescriptionTimeline uitbreidingen:
-
-1. **Nieuwe prop:** `onDescriptionRestore?: (description: string) => void`
-2. **Herstel knop:** In detail dialog met bevestigingsflow
-3. **Animaties:** Fade-in voor timeline items
-4. **Badge functionaliteit:** Export count voor parent component
-
-### TaskDetailModal wijzigingen:
-
-1. **State voor count:** Bijhouden van description changes count
-2. **Badge in header:** Dynamisch tonen van wijzigingsaantal
-3. **Callback prop:** Doorgeven aan DescriptionTimeline voor herstel
+| `src/lib/textDiff.ts` | **NIEUW** - Diff utility functies |
+| `src/components/DiffView.tsx` | **NIEUW** - Visuele diff component |
+| `src/components/DescriptionTimeline.tsx` | Integreer DiffView in detail dialog |
 
 ---
 
-## Implementatie Volgorde
+## Alternatieve Aanpak: Side-by-Side met Scroll Sync
 
-1. Update `ActionTimeline.tsx` - filter expliciet maken
-2. Update `DescriptionTimeline.tsx` - herstel functie + polish
-3. Update `TaskDetailModal.tsx` - header badge + callback
+Als je de twee-blokken weergave wilt behouden maar verbeteren:
+
+```text
+┌──────────────────┬──────────────────┐
+│ Oude versie      │ Nieuwe versie    │
+├──────────────────┼──────────────────┤
+│ tekst regel 1    │ tekst regel 1    │
+│ tekst regel 2    │ tekst regel 2    │
+│                  │ [+Test]          │  ← Highlight
+└──────────────────┴──────────────────┘
+```
+
+Dit is complexer maar geeft meer context bij grote wijzigingen.
+
+---
+
+## Aanbeveling
+
+**Ik raad Optie 1 aan**: Eigen simpele diff logica met inline view.
+
+**Waarom?**
+- Geen extra dependencies
+- Perfekt voor korte teksten zoals beschrijvingen
+- Sneller te implementeren
+- Volledig aangepast aan jullie design system
 
 ---
 
@@ -124,9 +195,8 @@ ActionTimeline (Actieverloop)
 
 | Onderdeel | Tijd |
 |-----------|------|
-| Filter optimalisatie | 5 min |
-| Header badge | 10 min |
-| Herstel functie | 20 min |
-| Visuele polish | 10 min |
-| **Totaal** | ~45 min |
-
+| textDiff utility | 20 min |
+| DiffView component | 25 min |
+| DescriptionTimeline update | 15 min |
+| Testen en polish | 15 min |
+| **Totaal** | ~1.25 uur |
