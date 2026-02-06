@@ -44,6 +44,7 @@ import { ReminderDialog } from "./ReminderDialog";
 import { ProcessTimeline } from "./ProcessTimeline";
 import { AttachmentPreviewModal } from "./AttachmentPreviewModal";
 import { ActionTimeline, ActionHistoryItem, ActiveSubtaskInfo } from "./ActionTimeline";
+import { DescriptionTimeline } from "./DescriptionTimeline";
 import { TaskMeetingMinutesSection } from "./tasks/TaskMeetingMinutesSection";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -1058,6 +1059,10 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                 <CollapsibleContent className="pt-3 animate-accordion-down">
                   <div className="bg-muted/30 dark:bg-muted/20 rounded-xl p-4 mx-3">
                     <p className="text-sm whitespace-pre-wrap leading-relaxed">{task.description}</p>
+                  </div>
+                  {/* Description Timeline - shows edit history */}
+                  <div className="mx-3">
+                    <DescriptionTimeline taskId={task.id} />
                   </div>
                 </CollapsibleContent>
               </Collapsible>
