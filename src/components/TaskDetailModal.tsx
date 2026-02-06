@@ -44,7 +44,7 @@ import { ReminderDialog } from "./ReminderDialog";
 import { ProcessTimeline } from "./ProcessTimeline";
 import { AttachmentPreviewModal } from "./AttachmentPreviewModal";
 import { ActionTimeline, ActionHistoryItem, ActiveSubtaskInfo } from "./ActionTimeline";
-import { DescriptionTimeline, type DescriptionChangeEntry } from "./DescriptionTimeline";
+import { DescriptionTimeline, type DescriptionChangeEntry } from "./description-timeline";
 import { DescriptionWithDiff } from "./DescriptionWithDiff";
 import { TaskMeetingMinutesSection } from "./tasks/TaskMeetingMinutesSection";
 import { InlineDescriptionEditor } from "./InlineDescriptionEditor";
