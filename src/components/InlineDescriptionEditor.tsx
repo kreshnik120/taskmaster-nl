@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 interface InlineDescriptionEditorProps {
   taskId: string;
   description: string | null;
-  onSaved: () => void;
+  onSaved: (newDescription: string) => void;
   onCancel: () => void;
   className?: string;
 }
@@ -81,12 +81,14 @@ export function InlineDescriptionEditor({
 
       if (error) throw error;
 
+      const savedValue = value.trim() || "";
+      
       toast({
         title: "Beschrijving opgeslagen",
         description: "De wijziging is vastgelegd in het verloop"
       });
 
-      onSaved();
+      onSaved(savedValue);
     } catch (error) {
       console.error('Error saving description:', error);
       toast({

@@ -148,6 +148,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   const [descriptionHistoryCount, setDescriptionHistoryCount] = useState(0);
   const [latestDescriptionChange, setLatestDescriptionChange] = useState<DescriptionChangeEntry | null>(null);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [localDescription, setLocalDescription] = useState<string | null>(null);
   const [teamMembers, setTeamMembers] = useState<Array<{id: string; name: string; email: string}>>([]);
   const descriptionRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -229,6 +230,11 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
     };
     loadTeamMembers();
   }, [task?.id, open]);
+
+  // Reset localDescription when task changes
+  useEffect(() => {
+    setLocalDescription(null);
+  }, [task?.id]);
 
   useEffect(() => {
     if (task?.id && open) {
@@ -1116,8 +1122,9 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                     {isEditingDescription ? (
                       <InlineDescriptionEditor
                         taskId={task.id}
-                        description={task.description}
-                        onSaved={() => {
+                        description={localDescription ?? task.description}
+                        onSaved={(newDescription) => {
+                          setLocalDescription(newDescription || null);
                           setIsEditingDescription(false);
                           onTaskUpdated();
                         }}
@@ -1125,8 +1132,8 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                       />
                     ) : (
                       <>
-                        <DescriptionWithDiff
-                          currentDescription={task.description}
+                      <DescriptionWithDiff
+                          currentDescription={localDescription ?? task.description}
                           latestChange={latestDescriptionChange}
                         />
                         {/* Hover edit indicator */}
