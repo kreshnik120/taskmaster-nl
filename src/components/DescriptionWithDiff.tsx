@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { computeWordDiff, type DiffSegment } from "@/lib/textDiff";
 import { cn } from "@/lib/utils";
-import { Plus, Edit3, ChevronDown } from "lucide-react";
+import { Plus, Edit3 } from "lucide-react";
 
 interface DescriptionChangeMetadata {
   old_description?: string | null;
@@ -147,54 +147,32 @@ export function DescriptionWithDiff({
     );
   }
 
-  // For modified descriptions, show unchanged text first, then connector and additions
+  // For modified descriptions, show ALL segments inline with highlights on additions
   return (
     <div className={cn("text-sm leading-relaxed", className)}>
-      {/* Render all segments inline, but separate additions for the box */}
-      <div className="whitespace-pre-wrap">
+      <p className="whitespace-pre-wrap">
         {segments.map((segment, index) => {
-          if (segment.type === 'unchanged') {
-            return <span key={index}>{segment.text}</span>;
+          if (segment.type === 'added') {
+            return (
+              <span 
+                key={index} 
+                className="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 px-0.5 rounded-sm"
+              >
+                {segment.text}
+              </span>
+            );
           }
-          // Skip added segments here, they go in the box below
-          return null;
+          return <span key={index}>{segment.text}</span>;
         })}
-      </div>
-
-      {/* Only show connector and box if there are additions */}
+      </p>
+      
+      {/* Compacte footer met wijzigingsinfo */}
       {addedSegments.length > 0 && (
-        <div className="animate-in fade-in-0 slide-in-from-top-2 duration-300">
-          {/* Visuele connector */}
-          <div className="flex flex-col items-start my-2">
-            <div className="flex flex-col items-center ml-4">
-              <div className="w-px h-3 bg-gradient-to-b from-transparent to-emerald-400 dark:to-emerald-500" />
-              <ChevronDown className="h-3 w-3 text-emerald-500 dark:text-emerald-400 -mt-1" />
-            </div>
-          </div>
-
-          {/* Highlighted additions box */}
-          <div className="border-l-2 border-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-r-lg overflow-hidden">
-            {/* Header */}
-            <div className="px-3 py-1.5 bg-emerald-100/50 dark:bg-emerald-900/30 border-b border-emerald-200/50 dark:border-emerald-800/50 flex items-center gap-2">
-              <ChangeIcon className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-              <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                Gewijzigd door {latestChange?.created_by_name || 'Onbekend'}
-              </span>
-              <span className="text-xs text-emerald-600/70 dark:text-emerald-400/70">•</span>
-              <span className="text-xs text-emerald-600/70 dark:text-emerald-400/70">
-                {formatRelativeTime(latestChange?.created_at || '')}
-              </span>
-            </div>
-            
-            {/* Content */}
-            <div className="px-3 py-2 whitespace-pre-wrap">
-              {addedSegments.map((segment, index) => (
-                <span key={index} className="text-emerald-900 dark:text-emerald-100">
-                  {segment.text}
-                </span>
-              ))}
-            </div>
-          </div>
+        <div className="mt-2 text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 animate-in fade-in-0 duration-300">
+          <Edit3 className="h-3 w-3" />
+          <span>Gewijzigd door {latestChange?.created_by_name || 'Onbekend'}</span>
+          <span>•</span>
+          <span>{formatRelativeTime(latestChange?.created_at || '')}</span>
         </div>
       )}
     </div>
