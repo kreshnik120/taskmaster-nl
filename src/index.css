@@ -609,11 +609,16 @@ All colors MUST be HSL.
     background: rgba(255, 255, 255, 0.80);
     backdrop-filter: blur(20px) saturate(160%);
     -webkit-backdrop-filter: blur(20px) saturate(160%);
+    border-color: hsla(234, 45%, 80%, 0.6);
     box-shadow:
-      0 4px 12px rgba(0, 0, 0, 0.08),
-      0 16px 48px rgba(0, 0, 0, 0.12),
+      0 4px 12px hsla(var(--tab-hue, 234), 40%, 50%, 0.10),
+      0 16px 48px rgba(0, 0, 0, 0.10),
       inset 0 1px 0 rgba(255, 255, 255, 0.7);
     transform: translateY(-1px);
+  }
+
+  .dark .glass-task-card:hover {
+    border-color: hsla(234, 45%, 40%, 0.5);
   }
 
   .dark .glass-task-card {
@@ -901,19 +906,21 @@ All colors MUST be HSL.
   }
 
   .glass-hover-lift:hover {
-    /* NO transform - only enhanced shadows for "floating" effect */
+    /* NO transform - context-colored shadows for "floating" effect */
     box-shadow:
-      0 12px 32px hsla(234, 45%, 52%, 0.12),
-      0 6px 16px hsla(234, 45%, 52%, 0.08),
-      0 2px 6px hsla(234, 45%, 52%, 0.04),
+      0 8px 32px hsla(var(--tab-hue, 234), 40%, 50%, 0.12),
+      0 12px 32px hsla(234, 45%, 52%, 0.10),
+      0 6px 16px hsla(234, 45%, 52%, 0.06),
+      0 2px 6px hsla(234, 45%, 52%, 0.03),
       inset 0 1px 2px rgba(255, 255, 255, 0.2);
   }
 
   .dark .glass-hover-lift:hover {
     box-shadow:
-      0 12px 32px hsla(234, 45%, 15%, 0.35),
-      0 6px 16px hsla(234, 45%, 15%, 0.25),
-      0 2px 6px hsla(234, 45%, 15%, 0.15),
+      0 8px 32px hsla(var(--tab-hue, 234), 40%, 30%, 0.20),
+      0 12px 32px hsla(234, 45%, 15%, 0.30),
+      0 6px 16px hsla(234, 45%, 15%, 0.20),
+      0 2px 6px hsla(234, 45%, 15%, 0.12),
       inset 0 1px 2px rgba(255, 255, 255, 0.08);
   }
 
@@ -1951,10 +1958,19 @@ All colors MUST be HSL.
 
 .glass-search-input:focus {
   background: rgba(255, 255, 255, 0.75);
+  border-color: hsla(234, 50%, 70%, 0.4);
   box-shadow: 
-    0 4px 16px hsla(234, 45%, 52%, 0.15),
-    0 0 0 3px hsla(234, 45%, 52%, 0.08),
+    0 4px 16px hsla(234, 45%, 52%, 0.20),
+    0 0 0 3px hsla(234, 45%, 52%, 0.12),
     inset 0 1px 2px rgba(255, 255, 255, 0.3);
+}
+
+.dark .glass-search-input:focus {
+  border-color: hsla(234, 50%, 50%, 0.4);
+  box-shadow: 
+    0 4px 16px hsla(234, 45%, 30%, 0.25),
+    0 0 0 3px hsla(234, 45%, 40%, 0.15),
+    inset 0 1px 2px rgba(255, 255, 255, 0.05);
 }
 
 .dark .glass-search-input {
@@ -4043,4 +4059,51 @@ All colors MUST be HSL.
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
   opacity: 0.012;
   mix-blend-mode: overlay;
+}
+
+/* ============================================
+   Scroll fade - vertical (top & bottom)
+   ============================================ */
+.scroll-fade {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    black 20px,
+    black calc(100% - 20px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    black 20px,
+    black calc(100% - 20px),
+    transparent 100%
+  );
+}
+
+/* ============================================
+   Badge glow - urgente statussen
+   ============================================ */
+.badge-glow-critical {
+  box-shadow: 0 0 8px hsla(0, 70%, 50%, 0.25);
+}
+
+.badge-glow-high {
+  box-shadow: 0 0 8px hsla(38, 70%, 50%, 0.20);
+}
+
+.badge-glow-overdue {
+  box-shadow: 0 0 10px hsla(0, 70%, 50%, 0.30);
+}
+
+.dark .badge-glow-critical {
+  box-shadow: 0 0 10px hsla(0, 70%, 45%, 0.35);
+}
+
+.dark .badge-glow-high {
+  box-shadow: 0 0 10px hsla(38, 70%, 45%, 0.30);
+}
+
+.dark .badge-glow-overdue {
+  box-shadow: 0 0 12px hsla(0, 70%, 45%, 0.40);
 }

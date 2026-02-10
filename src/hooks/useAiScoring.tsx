@@ -141,7 +141,11 @@ export const useAiScoring = (tasks: Task[], enableAutoScoring: boolean = false) 
               return;
             }
             
-            throw error;
+            // Graceful fallback for all other errors (500, network, etc.)
+            // Do NOT re-throw - the app must always work without AI scores
+            logger.error('AI scoring niet beschikbaar:', error.message);
+            toast.error('AI scorer tijdelijk niet beschikbaar');
+            return;
           }
 
           if (data?.error) {
