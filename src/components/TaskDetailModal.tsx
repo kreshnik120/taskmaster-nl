@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import confetti from "canvas-confetti";
@@ -131,6 +131,8 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   const [nextReminder, setNextReminder] = useState<any>(null);
   const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loadingAttachments, setLoadingAttachments] = useState(false);
   const [deletingAttachment, setDeletingAttachment] = useState<string | null>(null);
@@ -608,7 +610,6 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
 
   const undoComplete = async (taskId: string) => {
     try {
-      // Find the IN_PROGRESS column to restore the task
       const { data: column } = await supabase
         .from("columns")
         .select("id, status")
@@ -639,6 +640,70 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
         description: "Kon taak niet herstellen",
         variant: "destructive"
       });
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!task?.id) return;
+    
+    setDeleting(true);
+    setConfirmDeleteOpen(false);
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Niet ingelogd");
+
+      const { error } = await supabase
+        .from('tasks')
+        .update({ 
+          deleted_at: new Date().toISOString(),
+          deleted_by: user.id
+        })
+        .eq('id', task.id);
+
+      if (error) throw error;
+
+      const deletedTaskId = task.id;
+      const deletedTaskTitle = task.title;
+
+      toast({
+        title: "Opdracht verwijderd",
+        description: deletedTaskTitle,
+        action: (
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={async () => {
+              try {
+                const { error: undoError } = await supabase
+                  .from('tasks')
+                  .update({ deleted_at: null, deleted_by: null })
+                  .eq('id', deletedTaskId);
+                if (undoError) throw undoError;
+                toast({ title: "Opdracht hersteld", description: "Terug op je lijst" });
+                onTaskUpdated();
+              } catch (e) {
+                console.error('Undo delete error:', e);
+                toast({ title: "Fout", description: "Kon niet ongedaan maken", variant: "destructive" });
+              }
+            }}
+          >
+            Ongedaan maken
+          </Button>
+        )
+      });
+      
+      onOpenChange(false);
+      onTaskUpdated();
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      toast({
+        title: "Fout",
+        description: "Kon opdracht niet verwijderen",
+        variant: "destructive"
+      });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -807,7 +872,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
             )}
 
             {/* Fase 2: Quick Actions Grid Layout - Enhanced with glassmorphism */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-4 gap-3">
               <Button 
                 onClick={() => setConfirmCompleteOpen(true)}
                 className="group btn-primary-glass"
@@ -868,6 +933,16 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                   </Badge>
                 )}
               </div>
+              <Button 
+                variant="ghost"
+                size="lg"
+                onClick={() => setConfirmDeleteOpen(true)}
+                disabled={deleting}
+                className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Verwijderen
+              </Button>
             </div>
 
             {/* Interview-Specifieke Sectie - Premium glassmorphism */}
@@ -1452,6 +1527,28 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
               {subtasks.filter(s => s.status !== 'completed' && s.status !== 'skipped').length > 0 
                 ? "Toch afronden" 
                 : "Afronden"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Opdracht verwijderen</AlertDialogTitle>
+            <AlertDialogDescription>
+              Weet je zeker dat je deze opdracht wilt verwijderen? Je kunt de opdracht later terugvinden bij Verwijderde Taken.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Annuleren</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmDelete}
+              disabled={deleting}
+              className={cn(buttonVariants({ variant: "destructive" }))}
+            >
+              {deleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Verwijderen
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
