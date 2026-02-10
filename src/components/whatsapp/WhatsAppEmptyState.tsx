@@ -52,7 +52,7 @@ export function WhatsAppEmptyState({ stats }: WhatsAppEmptyStateProps) {
 
 export function ChatListEmptyState({ searchQuery }: { searchQuery?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+    <div className="flex flex-col items-center justify-center py-12 px-4 text-center rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] mx-2">
       <div className="rounded-full bg-muted p-4 mb-4">
         <MessageSquare className="h-8 w-8 text-muted-foreground" />
       </div>

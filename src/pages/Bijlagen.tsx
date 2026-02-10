@@ -391,7 +391,7 @@ export default function Bijlagen() {
               <p>Er ging iets mis bij het laden van de bijlagen.</p>
             </div>
           ) : filteredAttachments.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
+            <div className="p-8 text-center text-muted-foreground rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
               <Paperclip className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p className="font-medium">Geen bijlagen gevonden</p>
               <p className="text-sm mt-1">

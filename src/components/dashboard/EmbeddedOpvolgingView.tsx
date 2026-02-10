@@ -341,9 +341,9 @@ export default function EmbeddedOpvolgingView() {
             )}
             <div className="space-y-3">
               {focusTasks.length === 0 ? (
-                <p className="text-center text-muted-foreground py-4">
-                  Geen taken gevonden voor dit filter
-                </p>
+                <div className="flex flex-col items-center justify-center py-8 px-4 text-center rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+                  <p className="text-muted-foreground">Geen taken gevonden voor dit filter</p>
+                </div>
               ) : (
                 focusTasks.map((task) => {
                   const isOverdue = task.due_at && new Date(task.due_at) < new Date();
