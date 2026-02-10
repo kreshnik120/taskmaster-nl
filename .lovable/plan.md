@@ -1,93 +1,74 @@
 
-# Design Consistentie: Glass Polish op Enterprise Niveau
+# Apple Glass Polish: Diepte, Blur & Floating Effect
 
 ## Overzicht
 
-5 styling-inconsistenties worden opgelost zonder enige functionaliteit te wijzigen. Alleen CSS classes worden toegevoegd/aangepast op bestaande elementen.
+De glass CSS classes bestaan al en zijn grotendeels toegepast op de juiste elementen. Het probleem is dat de waarden te zwak zijn waardoor alles "plat" oogt. Deze prompt versterkt de bestaande classes en upgradet het Dialog component voor maximale impact.
+
+**Huidige staat (al correct toegepast):**
+- TaskCard: `glass-task-card glass-hover-lift` (al op regel 157 van TaskCard.tsx)
+- Kanban kolommen: `glass-kanban-column-enhanced` (al op regel 759 van MyTasksFlowSection.tsx)
+- Sidebar: glass styling met `!important` (al in index.css)
+- Dialog: `bg-white/90 backdrop-blur-2xl` (al in dialog.tsx)
+- KPI Cards: `glass-liquid-card` + color variants (al in kpi-card.tsx)
+
+**Probleem:** De glass-waarden zijn te subtiel en er zijn 3 duplicate definities van `.glass-hover-lift` en 2 van `.glass-search-input` die elkaar overschrijven.
 
 ---
 
 ## Wijzigingen
 
-### 1. CSS: `glass-drag-overlay-indigo` aanmaken in `src/index.css`
+### 1. `src/index.css` - CSS Classes Versterken
 
-Er bestaat geen `glass-drag-overlay-indigo` class. Aanmaken met hetzelfde patroon als de teal/rose varianten, maar met indigo HSL waarden (hue 234, sat 45%):
+**Duplicate cleanup + versterking van 7 glass classes:**
 
-- Light: shadow met `hsla(234, 45%, 52%, ...)` 
-- Dark: shadow met `hsla(234, 45%, 20%, ...)`
-- Toevoegen aan de `.dnd-dragging` guard selector
+| Class | Huidige waarde | Nieuwe waarde |
+|-------|---------------|---------------|
+| `.glass-task-card` | Alleen hover styling, geen base glass | Base: `bg-white/70 backdrop-blur-lg shadow-float` |
+| `.glass-task-card:hover` | blur 8px, shadow 0.08 | blur 16px, shadow 0.12, translateY(-1px) |
+| `.glass-kanban-column-enhanced` | blur 20px, bg 0.55 | blur 28px, bg 0.50, sterkere shadows |
+| `.glass-liquid-card` | bg 0.82 | bg 0.75 (meer transparant) |
+| `.glass-panel` | blur 20px | blur 28px |
+| `.glass-hover-lift` | 3 duplicate definities | 1 definitie, sterkere shadows |
+| `.glass-search-input` | 2 duplicate definities | 1 definitie, sterkere blur |
 
-Optioneel: `glass-filter-bar-indigo` aanmaken als die nog niet bestaat (zelfde patroon als andere filter-bar varianten).
+**Sidebar versterken (bestaande `[data-sidebar="sidebar"]`):**
+- Van: `bg-white/0.92 blur-24px`
+- Naar: `bg-white/0.88 blur-32px saturate-1.8` + gradient separator
 
-### 2. `src/components/dashboard/EmbeddedListView.tsx` - Glass styling toevoegen
+**Nieuw toevoegen:**
+- `.glass-dialog` utility class voor modals met `blur-2xl saturate-1.8`
+- `.glass-table-header` voor tabel headers met subtiele glaseffecten
 
-Alleen class-toevoegingen, geen logica-wijzigingen:
+### 2. `src/components/ui/dialog.tsx` - Dialog Component Upgraden
 
-- **Filter/sort bar** (regels ~720-791): wrap in container met `glass-filter-bar-slate` class
-- **Search input** (regel ~698): `glass-search-input` class toevoegen
-- **Table wrapper** (regel ~1032): `glass-liquid-card glass-liquid-card-slate` toevoegen aan de `div.rounded-lg.border`
-- **TableRow hover** (regel ~1079): `table-row-hover-slate` toevoegen naast bestaande hover
-- **KPI cards**: behouden zoals ze zijn (gebruiken al `KPICard` component)
+Dit is de meest impactvolle wijziging (raakt ALLE modals in de app).
 
-### 3. `src/components/dashboard/EmbeddedListCards.tsx` - Mobile glass styling
+**DialogOverlay:**
+- Van: `bg-black/50 backdrop-blur-sm`
+- Naar: `bg-black/30 backdrop-blur-sm` (lichter, app schijnt meer door)
 
-- `MobileTableCard` wrapper: `glass-card-slate` class toevoegen aan elke card via de bestaande `className` of wrapper
+**DialogContent:**
+- Van: `bg-white/90 backdrop-blur-2xl border-white/40 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15)]`
+- Naar: `bg-white/85 backdrop-blur-2xl backdrop-saturate-[1.8] border-white/50 shadow-[0_8px_40px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.06)]`
 
-### 4. `src/components/TaskDetailModal.tsx` - Context-aware kleuren
+### 3. Duplicate CSS opschonen
 
-**Interface uitbreiden:**
-```
-interface TaskDetailModalProps {
-  // bestaande props...
-  contextColor?: "indigo" | "teal" | "slate" | "amber" | "violet" | "rose" | "emerald";
-}
-```
-
-Default: `"indigo"` (backwards compatible).
-
-**Collapsible triggers aanpassen** (6 stuks, regels ~1201, 1312, 1358, 1422, 1506):
-- Van: `collapsible-glass-indigo` (hardcoded)
-- Naar: `collapsible-glass-${contextColor}` (dynamisch via template literal)
-
-### 5. `src/pages/UnifiedDashboard.tsx` - contextColor doorgeven
-
-Overal waar `TaskDetailModal` wordt geopend: de `contextColor` prop meegeven op basis van `TAB_CONTEXT_MAP[activeTab]`. De bestaande `TAB_CONTEXT_MAP` bevat al de juiste mapping.
-
-### 6. `src/components/dashboard/EmbeddedCalendarView.tsx` - Teal context op dag cards
-
-- **Dag Card** (regel ~772-778): `glass-card-teal` class toevoegen aan de Card wrapper
-- **Plus knop** (regel ~796-800): `text-tab-kalender-500` hover kleur toevoegen
-- Assignee kleuren op task items zelf blijven ONGEWIJZIGD
-
-### 7. `src/components/dashboard/MyTasksFlowSection.tsx` - Filter bar glass upgrade
-
-- **Sort/search controls container** (regels ~594-659): `glass-filter-bar-indigo` class toevoegen aan de wrapper div
-- **Search input** (regel ~656): behoudt bestaande `glass-search-input`
-- Drag overlay in het Kanban bord: `glass-drag-overlay-indigo` gebruiken (i.p.v. `glass-drag-overlay-enhanced`)
-
-### 8. `src/components/dashboard/MyWeekCalendarSection.tsx` - Drag overlay
-
-- DragOverlay: `glass-drag-overlay-indigo` gebruiken voor consistentie met het indigo thema van "Mijn Werk"
+De index.css bevat 3 definities van `.glass-hover-lift` (regels ~865, ~2426, ~3438) en 2 van `.glass-search-input` (regels ~1909, ~2564). De laatste definitie wint, maar dit is fragiel. Consolideer naar 1 definitie per class met de sterkste waarden.
 
 ---
 
 ## Technisch Overzicht
 
-| Onderdeel | Bestand | Wijziging |
-|-----------|---------|-----------|
-| CSS classes | `index.css` | `glass-drag-overlay-indigo` + `glass-filter-bar-indigo` toevoegen |
-| Lijst tab glass | `EmbeddedListView.tsx` | Class toevoegingen op filter bar, table, rows |
-| Lijst mobile glass | `EmbeddedListCards.tsx` | `glass-card-slate` op cards |
-| Modal context | `TaskDetailModal.tsx` | `contextColor` prop + dynamische collapsible classes |
-| Dashboard doorgifte | `UnifiedDashboard.tsx` | `contextColor` prop op TaskDetailModal |
-| Kalender teal | `EmbeddedCalendarView.tsx` | `glass-card-teal` op dag cards |
-| Kanban filter bar | `MyTasksFlowSection.tsx` | `glass-filter-bar-indigo` op controls |
-| Weekkalender overlay | `MyWeekCalendarSection.tsx` | `glass-drag-overlay-indigo` |
+| Bestand | Wijziging |
+|---------|-----------|
+| `src/index.css` | Versterking van ~7 glass classes + duplicate cleanup |
+| `src/components/ui/dialog.tsx` | Overlay + Content glass upgrade |
 
 ## Wat NIET verandert
 
-- Geen functionaliteit, logica of data-flows
+- Geen component imports of logica
 - Geen database wijzigingen
-- Geen nieuwe componenten
-- Geen import/routing wijzigingen
-- Assignee kleuren op kalender task items blijven behouden
+- Geen routing wijzigingen
+- Alle functionaliteit blijft identiek
+- Geen nieuwe classes toevoegen aan component bestanden (de bestaande class-namen zijn al correct toegepast)
