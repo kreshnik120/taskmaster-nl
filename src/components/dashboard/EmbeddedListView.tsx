@@ -980,8 +980,8 @@ export default function EmbeddedListView() {
               </h2>
             )}
             {groupTasks.length === 0 ? (
-              <Card className="border-dashed">
-                <CardContent className="flex flex-col items-center justify-center py-16">
+              <div className="rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+                <div className="flex flex-col items-center justify-center py-16">
                   <CheckCircle2 className="h-16 w-16 text-muted-foreground/40 mb-4" />
                   <h3 className="text-lg font-medium mb-2">
                     {searchQuery || filterPriority !== 'all' || filterStatus !== 'all' 
@@ -1012,8 +1012,8 @@ export default function EmbeddedListView() {
                       Nieuwe taak
                     </Button>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             ) : (
                isMobile ? (
                  <EmbeddedListCards

@@ -104,7 +104,7 @@ export function NotificationBell({ onNotificationClick }: NotificationBellProps)
               {notifications.map((notification) => (
                 <div
                   key={notification.id}
-                  className="flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors hover:bg-muted/50"
+                  className="flex cursor-pointer items-start gap-3 px-4 py-3 rounded-lg transition-all duration-150 hover:bg-white/60 dark:hover:bg-slate-800/60 hover:shadow-[0_1px_4px_rgba(0,0,0,0.04)]"
                   onClick={() => handleNotificationClick(notification)}
                 >
                   <span className="mt-0.5 text-lg">

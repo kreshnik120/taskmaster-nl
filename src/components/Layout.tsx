@@ -66,7 +66,7 @@ export const Layout = () => {
         <AppSidebar />
         <main className="flex-1 overflow-auto">
           <div className="p-6">
-            <div className="mb-4 flex items-center justify-between p-3 -mx-3 rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10">
+            <div className="mb-4 flex items-center justify-between p-3 -mx-3 rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-xl border border-white/30 dark:border-white/10">
               <SidebarTrigger />
               <div className="flex items-center gap-2">
                 <SecurityAlertBell />

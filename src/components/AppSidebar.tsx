@@ -178,9 +178,9 @@ const CollapsibleGroup = ({
                     to={item.url}
                     className={cn(
                       "flex items-center gap-3 px-3 py-2 rounded-lg transition-colors",
-                      isActive 
-                        ? "bg-primary/10 text-primary font-medium" 
-                        : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+                    isActive 
+                        ? "bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm text-primary font-medium border-l-[3px] border-primary shadow-[0_1px_4px_rgba(0,0,0,0.04)]" 
+                        : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-white/40 dark:hover:bg-slate-800/40"
                     )}
                   >
                     <item.icon className="h-4 w-4 flex-shrink-0" />

@@ -67,9 +67,9 @@ export function ApplicationKanbanColumn({
   }, [isOpen, id]);
 
   return (
-    <Card className={`min-w-[320px] flex flex-col bg-card border shadow-none ${borderColor}`} id={`column-${id}`}>
+    <Card className={`min-w-[320px] flex flex-col bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] ${borderColor}`} id={`column-${id}`}>
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CardHeader className="pb-3 sticky top-0 z-10 bg-card/95 backdrop-blur-sm border-b">
+        <CardHeader className="pb-3 sticky top-0 z-10 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border-b border-white/20 dark:border-white/10">
           <CollapsibleTrigger asChild>
             <Button variant="ghost" className="w-full p-0 h-auto hover:bg-transparent">
               <CardTitle className="flex items-center justify-between text-base w-full">
@@ -101,7 +101,7 @@ export function ApplicationKanbanColumn({
             >
               <div ref={setNodeRef} className="space-y-2 min-h-[200px]">
                 {applications.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <div className="flex flex-col items-center justify-center py-12 text-center bg-white/30 dark:bg-slate-900/30 backdrop-blur-sm rounded-lg border border-white/20 dark:border-white/8 mx-2 mb-2">
                     <Inbox className="h-8 w-8 text-muted-foreground/30 mb-3" />
                     <p className="text-sm text-muted-foreground/60">Geen sollicitaties</p>
                     <p className="text-xs text-muted-foreground/40 mt-1">Sleep hier om toe te voegen</p>
