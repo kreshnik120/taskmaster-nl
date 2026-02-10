@@ -1,12 +1,11 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { Clock, User, Edit, Check, Play, Square, ArrowRight } from "lucide-react";
+import { Clock, User, Edit, Check, Play, Square, ArrowRight, ListChecks } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useTaskTimer } from "@/hooks/useTaskTimer";
-import { SUBTASK_TOKENS, ACTION_TOKENS } from "@/lib/constants/designTokens";
+import { ACTION_TOKENS } from "@/lib/constants/designTokens";
 
 interface Task {
   id: string;
@@ -115,30 +114,9 @@ export function TaskItem({ task, onTaskClick, onCompleteTask, onEditTask }: Task
           )}
 
           {subtasksTotal > 0 && (
-            <div className="mt-3">
-              <Progress 
-                value={progressPercentage} 
-                className={cn(SUBTASK_TOKENS.progress.height, "mt-2 bg-muted/50")} 
-              />
-              <p className={cn(SUBTASK_TOKENS.counter.wrapper, "text-muted-foreground mt-1")}>
-                {subtasksCompleted} van {subtasksTotal} stappen voltooid
-              </p>
-              
-              {/* Actieve subtaak indicator - Enterprise UX */}
-              {(() => {
-                const activeSubtask = task.subtasks?.find(s => s.status === 'active')
-                  || task.subtasks?.find(s => s.status === 'pending');
-                const isComplete = progressPercentage === 100;
-                
-                return activeSubtask && !isComplete ? (
-                  <div className={cn(SUBTASK_TOKENS.activeIndicator.wrapper, "mt-1")}>
-                    <div className={SUBTASK_TOKENS.activeIndicator.dot} />
-                    <span className={cn(SUBTASK_TOKENS.activeIndicator.text, "truncate")}>
-                      {activeSubtask.title}
-                    </span>
-                  </div>
-                ) : null;
-              })()}
+            <div className="mt-1.5 flex items-center gap-1 text-muted-foreground/60">
+              <ListChecks className="h-3 w-3" />
+              <span className="text-[10px]">{subtasksCompleted}/{subtasksTotal}</span>
             </div>
           )}
         </div>
