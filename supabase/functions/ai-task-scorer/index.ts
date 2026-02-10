@@ -322,23 +322,36 @@ Geef ALLEEN het JSON object terug, geen andere tekst.`;
 
       console.log(`[AI-SCORER] Batch ${Math.floor(i / batchSize) + 1}: Analyseren ${batch.length} taken`);
 
-      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: prompt }
-          ],
-          temperature: 0.3,
-          max_tokens: 2000,
-          response_format: { type: "json_object" },
-        }),
-      });
+      let response: Response;
+      try {
+        response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'google/gemini-2.5-flash',
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: prompt }
+            ],
+            temperature: 0.3,
+            max_tokens: 2000,
+            response_format: { type: "json_object" },
+          }),
+        });
+      } catch (fetchError) {
+        // Network error / AI gateway unreachable - use fallback scores
+        console.error(`[AI-SCORER] ❌ AI Gateway onbereikbaar:`, fetchError);
+        const fallbackScores = batch.map(generateFallbackScore);
+        results.push(...fallbackScores);
+        console.log(`[AI-SCORER] ⚠️ Batch ${Math.floor(i / batchSize) + 1}: Fallback scores (gateway onbereikbaar)`);
+        if (i + batchSize < tasks.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        continue;
+      }
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -352,7 +365,14 @@ Geef ALLEEN het JSON object terug, geen andere tekst.`;
           throw new Error("402: Onvoldoende credits. Voeg credits toe aan je workspace.");
         }
 
-        throw new Error(`AI Gateway fout: ${response.status} - ${errorText.substring(0, 100)}`);
+        // For other HTTP errors (500, 503, etc.), use fallback scores instead of throwing
+        console.warn(`[AI-SCORER] ⚠️ Gateway error ${response.status}, using fallback scores for batch`);
+        const fallbackScores = batch.map(generateFallbackScore);
+        results.push(...fallbackScores);
+        if (i + batchSize < tasks.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        continue;
       }
 
       const data = await response.json();
