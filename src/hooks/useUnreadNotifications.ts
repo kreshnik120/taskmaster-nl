@@ -19,6 +19,8 @@ export function useUnreadNotifications() {
   const { data: notifications = [], isLoading, refetch } = useQuery({
     queryKey: ["unread-notifications"],
     queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      
       const { data, error } = await supabase
         .from("recruiter_notifications")
         .select("*")
@@ -28,7 +30,15 @@ export function useUnreadNotifications() {
         .limit(20);
 
       if (error) throw error;
-      return (data || []) as RecruiterNotification[];
+      
+      const filtered = (data || []).filter((notification) => {
+        const metadata = notification.metadata as Record<string, unknown> | null;
+        if (!metadata) return true;
+        const triggeredBy = (metadata.triggered_by ?? metadata.assigned_by) as string | undefined;
+        return !(triggeredBy && triggeredBy === user?.id);
+      });
+      
+      return filtered as RecruiterNotification[];
     },
     staleTime: 30000,
   });
