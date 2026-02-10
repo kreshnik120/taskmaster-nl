@@ -687,8 +687,22 @@ const Professionals = () => {
 
       {/* Empty State */}
       {filteredProfessionals.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-12 px-8 text-center rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] text-muted-foreground">
-          <p>Geen professionals gevonden</p>
+        <div className="flex flex-col items-center justify-center py-12 px-8 text-center rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+          <div className="p-4 rounded-full bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm mb-4">
+            {(hasActiveFilters || searchTerm) ? (
+              <Search className="h-8 w-8 text-muted-foreground/50" />
+            ) : (
+              <Users className="h-8 w-8 text-muted-foreground/50" />
+            )}
+          </div>
+          <h3 className="text-base font-medium text-foreground mb-1">
+            {(hasActiveFilters || searchTerm) ? "Geen professionals gevonden" : "Nog geen professionals"}
+          </h3>
+          <p className="text-sm text-muted-foreground/70">
+            {(hasActiveFilters || searchTerm)
+              ? "Probeer andere filters of zoektermen"
+              : "Voeg je eerste professional toe om te beginnen"}
+          </p>
         </div>
       )}
 

@@ -454,8 +454,22 @@ export default function Gebruikers() {
                 Kon gebruikers niet laden. Probeer opnieuw.
               </div>
             ) : filteredUsers?.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                {searchTerm ? "Geen gebruikers gevonden" : "Nog geen gebruikers geregistreerd"}
+              <div className="flex flex-col items-center justify-center py-12 px-8 text-center rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+                <div className="p-4 rounded-full bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm mb-4">
+                  {searchTerm ? (
+                    <Search className="h-8 w-8 text-muted-foreground/50" />
+                  ) : (
+                    <Users className="h-8 w-8 text-muted-foreground/50" />
+                  )}
+                </div>
+                <h3 className="text-base font-medium text-foreground mb-1">
+                  {searchTerm ? "Geen gebruikers gevonden" : "Nog geen medewerkers"}
+                </h3>
+                <p className="text-sm text-muted-foreground/70">
+                  {searchTerm
+                    ? `Geen resultaten voor "${searchTerm}"`
+                    : "Klik op 'Nieuwe Medewerker Uitnodigen' om te beginnen"}
+                </p>
               </div>
             ) : (
               <Table>
