@@ -1,43 +1,64 @@
 
-# Verwijderen-knop toevoegen aan TaskDetailModal
+# Beschrijving Wijzigingen: Persistente Highlights & Inline Timeline
 
-## Wat wordt er gedaan
+## Overzicht
 
-Een "Verwijderen" knop toevoegen aan het TaskDetailModal zodat gebruikers taken ook vanuit de detailweergave kunnen soft-deleten, met bevestigingsdialog en undo-toast.
+Drie bestanden worden aangepast om de beschrijvingswijzigingen als een doorlopende, altijd zichtbare flow te tonen.
+
+---
 
 ## Wijzigingen
 
-### Bestand: `src/components/TaskDetailModal.tsx`
+### 1. DescriptionWithDiff.tsx - Highlight blijft staan (7 dagen)
 
-**1. Nieuwe state variabelen (rond regel 132-136)**
-- `confirmDeleteOpen` (boolean) - voor de bevestigingsdialog
-- `deleting` (boolean) - loading state
+**Wat verandert:**
+- De 10-seconden setTimeout wordt verwijderd
+- De 24-uurs check wordt vervangen door een 7-dagen check
+- `showHighlight` state en het bijbehorende useEffect verdwijnen volledig
+- De highlight blijft zichtbaar zolang de wijziging minder dan 7 dagen oud is
+- De `highlightDuration` prop wordt verwijderd (niet meer nodig)
 
-**2. Nieuwe `handleConfirmDelete` functie (na `undoComplete`, rond regel 643)**
-- Soft delete: `UPDATE tasks SET deleted_at = now(), deleted_by = user.id WHERE id = task.id`
-- Toast met "Ongedaan maken" knop die `deleted_at` en `deleted_by` terugzet naar `null`
-- Modal sluiten + `onTaskUpdated()` aanroepen
+**Vereenvoudigde logica:**
+- `isRecentChange` checkt nu: `(now - changeTime) < 7 dagen`
+- Als `isRecentChange` true is EN er segments zijn: toon highlight
+- Anders: toon platte tekst
 
-**3. Quick Actions grid uitbreiden (regels 810-871)**
-- Grid wijzigen van `grid-cols-3` naar `grid-cols-4`
-- Verwijderen-knop toevoegen als vierde kolom:
-  - Ghost variant, Trash2 icon
-  - Tekst: "Verwijderen"
-  - Kleur: `text-muted-foreground`, hover: `text-destructive hover:bg-destructive/10`
+### 2. DescriptionTimeline.tsx - Altijd zichtbaar met inline diffs
 
-**4. Bevestigingsdialog toevoegen (bij bestaande AlertDialog, rond regel 1460)**
-- Titel: "Opdracht verwijderen"
-- Tekst: "Weet je zeker dat je deze opdracht wilt verwijderen? Je kunt de opdracht later terugvinden bij Verwijderde Taken."
-- Annuleren (outline) + Verwijderen (destructive) knoppen
+**Wat verandert:**
+- `MAX_VISIBLE_GROUPS` wordt `5` (was 3)
+- De `isLatestShowingInline` logica wordt aangepast van 24u naar 7 dagen (synchroon met highlight)
+- Separator tekst wordt "Wijzigingen" in plaats van "Verloop"
+
+### 3. GroupedEntryItem.tsx - Compactere weergave met samenvatting
+
+**Wat verandert:**
+- De "Bekijk" hover card wordt vervangen door een uitklapbare inline diff
+- Elke entry toont een korte samenvatting op basis van metadata:
+  - `old_description` leeg + `new_description` gevuld: "Beschrijving aangemaakt"
+  - `old_description` gevuld + `new_description` leeg: "Beschrijving verwijderd"
+  - Beide gevuld: tel woordverschil ("X woorden toegevoegd" / "X woorden gewijzigd")
+- Klik op de entry klapt de DiffView inline uit/in (geen dialog meer voor single entries)
+- De HoverCard wordt verwijderd voor een schonere ervaring
+
+### 4. utils.ts - Samenvatting functie toevoegen
+
+**Nieuwe functie:** `computeChangeSummary(metadata)`
+- Berekent een korte tekst op basis van old/new description
+- Telt woorden met `text.split(/\s+/).length`
+- Retourneert strings zoals "Beschrijving aangemaakt", "3 woorden toegevoegd", "Beschrijving gewijzigd"
+
+---
+
+## Technische Details
+
+| Bestand | Wijziging |
+|---------|-----------|
+| `DescriptionWithDiff.tsx` | Verwijder setTimeout, showHighlight state, highlightDuration prop. Wijzig 24u naar 7 dagen. |
+| `description-timeline/DescriptionTimeline.tsx` | MAX_VISIBLE_GROUPS=5, sync 7-dagen check, label "Wijzigingen" |
+| `description-timeline/GroupedEntryItem.tsx` | Vervang HoverCard+dialog door uitklapbare inline DiffView met samenvatting |
+| `description-timeline/utils.ts` | Nieuwe `computeChangeSummary()` functie |
 
 ## Geen database wijzigingen nodig
-De `deleted_at` en `deleted_by` kolommen bestaan al op de `tasks` tabel.
 
-## Technisch overzicht
-
-| Onderdeel | Detail |
-|-----------|--------|
-| Bestand | `src/components/TaskDetailModal.tsx` |
-| Nieuwe imports | Geen (Trash2, AlertDialog al geimporteerd) |
-| Soft delete logica | Identiek aan Dashboard.tsx patroon |
-| Undo mechanisme | Toast met 8s window, zelfde als "Taak Afronden" |
+Alle data is al beschikbaar in `task_action_history.metadata`.
