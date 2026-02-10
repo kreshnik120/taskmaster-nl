@@ -1,115 +1,43 @@
 
-# Plan: Beschrijving Historie Verfijning & Deduplicatie
+# Verwijderen-knop toevoegen aan TaskDetailModal
 
-## Probleem Analyse
+## Wat wordt er gedaan
 
-Op basis van de afbeeldingen en database-analyse:
+Een "Verwijderen" knop toevoegen aan het TaskDetailModal zodat gebruikers taken ook vanuit de detailweergave kunnen soft-deleten, met bevestigingsdialog en undo-toast.
 
-### Huidige Situatie
-| Issue | Detail |
-|-------|--------|
-| Duplicaten in database | Entries met identieke timestamps komen dubbel voor (bijv. `04:18:29` heeft 2 rijen) |
-| Lange lijst | Elke kleine wijziging = aparte rij met "Bekijk wijziging" link |
-| Visuele ruis | Veel "Gewijzigd" badges maken de timeline onoverzichtelijk |
+## Wijzigingen
 
-### Database Status
-```
-Task bd9e94dd: 7 description_change entries → 3 zijn duplicaten
-```
+### Bestand: `src/components/TaskDetailModal.tsx`
 
----
+**1. Nieuwe state variabelen (rond regel 132-136)**
+- `confirmDeleteOpen` (boolean) - voor de bevestigingsdialog
+- `deleting` (boolean) - loading state
 
-## Oplossing: Drie-Staps Verfijning
+**2. Nieuwe `handleConfirmDelete` functie (na `undoComplete`, rond regel 643)**
+- Soft delete: `UPDATE tasks SET deleted_at = now(), deleted_by = user.id WHERE id = task.id`
+- Toast met "Ongedaan maken" knop die `deleted_at` en `deleted_by` terugzet naar `null`
+- Modal sluiten + `onTaskUpdated()` aanroepen
 
-### Stap 1: Database Opschoning - Verwijder Duplicaten
+**3. Quick Actions grid uitbreiden (regels 810-871)**
+- Grid wijzigen van `grid-cols-3` naar `grid-cols-4`
+- Verwijderen-knop toevoegen als vierde kolom:
+  - Ghost variant, Trash2 icon
+  - Tekst: "Verwijderen"
+  - Kleur: `text-muted-foreground`, hover: `text-destructive hover:bg-destructive/10`
 
-**SQL Migratie:**
-```sql
--- Verwijder duplicate entries (behoud alleen de eerste per timestamp)
-DELETE FROM task_action_history 
-WHERE id NOT IN (
-  SELECT DISTINCT ON (task_id, created_at, action_type) id
-  FROM task_action_history
-  WHERE action_type = 'description_change'
-  ORDER BY task_id, created_at, action_type, id
-) AND action_type = 'description_change';
-```
+**4. Bevestigingsdialog toevoegen (bij bestaande AlertDialog, rond regel 1460)**
+- Titel: "Opdracht verwijderen"
+- Tekst: "Weet je zeker dat je deze opdracht wilt verwijderen? Je kunt de opdracht later terugvinden bij Verwijderde Taken."
+- Annuleren (outline) + Verwijderen (destructive) knoppen
 
-### Stap 2: UI Verfijning - Wijzigingen Groeperen
+## Geen database wijzigingen nodig
+De `deleted_at` en `deleted_by` kolommen bestaan al op de `tasks` tabel.
 
-**Bestand:** `src/components/DescriptionTimeline.tsx`
+## Technisch overzicht
 
-**Concept:** Wijzigingen binnen 5 minuten van dezelfde gebruiker samenvoegen tot één item
-
-```text
-VOOR:
-┌─────────────────────────────────────────────┐
-│ ⏱ 6 feb om 05:18 • Kreshnik    [Gewijzigd] │
-│   Bekijk wijziging                          │
-├─────────────────────────────────────────────┤
-│ ⏱ 6 feb om 05:18 • Kreshnik    [Gewijzigd] │
-│   Bekijk wijziging                          │
-├─────────────────────────────────────────────┤
-│ ⏱ 6 feb om 05:18 • Kreshnik    [Gewijzigd] │
-│   Bekijk wijziging                          │
-└─────────────────────────────────────────────┘
-
-NA (Gegroepeerd):
-┌─────────────────────────────────────────────┐
-│ ⏱ 6 feb om 05:18 • Kreshnik                │
-│   3 wijzigingen               [Bekijk alle] │
-└─────────────────────────────────────────────┘
-```
-
-**Logica toevoegen:**
-- Groepeer entries binnen 5 minuten van dezelfde `created_by_name`
-- Toon alleen de eerste en laatste staat (begin→eind)
-- Badge toont aantal wijzigingen in de groep
-- Klik opent detail dialog met volledige diff
-
-### Stap 3: Compactere Weergave
-
-**Wijzigingen:**
-1. Verwijder individuele "Bekijk wijziging" links voor gegroepeerde items
-2. Voeg collapse/expand toe voor lange historie (max 3 items standaard, "+X meer" knop)
-3. Smaller timeline design met minder padding
-
----
-
-## Technische Implementatie
-
-### Database Migratie
-| Actie | SQL |
-|-------|-----|
-| Verwijder duplicaten | `DELETE WHERE id NOT IN (SELECT DISTINCT ON...)` |
-| Voeg dedup check toe aan trigger | `IF NOT EXISTS (SELECT ... WHERE created_at > NOW() - INTERVAL '5 seconds')` |
-
-### Code Wijzigingen
-
-**Bestand: `src/components/DescriptionTimeline.tsx`**
-
-| Wijziging | Regels (ca.) |
-|-----------|--------------|
-| Nieuwe `groupEntries()` functie | 120-160 |
-| Bijgewerkte render voor groepen | 247-340 |
-| Collapse/expand state | 66-70 |
-| Nieuwe GroupedEntryView component | 180-220 |
-
----
-
-## Verwacht Resultaat
-
-| Scenario | Voor | Na |
-|----------|------|-----|
-| 7 wijzigingen | 7 losse rijen | 2-3 gegroepeerde items |
-| Duplicaten | Zichtbaar | Verwijderd |
-| Visuele impact | Overweldigend | Compact & overzichtelijk |
-
----
-
-## Implementatie Volgorde
-
-1. **Database migratie** - Verwijder bestaande duplicaten
-2. **Trigger update** - Voorkom toekomstige duplicaten met 5-seconden check
-3. **DescriptionTimeline.tsx** - Voeg groepering toe
-4. **UI polish** - Collapse/expand en compactere stijl
+| Onderdeel | Detail |
+|-----------|--------|
+| Bestand | `src/components/TaskDetailModal.tsx` |
+| Nieuwe imports | Geen (Trash2, AlertDialog al geimporteerd) |
+| Soft delete logica | Identiek aan Dashboard.tsx patroon |
+| Undo mechanisme | Toast met 8s window, zelfde als "Taak Afronden" |
