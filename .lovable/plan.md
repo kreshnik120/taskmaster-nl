@@ -1,64 +1,77 @@
 
-# Beschrijving Wijzigingen: Persistente Highlights & Inline Timeline
+# Quick Fixes: Kalender, Notificatie Scroll & Eigen Notificaties
 
-## Overzicht
+## Fix 1: Kalender week begint op maandag
 
-Drie bestanden worden aangepast om de beschrijvingswijzigingen als een doorlopende, altijd zichtbare flow te tonen.
+**Bestand:** `src/components/ui/calendar.tsx`
 
----
+**Wijziging (3 regels):**
+1. Import toevoegen: `import { nl } from "date-fns/locale";`
+2. Functie-signature uitbreiden: destructure `locale` uit props
+3. Op DayPicker: `locale={locale ?? nl}`
 
-## Wijzigingen
-
-### 1. DescriptionWithDiff.tsx - Highlight blijft staan (7 dagen)
-
-**Wat verandert:**
-- De 10-seconden setTimeout wordt verwijderd
-- De 24-uurs check wordt vervangen door een 7-dagen check
-- `showHighlight` state en het bijbehorende useEffect verdwijnen volledig
-- De highlight blijft zichtbaar zolang de wijziging minder dan 7 dagen oud is
-- De `highlightDuration` prop wordt verwijderd (niet meer nodig)
-
-**Vereenvoudigde logica:**
-- `isRecentChange` checkt nu: `(now - changeTime) < 7 dagen`
-- Als `isRecentChange` true is EN er segments zijn: toon highlight
-- Anders: toon platte tekst
-
-### 2. DescriptionTimeline.tsx - Altijd zichtbaar met inline diffs
-
-**Wat verandert:**
-- `MAX_VISIBLE_GROUPS` wordt `5` (was 3)
-- De `isLatestShowingInline` logica wordt aangepast van 24u naar 7 dagen (synchroon met highlight)
-- Separator tekst wordt "Wijzigingen" in plaats van "Verloop"
-
-### 3. GroupedEntryItem.tsx - Compactere weergave met samenvatting
-
-**Wat verandert:**
-- De "Bekijk" hover card wordt vervangen door een uitklapbare inline diff
-- Elke entry toont een korte samenvatting op basis van metadata:
-  - `old_description` leeg + `new_description` gevuld: "Beschrijving aangemaakt"
-  - `old_description` gevuld + `new_description` leeg: "Beschrijving verwijderd"
-  - Beide gevuld: tel woordverschil ("X woorden toegevoegd" / "X woorden gewijzigd")
-- Klik op de entry klapt de DiffView inline uit/in (geen dialog meer voor single entries)
-- De HoverCard wordt verwijderd voor een schonere ervaring
-
-### 4. utils.ts - Samenvatting functie toevoegen
-
-**Nieuwe functie:** `computeChangeSummary(metadata)`
-- Berekent een korte tekst op basis van old/new description
-- Telt woorden met `text.split(/\s+/).length`
-- Retourneert strings zoals "Beschrijving aangemaakt", "3 woorden toegevoegd", "Beschrijving gewijzigd"
+Dit fixt automatisch alle 6 Calendar-instanties die geen locale meegeven. De 6 die al `locale={nl}` gebruiken blijven ongewijzigd werken.
 
 ---
 
-## Technische Details
+## Fix 2: Notificatie belletje scrollbaar
 
-| Bestand | Wijziging |
-|---------|-----------|
-| `DescriptionWithDiff.tsx` | Verwijder setTimeout, showHighlight state, highlightDuration prop. Wijzig 24u naar 7 dagen. |
-| `description-timeline/DescriptionTimeline.tsx` | MAX_VISIBLE_GROUPS=5, sync 7-dagen check, label "Wijzigingen" |
-| `description-timeline/GroupedEntryItem.tsx` | Vervang HoverCard+dialog door uitklapbare inline DiffView met samenvatting |
-| `description-timeline/utils.ts` | Nieuwe `computeChangeSummary()` functie |
+**Bestand:** `src/components/notifications/NotificationBell.tsx`
 
-## Geen database wijzigingen nodig
+**Wijzigingen (2 regels):**
+1. `PopoverContent`: className wordt `"w-80 p-0 max-h-[70vh]"`
+2. `ScrollArea`: className wordt `"max-h-[calc(70vh-52px)]"`
 
-Alle data is al beschikbaar in `task_action_history.metadata`.
+Dit zorgt dat de header vast blijft staan en de lijst scrollbaar wordt bij veel notificaties.
+
+---
+
+## Fix 3: Eigen notificaties filteren
+
+### Stap A: Database triggers updaten (SQL migratie)
+
+**`notify_subtask_assignment()`** - voeg `triggered_by` toe aan metadata:
+```sql
+metadata = jsonb_build_object(
+  'subtask_id', NEW.id,
+  'task_id', NEW.task_id,
+  'subtask_title', NEW.title,
+  'due_at', NEW.due_at,
+  'triggered_by', auth.uid()   -- NIEUW
+)
+```
+
+**`notify_task_assignment()`** - voeg `triggered_by` toe (naast het bestaande `assigned_by` veld):
+```sql
+metadata = jsonb_build_object(
+  'task_id', NEW.id,
+  'task_title', NEW.title,
+  'assigned_by', auth.uid(),
+  'assigned_by_name', v_assigner_name,
+  'triggered_by', auth.uid()   -- NIEUW (expliciet, voor consistentie)
+)
+```
+
+### Stap B: Client-side filter
+
+**Bestand:** `src/hooks/useUnreadNotifications.ts`
+
+In de `queryFn`, na het ophalen van data:
+1. Haal huidige user op: `const { data: { user } } = await supabase.auth.getUser()`
+2. Filter resultaten: notificaties waar `metadata.triggered_by === user.id` worden uitgesloten
+3. Voor `task_assigned`: check ook `metadata.assigned_by` (backward compatibility met bestaande notificaties)
+
+---
+
+## Technisch Overzicht
+
+| Fix | Bestand(en) | Type wijziging |
+|-----|-------------|----------------|
+| 1 | `calendar.tsx` | 3 regels frontend |
+| 2 | `NotificationBell.tsx` | 2 regels CSS |
+| 3a | SQL migratie | 2 trigger updates |
+| 3b | `useUnreadNotifications.ts` | Filter logica |
+
+## Geen destructieve database wijzigingen
+- Fix 3 voegt alleen een extra key toe aan bestaande JSONB metadata
+- Bestaande notificaties zonder `triggered_by` worden gewoon getoond (backward compatible)
