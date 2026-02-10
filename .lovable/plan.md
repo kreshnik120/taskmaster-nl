@@ -1,77 +1,39 @@
 
-# Quick Fixes: Kalender, Notificatie Scroll & Eigen Notificaties
+# Subtaken vereenvoudigen in taakkaarten
 
-## Fix 1: Kalender week begint op maandag
+## Wat wordt er gedaan
 
-**Bestand:** `src/components/ui/calendar.tsx`
+De subtaak-informatie in TaskCard.tsx (Kanban) en TaskItem.tsx (Lijst) wordt vervangen door een compacte counter badge. Detail-informatie blijft beschikbaar via hover (HoverCard) en klik (TaskDetailModal).
 
-**Wijziging (3 regels):**
-1. Import toevoegen: `import { nl } from "date-fns/locale";`
-2. Functie-signature uitbreiden: destructure `locale` uit props
-3. Op DayPicker: `locale={locale ?? nl}`
+## Wijzigingen
 
-Dit fixt automatisch alle 6 Calendar-instanties die geen locale meegeven. De 6 die al `locale={nl}` gebruiken blijven ongewijzigd werken.
+### 1. TaskCard.tsx (regels 206-265)
 
----
+Het volledige subtaak-blok (header, progress bar, actieve indicator, subtaak titels, overflow tekst) wordt vervangen door:
 
-## Fix 2: Notificatie belletje scrollbaar
-
-**Bestand:** `src/components/notifications/NotificationBell.tsx`
-
-**Wijzigingen (2 regels):**
-1. `PopoverContent`: className wordt `"w-80 p-0 max-h-[70vh]"`
-2. `ScrollArea`: className wordt `"max-h-[calc(70vh-52px)]"`
-
-Dit zorgt dat de header vast blijft staan en de lijst scrollbaar wordt bij veel notificaties.
-
----
-
-## Fix 3: Eigen notificaties filteren
-
-### Stap A: Database triggers updaten (SQL migratie)
-
-**`notify_subtask_assignment()`** - voeg `triggered_by` toe aan metadata:
-```sql
-metadata = jsonb_build_object(
-  'subtask_id', NEW.id,
-  'task_id', NEW.task_id,
-  'subtask_title', NEW.title,
-  'due_at', NEW.due_at,
-  'triggered_by', auth.uid()   -- NIEUW
-)
+```
+<div className="mt-1.5 flex items-center gap-1 text-muted-foreground/60">
+  <ListChecks className="h-3 w-3" />
+  <span className="text-[10px]">{completedCount}/{subtasks.length}</span>
+</div>
 ```
 
-**`notify_task_assignment()`** - voeg `triggered_by` toe (naast het bestaande `assigned_by` veld):
-```sql
-metadata = jsonb_build_object(
-  'task_id', NEW.id,
-  'task_title', NEW.title,
-  'assigned_by', auth.uid(),
-  'assigned_by_name', v_assigner_name,
-  'triggered_by', auth.uid()   -- NIEUW (expliciet, voor consistentie)
-)
+### 2. TaskItem.tsx (regels 117-143)
+
+Het subtaak-blok (Progress bar, "X van Y stappen voltooid" tekst, actieve subtaak indicator) wordt vervangen door:
+
+```
+<div className="mt-1.5 flex items-center gap-1 text-muted-foreground/60">
+  <ListChecks className="h-3 w-3" />
+  <span className="text-[10px]">{subtasksCompleted}/{subtasksTotal}</span>
+</div>
 ```
 
-### Stap B: Client-side filter
+Daarnaast wordt de `Progress` import en de `SUBTASK_TOKENS` import verwijderd uit TaskItem.tsx (niet meer nodig).
 
-**Bestand:** `src/hooks/useUnreadNotifications.ts`
+### Wat NIET verandert
 
-In de `queryFn`, na het ophalen van data:
-1. Haal huidige user op: `const { data: { user } } = await supabase.auth.getUser()`
-2. Filter resultaten: notificaties waar `metadata.triggered_by === user.id` worden uitgesloten
-3. Voor `task_assigned`: check ook `metadata.assigned_by` (backward compatibility met bestaande notificaties)
-
----
-
-## Technisch Overzicht
-
-| Fix | Bestand(en) | Type wijziging |
-|-----|-------------|----------------|
-| 1 | `calendar.tsx` | 3 regels frontend |
-| 2 | `NotificationBell.tsx` | 2 regels CSS |
-| 3a | SQL migratie | 2 trigger updates |
-| 3b | `useUnreadNotifications.ts` | Filter logica |
-
-## Geen destructieve database wijzigingen
-- Fix 3 voegt alleen een extra key toe aan bestaande JSONB metadata
-- Bestaande notificaties zonder `triggered_by` worden gewoon getoond (backward compatible)
+- HoverCard in TaskCard.tsx (subtaak-detail bij hover)
+- TaskDetailModal (volledige subtaak-weergave)
+- KanbanColumn orphan subtasks
+- Geen database wijzigingen
