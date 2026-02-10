@@ -310,7 +310,7 @@ export default function Notulen() {
               </p>
             </div>
           ) : filteredMinutes.length === 0 ? (
-            <div className="p-12 text-center text-muted-foreground">
+            <div className="p-12 text-center text-muted-foreground rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
               <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p className="font-medium">Geen notulen gevonden</p>
               <p className="text-sm mt-1">

@@ -814,7 +814,7 @@ export default function Klanten() {
               ))}
             </div>
           ) : filteredOrganizations.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
+            <div className="flex flex-col items-center justify-center py-12 px-8 text-center rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] text-muted-foreground">
               {searchQuery ? "Geen organisaties gevonden" : "Nog geen organisaties"}
             </div>
           ) : (
@@ -851,7 +851,7 @@ export default function Klanten() {
               ))}
             </div>
           ) : filteredOrganizations.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg">
+            <div className="flex flex-col items-center justify-center py-12 px-8 text-center rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] text-muted-foreground">
               <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p className="text-lg font-medium">Geen organisaties gevonden</p>
               <p className="text-sm mt-2">
