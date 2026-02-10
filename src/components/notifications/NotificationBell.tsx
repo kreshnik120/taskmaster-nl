@@ -71,7 +71,7 @@ export function NotificationBell({ onNotificationClick }: NotificationBellProps)
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align="end">
+      <PopoverContent className="w-80 p-0 max-h-[70vh]" align="end">
         <div className="flex items-center justify-between border-b px-4 py-3">
           <h4 className="text-sm font-semibold">Notificaties</h4>
           {unreadCount > 0 && (
@@ -87,7 +87,7 @@ export function NotificationBell({ onNotificationClick }: NotificationBellProps)
           )}
         </div>
 
-        <ScrollArea className="max-h-80">
+        <ScrollArea className="max-h-[calc(70vh-52px)]">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <span className="text-sm text-muted-foreground">Laden...</span>
