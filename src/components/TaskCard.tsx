@@ -2,7 +2,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { GripVertical, Edit, Calendar, ArrowRight, ListChecks, CheckCircle2, Circle, Clock } from "lucide-react";
+import { GripVertical, Edit, Calendar, ArrowRight, ListChecks, CheckCircle2, Circle, Clock, Repeat } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -35,6 +35,7 @@ interface Task {
   updated_at: string;
   accepted_at?: string | null;
   accepted_by?: string | null;
+  recurrence_rule?: string | null;
   profiles: {
     name: string | null;
     email: string | null;
@@ -212,6 +213,16 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
                       </div>
                     );
                   })()}
+
+                  {task.recurrence_rule && (
+                    <div className="flex items-center gap-1 text-muted-foreground/60" title={`Herhaalt ${
+                      task.recurrence_rule === 'DAILY' ? 'dagelijks' :
+                      task.recurrence_rule === 'WEEKLY' ? 'wekelijks' :
+                      task.recurrence_rule === 'BIWEEKLY' ? 'tweewekelijks' : 'maandelijks'
+                    }`}>
+                      <Repeat className="h-3 w-3" />
+                    </div>
+                  )}
 
                   {/* Due date with urgency */}
                   {task.due_at && (

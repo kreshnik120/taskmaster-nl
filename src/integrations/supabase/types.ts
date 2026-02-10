@@ -6158,6 +6158,10 @@ export type Database = {
           priority: Database["public"]["Enums"]["priority"]
           project_id: string | null
           recruitment_action_type: string | null
+          recurrence_assignee_id: string | null
+          recurrence_end_at: string | null
+          recurrence_parent_id: string | null
+          recurrence_rule: string | null
           reporter_id: string | null
           revenue_impact_eur: number | null
           sequence_number: number | null
@@ -6196,6 +6200,10 @@ export type Database = {
           priority?: Database["public"]["Enums"]["priority"]
           project_id?: string | null
           recruitment_action_type?: string | null
+          recurrence_assignee_id?: string | null
+          recurrence_end_at?: string | null
+          recurrence_parent_id?: string | null
+          recurrence_rule?: string | null
           reporter_id?: string | null
           revenue_impact_eur?: number | null
           sequence_number?: number | null
@@ -6234,6 +6242,10 @@ export type Database = {
           priority?: Database["public"]["Enums"]["priority"]
           project_id?: string | null
           recruitment_action_type?: string | null
+          recurrence_assignee_id?: string | null
+          recurrence_end_at?: string | null
+          recurrence_parent_id?: string | null
+          recurrence_rule?: string | null
           reporter_id?: string | null
           revenue_impact_eur?: number | null
           sequence_number?: number | null
@@ -6285,6 +6297,20 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_recurrence_assignee_id_fkey"
+            columns: ["recurrence_assignee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_recurrence_parent_id_fkey"
+            columns: ["recurrence_parent_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
             referencedColumns: ["id"]
           },
           {

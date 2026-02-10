@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Clock, User, Edit, Check, Play, Square, ArrowRight, ListChecks } from "lucide-react";
+import { Clock, User, Edit, Check, Play, Square, ArrowRight, ListChecks, Repeat } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,7 @@ interface Task {
   priority: string;
   due_at: string | null;
   next_action?: string | null;
+  recurrence_rule?: string | null;
   profiles: {
     name: string | null;
     email: string | null;
@@ -117,6 +118,16 @@ export function TaskItem({ task, onTaskClick, onCompleteTask, onEditTask }: Task
             <div className="mt-1.5 flex items-center gap-1 text-muted-foreground/60">
               <ListChecks className="h-3 w-3" />
               <span className="text-[10px]">{subtasksCompleted}/{subtasksTotal}</span>
+            </div>
+          )}
+
+          {task.recurrence_rule && (
+            <div className="flex items-center gap-1 text-muted-foreground/60" title={`Herhaalt ${
+              task.recurrence_rule === 'DAILY' ? 'dagelijks' :
+              task.recurrence_rule === 'WEEKLY' ? 'wekelijks' :
+              task.recurrence_rule === 'BIWEEKLY' ? 'tweewekelijks' : 'maandelijks'
+            }`}>
+              <Repeat className="h-3 w-3" />
             </div>
           )}
         </div>

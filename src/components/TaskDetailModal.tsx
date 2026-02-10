@@ -35,7 +35,8 @@ import {
   Image as ImageIcon,
   File,
   Eye,
-  GitBranch
+  GitBranch,
+  Repeat
 } from "lucide-react";
 import { format, parseISO, formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -90,6 +91,7 @@ interface Task {
   recruitment_action_type: string | null;
   category?: string | null;
   interview_details?: InterviewDetails | null;
+  recurrence_rule?: string | null;
   profiles: {
     name: string | null;
     email: string | null;
@@ -133,6 +135,8 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   const [completing, setCompleting] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmStopRecurrenceOpen, setConfirmStopRecurrenceOpen] = useState(false);
+  const [stoppingRecurrence, setStoppingRecurrence] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loadingAttachments, setLoadingAttachments] = useState(false);
   const [deletingAttachment, setDeletingAttachment] = useState<string | null>(null);
@@ -945,6 +949,27 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
               </Button>
             </div>
 
+            {/* Herhaling stoppen knop */}
+            {task.recurrence_rule && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setConfirmStopRecurrenceOpen(true)}
+                  disabled={stoppingRecurrence}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <Repeat className="h-4 w-4 mr-2" />
+                  Herhaling stoppen
+                </Button>
+                <Badge variant="secondary" className="text-xs">
+                  {task.recurrence_rule === 'DAILY' ? 'Dagelijks' :
+                   task.recurrence_rule === 'WEEKLY' ? 'Wekelijks' :
+                   task.recurrence_rule === 'BIWEEKLY' ? 'Tweewekelijks' : 'Maandelijks'}
+                </Badge>
+              </div>
+            )}
+
             {/* Interview-Specifieke Sectie - Premium glassmorphism */}
             {task.category === 'interview' && task.interview_details && (
               <div className="p-5 rounded-xl glass-card-violet glass-light-bleed border border-violet-200/50 dark:border-violet-700/30 space-y-4 animate-fade-in">
@@ -1549,6 +1574,46 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
             >
               {deleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
               Verwijderen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Stop Recurrence AlertDialog */}
+      <AlertDialog open={confirmStopRecurrenceOpen} onOpenChange={setConfirmStopRecurrenceOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Herhaling stoppen</AlertDialogTitle>
+            <AlertDialogDescription>
+              Weet je zeker dat je de herhaling wilt stoppen? Na het afronden van deze taak wordt er geen nieuwe taak meer aangemaakt.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={stoppingRecurrence}>Annuleren</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={async () => {
+                if (!task?.id) return;
+                setStoppingRecurrence(true);
+                try {
+                  const { error } = await supabase
+                    .from('tasks')
+                    .update({ recurrence_rule: null } as any)
+                    .eq('id', task.id);
+                  if (error) throw error;
+                  toast({ title: "Herhaling gestopt" });
+                  onTaskUpdated();
+                } catch (error) {
+                  console.error('Error stopping recurrence:', error);
+                  toast({ title: "Fout", description: "Kon herhaling niet stoppen", variant: "destructive" });
+                } finally {
+                  setStoppingRecurrence(false);
+                  setConfirmStopRecurrenceOpen(false);
+                }
+              }}
+              disabled={stoppingRecurrence}
+            >
+              {stoppingRecurrence ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Stoppen
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

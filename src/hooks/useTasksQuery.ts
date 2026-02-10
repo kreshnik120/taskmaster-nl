@@ -41,6 +41,11 @@ export interface Task {
   subtasks?: Subtask[];
   subtask_count?: number;
   completed_subtask_count?: number;
+  // Recurrence fields
+  recurrence_rule: string | null;
+  recurrence_assignee_id: string | null;
+  recurrence_end_at: string | null;
+  recurrence_parent_id: string | null;
   // Opvolging fields
   organizations: { name: string } | null;
   task_scoring_metadata?: {
