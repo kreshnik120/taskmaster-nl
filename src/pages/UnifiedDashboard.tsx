@@ -196,7 +196,7 @@ export default function UnifiedDashboard() {
             <User className="h-4 w-4" />
             <span className="hidden sm:inline">Mijn Werk</span>
             {activeTab === "mijn-werk" && (
-              <span className="absolute -bottom-[1px] left-2 right-2 h-0.5 rounded-full bg-tab-mijn-werk-500" />
+              <span className="absolute -bottom-[1px] left-2 right-2 h-[3px] rounded-full bg-tab-mijn-werk-500 shadow-[0_2px_8px_currentColor]" />
             )}
           </TabsTrigger>
           
@@ -215,7 +215,7 @@ export default function UnifiedDashboard() {
             <Calendar className="h-4 w-4" />
             <span className="hidden sm:inline">Kalender</span>
             {activeTab === "kalender" && (
-              <span className="absolute -bottom-[1px] left-2 right-2 h-0.5 rounded-full bg-tab-kalender-500" />
+              <span className="absolute -bottom-[1px] left-2 right-2 h-[3px] rounded-full bg-tab-kalender-500 shadow-[0_2px_8px_currentColor]" />
             )}
           </TabsTrigger>
           
@@ -234,7 +234,7 @@ export default function UnifiedDashboard() {
             <List className="h-4 w-4" />
             <span className="hidden sm:inline">Lijst</span>
             {activeTab === "lijst" && (
-              <span className="absolute -bottom-[1px] left-2 right-2 h-0.5 rounded-full bg-tab-lijst-500" />
+              <span className="absolute -bottom-[1px] left-2 right-2 h-[3px] rounded-full bg-tab-lijst-500 shadow-[0_2px_8px_currentColor]" />
             )}
           </TabsTrigger>
           
@@ -253,7 +253,7 @@ export default function UnifiedDashboard() {
             <TrendingUp className="h-4 w-4" />
             <span className="hidden sm:inline">Opvolging</span>
             {activeTab === "opvolging" && (
-              <span className="absolute -bottom-[1px] left-2 right-2 h-0.5 rounded-full bg-tab-opvolging-500" />
+              <span className="absolute -bottom-[1px] left-2 right-2 h-[3px] rounded-full bg-tab-opvolging-500 shadow-[0_2px_8px_currentColor]" />
             )}
           </TabsTrigger>
           
@@ -272,7 +272,7 @@ export default function UnifiedDashboard() {
             <Users className="h-4 w-4" />
             <span className="hidden sm:inline">Team</span>
             {activeTab === "team" && (
-              <span className="absolute -bottom-[1px] left-2 right-2 h-0.5 rounded-full bg-tab-team-500" />
+              <span className="absolute -bottom-[1px] left-2 right-2 h-[3px] rounded-full bg-tab-team-500 shadow-[0_2px_8px_currentColor]" />
             )}
           </TabsTrigger>
           
@@ -291,7 +291,7 @@ export default function UnifiedDashboard() {
             <Briefcase className="h-4 w-4" />
             <span className="hidden sm:inline">Recruitment</span>
             {activeTab === "recruitment" && (
-              <span className="absolute -bottom-[1px] left-2 right-2 h-0.5 rounded-full bg-tab-recruitment-500" />
+              <span className="absolute -bottom-[1px] left-2 right-2 h-[3px] rounded-full bg-tab-recruitment-500 shadow-[0_2px_8px_currentColor]" />
             )}
           </TabsTrigger>
         </TabsList>
