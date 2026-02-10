@@ -211,10 +211,12 @@ export function KanbanColumn({ id, title, tasks, subtasks = [], subtasksByTaskId
           <CardContent>
             <div ref={setNodeRef} className="space-y-2 min-h-[200px]">
               {tasks.length === 0 && orphanSubtasks.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center bg-white/30 dark:bg-slate-900/30 backdrop-blur-sm rounded-lg border border-white/20 dark:border-white/8 mx-2 mb-2">
-                  <Inbox className="h-8 w-8 text-muted-foreground/30 mb-3" />
-                  <p className="text-sm text-muted-foreground/60">Geen taken</p>
-                  <p className="text-xs text-muted-foreground/40 mt-1">Sleep hier om toe te voegen</p>
+                <div className="flex flex-col items-center justify-center py-12 px-8 text-center bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm rounded-lg border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] mx-2 mb-2">
+                  <div className="p-4 rounded-full bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm mb-4">
+                    <Inbox className="h-8 w-8 text-muted-foreground/50" />
+                  </div>
+                  <h3 className="text-base font-medium text-foreground mb-1">Geen taken</h3>
+                  <p className="text-sm text-muted-foreground/70">Sleep hier om toe te voegen</p>
                 </div>
               ) : (
                 <>
