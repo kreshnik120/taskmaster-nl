@@ -203,63 +203,12 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
                     </div>
                   )}
 
-                  {/* Compact Subtasks Preview - Enterprise-niveau integratie */}
                   {subtasks.length > 0 && (() => {
                     const completedCount = subtasks.filter(s => s.status === 'completed').length;
-                    const activeSubtask = subtasks.find(s => s.status === 'active') 
-                      || subtasks.find(s => s.status === 'pending');
-                    const isComplete = completedCount === subtasks.length;
-                    
                     return (
-                      <div className="mt-2 pt-2 border-t border-border/30 space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <p className={cn(SUBTASK_TOKENS.counter.wrapper, "uppercase tracking-wider")}>
-                            <ListChecks className={SUBTASK_TOKENS.counter.icon} />
-                            Subtaken ({completedCount}/{subtasks.length})
-                          </p>
-                        </div>
-                        {/* Subtle progress bar - unified token */}
-                        <div className={cn(SUBTASK_TOKENS.progress.height, SUBTASK_TOKENS.progress.background, "rounded-full overflow-hidden")}>
-                          <div 
-                            className={cn(
-                              "h-full rounded-full transition-all duration-300",
-                              isComplete ? SUBTASK_TOKENS.progress.fillComplete : SUBTASK_TOKENS.progress.fill
-                            )}
-                            style={{ width: `${(completedCount / subtasks.length) * 100}%` }}
-                          />
-                        </div>
-                        
-                        {/* Actieve subtaak indicator - Enterprise UX */}
-                        {activeSubtask && !isComplete && (
-                          <div className={SUBTASK_TOKENS.activeIndicator.wrapper}>
-                            <div className={SUBTASK_TOKENS.activeIndicator.dot} />
-                            <span className={cn(SUBTASK_TOKENS.activeIndicator.text, "truncate")}>
-                              {activeSubtask.title}
-                            </span>
-                          </div>
-                        )}
-                        
-                        {subtasks.slice(0, 2).map(st => (
-                          <div key={st.id} className={cn(
-                            SUBTASK_TOKENS.inlinePreview.text,
-                            "flex items-center gap-1.5",
-                            st.status === 'active' && SUBTASK_TOKENS.inlinePreview.activeText
-                          )}>
-                            {st.status === 'completed' ? (
-                              <CheckCircle2 className={cn(SUBTASK_TOKENS.inlinePreview.icon, "text-green-500 flex-shrink-0")} />
-                            ) : st.status === 'active' ? (
-                              <div className={SUBTASK_TOKENS.inlinePreview.activeIcon} />
-                            ) : (
-                              <Circle className={cn(SUBTASK_TOKENS.inlinePreview.icon, "flex-shrink-0")} />
-                            )}
-                            <span className="truncate">{st.title}</span>
-                          </div>
-                        ))}
-                        {subtasks.length > 2 && (
-                          <p className="text-[10px] text-muted-foreground/50 pl-4">
-                            +{subtasks.length - 2} meer...
-                          </p>
-                        )}
+                      <div className="mt-1.5 flex items-center gap-1 text-muted-foreground/60">
+                        <ListChecks className="h-3 w-3" />
+                        <span className="text-[10px]">{completedCount}/{subtasks.length}</span>
                       </div>
                     );
                   })()}
