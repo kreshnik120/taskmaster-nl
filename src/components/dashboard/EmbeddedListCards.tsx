@@ -85,10 +85,11 @@
          const canAccept = !task.accepted_by && task.assignee_id === globalFilterUserId;
  
          return (
-           <MobileTableCard
-             key={task.id}
-             ariaLabel={`Taak: ${task.title}`}
-             highlight={urgency.status === 'overdue' ? 'destructive' : undefined}
+            <MobileTableCard
+              key={task.id}
+              ariaLabel={`Taak: ${task.title}`}
+              highlight={urgency.status === 'overdue' ? 'destructive' : undefined}
+              className="glass-card-slate"
              onClick={() => onTaskClick(task)}
              leading={
                <div className="flex flex-col items-center gap-2" onClick={(e) => e.stopPropagation()}>

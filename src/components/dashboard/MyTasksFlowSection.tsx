@@ -591,7 +591,7 @@ export function MyTasksFlowSection() {
           </div>
 
           {/* Controls row */}
-          <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between glass-filter-bar-indigo">
             {/* Sort controls */}
             <div className="flex items-center gap-2">
               <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
@@ -898,7 +898,7 @@ export function MyTasksFlowSection() {
             <DragOverlay dropAnimation={null}>
               {activeTask && (
                 <div className="cursor-grabbing">
-                  <div className="glass-drag-overlay-enhanced">
+                  <div className="glass-drag-overlay-indigo">
                     <TaskCard task={activeTask} />
                   </div>
                 </div>

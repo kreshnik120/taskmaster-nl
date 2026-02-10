@@ -693,7 +693,7 @@ export default function MyWeekCalendarSection() {
         <DragOverlay dropAnimation={null}>
           {activeTask && (
             <div className="cursor-grabbing">
-              <div className="glass-drag-overlay-enhanced p-2 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-white/40 dark:border-white/15">
+              <div className="glass-drag-overlay-indigo p-2 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-white/40 dark:border-white/15">
                 <p className="text-xs font-medium">{activeTask.title}</p>
               </div>
             </div>
@@ -777,6 +777,7 @@ export default function MyWeekCalendarSection() {
           open={detailModalOpen}
           onOpenChange={setDetailModalOpen}
           onTaskUpdated={handleTaskUpdated}
+          contextColor="indigo"
         />
       )}
 

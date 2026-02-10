@@ -418,6 +418,7 @@ export default function UnifiedDashboard() {
           task={{ id: selectedTaskId } as any}
           open={taskModalOpen}
           onOpenChange={handleTaskModalClose}
+          contextColor={TAB_CONTEXT_MAP[activeTab] as any}
           onTaskUpdated={handleTaskUpdated}
         />
       )}

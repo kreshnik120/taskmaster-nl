@@ -2257,13 +2257,53 @@ All colors MUST be HSL.
     0 0 0 1px hsla(172, 66%, 50%, 0.15);
 }
 
+/* Indigo/Mijn Werk context */
+.glass-drag-overlay-indigo {
+  position: relative;
+  border-radius: 0.75rem;
+  box-shadow:
+    0 25px 60px -15px hsla(234, 45%, 52%, 0.25),
+    0 15px 35px -10px hsla(234, 45%, 52%, 0.18),
+    0 5px 15px -5px hsla(234, 45%, 52%, 0.12),
+    inset 0 1px 2px rgba(255, 255, 255, 0.25),
+    0 0 0 1px hsla(234, 45%, 52%, 0.08);
+  transition: none !important;
+  will-change: transform;
+  transform: none !important;
+}
+
+.dark .glass-drag-overlay-indigo {
+  box-shadow:
+    0 25px 60px -15px hsla(234, 45%, 20%, 0.50),
+    0 15px 35px -10px hsla(234, 45%, 20%, 0.35),
+    0 5px 15px -5px hsla(234, 45%, 20%, 0.25),
+    inset 0 1px 2px rgba(255, 255, 255, 0.10),
+    0 0 0 1px hsla(234, 45%, 52%, 0.15);
+}
+
+/* Indigo filter bar */
+.glass-filter-bar-indigo {
+  position: relative;
+  background: linear-gradient(135deg, hsla(234, 45%, 99%, 0.88) 0%, hsla(234, 45%, 97%, 0.72) 100%);
+  border: 1px solid hsla(234, 45%, 80%, 0.25);
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  backdrop-filter: blur(12px);
+}
+
+.dark .glass-filter-bar-indigo {
+  background: linear-gradient(135deg, hsla(234, 45%, 20%, 0.55) 0%, hsla(234, 45%, 15%, 0.40) 100%);
+  border-color: hsla(234, 45%, 35%, 0.35);
+}
+
 /* Extend DnD guard to cover all context overlays */
 .dnd-dragging .glass-drag-overlay-rose,
 .dnd-dragging .glass-drag-overlay-teal,
 .dnd-dragging .glass-drag-overlay-enhanced,
 .dnd-dragging .glass-drag-overlay-emerald,
 .dnd-dragging .glass-drag-overlay-slate,
-.dnd-dragging .glass-drag-overlay-violet {
+.dnd-dragging .glass-drag-overlay-violet,
+.dnd-dragging .glass-drag-overlay-indigo {
   transform: none !important;
   transition: none !important;
 }

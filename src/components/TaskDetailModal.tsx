@@ -119,12 +119,13 @@ interface TaskDetailModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onTaskUpdated: () => void;
+  contextColor?: "indigo" | "teal" | "slate" | "amber" | "violet" | "rose" | "emerald";
 }
 
 // Import priority configuration from central hook
 import { getPriorityConfig, getPriorityBadgeClass } from "@/hooks/usePriorityConfig";
 
-export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: TaskDetailModalProps) {
+export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated, contextColor = "indigo" }: TaskDetailModalProps) {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [loadingSubtasks, setLoadingSubtasks] = useState(false);
@@ -1198,7 +1199,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                 open={sectionsOpen.description} 
                 onOpenChange={() => toggleSection('description')}
               >
-                <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg collapsible-glass collapsible-glass-indigo group">
+                <CollapsibleTrigger className={`flex items-center justify-between w-full p-3 rounded-lg collapsible-glass collapsible-glass-${contextColor} group`}>
                   <div className="flex items-center gap-2">
                     <FileText className="h-5 w-5 text-primary/80" />
                     <h3 className="font-semibold text-foreground">Beschrijving</h3>
@@ -1309,7 +1310,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
               open={sectionsOpen.actions} 
               onOpenChange={() => toggleSection('actions')}
             >
-              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg collapsible-glass collapsible-glass-indigo group">
+              <CollapsibleTrigger className={`flex items-center justify-between w-full p-3 rounded-lg collapsible-glass collapsible-glass-${contextColor} group`}>
                 <div className="flex items-center gap-2">
                   <GitBranch className="h-5 w-5 text-primary/80" />
                   <h3 className="font-semibold text-foreground">Actieverloop</h3>
@@ -1355,7 +1356,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                 open={sectionsOpen.steps} 
                 onOpenChange={() => toggleSection('steps')}
               >
-                <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg collapsible-glass collapsible-glass-indigo group">
+                <CollapsibleTrigger className={`flex items-center justify-between w-full p-3 rounded-lg collapsible-glass collapsible-glass-${contextColor} group`}>
                   <div className="flex items-center gap-2">
                     <ListChecks className="h-5 w-5 text-primary/80" />
                     <h3 className="font-semibold text-foreground">Processtappen</h3>
@@ -1419,7 +1420,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                 open={sectionsOpen.attachments} 
                 onOpenChange={() => toggleSection('attachments')}
               >
-                <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg collapsible-glass collapsible-glass-indigo group">
+                <CollapsibleTrigger className={`flex items-center justify-between w-full p-3 rounded-lg collapsible-glass collapsible-glass-${contextColor} group`}>
                   <div className="flex items-center gap-2">
                     <Paperclip className="h-5 w-5 text-primary/80" />
                     <h3 className="font-semibold text-foreground">Bijlagen</h3>
@@ -1503,7 +1504,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
               open={sectionsOpen.notulen} 
               onOpenChange={() => toggleSection('notulen')}
             >
-              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg collapsible-glass collapsible-glass-indigo group">
+              <CollapsibleTrigger className={`flex items-center justify-between w-full p-3 rounded-lg collapsible-glass collapsible-glass-${contextColor} group`}>
                 <div className="flex items-center gap-2">
                   <FileText className="h-5 w-5 text-primary/80" />
                   <h3 className="font-semibold text-foreground">Notulen</h3>

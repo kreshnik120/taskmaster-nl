@@ -771,7 +771,7 @@ export default function EmbeddedCalendarView() {
               <DroppableDay key={day.toISOString()} day={day}>
                 <Card 
                   className={cn(
-                    "overflow-hidden min-h-[280px] border border-border/20 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-all duration-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)]",
+                    "overflow-hidden min-h-[280px] border border-border/20 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-all duration-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)] glass-card-teal",
                     isToday && "bg-primary/[0.03] border-primary/10",
                     isWeekend && !isToday && "bg-muted/[0.02] dark:bg-muted/[0.04]"
                   )}
@@ -794,7 +794,7 @@ export default function EmbeddedCalendarView() {
                       </span>
                       <button 
                         onClick={() => handleDayClick(day)}
-                        className="p-1 rounded-full text-muted-foreground/50 hover:text-primary hover:bg-primary/5 transition-colors"
+                        className="p-1 rounded-full text-muted-foreground/50 hover:text-tab-kalender-500 hover:bg-tab-kalender-500/5 transition-colors"
                         title="Nieuwe taak"
                       >
                         <Plus className="h-3.5 w-3.5" />
@@ -940,6 +940,7 @@ export default function EmbeddedCalendarView() {
           open={detailModalOpen}
           onOpenChange={setDetailModalOpen}
           onTaskUpdated={handleTaskUpdated}
+          contextColor="teal"
         />
       )}
 

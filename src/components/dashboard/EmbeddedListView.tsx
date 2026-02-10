@@ -701,7 +701,7 @@ export default function EmbeddedListView() {
               placeholder="Zoek taken... (Cmd+K)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
+              className="pl-10 glass-search-input focus-ring-slate"
             />
             {searchQuery && (
               <Button
@@ -717,7 +717,7 @@ export default function EmbeddedListView() {
         </div>
 
         {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-end mb-4">
+        <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-end mb-4 glass-filter-bar-slate">
           <div className="flex-1">
             <label className="text-sm font-medium mb-2 block">
               Groepeer op
@@ -1029,7 +1029,7 @@ export default function EmbeddedListView() {
                    globalFilterUserId={globalFilterUserId}
                  />
                ) : (
-               <div className="rounded-lg border bg-card relative overflow-auto max-h-[calc(100vh-450px)]">
+               <div className="rounded-lg border bg-card relative overflow-auto max-h-[calc(100vh-450px)] glass-liquid-card glass-liquid-card-slate">
                 <Table>
                   <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
                     <TableRow>
@@ -1078,8 +1078,8 @@ export default function EmbeddedListView() {
                           onClick={() => handleTaskClick(task)}
                           className={cn(
                             "group cursor-pointer transition-colors",
-                            "hover:bg-muted/30",
-                            "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
+                            "hover:bg-muted/30 table-row-hover-slate",
+                            "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus-ring-slate",
                             activeTimer && "bg-primary/5",
                             isSelected && "ring-2 ring-primary bg-primary/10"
                           )}
@@ -1281,6 +1281,7 @@ export default function EmbeddedListView() {
         open={detailModalOpen}
         onOpenChange={setDetailModalOpen}
         onTaskUpdated={handleTaskUpdated}
+        contextColor="slate"
       />
 
       {/* Task Dialog */}
