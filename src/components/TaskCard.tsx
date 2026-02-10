@@ -8,8 +8,10 @@ import { nl } from "date-fns/locale";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Button } from "@/components/ui/button";
+import { useState } from "react";
 import { logger } from "@/lib/logger";
 import { UrgencyBadge } from "@/components/ui/urgency-badge";
+import { ReminderDialog } from "@/components/ReminderDialog";
 import { formatDateFull } from "@/lib/dateFormatters";
 import { SUBTASK_TOKENS, ACTION_TOKENS } from "@/lib/constants/designTokens";
 import { cn } from "@/lib/utils";
@@ -128,9 +130,11 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
     onClick?.(task);
   };
 
+  const [reminderOpen, setReminderOpen] = useState(false);
+
   const handleReminderClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    // TODO: Open reminder dialog
+    setReminderOpen(true);
     log.log('Plan reminder voor', task.title);
   };
 
@@ -321,6 +325,12 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
         </div>
       </HoverCardContent>
       </HoverCard>
+      <ReminderDialog
+        open={reminderOpen}
+        onOpenChange={setReminderOpen}
+        taskId={task.id}
+        onSuccess={() => setReminderOpen(false)}
+      />
     </div>
   );
 }

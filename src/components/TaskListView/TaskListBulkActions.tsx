@@ -24,6 +24,7 @@ const STATUS_OPTIONS = [
   { value: 'DOING', label: 'In uitvoering' },
   { value: 'BLOCKED', label: 'Geblokkeerd' },
   { value: 'REVIEW', label: 'Review' },
+  { value: 'DONE', label: 'Afgerond' },
 ];
 
 const PRIORITY_OPTIONS = [

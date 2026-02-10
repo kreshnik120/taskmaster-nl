@@ -15,6 +15,20 @@ import { TaskListSidePanel } from './TaskListSidePanel';
 import { TaskListBulkActions } from './TaskListBulkActions';
 import { TaskListErrorBoundary } from './TaskListErrorBoundary';
 import { announceToScreenReader, TASK_LIST_ID } from './utils/accessibility';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import { useQueryClient } from '@tanstack/react-query';
+import { TaskDetailModal } from '@/components/TaskDetailModal';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import type { TaskListViewProps, TaskListTask } from './types';
 
 /**
@@ -112,6 +126,9 @@ function TaskListViewContent({
   const isMobile = useIsMobile();
   const searchInputRef = useRef<HTMLInputElement>(null);
   
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   // Filters and data
   const { 
     filters, 
@@ -137,9 +154,12 @@ function TaskListViewContent({
     isPartiallySelected,
   } = useTaskListSelection();
 
-  // Panel and navigation state
+  // Panel, edit, and delete state
   const [panelTask, setPanelTask] = useState<TaskListTask | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [editTask, setEditTask] = useState<TaskListTask | null>(null);
+  const [deleteTask, setDeleteTask] = useState<TaskListTask | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   // Task IDs for bulk selection
   const taskIds = tasks.map(t => t.id);
@@ -175,22 +195,112 @@ function TaskListViewContent({
     externalOnTaskSelect?.(task);
   };
 
-  // Handle bulk actions (placeholder implementations)
-  const handleBulkStatusChange = (status: string) => {
-    // TODO: Implement bulk status change
-    announceToScreenReader(`${selectedIds.size} taken bijgewerkt`);
+  // Handle bulk status change
+  const handleBulkStatusChange = async (status: string) => {
+    const count = selectedIds.size;
+    const { error } = await supabase
+      .from('tasks')
+      .update({ status } as any)
+      .in('id', Array.from(selectedIds));
+    if (error) {
+      toast({ title: 'Fout', description: 'Kon status niet wijzigen', variant: 'destructive' });
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: ['active-tasks'] });
+    toast({ title: `${count} taken bijgewerkt naar ${status}` });
+    announceToScreenReader(`${count} taken bijgewerkt`);
     clearSelection();
   };
 
-  const handleBulkPriorityChange = (priority: string) => {
-    // TODO: Implement bulk priority change
-    announceToScreenReader(`${selectedIds.size} taken bijgewerkt`);
+  // Handle bulk priority change
+  const handleBulkPriorityChange = async (priority: string) => {
+    const count = selectedIds.size;
+    const { error } = await supabase
+      .from('tasks')
+      .update({ priority } as any)
+      .in('id', Array.from(selectedIds));
+    if (error) {
+      toast({ title: 'Fout', description: 'Kon prioriteit niet wijzigen', variant: 'destructive' });
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: ['active-tasks'] });
+    toast({ title: `${count} taken prioriteit gewijzigd` });
+    announceToScreenReader(`${count} taken bijgewerkt`);
     clearSelection();
   };
 
+  // Handle bulk delete — opens confirmation dialog
   const handleBulkDelete = () => {
-    // TODO: Show delete confirmation
+    setBulkDeleteOpen(true);
+  };
+
+  // Confirm bulk delete (soft delete)
+  const confirmBulkDelete = async () => {
+    const deletedIds = Array.from(selectedIds);
+    const count = deletedIds.length;
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase
+      .from('tasks')
+      .update({ deleted_at: new Date().toISOString(), deleted_by: user?.id ?? null } as any)
+      .in('id', deletedIds);
+    setBulkDeleteOpen(false);
+    if (error) {
+      toast({ title: 'Fout', description: 'Kon taken niet verwijderen', variant: 'destructive' });
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: ['active-tasks'] });
+    toast({
+      title: `${count} taken verwijderd`,
+      action: (
+        <button
+          className="text-sm font-medium underline"
+          onClick={async () => {
+            await supabase
+              .from('tasks')
+              .update({ deleted_at: null, deleted_by: null } as any)
+              .in('id', deletedIds);
+            queryClient.invalidateQueries({ queryKey: ['active-tasks'] });
+          }}
+        >
+          Ongedaan maken
+        </button>
+      ),
+    });
     clearSelection();
+  };
+
+  // Confirm single task delete (soft delete)
+  const confirmSingleDelete = async () => {
+    if (!deleteTask) return;
+    const taskId = deleteTask.id;
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase
+      .from('tasks')
+      .update({ deleted_at: new Date().toISOString(), deleted_by: user?.id ?? null } as any)
+      .eq('id', taskId);
+    setDeleteTask(null);
+    if (error) {
+      toast({ title: 'Fout', description: 'Kon taak niet verwijderen', variant: 'destructive' });
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: ['active-tasks'] });
+    toast({
+      title: 'Taak verwijderd',
+      action: (
+        <button
+          className="text-sm font-medium underline"
+          onClick={async () => {
+            await supabase
+              .from('tasks')
+              .update({ deleted_at: null, deleted_by: null } as any)
+              .eq('id', taskId);
+            queryClient.invalidateQueries({ queryKey: ['active-tasks'] });
+          }}
+        >
+          Ongedaan maken
+        </button>
+      ),
+    });
   };
 
   // Loading state
@@ -274,10 +384,12 @@ function TaskListViewContent({
         task={panelTask}
         onClose={() => setPanelTask(null)}
         onEdit={(task) => {
-          // TODO: Open edit modal for task.id
+          setEditTask(task);
+          setPanelTask(null);
         }}
         onDelete={(task) => {
-          // TODO: Show delete confirmation for task.id
+          setDeleteTask(task);
+          setPanelTask(null);
         }}
       />
 
@@ -291,6 +403,53 @@ function TaskListViewContent({
           onClear={clearSelection}
         />
       )}
+
+      {/* Task Detail Modal */}
+      <TaskDetailModal
+        task={editTask}
+        open={!!editTask}
+        onOpenChange={(open) => !open && setEditTask(null)}
+        onTaskUpdated={() => {
+          setEditTask(null);
+          queryClient.invalidateQueries({ queryKey: ['active-tasks'] });
+        }}
+      />
+
+      {/* Bulk Delete Confirmation */}
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Taken verwijderen</AlertDialogTitle>
+            <AlertDialogDescription>
+              Weet je zeker dat je {selectedIds.size} taken wilt verwijderen? Je kunt ze later terugvinden bij Verwijderde Taken.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuleren</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmBulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Verwijderen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Single Delete Confirmation */}
+      <AlertDialog open={!!deleteTask} onOpenChange={(open) => !open && setDeleteTask(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Taak verwijderen</AlertDialogTitle>
+            <AlertDialogDescription>
+              Weet je zeker dat je deze taak wilt verwijderen? Je kunt de taak later terugvinden bij Verwijderde Taken.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuleren</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmSingleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Verwijderen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
