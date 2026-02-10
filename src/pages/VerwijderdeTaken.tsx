@@ -229,7 +229,7 @@ const VerwijderdeTaken = () => {
               {loading ? (
                 <div className="text-center py-8 text-muted-foreground">Laden...</div>
               ) : tasks.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
+                <div className="text-center py-8 px-6 rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] text-muted-foreground">
                   Geen verwijderde taken gevonden
                 </div>
                ) : isMobile ? (

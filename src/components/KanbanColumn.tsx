@@ -159,7 +159,7 @@ export function KanbanColumn({ id, title, tasks, subtasks = [], subtasksByTaskId
   };
 
   return (
-    <Card className={`flex-shrink-0 w-80 bg-card ${statusBorderColors[status] || ""}`}>
+    <Card className={`flex-shrink-0 w-80 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] ${statusBorderColors[status] || ""}`}>
       <Collapsible open={isOpen} onOpenChange={handleToggleOpen}>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -211,7 +211,7 @@ export function KanbanColumn({ id, title, tasks, subtasks = [], subtasksByTaskId
           <CardContent>
             <div ref={setNodeRef} className="space-y-2 min-h-[200px]">
               {tasks.length === 0 && orphanSubtasks.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="flex flex-col items-center justify-center py-12 text-center bg-white/30 dark:bg-slate-900/30 backdrop-blur-sm rounded-lg border border-white/20 dark:border-white/8 mx-2 mb-2">
                   <Inbox className="h-8 w-8 text-muted-foreground/30 mb-3" />
                   <p className="text-sm text-muted-foreground/60">Geen taken</p>
                   <p className="text-xs text-muted-foreground/40 mt-1">Sleep hier om toe te voegen</p>

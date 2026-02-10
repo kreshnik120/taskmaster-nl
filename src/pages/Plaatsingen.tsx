@@ -268,7 +268,7 @@ export default function Plaatsingen() {
           Laden...
         </div>
       ) : filteredPlacements.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
+        <div className="flex flex-col items-center justify-center py-12 px-8 text-center rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] text-muted-foreground">
           {searchQuery || statusFilter !== "all" 
             ? "Geen plaatsingen gevonden met deze filters" 
             : "Nog geen plaatsingen"}

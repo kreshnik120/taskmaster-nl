@@ -264,7 +264,7 @@ export default function SollicitatiesArchief() {
           {/* Applications List */}
           <div className="space-y-3">
             {filteredApplications.length === 0 ? (
-              <Card className="p-12 text-center">
+              <div className="p-12 text-center rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
                 <Archive className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-semibold mb-2">Geen gearchiveerde sollicitaties</h3>
                 <p className="text-muted-foreground">
@@ -272,7 +272,7 @@ export default function SollicitatiesArchief() {
                     ? "Geen sollicitaties gevonden met deze filters"
                     : "Verwijderde sollicitaties verschijnen hier"}
                 </p>
-              </Card>
+              </div>
             ) : (
               filteredApplications.map((app) => (
                 <Card key={app.id} className="p-4 hover:shadow-md transition-shadow">
