@@ -1,69 +1,82 @@
 
-# Terugkerende / Herhalende Opdrachten
+# "Mijn Werk" Tab: Kanban naar Weekkalender
 
 ## Overzicht
 
-Implementatie van herhalende taken: bij het afronden van een taak met een recurrence_rule maakt een database trigger automatisch een nieuwe taak aan.
+De MyTasksFlowSection (Kanban met 5 kolommen) wordt vervangen door een MyWeekCalendarSection - een persoonlijke weekkalender die het bewezen patroon van EmbeddedCalendarView hergebruikt, maar uitsluitend eigen taken toont. MyTasksFlowSection.tsx blijft bestaan (niet verwijderd).
 
 ---
 
 ## Wijzigingen
 
-### 1. Database migratie
+### 1. Nieuw bestand: `src/components/dashboard/MyWeekCalendarSection.tsx`
 
-- 4 kolommen toevoegen aan `tasks`: `recurrence_rule`, `recurrence_assignee_id`, `recurrence_end_at`, `recurrence_parent_id`
-- CHECK constraint op `recurrence_rule` (NULL of DAILY/WEEKLY/BIWEEKLY/MONTHLY)
-- Trigger `handle_recurring_task()` die bij het zetten van `completed_at` automatisch een nieuwe taak INSERT
-- De trigger berekent `due_at`, `start_at`, en `assignee_id` voor de volgende taak
+Een zelfstandig component (~400 regels) gebaseerd op het EmbeddedCalendarView patroon, met deze aanpassingen:
 
-### 2. TaskDialog.tsx - Herhaling sectie in stap 2
+**Data ophalen:**
+- Eigen taken via `supabase.from("tasks").select(...)` met `.eq("assignee_id", user.id)`, `.is("deleted_at", null)`, `.is("completed_at", null)`
+- GEEN team-filter toggle (altijd alleen eigen taken)
+- GEEN subtasks/reminders (vereenvoudigd t.o.v. EmbeddedCalendarView)
+- Taken ZONDER start_at EN zonder due_at komen in de "Ongepland" sectie
 
-- Zod schema uitbreiden met `recurrence_rule`, `recurrence_assignee_id`, `recurrence_end_at`
-- Na "Volgende actie", voor "Bijlagen": dropdown "Herhaling" (Geen/Dagelijks/Wekelijks/Tweewekelijks/Maandelijks)
-- Conditioneel: "Toewijzen aan bij herhaling" dropdown + "Herhalen tot" datumpicker
-- Bij bewerken: recurrence velden laden en voorinvullen
-- Bij opslaan: recurrence velden meesturen in INSERT/UPDATE
+**Weekkalender features (overgenomen uit EmbeddedCalendarView):**
+- Week navigatie: vorige/volgende knoppen + "Vandaag" link + weeknummer
+- 5/7 dagen toggle via ToggleGroup (default "5" = Ma-Vr)
+- startOfWeek met `{ locale: nl, weekStartsOn: 1 }`
+- Dag kolommen als Card met header (dag + datum + isToday indicator) + plus-knop
+- Taken als compacte kaartjes: priority dot + titel (truncated) + tijdstip (HH:mm)
+- Empty states per dag (hergebruik van `getEmptyStateMessage` patroon)
+- Week progress bar (alleen bij huidige week)
 
-### 3. useTasksQuery.ts - Type uitbreiding
+**Drag & drop (hergebruik van EmbeddedCalendarView patronen):**
+- DraggableTask wrapper met `useDraggable` + DroppableDay wrapper met `useDroppable`
+- PointerSensor met distance: 10 (consistent met EmbeddedCalendarView)
+- Bij drop: update start_at en/of due_at naar nieuwe dag (behoud origineel tijdstip)
+- Toast: "Taak verplaatst naar [dag naam]"
+- DragOverlay met indigo glass theme (i.p.v. teal)
 
-- 4 velden toevoegen aan Task interface: `recurrence_rule`, `recurrence_assignee_id`, `recurrence_end_at`, `recurrence_parent_id`
-- Query haalt al `*` op, data komt automatisch mee
+**Ongepland sectie:**
+- Collapsible Card onder de weekkalender
+- Horizontale scrollbare lijst van compacte taakkaartjes
+- Draggable vanuit ongepland naar een dag: zet due_at op die dag 12:00
+- Count badge in header
 
-### 4. TaskCard.tsx - Herhaling badge
+**KPI strip (3 KPICards boven de kalender):**
+- "Vandaag" - taken count voor vandaag
+- "Deze week" - totaal taken deze week
+- "Ongepland" - taken zonder datum
+- Gebruik useCountUp voor animatie
 
-- Import `Repeat` uit lucide-react
-- Na subtask counter: compact Repeat icon met tooltip bij `recurrence_rule !== null`
-- Task interface uitbreiden met `recurrence_rule`
+**Interacties:**
+- Klik op taak: opent TaskDetailModal
+- Plus-knop per dag: opent TaskDialog met defaultStartDate
+- Realtime: useRealtimeChannel met filter `assignee_id=eq.${user.id}`
 
-### 5. TaskItem.tsx - Herhaling badge
+**Styling:**
+- Glass/indigo tokens (glass-card-indigo, glass-drag-overlay-enhanced)
+- Responsive: grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 (of 7)
+- date-fns met nl locale
 
-- Zelfde Repeat icon als TaskCard
-- Task interface uitbreiden met `recurrence_rule`
+### 2. `src/pages/UnifiedDashboard.tsx`
 
-### 6. TaskDetailModal.tsx - "Herhaling stoppen" knop
-
-- Na de bestaande action buttons grid (regels 874-946): conditionele extra rij als `task.recurrence_rule` niet null
-- Knop met `Repeat` icon + tekst "Herhaling stoppen" + frequentie badge
-- AlertDialog bevestiging
-- UPDATE `recurrence_rule = NULL` + toast + `onTaskUpdated()`
-- Task interface uitbreiden met `recurrence_rule`
+Minimale wijzigingen:
+- Import `MyWeekCalendarSection` (lazy loaded) i.p.v. `MyTasksFlowSection`
+- In TabsContent "mijn-werk": vervang `<MyTasksFlowSection />` door `<Suspense><MyWeekCalendarSection /></Suspense>`
+- Verwijder de `MyTasksFlowSection` import (het bestand zelf blijft bestaan)
 
 ---
 
 ## Technisch Overzicht
 
-| Onderdeel | Bestand(en) | Type |
-|-----------|-------------|------|
-| Schema | SQL migratie | 4 kolommen + constraint + trigger |
-| Formulier | `TaskDialog.tsx` | Zod schema + UI velden stap 2 |
-| Types | `useTasksQuery.ts` | Interface uitbreiding |
-| Kanban badge | `TaskCard.tsx` | Repeat icon |
-| Lijst badge | `TaskItem.tsx` | Repeat icon |
-| Detail modal | `TaskDetailModal.tsx` | Stop-knop + AlertDialog |
+| Onderdeel | Bestand | Type |
+|-----------|---------|------|
+| Weekkalender component | `MyWeekCalendarSection.tsx` (nieuw) | Nieuw bestand |
+| Dashboard integratie | `UnifiedDashboard.tsx` | Import swap |
 
-## Geen destructieve wijzigingen
+## Wat NIET verandert
 
-- Alle kolommen zijn nullable met DEFAULT NULL
-- Bestaande taken worden niet geraakt
-- Subtaken worden NIET gekopieerd naar de volgende taak
-- RLS werkt automatisch via org_id overerving
+- MyTasksFlowSection.tsx blijft bestaan (niet verwijderd)
+- EmbeddedCalendarView.tsx wordt niet gewijzigd
+- TodayFocusCard en UpcomingRemindersWidget blijven boven de kalender
+- Geen database wijzigingen
+- Andere tabs ongewijzigd
