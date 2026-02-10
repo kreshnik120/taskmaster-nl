@@ -1,82 +1,50 @@
 
-# "Mijn Werk" Tab: Kanban naar Weekkalender
+# "Mijn Werk" View Toggle: Bord + Weekkalender
 
 ## Overzicht
 
-De MyTasksFlowSection (Kanban met 5 kolommen) wordt vervangen door een MyWeekCalendarSection - een persoonlijke weekkalender die het bewezen patroon van EmbeddedCalendarView hergebruikt, maar uitsluitend eigen taken toont. MyTasksFlowSection.tsx blijft bestaan (niet verwijderd).
+Een view toggle toevoegen aan de "Mijn Werk" tab zodat gebruikers kunnen wisselen tussen het Kanban-bord (MyTasksFlowSection) en de Weekkalender (MyWeekCalendarSection). De keuze wordt opgeslagen in localStorage.
 
 ---
 
 ## Wijzigingen
 
-### 1. Nieuw bestand: `src/components/dashboard/MyWeekCalendarSection.tsx`
+### Enig bestand: `src/pages/UnifiedDashboard.tsx`
 
-Een zelfstandig component (~400 regels) gebaseerd op het EmbeddedCalendarView patroon, met deze aanpassingen:
+**Imports toevoegen:**
+- `LayoutGrid` uit `lucide-react`
+- `{ ToggleGroup, ToggleGroupItem }` uit `@/components/ui/toggle-group`
+- `{ MyTasksFlowSection }` uit `@/components/dashboard/MyTasksFlowSection` (direct import, niet lazy)
 
-**Data ophalen:**
-- Eigen taken via `supabase.from("tasks").select(...)` met `.eq("assignee_id", user.id)`, `.is("deleted_at", null)`, `.is("completed_at", null)`
-- GEEN team-filter toggle (altijd alleen eigen taken)
-- GEEN subtasks/reminders (vereenvoudigd t.o.v. EmbeddedCalendarView)
-- Taken ZONDER start_at EN zonder due_at komen in de "Ongepland" sectie
+**State toevoegen (regel ~72):**
+```
+const [mijnWerkView, setMijnWerkView] = useState<"bord" | "kalender">(
+  () => (localStorage.getItem("mijn-werk-view") as "bord" | "kalender") || "bord"
+);
+```
 
-**Weekkalender features (overgenomen uit EmbeddedCalendarView):**
-- Week navigatie: vorige/volgende knoppen + "Vandaag" link + weeknummer
-- 5/7 dagen toggle via ToggleGroup (default "5" = Ma-Vr)
-- startOfWeek met `{ locale: nl, weekStartsOn: 1 }`
-- Dag kolommen als Card met header (dag + datum + isToday indicator) + plus-knop
-- Taken als compacte kaartjes: priority dot + titel (truncated) + tijdstip (HH:mm)
-- Empty states per dag (hergebruik van `getEmptyStateMessage` patroon)
-- Week progress bar (alleen bij huidige week)
+**Handler toevoegen:**
+```
+const handleViewChange = (view: string) => {
+  if (view === "bord" || view === "kalender") {
+    setMijnWerkView(view);
+    localStorage.setItem("mijn-werk-view", view);
+  }
+};
+```
 
-**Drag & drop (hergebruik van EmbeddedCalendarView patronen):**
-- DraggableTask wrapper met `useDraggable` + DroppableDay wrapper met `useDroppable`
-- PointerSensor met distance: 10 (consistent met EmbeddedCalendarView)
-- Bij drop: update start_at en/of due_at naar nieuwe dag (behoud origineel tijdstip)
-- Toast: "Taak verplaatst naar [dag naam]"
-- DragOverlay met indigo glass theme (i.p.v. teal)
+**TabsContent "mijn-werk" aanpassen (regels 286-298):**
 
-**Ongepland sectie:**
-- Collapsible Card onder de weekkalender
-- Horizontale scrollbare lijst van compacte taakkaartjes
-- Draggable vanuit ongepland naar een dag: zet due_at op die dag 12:00
-- Count badge in header
+Tussen de widget grid en de content, een view toggle bar invoegen met een ToggleGroup (Bord / Weekkalender). Daaronder conditioneel MyTasksFlowSection of MyWeekCalendarSection renderen:
 
-**KPI strip (3 KPICards boven de kalender):**
-- "Vandaag" - taken count voor vandaag
-- "Deze week" - totaal taken deze week
-- "Ongepland" - taken zonder datum
-- Gebruik useCountUp voor animatie
+- "Bord" knop: LayoutGrid icon + tekst
+- "Weekkalender" knop: Calendar icon + tekst
+- Bord = `<MyTasksFlowSection />` (direct)
+- Weekkalender = `<Suspense><MyWeekCalendarSection /></Suspense>` (lazy)
 
-**Interacties:**
-- Klik op taak: opent TaskDetailModal
-- Plus-knop per dag: opent TaskDialog met defaultStartDate
-- Realtime: useRealtimeChannel met filter `assignee_id=eq.${user.id}`
+### Wat NIET verandert
 
-**Styling:**
-- Glass/indigo tokens (glass-card-indigo, glass-drag-overlay-enhanced)
-- Responsive: grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 (of 7)
-- date-fns met nl locale
-
-### 2. `src/pages/UnifiedDashboard.tsx`
-
-Minimale wijzigingen:
-- Import `MyWeekCalendarSection` (lazy loaded) i.p.v. `MyTasksFlowSection`
-- In TabsContent "mijn-werk": vervang `<MyTasksFlowSection />` door `<Suspense><MyWeekCalendarSection /></Suspense>`
-- Verwijder de `MyTasksFlowSection` import (het bestand zelf blijft bestaan)
-
----
-
-## Technisch Overzicht
-
-| Onderdeel | Bestand | Type |
-|-----------|---------|------|
-| Weekkalender component | `MyWeekCalendarSection.tsx` (nieuw) | Nieuw bestand |
-| Dashboard integratie | `UnifiedDashboard.tsx` | Import swap |
-
-## Wat NIET verandert
-
-- MyTasksFlowSection.tsx blijft bestaan (niet verwijderd)
-- EmbeddedCalendarView.tsx wordt niet gewijzigd
-- TodayFocusCard en UpcomingRemindersWidget blijven boven de kalender
+- MyTasksFlowSection.tsx: ongewijzigd
+- MyWeekCalendarSection.tsx: ongewijzigd
+- Andere tabs: ongewijzigd
 - Geen database wijzigingen
-- Andere tabs ongewijzigd
