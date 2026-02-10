@@ -756,8 +756,8 @@ export function MyTasksFlowSection() {
 
                 return (
                   <DroppableColumn key={column.id} column={column}>
-                    <Card className="h-full min-h-[200px] glass-kanban-column-enhanced border-t-2 border-t-tab-mijn-werk-400/80 dark:border-t-tab-mijn-werk-600/80">
-                      <CardHeader className="pb-2 pt-3 px-3 bg-gradient-to-b from-white/60 to-transparent dark:from-slate-800/60 dark:to-transparent border-b border-white/30 dark:border-white/10 rounded-t-xl">
+                    <Card className="h-full min-h-[200px] glass-kanban-column-enhanced border-t-[3px] border-t-tab-mijn-werk-400/80 dark:border-t-tab-mijn-werk-600/80">
+                      <CardHeader className="pb-2 pt-3 px-3 bg-gradient-to-b from-tab-mijn-werk-50/40 to-transparent dark:from-tab-mijn-werk-900/30 dark:to-transparent border-b border-white/30 dark:border-white/10 rounded-t-xl">
                         <CardTitle className="text-sm font-medium flex items-center justify-between group">
                           {editingColumnId === column.id ? (
                             <Input

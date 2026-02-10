@@ -696,110 +696,124 @@ All colors MUST be HSL.
       inset 0 1px 0 rgba(255, 255, 255, 0.14);
   }
 
-  /* ENHANCED Context-Colored Glass Liquid Cards (+50% shadow opacity) */
+  /* ENHANCED Context-Colored Glass Liquid Cards with background tint */
   .glass-liquid-card-rose {
+    background: hsla(345, 45%, 97%, 0.7);
     box-shadow:
       0 4px 24px -4px hsla(345, 55%, 50%, 0.18),
       0 8px 16px -8px hsla(345, 55%, 40%, 0.15),
       0 16px 40px -12px hsla(345, 55%, 50%, 0.10),
-      inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      inset 0 1px 0 hsla(345, 60%, 95%, 0.7);
   }
   .glass-liquid-card-rose:hover {
+    background: hsla(345, 48%, 96%, 0.75);
     box-shadow:
       0 6px 32px -4px hsla(345, 55%, 50%, 0.24),
       0 12px 24px -8px hsla(345, 55%, 40%, 0.20),
       0 24px 48px -12px hsla(345, 55%, 50%, 0.14),
-      inset 0 1px 0 rgba(255, 255, 255, 0.90);
+      inset 0 1px 0 hsla(345, 60%, 95%, 0.8);
   }
 
   .glass-liquid-card-violet {
+    background: hsla(270, 40%, 97%, 0.7);
     box-shadow:
       0 4px 24px -4px hsla(270, 45%, 55%, 0.18),
       0 8px 16px -8px hsla(270, 45%, 45%, 0.15),
       0 16px 40px -12px hsla(270, 45%, 55%, 0.10),
-      inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      inset 0 1px 0 hsla(270, 55%, 95%, 0.7);
   }
   .glass-liquid-card-violet:hover {
+    background: hsla(270, 43%, 96%, 0.75);
     box-shadow:
       0 6px 32px -4px hsla(270, 45%, 55%, 0.24),
       0 12px 24px -8px hsla(270, 45%, 45%, 0.20),
       0 24px 48px -12px hsla(270, 45%, 55%, 0.14),
-      inset 0 1px 0 rgba(255, 255, 255, 0.90);
+      inset 0 1px 0 hsla(270, 55%, 95%, 0.8);
   }
 
   .glass-liquid-card-slate {
+    background: hsla(215, 30%, 97%, 0.7);
     box-shadow:
       0 4px 24px -4px hsla(215, 25%, 48%, 0.18),
       0 8px 16px -8px hsla(215, 25%, 38%, 0.15),
       0 16px 40px -12px hsla(215, 25%, 48%, 0.10),
-      inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      inset 0 1px 0 hsla(215, 35%, 95%, 0.7);
   }
   .glass-liquid-card-slate:hover {
+    background: hsla(215, 33%, 96%, 0.75);
     box-shadow:
       0 6px 32px -4px hsla(215, 25%, 48%, 0.24),
       0 12px 24px -8px hsla(215, 25%, 38%, 0.20),
       0 24px 48px -12px hsla(215, 25%, 48%, 0.14),
-      inset 0 1px 0 rgba(255, 255, 255, 0.90);
+      inset 0 1px 0 hsla(215, 35%, 95%, 0.8);
   }
 
   .glass-liquid-card-teal {
+    background: hsla(174, 40%, 97%, 0.7);
     box-shadow:
       0 4px 24px -4px hsla(174, 42%, 43%, 0.18),
       0 8px 16px -8px hsla(174, 42%, 33%, 0.15),
       0 16px 40px -12px hsla(174, 42%, 43%, 0.10),
-      inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      inset 0 1px 0 hsla(174, 52%, 95%, 0.7);
   }
   .glass-liquid-card-teal:hover {
+    background: hsla(174, 43%, 96%, 0.75);
     box-shadow:
       0 6px 32px -4px hsla(174, 42%, 43%, 0.24),
       0 12px 24px -8px hsla(174, 42%, 33%, 0.20),
       0 24px 48px -12px hsla(174, 42%, 43%, 0.14),
-      inset 0 1px 0 rgba(255, 255, 255, 0.90);
+      inset 0 1px 0 hsla(174, 52%, 95%, 0.8);
   }
 
   .glass-liquid-card-amber {
+    background: hsla(38, 50%, 97%, 0.7);
     box-shadow:
       0 4px 24px -4px hsla(38, 55%, 50%, 0.18),
       0 8px 16px -8px hsla(38, 55%, 40%, 0.15),
       0 16px 40px -12px hsla(38, 55%, 50%, 0.10),
-      inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      inset 0 1px 0 hsla(38, 65%, 95%, 0.7);
   }
   .glass-liquid-card-amber:hover {
+    background: hsla(38, 53%, 96%, 0.75);
     box-shadow:
       0 6px 32px -4px hsla(38, 55%, 50%, 0.24),
       0 12px 24px -8px hsla(38, 55%, 40%, 0.20),
       0 24px 48px -12px hsla(38, 55%, 50%, 0.14),
-      inset 0 1px 0 rgba(255, 255, 255, 0.90);
+      inset 0 1px 0 hsla(38, 65%, 95%, 0.8);
   }
 
   .glass-liquid-card-emerald {
+    background: hsla(142, 45%, 97%, 0.7);
     box-shadow:
       0 4px 24px -4px hsla(142, 55%, 45%, 0.18),
       0 8px 16px -8px hsla(142, 55%, 35%, 0.15),
       0 16px 40px -12px hsla(142, 55%, 45%, 0.10),
-      inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      inset 0 1px 0 hsla(142, 60%, 95%, 0.7);
   }
   .glass-liquid-card-emerald:hover {
+    background: hsla(142, 48%, 96%, 0.75);
     box-shadow:
       0 6px 32px -4px hsla(142, 55%, 45%, 0.24),
       0 12px 24px -8px hsla(142, 55%, 35%, 0.20),
       0 24px 48px -12px hsla(142, 55%, 45%, 0.14),
-      inset 0 1px 0 rgba(255, 255, 255, 0.90);
+      inset 0 1px 0 hsla(142, 60%, 95%, 0.8);
   }
 
   .glass-liquid-card-indigo {
+    background: hsla(234, 45%, 97%, 0.7);
     box-shadow:
       0 4px 24px -4px hsla(234, 45%, 52%, 0.18),
       0 8px 16px -8px hsla(234, 45%, 42%, 0.15),
       0 16px 40px -12px hsla(234, 45%, 52%, 0.10),
-      inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      inset 0 1px 0 hsla(234, 55%, 95%, 0.7);
   }
   .glass-liquid-card-indigo:hover {
+    background: hsla(234, 48%, 96%, 0.75);
     box-shadow:
       0 6px 32px -4px hsla(234, 45%, 52%, 0.24),
       0 12px 24px -8px hsla(234, 45%, 42%, 0.20),
       0 24px 48px -12px hsla(234, 45%, 52%, 0.14),
-      inset 0 1px 0 rgba(255, 255, 255, 0.90);
+      inset 0 1px 0 hsla(234, 55%, 95%, 0.8);
   }
 
   .glass-liquid-card-blue {
@@ -3636,25 +3650,7 @@ All colors MUST be HSL.
   overflow: hidden;
 }
 
-.glass-ambient-mesh-indigo::before {
-  content: '';
-  position: absolute;
-  inset: -150px;
-  background: 
-    radial-gradient(ellipse 700px 500px at 0% 0%, hsla(234, 45%, 70%, 0.15) 0%, transparent 50%),
-    radial-gradient(ellipse 600px 400px at 100% 100%, hsla(234, 45%, 60%, 0.10) 0%, transparent 50%),
-    radial-gradient(ellipse 400px 300px at 50% 50%, hsla(234, 45%, 75%, 0.06) 0%, transparent 60%);
-  pointer-events: none;
-  z-index: -1;
-  filter: blur(50px);
-}
-
-.dark .glass-ambient-mesh-indigo::before {
-  background: 
-    radial-gradient(ellipse 700px 500px at 0% 0%, hsla(234, 45%, 30%, 0.12) 0%, transparent 50%),
-    radial-gradient(ellipse 600px 400px at 100% 100%, hsla(234, 45%, 25%, 0.08) 0%, transparent 50%),
-    radial-gradient(ellipse 400px 300px at 50% 50%, hsla(234, 45%, 35%, 0.05) 0%, transparent 60%);
-}
+/* Duplicate indigo mesh removed - consolidated in enhanced ambient mesh section below */
 
 /* ============================================
    ENTERPRISE SIDEBAR GLASS STYLING
@@ -3705,147 +3701,107 @@ All colors MUST be HSL.
 /* Subtiele context-specifieke kleurtint voor volledige pagina achtergrond */
 
 .page-bg-rose {
-  background: linear-gradient(
-    165deg,
-    hsl(345 48% 98%) 0%,
-    hsl(345 20% 99%) 40%,
-    hsl(0 0% 100%) 100%
-  );
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 20%, hsla(345, 55%, 92%, 0.7), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, hsla(345, 50%, 90%, 0.5), transparent 60%),
+    linear-gradient(135deg, hsla(345, 40%, 97%, 1), hsla(345, 30%, 95%, 1), hsla(345, 45%, 93%, 1));
 }
-
 .dark .page-bg-rose {
-  background: linear-gradient(
-    165deg,
-    hsl(345 30% 8%) 0%,
-    hsl(345 15% 6%) 40%,
-    hsl(222 47% 11%) 100%
-  );
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 20%, hsla(345, 55%, 20%, 0.5), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, hsla(345, 50%, 18%, 0.35), transparent 60%),
+    linear-gradient(135deg, hsla(345, 40%, 8%, 1), hsla(345, 30%, 6%, 1), hsla(222, 47%, 11%, 1));
 }
 
 .page-bg-violet {
-  background: linear-gradient(
-    165deg,
-    hsl(270 45% 98%) 0%,
-    hsl(270 20% 99%) 40%,
-    hsl(0 0% 100%) 100%
-  );
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 20%, hsla(270, 50%, 92%, 0.7), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, hsla(270, 45%, 90%, 0.5), transparent 60%),
+    linear-gradient(135deg, hsla(270, 35%, 97%, 1), hsla(270, 25%, 95%, 1), hsla(270, 40%, 93%, 1));
 }
-
 .dark .page-bg-violet {
-  background: linear-gradient(
-    165deg,
-    hsl(270 30% 8%) 0%,
-    hsl(270 15% 6%) 40%,
-    hsl(222 47% 11%) 100%
-  );
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 20%, hsla(270, 50%, 20%, 0.5), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, hsla(270, 45%, 18%, 0.35), transparent 60%),
+    linear-gradient(135deg, hsla(270, 35%, 8%, 1), hsla(270, 25%, 6%, 1), hsla(222, 47%, 11%, 1));
 }
 
 .page-bg-slate {
-  background: linear-gradient(
-    165deg,
-    hsl(215 25% 97%) 0%,
-    hsl(215 15% 98%) 40%,
-    hsl(0 0% 100%) 100%
-  );
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 20%, hsla(215, 35%, 92%, 0.7), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, hsla(215, 30%, 90%, 0.5), transparent 60%),
+    linear-gradient(135deg, hsla(215, 20%, 97%, 1), hsla(215, 10%, 95%, 1), hsla(215, 25%, 93%, 1));
 }
-
 .dark .page-bg-slate {
-  background: linear-gradient(
-    165deg,
-    hsl(215 20% 8%) 0%,
-    hsl(215 12% 6%) 40%,
-    hsl(222 47% 11%) 100%
-  );
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 20%, hsla(215, 35%, 20%, 0.5), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, hsla(215, 30%, 18%, 0.35), transparent 60%),
+    linear-gradient(135deg, hsla(215, 20%, 8%, 1), hsla(215, 10%, 6%, 1), hsla(222, 47%, 11%, 1));
 }
 
 .page-bg-teal {
-  background: linear-gradient(
-    165deg,
-    hsl(174 42% 97%) 0%,
-    hsl(174 20% 98%) 40%,
-    hsl(0 0% 100%) 100%
-  );
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 20%, hsla(174, 50%, 92%, 0.7), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, hsla(174, 45%, 90%, 0.5), transparent 60%),
+    linear-gradient(135deg, hsla(174, 35%, 97%, 1), hsla(174, 25%, 95%, 1), hsla(174, 40%, 93%, 1));
 }
-
 .dark .page-bg-teal {
-  background: linear-gradient(
-    165deg,
-    hsl(174 30% 7%) 0%,
-    hsl(174 15% 5%) 40%,
-    hsl(222 47% 11%) 100%
-  );
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 20%, hsla(174, 50%, 20%, 0.5), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, hsla(174, 45%, 18%, 0.35), transparent 60%),
+    linear-gradient(135deg, hsla(174, 35%, 8%, 1), hsla(174, 25%, 6%, 1), hsla(222, 47%, 11%, 1));
 }
 
 .page-bg-amber {
-  background: linear-gradient(
-    165deg,
-    hsl(38 55% 97%) 0%,
-    hsl(38 25% 98%) 40%,
-    hsl(0 0% 100%) 100%
-  );
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 20%, hsla(38, 60%, 92%, 0.7), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, hsla(38, 55%, 90%, 0.5), transparent 60%),
+    linear-gradient(135deg, hsla(38, 45%, 97%, 1), hsla(38, 35%, 95%, 1), hsla(38, 50%, 93%, 1));
 }
-
 .dark .page-bg-amber {
-  background: linear-gradient(
-    165deg,
-    hsl(38 35% 7%) 0%,
-    hsl(38 18% 5%) 40%,
-    hsl(222 47% 11%) 100%
-  );
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 20%, hsla(38, 60%, 20%, 0.5), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, hsla(38, 55%, 18%, 0.35), transparent 60%),
+    linear-gradient(135deg, hsla(38, 45%, 8%, 1), hsla(38, 35%, 6%, 1), hsla(222, 47%, 11%, 1));
 }
 
 .page-bg-emerald {
-  background: linear-gradient(
-    165deg,
-    hsl(142 55% 97%) 0%,
-    hsl(142 25% 98%) 40%,
-    hsl(0 0% 100%) 100%
-  );
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 20%, hsla(142, 50%, 92%, 0.7), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, hsla(142, 45%, 90%, 0.5), transparent 60%),
+    linear-gradient(135deg, hsla(142, 35%, 97%, 1), hsla(142, 25%, 95%, 1), hsla(142, 40%, 93%, 1));
 }
-
 .dark .page-bg-emerald {
-  background: linear-gradient(
-    165deg,
-    hsl(142 35% 6%) 0%,
-    hsl(142 18% 4%) 40%,
-    hsl(222 47% 11%) 100%
-  );
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 20%, hsla(142, 50%, 20%, 0.5), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, hsla(142, 45%, 18%, 0.35), transparent 60%),
+    linear-gradient(135deg, hsla(142, 35%, 8%, 1), hsla(142, 25%, 6%, 1), hsla(222, 47%, 11%, 1));
 }
 
 .page-bg-indigo {
-  background: linear-gradient(
-    165deg,
-    hsl(234 45% 98%) 0%,
-    hsl(234 20% 99%) 40%,
-    hsl(0 0% 100%) 100%
-  );
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 20%, hsla(234, 55%, 92%, 0.7), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, hsla(234, 50%, 90%, 0.5), transparent 60%),
+    linear-gradient(135deg, hsla(234, 40%, 97%, 1), hsla(234, 30%, 95%, 1), hsla(234, 45%, 93%, 1));
 }
-
 .dark .page-bg-indigo {
-  background: linear-gradient(
-    165deg,
-    hsl(234 30% 8%) 0%,
-    hsl(234 15% 6%) 40%,
-    hsl(222 47% 11%) 100%
-  );
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 20%, hsla(234, 55%, 20%, 0.5), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, hsla(234, 50%, 18%, 0.35), transparent 60%),
+    linear-gradient(135deg, hsla(234, 40%, 8%, 1), hsla(234, 30%, 6%, 1), hsla(222, 47%, 11%, 1));
 }
 
 .page-bg-blue {
-  background: linear-gradient(
-    165deg,
-    hsl(217 91% 98%) 0%,
-    hsl(217 40% 99%) 40%,
-    hsl(0 0% 100%) 100%
-  );
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 20%, hsla(217, 55%, 92%, 0.7), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, hsla(217, 50%, 90%, 0.5), transparent 60%),
+    linear-gradient(135deg, hsla(217, 40%, 97%, 1), hsla(217, 30%, 95%, 1), hsla(217, 45%, 93%, 1));
 }
-
 .dark .page-bg-blue {
-  background: linear-gradient(
-    165deg,
-    hsl(217 50% 7%) 0%,
-    hsl(217 25% 5%) 40%,
-    hsl(222 47% 11%) 100%
-  );
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 20%, hsla(217, 55%, 20%, 0.5), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, hsla(217, 50%, 18%, 0.35), transparent 60%),
+    linear-gradient(135deg, hsla(217, 40%, 8%, 1), hsla(217, 30%, 6%, 1), hsla(222, 47%, 11%, 1));
 }
 
 /* ---- TIER 2: Enhanced Ambient Mesh ---- */
@@ -3858,9 +3814,9 @@ All colors MUST be HSL.
   position: absolute !important;
   inset: -200px !important;
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(345, 48%, 70%, 0.28) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(345, 48%, 60%, 0.22) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(345, 48%, 75%, 0.14) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(345, 48%, 70%, 0.38) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(345, 48%, 60%, 0.30) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(345, 48%, 75%, 0.22) 0%, transparent 65%) !important;
   filter: blur(40px) !important;
   pointer-events: none !important;
   z-index: -1 !important;
@@ -3871,9 +3827,9 @@ All colors MUST be HSL.
 
 .dark .glass-ambient-mesh-rose::before {
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(345, 48%, 30%, 0.24) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(345, 48%, 25%, 0.18) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(345, 48%, 35%, 0.12) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(345, 48%, 30%, 0.30) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(345, 48%, 25%, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(345, 48%, 35%, 0.16) 0%, transparent 65%) !important;
   filter: blur(40px) !important;
 }
 
@@ -3882,9 +3838,9 @@ All colors MUST be HSL.
   position: absolute !important;
   inset: -200px !important;
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(270, 45%, 70%, 0.28) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(270, 45%, 60%, 0.22) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(270, 45%, 75%, 0.14) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(270, 45%, 70%, 0.38) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(270, 45%, 60%, 0.30) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(270, 45%, 75%, 0.22) 0%, transparent 65%) !important;
   filter: blur(40px) !important;
   pointer-events: none !important;
   z-index: -1 !important;
@@ -3895,9 +3851,9 @@ All colors MUST be HSL.
 
 .dark .glass-ambient-mesh-violet::before {
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(270, 45%, 30%, 0.24) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(270, 45%, 25%, 0.18) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(270, 45%, 35%, 0.12) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(270, 45%, 30%, 0.30) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(270, 45%, 25%, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(270, 45%, 35%, 0.16) 0%, transparent 65%) !important;
   filter: blur(40px) !important;
 }
 
@@ -3906,9 +3862,9 @@ All colors MUST be HSL.
   position: absolute !important;
   inset: -200px !important;
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(215, 25%, 70%, 0.24) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(215, 25%, 60%, 0.18) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(215, 25%, 75%, 0.12) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(215, 25%, 70%, 0.34) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(215, 25%, 60%, 0.26) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(215, 25%, 75%, 0.18) 0%, transparent 65%) !important;
   filter: blur(40px) !important;
   pointer-events: none !important;
   z-index: -1 !important;
@@ -3919,9 +3875,9 @@ All colors MUST be HSL.
 
 .dark .glass-ambient-mesh-slate::before {
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(215, 25%, 25%, 0.20) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(215, 25%, 20%, 0.14) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(215, 25%, 30%, 0.10) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(215, 25%, 25%, 0.26) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(215, 25%, 20%, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(215, 25%, 30%, 0.14) 0%, transparent 65%) !important;
   filter: blur(40px) !important;
 }
 
@@ -3930,9 +3886,9 @@ All colors MUST be HSL.
   position: absolute !important;
   inset: -200px !important;
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(174, 42%, 65%, 0.28) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(174, 42%, 55%, 0.22) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(174, 42%, 70%, 0.14) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(174, 42%, 65%, 0.38) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(174, 42%, 55%, 0.30) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(174, 42%, 70%, 0.22) 0%, transparent 65%) !important;
   filter: blur(40px) !important;
   pointer-events: none !important;
   z-index: -1 !important;
@@ -3943,9 +3899,9 @@ All colors MUST be HSL.
 
 .dark .glass-ambient-mesh-teal::before {
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(174, 42%, 28%, 0.24) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(174, 42%, 22%, 0.18) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(174, 42%, 32%, 0.12) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(174, 42%, 28%, 0.30) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(174, 42%, 22%, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(174, 42%, 32%, 0.16) 0%, transparent 65%) !important;
   filter: blur(40px) !important;
 }
 
@@ -3954,9 +3910,9 @@ All colors MUST be HSL.
   position: absolute !important;
   inset: -200px !important;
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(38, 55%, 65%, 0.28) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(38, 55%, 55%, 0.22) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(38, 55%, 70%, 0.14) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(38, 55%, 65%, 0.38) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(38, 55%, 55%, 0.30) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(38, 55%, 70%, 0.22) 0%, transparent 65%) !important;
   filter: blur(40px) !important;
   pointer-events: none !important;
   z-index: -1 !important;
@@ -3967,9 +3923,9 @@ All colors MUST be HSL.
 
 .dark .glass-ambient-mesh-amber::before {
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(38, 55%, 28%, 0.24) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(38, 55%, 22%, 0.18) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(38, 55%, 32%, 0.12) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(38, 55%, 28%, 0.30) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(38, 55%, 22%, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(38, 55%, 32%, 0.16) 0%, transparent 65%) !important;
   filter: blur(40px) !important;
 }
 
@@ -3978,9 +3934,9 @@ All colors MUST be HSL.
   position: absolute !important;
   inset: -200px !important;
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(142, 55%, 70%, 0.28) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(142, 55%, 60%, 0.22) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(142, 55%, 75%, 0.14) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(142, 55%, 70%, 0.38) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(142, 55%, 60%, 0.30) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(142, 55%, 75%, 0.22) 0%, transparent 65%) !important;
   filter: blur(40px) !important;
   pointer-events: none !important;
   z-index: -1 !important;
@@ -3991,9 +3947,9 @@ All colors MUST be HSL.
 
 .dark .glass-ambient-mesh-emerald::before {
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(142, 55%, 30%, 0.24) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(142, 55%, 25%, 0.18) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(142, 55%, 35%, 0.12) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(142, 55%, 30%, 0.30) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(142, 55%, 25%, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(142, 55%, 35%, 0.16) 0%, transparent 65%) !important;
   filter: blur(40px) !important;
 }
 
@@ -4002,9 +3958,9 @@ All colors MUST be HSL.
   position: absolute !important;
   inset: -200px !important;
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(234, 45%, 70%, 0.28) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(234, 45%, 60%, 0.22) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(234, 45%, 75%, 0.14) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(234, 45%, 70%, 0.38) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(234, 45%, 60%, 0.30) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(234, 45%, 75%, 0.22) 0%, transparent 65%) !important;
   filter: blur(40px) !important;
   pointer-events: none !important;
   z-index: -1 !important;
@@ -4015,9 +3971,9 @@ All colors MUST be HSL.
 
 .dark .glass-ambient-mesh-indigo::before {
   background: 
-    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(234, 45%, 30%, 0.24) 0%, transparent 55%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(234, 45%, 25%, 0.18) 0%, transparent 55%),
-    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(234, 45%, 35%, 0.12) 0%, transparent 65%) !important;
+    radial-gradient(ellipse 800px 600px at 0% 0%, hsla(234, 45%, 30%, 0.30) 0%, transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, hsla(234, 45%, 25%, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 500px 400px at 50% 50%, hsla(234, 45%, 35%, 0.16) 0%, transparent 65%) !important;
   filter: blur(40px) !important;
 }
 
