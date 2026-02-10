@@ -1,82 +1,89 @@
 
-# Glass Design Polish (5 stappen)
+# Glass Empty States Batch 2 (10 bestanden, 13 wijzigingen)
 
 ## Overzicht
 
-5 kleine visuele fixes die het glass-patroon consistent doorvoeren. Alleen CSS classes, geen functionaliteit.
+Hetzelfde glass patroon uit Prompt #71 toepassen op alle overige platte empty states en de Taken KanbanColumn. Alleen CSS class wijzigingen, geen functionaliteit.
 
 ---
 
-## Stap 1: Topbar Blur Versterken
+## Stap 1: Klanten.tsx
 
-**Bestand:** `src/components/Layout.tsx` (regel 69)
+**A) Cards view empty state (regel 817)**
+- Van: `"text-center py-12 text-muted-foreground"`
+- Naar: `"flex flex-col items-center justify-center py-12 px-8 text-center rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] text-muted-foreground"`
 
-Wijzig `backdrop-blur-sm` naar `backdrop-blur-xl` in de topbar div.
-
----
-
-## Stap 2: Sidebar Active State
-
-**Bestand:** `src/components/AppSidebar.tsx` (regels 181-183)
-
-- Active class: van `"bg-primary/10 text-primary font-medium"` naar `"bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm text-primary font-medium border-l-[3px] border-primary shadow-[0_1px_4px_rgba(0,0,0,0.04)]"`
-- Inactive hover: van `"hover:text-sidebar-foreground hover:bg-sidebar-accent/50"` naar `"hover:text-sidebar-foreground hover:bg-white/40 dark:hover:bg-slate-800/40"`
+**B) Hierarchy view empty state (regel 854)**
+- Van: `"text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg"`
+- Naar: `"flex flex-col items-center justify-center py-12 px-8 text-center rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] text-muted-foreground"`
 
 ---
 
-## Stap 3: Notificatie Items Hover
+## Stap 2: Plaatsingen + Notulen
 
-**Bestand:** `src/components/notifications/NotificationBell.tsx` (regel 107)
+**A) Plaatsingen.tsx (regel 271)**
+- Van: `"text-center py-12 text-muted-foreground"`
+- Naar: `"flex flex-col items-center justify-center py-12 px-8 text-center rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] text-muted-foreground"`
 
-Van: `"flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors hover:bg-muted/50"`
-Naar: `"flex cursor-pointer items-start gap-3 px-4 py-3 rounded-lg transition-all duration-150 hover:bg-white/60 dark:hover:bg-slate-800/60 hover:shadow-[0_1px_4px_rgba(0,0,0,0.04)]"`
-
----
-
-## Stap 4: Kanban Kolommen Glass
-
-**Bestand:** `src/components/ApplicationKanbanColumn.tsx`
-
-A) Kolom Card (regel 70): Vervang `bg-card border shadow-none` met glass styling (`bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)]`)
-
-B) Sticky header (regel 72): Vervang `bg-card/95 backdrop-blur-sm border-b` met `bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border-b border-white/20 dark:border-white/10`
-
-C) Lege kolom state (regel 104): Voeg glass classes toe aan de empty state wrapper.
+**B) Notulen.tsx (regel 313)**
+- Van: `"p-12 text-center text-muted-foreground"`
+- Naar: `"p-12 text-center text-muted-foreground rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)]"`
 
 ---
 
-## Stap 5: Empty States Glass
+## Stap 3: Archief Pagina's
 
-Glass patroon toepassen op 5 locaties:
+**A) AfgerondeTaken.tsx - 3 empty states:**
+1. Regel 264: `"text-center py-8 text-muted-foreground"` naar `"text-center py-8 px-6 rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] text-muted-foreground"`
+2. Regel 289: zelfde wijziging
+3. Regel 299: zelfde wijziging
 
-| Bestand | Regel | Huidige state |
-|---------|-------|---------------|
-| `src/pages/Professionals.tsx` | 690 | Platte `text-center py-12` div |
-| `src/components/whatsapp/WhatsAppEmptyState.tsx` | 53 (ChatListEmptyState) | `py-12 px-4 text-center` div |
-| `src/components/dashboard/EmbeddedListView.tsx` | 983 | `Card className="border-dashed"` wrapper |
-| `src/components/dashboard/EmbeddedOpvolgingView.tsx` | 344 | Platte `<p>` element |
-| `src/pages/Bijlagen.tsx` | 394 | Platte `p-8 text-center` div |
+**B) VerwijderdeTaken.tsx (regel 232)**
+- Van: `"text-center py-8 text-muted-foreground"`
+- Naar: `"text-center py-8 px-6 rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] text-muted-foreground"`
 
-Elk krijgt: `rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)]`
+---
 
-De EmbeddedListView Card wordt vervangen door een div met glass classes (de `border-dashed` Card past niet in het glass systeem). De EmbeddedOpvolgingView `<p>` wordt een `<div>` met glass styling.
+## Stap 4: Facturatie + Tijdregistratie + SollicitatiesArchief
 
-`TaskListEmptyState.tsx` wordt NIET aangeraakt (heeft al glass).
+**A) Facturatie.tsx (regel 442)**
+- Van: `"flex flex-col items-center justify-center py-12 text-center"`
+- Naar: `"flex flex-col items-center justify-center py-12 px-8 text-center rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)]"`
+
+**B) Tijdregistratie.tsx (regel 528)**
+- Van: `"text-center text-muted-foreground py-8"`
+- Naar: `"text-center text-muted-foreground py-8 px-6 rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)]"`
+
+**C) SollicitatiesArchief.tsx (regels 267-275)**
+- `<Card className="p-12 text-center">` wordt `<div className="p-12 text-center rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">`
+- Closing `</Card>` wordt `</div>`
+
+---
+
+## Stap 5: Taken KanbanColumn.tsx
+
+**A) Kolom Card (regel 162)**
+- Van: `flex-shrink-0 w-80 bg-card ${statusBorderColors[status] || ""}`
+- Naar: `flex-shrink-0 w-80 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] ${statusBorderColors[status] || ""}`
+
+**B) Lege kolom state (regel 214)**
+- Van: `"flex flex-col items-center justify-center py-12 text-center"`
+- Naar: `"flex flex-col items-center justify-center py-12 text-center bg-white/30 dark:bg-slate-900/30 backdrop-blur-sm rounded-lg border border-white/20 dark:border-white/8 mx-2 mb-2"`
 
 ---
 
 ## Technisch Overzicht
 
-| Bestand | Wijziging |
-|---------|-----------|
-| `src/components/Layout.tsx` | backdrop-blur-sm naar backdrop-blur-xl |
-| `src/components/AppSidebar.tsx` | Active/hover classes sidebar items |
-| `src/components/notifications/NotificationBell.tsx` | Notification item hover glass |
-| `src/components/ApplicationKanbanColumn.tsx` | 3 class wijzigingen (card, header, empty) |
-| `src/pages/Professionals.tsx` | Empty state glass |
-| `src/components/whatsapp/WhatsAppEmptyState.tsx` | ChatListEmptyState glass |
-| `src/components/dashboard/EmbeddedListView.tsx` | Empty state glass |
-| `src/components/dashboard/EmbeddedOpvolgingView.tsx` | Empty state glass |
-| `src/pages/Bijlagen.tsx` | Empty state glass |
+| Bestand | Wijzigingen |
+|---------|-------------|
+| `src/pages/Klanten.tsx` | 2x empty state glass |
+| `src/pages/Plaatsingen.tsx` | 1x empty state glass |
+| `src/pages/Notulen.tsx` | 1x empty state glass |
+| `src/pages/AfgerondeTaken.tsx` | 3x empty state glass |
+| `src/pages/VerwijderdeTaken.tsx` | 1x empty state glass |
+| `src/pages/Facturatie.tsx` | 1x empty state glass |
+| `src/pages/Tijdregistratie.tsx` | 1x empty state glass |
+| `src/pages/SollicitatiesArchief.tsx` | 1x Card naar div + glass |
+| `src/components/KanbanColumn.tsx` | 1x kolom glass + 1x empty state glass |
 
-Totaal: 9 bestanden, alleen CSS class wijzigingen.
+Totaal: 10 bestanden, 13 class-wijzigingen. Geen functionaliteit, database, hooks of types wijzigingen.
