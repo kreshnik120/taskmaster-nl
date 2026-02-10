@@ -1,14 +1,11 @@
-import { Plus, Minus, Edit3, Eye, Layers } from "lucide-react";
+import { useState } from "react";
+import { Plus, Minus, Edit3, Layers, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
+import { DiffView } from "@/components/DiffView";
 import { GroupedEntry, DescriptionChangeEntry } from "./types";
-import { formatRelativeDate, truncateText } from "./utils";
+import { formatRelativeDate, computeChangeSummary } from "./utils";
 
 interface GroupedEntryItemProps {
   group: GroupedEntry;
@@ -25,8 +22,8 @@ export function GroupedEntryItem({
   onViewChange,
   onViewGroup 
 }: GroupedEntryItemProps) {
+  const [expanded, setExpanded] = useState(false);
   const entry = group.firstEntry;
-  const hasContent = entry.metadata?.old_description || entry.metadata?.new_description;
 
   const getChangeIcon = (changeType?: string) => {
     switch (changeType) {
@@ -43,6 +40,8 @@ export function GroupedEntryItem({
   const getGroupIcon = () => {
     return <Layers className="h-3.5 w-3.5 text-primary" />;
   };
+
+  const summary = computeChangeSummary(entry.metadata);
 
   return (
     <div 
@@ -75,95 +74,46 @@ export function GroupedEntryItem({
           <span className="text-xs font-medium">
             {group.created_by_name}
           </span>
-          
-          {/* Grouped badge of single badge */}
-          {group.isSingle ? (
-            <Badge 
-              variant={
-                entry.metadata?.change_type === 'added' ? 'success' :
-                entry.metadata?.change_type === 'removed' ? 'destructive' : 'info'
-              } 
-              className="text-[10px] px-1.5 py-0"
-            >
-              {entry.metadata?.change_type === 'added' ? 'Toegevoegd' :
-               entry.metadata?.change_type === 'removed' ? 'Verwijderd' : 'Gewijzigd'}
-            </Badge>
-          ) : (
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-              {group.count} wijzigingen
-            </Badge>
-          )}
         </div>
 
-        {/* Preview or action */}
+        {/* Summary + expand toggle */}
         {group.isSingle ? (
-          // Single entry: show hover preview
-          hasContent ? (
-            <HoverCard openDelay={300}>
-              <HoverCardTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 mt-1 text-xs text-primary/80 hover:text-primary transition-colors duration-200"
-                  onClick={() => onViewChange(entry)}
-                >
-                  <Eye className="h-3 w-3 mr-1" />
-                  Bekijk
-                </Button>
-              </HoverCardTrigger>
-              <HoverCardContent 
-                side="right" 
-                align="start"
-                className="w-80 max-h-48 overflow-auto text-xs"
-              >
-                {entry.metadata?.change_type === 'added' ? (
-                  <div>
-                    <span className="font-medium text-emerald-600">Toegevoegd:</span>
-                    <p className="mt-1 text-muted-foreground whitespace-pre-wrap">
-                      {truncateText(entry.metadata.new_description, 200)}
-                    </p>
-                  </div>
-                ) : entry.metadata?.change_type === 'removed' ? (
-                  <div>
-                    <span className="font-medium text-red-600">Verwijderd:</span>
-                    <p className="mt-1 text-muted-foreground line-through whitespace-pre-wrap">
-                      {truncateText(entry.metadata.old_description, 200)}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div>
-                      <span className="font-medium text-muted-foreground">Was:</span>
-                      <p className="mt-0.5 text-muted-foreground/70 line-through whitespace-pre-wrap">
-                        {truncateText(entry.metadata?.old_description, 100)}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="font-medium text-emerald-600">Werd:</span>
-                      <p className="mt-0.5 whitespace-pre-wrap">
-                        {truncateText(entry.metadata?.new_description, 100)}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </HoverCardContent>
-            </HoverCard>
-          ) : (
-            <p className="text-xs text-muted-foreground mt-1 italic">
-              Geen details
-            </p>
-          )
+          <div>
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="flex items-center gap-1 mt-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors duration-200 cursor-pointer"
+            >
+              <span>{summary}</span>
+              {expanded 
+                ? <ChevronUp className="h-3 w-3" /> 
+                : <ChevronDown className="h-3 w-3" />
+              }
+            </button>
+
+            {/* Inline diff */}
+            {expanded && (
+              <div className="mt-2 animate-in fade-in-0 slide-in-from-top-1 duration-200">
+                <DiffView
+                  oldText={entry.metadata?.old_description}
+                  newText={entry.metadata?.new_description}
+                />
+              </div>
+            )}
+          </div>
         ) : (
-          // Grouped entries: show "Bekijk alle" button
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-2 mt-1 text-xs text-primary/80 hover:text-primary transition-colors duration-200"
-            onClick={() => onViewGroup(group)}
-          >
-            <Eye className="h-3 w-3 mr-1" />
-            Bekijk alle
-          </Button>
+          <div>
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 mt-0.5">
+              {group.count} wijzigingen
+            </Badge>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 mt-1 text-xs text-primary/80 hover:text-primary transition-colors duration-200"
+              onClick={() => onViewGroup(group)}
+            >
+              Bekijk alle
+            </Button>
+          </div>
         )}
       </div>
     </div>

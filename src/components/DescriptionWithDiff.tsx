@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo } from "react";
 import { computeWordDiff, type DiffSegment } from "@/lib/textDiff";
 import { cn } from "@/lib/utils";
 import { Plus, Edit3 } from "lucide-react";
@@ -18,7 +18,6 @@ interface LatestChange {
 interface DescriptionWithDiffProps {
   currentDescription: string;
   latestChange: LatestChange | null;
-  highlightDuration?: number; // ms before fade starts (default: 10000)
   className?: string;
 }
 
@@ -39,30 +38,16 @@ function formatRelativeTime(dateStr: string): string {
 export function DescriptionWithDiff({ 
   currentDescription, 
   latestChange,
-  highlightDuration = 10000,
   className 
 }: DescriptionWithDiffProps) {
-  const [showHighlight, setShowHighlight] = useState(true);
-
-  // Check if change is recent (within last 24 hours)
+  // Check if change is recent (within last 7 days)
   const isRecentChange = useMemo(() => {
     if (!latestChange?.created_at) return false;
     const changeTime = new Date(latestChange.created_at).getTime();
     const now = Date.now();
-    const twentyFourHours = 24 * 60 * 60 * 1000;
-    return (now - changeTime) < twentyFourHours;
+    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+    return (now - changeTime) < sevenDays;
   }, [latestChange?.created_at]);
-
-  // Start fade-out timer
-  useEffect(() => {
-    if (!isRecentChange || !showHighlight) return;
-    
-    const timer = setTimeout(() => {
-      setShowHighlight(false);
-    }, highlightDuration);
-
-    return () => clearTimeout(timer);
-  }, [isRecentChange, highlightDuration, showHighlight]);
 
   // Compute what should be highlighted
   const segments = useMemo(() => {
@@ -104,7 +89,7 @@ export function DescriptionWithDiff({
   }, [segments]);
 
   // If no segments to highlight, render plain text
-  if (!segments || !showHighlight) {
+  if (!segments) {
     return (
       <p className={cn("text-sm whitespace-pre-wrap leading-relaxed", className)}>
         {currentDescription}

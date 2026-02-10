@@ -27,7 +27,7 @@ import { groupEntries, formatRelativeDate } from "./utils";
 import { GroupedEntryItem } from "./GroupedEntryItem";
 import { GroupDetailDialog } from "./GroupDetailDialog";
 
-const MAX_VISIBLE_GROUPS = 3;
+const MAX_VISIBLE_GROUPS = 5;
 
 export function DescriptionTimeline({ 
   taskId, 
@@ -147,8 +147,8 @@ export function DescriptionTimeline({
     const latestEntry = entries[0];
     const changeTime = new Date(latestEntry.created_at).getTime();
     const now = Date.now();
-    const twentyFourHours = 24 * 60 * 60 * 1000;
-    return (now - changeTime) < twentyFourHours;
+    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+    return (now - changeTime) < sevenDays;
   }, [entries]);
 
   // Filter entries: if the first one is shown inline, start from index 1
@@ -191,7 +191,7 @@ export function DescriptionTimeline({
           <Separator className="flex-1" />
           <span className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
             <FileText className="h-3 w-3" />
-            {isLatestShowingInline ? 'Meer verloop' : 'Verloop'} ({visibleEntries.length})
+            {isLatestShowingInline ? 'Meer wijzigingen' : 'Wijzigingen'} ({visibleEntries.length})
           </span>
           <Separator className="flex-1" />
         </div>
