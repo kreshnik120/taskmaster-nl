@@ -286,7 +286,7 @@ export default function Facturatie() {
           title="Vervallen"
           value={statsLoading ? 0 : stats?.aantal_vervallen || 0}
           subtitle={formatCurrency(stats?.totaal_vervallen || 0)}
-          variant="urgent"
+          variant="emerald"
           onClick={() => setFilter("status", "HERINNERING_1")}
           isActive={["HERINNERING_1", "HERINNERING_2", "HERINNERING_3"].includes(statusFilter)}
         />
@@ -295,7 +295,7 @@ export default function Facturatie() {
           title="Betaald deze week"
           value={statsLoading ? 0 : stats?.aantal_deze_week_betaald || 0}
           subtitle={formatCurrency(stats?.totaal_deze_week_betaald || 0)}
-          variant="success"
+          variant="emerald"
           onClick={() => setFilter("status", "BETAALD")}
           isActive={statusFilter === "BETAALD"}
         />

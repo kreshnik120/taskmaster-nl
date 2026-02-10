@@ -671,21 +671,21 @@ export default function EmbeddedCalendarView() {
           icon={Calendar}
           title="Vandaag"
           value={animatedTodayTasks}
-          variant="count"
+          variant="teal"
           onClick={goToToday}
         />
         <KPICard
           icon={CheckCircle2}
           title="Deze Week"
           value={animatedWeekTasks}
-          variant="success"
+          variant="teal"
           onClick={goToToday}
         />
         <KPICard
           icon={Clock}
           title="Herinneringen"
           value={animatedReminders}
-          variant="time"
+          variant="teal"
           isActive={activeKpi === "herinneringen"}
           onClick={() => {
             setActiveKpi(activeKpi === "herinneringen" ? null : "herinneringen");
@@ -695,7 +695,7 @@ export default function EmbeddedCalendarView() {
           icon={AlertCircle}
           title="Urgent"
           value={animatedUrgentTasks}
-          variant="urgent"
+          variant="teal"
           isActive={activeKpi === "urgent"}
           onClick={() => {
             setActiveKpi(activeKpi === "urgent" ? null : "urgent");

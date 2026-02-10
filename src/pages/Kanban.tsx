@@ -693,7 +693,7 @@ const Kanban = () => {
           icon={ListTodo} 
           title="Actieve taken" 
           value={activeTasks} 
-          variant="count"
+          variant="indigo"
           isActive={lastScrolledKpi === "active"}
           onClick={() => {
             const firstColumn = columns[0];
@@ -708,7 +708,7 @@ const Kanban = () => {
           icon={Clock} 
           title="In afwachting" 
           value={blockedCount} 
-          variant="time"
+          variant="indigo"
           isActive={lastScrolledKpi === "blocked"}
           onClick={() => {
             const blockedColumn = columns.find(c => c.status === 'BLOCKED');
@@ -723,7 +723,7 @@ const Kanban = () => {
           icon={Clock} 
           title="In Review" 
           value={reviewCount} 
-          variant="time"
+          variant="indigo"
           isActive={lastScrolledKpi === "review"}
           onClick={() => {
             const reviewColumn = columns.find(c => c.status === 'REVIEW');
@@ -738,7 +738,7 @@ const Kanban = () => {
           icon={CheckCircle2} 
           title="Vandaag afgerond" 
           value={completedToday} 
-          variant="success"
+          variant="indigo"
           isActive={lastScrolledKpi === "done"}
           onClick={() => {
             const doneColumn = columns.find(c => c.status === 'DONE');
@@ -752,7 +752,7 @@ const Kanban = () => {
       </div>
 
       {/* Compact Header with Personalized Greeting */}
-      <div className="flex items-center justify-between py-4 border-b mb-6">
+      <div className="flex items-center justify-between p-4 mb-4 glass-layer-1 rounded-xl border border-white/30 dark:border-white/10">
         <div>
           <h1 className="text-xl font-medium text-foreground">
             Team Kanban Bord

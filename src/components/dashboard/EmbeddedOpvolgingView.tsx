@@ -272,7 +272,7 @@ export default function EmbeddedOpvolgingView() {
           icon={AlertCircle}
           title="Achterstallig"
           value={animatedOverdueTasks}
-          variant="urgent"
+          variant="amber"
           onClick={() => setActiveFilter(activeFilter === "achterstallig" ? null : "achterstallig")}
           className={cn(activeFilter === "achterstallig" && "ring-2 ring-orange-500")}
         />
@@ -280,7 +280,7 @@ export default function EmbeddedOpvolgingView() {
           icon={Calendar}
           title="Deze Week"
           value={animatedUpcomingTasks}
-          variant="time"
+          variant="amber"
           onClick={() => setActiveFilter(activeFilter === "deze-week" ? null : "deze-week")}
           className={cn(activeFilter === "deze-week" && "ring-2 ring-amber-500")}
         />
@@ -288,7 +288,7 @@ export default function EmbeddedOpvolgingView() {
           icon={CheckCircle2}
           title="Met Actie"
           value={animatedWithAction}
-          variant="count"
+          variant="amber"
           onClick={() => setActiveFilter(activeFilter === "met-actie" ? null : "met-actie")}
           className={cn(activeFilter === "met-actie" && "ring-2 ring-blue-500")}
         />
@@ -296,7 +296,7 @@ export default function EmbeddedOpvolgingView() {
           icon={TrendingUp}
           title="Gem. AI Score"
           value={scoringLoading ? 0 : animatedAvgScore}
-          variant="success"
+          variant="amber"
         />
       </div>
 

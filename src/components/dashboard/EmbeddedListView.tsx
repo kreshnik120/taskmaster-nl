@@ -797,21 +797,21 @@ export default function EmbeddedListView() {
             icon={ListTodo} 
             title="Open" 
             value={animatedOpenTasks} 
-            variant="count"
+            variant="slate"
             onClick={() => { setFilterStatus('active'); setFilterPriority('all'); }}
           />
           <KPICard 
             icon={CheckCircle2} 
             title="Vandaag" 
             value={animatedCompletedToday} 
-            variant="success"
+            variant="slate"
             onClick={() => { setFilterStatus('completed'); setFilterPriority('all'); }}
           />
           <KPICard 
             icon={AlertTriangle} 
             title="High Priority" 
             value={animatedHighPriority} 
-            variant="urgent"
+            variant="slate"
             onClick={() => { if (highPriorityCount > 0) { setFilterPriority('HIGH'); setFilterStatus('all'); } }}
             className={cn(highPriorityCount === 0 && "opacity-50 cursor-not-allowed")}
           />
