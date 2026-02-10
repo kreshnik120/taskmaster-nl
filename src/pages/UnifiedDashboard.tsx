@@ -1,6 +1,7 @@
 import { useEffect, useState, Suspense, lazy } from "react";
 import { useSearchParams } from "react-router-dom";
-import { LayoutDashboard, User, Users, Briefcase, List, Calendar, TrendingUp, Loader2 } from "lucide-react";
+import { LayoutDashboard, LayoutGrid, User, Users, Briefcase, List, Calendar, TrendingUp, Loader2 } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUserRole } from "@/hooks/useUserRole";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,6 +22,7 @@ const TAB_CONTEXT_MAP: Record<string, ContextColor> = {
 import { TodayFocusCard } from "@/components/dashboard/TodayFocusCard";
 import { UpcomingRemindersWidget } from "@/components/UpcomingRemindersWidget";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
+import { MyTasksFlowSection } from "@/components/dashboard/MyTasksFlowSection";
 
 // Tab 2: Team Overzicht - Components
 import { useDashboardStats } from "@/hooks/useDashboardStats";
@@ -67,6 +69,18 @@ export default function UnifiedDashboard() {
   // Tab 3: Recruitment data - inline fetch for UrgencyActionPanel
   const [urgencyApplications, setUrgencyApplications] = useState<Application[]>([]);
   
+  // Mijn Werk view toggle (persisted)
+  const [mijnWerkView, setMijnWerkView] = useState<"bord" | "kalender">(
+    () => (localStorage.getItem("mijn-werk-view") as "bord" | "kalender") || "bord"
+  );
+
+  const handleViewChange = (view: string) => {
+    if (view === "bord" || view === "kalender") {
+      setMijnWerkView(view);
+      localStorage.setItem("mijn-werk-view", view);
+    }
+  };
+
   // Task deeplink handling
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
@@ -290,10 +304,28 @@ export default function UnifiedDashboard() {
               <UpcomingRemindersWidget />
             </div>
             
-            {/* Mijn Weekkalender */}
-            <Suspense fallback={<TabLoadingFallback />}>
-              <MyWeekCalendarSection />
-            </Suspense>
+            {/* View toggle */}
+            <div className="flex justify-end">
+              <ToggleGroup type="single" value={mijnWerkView} onValueChange={handleViewChange} className="glass-liquid-premium p-1 rounded-lg">
+                <ToggleGroupItem value="bord" className="gap-1.5 px-3 text-xs">
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Bord</span>
+                </ToggleGroupItem>
+                <ToggleGroupItem value="kalender" className="gap-1.5 px-3 text-xs">
+                  <Calendar className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Weekkalender</span>
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+
+            {/* Conditional view */}
+            {mijnWerkView === "bord" ? (
+              <MyTasksFlowSection />
+            ) : (
+              <Suspense fallback={<TabLoadingFallback />}>
+                <MyWeekCalendarSection />
+              </Suspense>
+            )}
           </div>
         </TabsContent>
 
