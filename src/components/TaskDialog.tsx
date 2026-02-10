@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { toast } from "sonner";
-import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, CalendarIcon, Paperclip } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, CalendarIcon, Paperclip, Repeat } from "lucide-react";
 import { SubtaskManager } from "./SubtaskManager";
 import { TaskAttachmentUpload, uploadTaskAttachments } from "./TaskAttachmentUpload";
 import { format } from "date-fns";
@@ -34,6 +34,9 @@ const taskSchema = z.object({
   due_at: z.string().optional(),
   due_time: z.string().optional(),
   next_action: z.string().optional(),
+  recurrence_rule: z.enum(["DAILY", "WEEKLY", "BIWEEKLY", "MONTHLY"]).optional(),
+  recurrence_assignee_id: z.string().optional(),
+  recurrence_end_at: z.string().optional(),
 });
 
 type TaskFormData = z.infer<typeof taskSchema>;
@@ -83,6 +86,7 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, de
   const [dueDate, setDueDate] = useState<Date>();
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [existingAttachments, setExistingAttachments] = useState<Attachment[]>([]);
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState<Date>();
 
   const form = useForm<TaskFormData>({
     resolver: zodResolver(taskSchema),
@@ -96,6 +100,9 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, de
       due_at: "",
       due_time: "17:00",
       next_action: "",
+      recurrence_rule: undefined,
+      recurrence_assignee_id: undefined,
+      recurrence_end_at: undefined,
     },
   });
 
@@ -121,10 +128,14 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, de
           due_at: dueDateValue,
           due_time: "17:00",
           next_action: "",
+          recurrence_rule: undefined,
+          recurrence_assignee_id: undefined,
+          recurrence_end_at: undefined,
         });
         setCurrentStep(1);
         setStartDate(defaultStartDate);
         setDueDate(defaultDueDate);
+        setRecurrenceEndDate(undefined);
         setExistingAttachments([]);
       }
     }
@@ -204,7 +215,14 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, de
         due_at: data.due_at ? format(new Date(data.due_at), "yyyy-MM-dd") : "",
         due_time: data.due_at ? format(new Date(data.due_at), "HH:mm") : "17:00",
         next_action: data.next_action || "",
+        recurrence_rule: (['DAILY', 'WEEKLY', 'BIWEEKLY', 'MONTHLY'].includes(data.recurrence_rule) ? data.recurrence_rule : undefined) as "DAILY" | "WEEKLY" | "BIWEEKLY" | "MONTHLY" | undefined,
+        recurrence_assignee_id: data.recurrence_assignee_id || undefined,
+        recurrence_end_at: data.recurrence_end_at ? format(new Date(data.recurrence_end_at), "yyyy-MM-dd") : undefined,
       });
+      
+      if (data.recurrence_end_at) {
+        setRecurrenceEndDate(new Date(data.recurrence_end_at));
+      }
     }
   };
 
@@ -274,11 +292,14 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, de
           next_action: values.next_action || null,
           org_id: defaultOrgId,
           column_id: columnId || defaultBacklogColumnId,
+          recurrence_rule: values.recurrence_rule || null,
+          recurrence_assignee_id: values.recurrence_assignee_id && values.recurrence_assignee_id !== "same" ? values.recurrence_assignee_id : null,
+          recurrence_end_at: values.recurrence_end_at ? new Date(values.recurrence_end_at).toISOString() : null,
         }).eq("id", taskId);
         if (error) throw error;
       } else {
         // Create new task met auto-assign en auto-accept
-        const insertData: Database['public']['Tables']['tasks']['Insert'] = {
+        const insertData: Record<string, any> = {
           title: values.title,
           description: values.description || null,
           priority: values.priority,
@@ -290,9 +311,12 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, de
           column_id: columnId || defaultBacklogColumnId,
           accepted_by: acceptedBy ?? null,
           accepted_at: acceptedAt ?? null,
+          recurrence_rule: values.recurrence_rule || null,
+          recurrence_assignee_id: values.recurrence_assignee_id && values.recurrence_assignee_id !== "same" ? values.recurrence_assignee_id : null,
+          recurrence_end_at: values.recurrence_end_at ? new Date(values.recurrence_end_at).toISOString() : null,
         };
         
-        const { data, error } = await supabase.from("tasks").insert(insertData).select('id').single();
+        const { data, error } = await supabase.from("tasks").insert(insertData as any).select('id').single();
         if (error) throw error;
         savedTaskId = data.id;
       }
@@ -615,6 +639,107 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, de
                     </FormItem>
                   )}
                 />
+
+                {/* Herhaling sectie */}
+                <div className="pt-4 border-t space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Repeat className="h-4 w-4 text-muted-foreground" />
+                    <FormLabel className="mb-0">Herhaling</FormLabel>
+                  </div>
+                  
+                  <FormField
+                    control={form.control}
+                    name="recurrence_rule"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Select onValueChange={(val) => field.onChange(val === "NONE" ? undefined : val)} value={field.value || "NONE"}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Geen herhaling" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="NONE">Geen herhaling</SelectItem>
+                            <SelectItem value="DAILY">Dagelijks</SelectItem>
+                            <SelectItem value="WEEKLY">Wekelijks</SelectItem>
+                            <SelectItem value="BIWEEKLY">Tweewekelijks</SelectItem>
+                            <SelectItem value="MONTHLY">Maandelijks</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {form.watch("recurrence_rule") && (
+                    <div className="space-y-3 pl-2 border-l-2 border-primary/20">
+                      <FormField
+                        control={form.control}
+                        name="recurrence_assignee_id"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs">Toewijzen aan bij herhaling</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value || "same"}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Zelfde persoon" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="same">Zelfde persoon</SelectItem>
+                                {profiles.map((profile) => (
+                                  <SelectItem key={profile.id} value={profile.id}>
+                                    {profile.name || "Onbekend"}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="recurrence_end_at"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-col">
+                            <FormLabel className="text-xs">Herhalen tot (optioneel)</FormLabel>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <FormControl>
+                                  <Button
+                                    variant="outline"
+                                    className={cn(
+                                      "w-full pl-3 text-left font-normal",
+                                      !recurrenceEndDate && "text-muted-foreground"
+                                    )}
+                                  >
+                                    {recurrenceEndDate ? format(recurrenceEndDate, "PPP", { locale: nl }) : "Geen einddatum"}
+                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                  </Button>
+                                </FormControl>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar
+                                  mode="single"
+                                  selected={recurrenceEndDate}
+                                  onSelect={(date) => {
+                                    setRecurrenceEndDate(date);
+                                    field.onChange(date ? format(date, "yyyy-MM-dd") : undefined);
+                                  }}
+                                  initialFocus
+                                  className="pointer-events-auto"
+                                />
+                              </PopoverContent>
+                            </Popover>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
+                </div>
 
                 {/* Bijlagen sectie */}
                 <div className="pt-4 border-t space-y-3">
