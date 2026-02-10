@@ -80,3 +80,35 @@ export function truncateText(text: string | null | undefined, maxLength: number 
   if (text.length <= maxLength) return text;
   return text.substring(0, maxLength) + '...';
 }
+
+function countWords(text: string): number {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+export function computeChangeSummary(metadata?: {
+  old_description?: string | null;
+  new_description?: string | null;
+  change_type?: string;
+}): string {
+  if (!metadata) return 'Beschrijving gewijzigd';
+
+  const { old_description, new_description, change_type } = metadata;
+  const hasOld = !!old_description?.trim();
+  const hasNew = !!new_description?.trim();
+
+  if (change_type === 'added' || (!hasOld && hasNew)) {
+    return 'Beschrijving aangemaakt';
+  }
+  if (change_type === 'removed' || (hasOld && !hasNew)) {
+    return 'Beschrijving verwijderd';
+  }
+  if (hasOld && hasNew) {
+    const oldWords = countWords(old_description!);
+    const newWords = countWords(new_description!);
+    const diff = newWords - oldWords;
+    if (diff > 0) return `${diff} woord${diff > 1 ? 'en' : ''} toegevoegd`;
+    if (diff < 0) return `${Math.abs(diff)} woord${Math.abs(diff) > 1 ? 'en' : ''} verwijderd`;
+    return 'Beschrijving gewijzigd';
+  }
+  return 'Beschrijving gewijzigd';
+}
