@@ -1,110 +1,70 @@
 
-# Kleur Activatie: Achtergronden & Glass Tints per Tab
+
+# Error Handling ai-task-scorer + Subtiele Design Verfijningen
 
 ## Overzicht
 
-De glass-elementen zijn correct gestyled maar de pagina-achtergronden zijn te bleek (bijna wit). Glass-op-wit = wit. Deze prompt versterkt de achtergrondkleuren zodat ze door het glas heen schijnen, en voegt een glow toe aan de actieve tab indicator.
-
-**Kernprobleem:** De `.page-bg-*` classes gebruiken een enkele `linear-gradient` met lightness van 97-99%. De ambient mesh orbs hebben opacity van 0.14-0.28. Samen is dit te subtiel.
+Twee onderdelen: (1) verbetering van de AI scorer error handling zodat de 500 error niet als uncaught exception door de catch chain valt, en (2) 6 subtiele CSS/component verfijningen.
 
 ---
 
-## Wijzigingen
+## DEEL 1: ai-task-scorer Error Handling
 
-### Enig bestand: `src/index.css`
+### Huidige situatie
+De `useAiScoring` hook heeft al try-catch met toast meldingen. Het probleem is specifiek: wanneer de edge function een 500 retourneert, matcht de error message niet op "429", "402", of "timeout", waardoor `throw error` op regel 144 wordt uitgevoerd. Dit wordt wel opgevangen door de buitenste catch op regel 178, maar de error wordt dubbel gelogd.
 
-Alle wijzigingen vinden uitsluitend plaats in het CSS-bestand. Geen component-wijzigingen nodig.
+### Wijzigingen in `src/hooks/useAiScoring.tsx`
+- **Regel 144**: Verwijder `throw error` en vervang door een graceful return met toast melding. De generieke 500/network errors moeten NIET re-thrown worden.
+- Dit zorgt ervoor dat bij elke error-variant de hook netjes stopt zonder te crashen.
+- De `EmbeddedOpvolgingView` en `Kanban.tsx` gebruiken al null-safe access (`??` operators), dus geen wijzigingen nodig daar.
+
+### Wijzigingen in `supabase/functions/ai-task-scorer/index.ts`
+- Wrap de fetch naar de AI gateway in een try-catch die connection errors opvangt en een JSON error response retourneert (status 200 met `{ error: "..." }`) in plaats van een 500 te laten doorvallen.
 
 ---
 
-### 1. Page Backgrounds versterken (7 kleuren + blue)
+## DEEL 2: Subtiele Design Verfijningen
 
-Elke `.page-bg-*` class wordt vervangen door een 3-laags radial+linear gradient patroon:
+Alle wijzigingen in `src/index.css` tenzij anders aangegeven.
 
-```text
-Huidig (1 laag):
-  linear-gradient(165deg, hsl(H S% 98%) 0%, hsl(H S% 99%) 40%, white 100%)
+### 2a. Glass-card border kleurtint
+De glass-card-* classes hebben al gekleurde borders (bijv. `hsla(234, 45%, 88%, 0.5)` voor indigo). Deze zijn al correct. Geen wijziging nodig.
 
-Nieuw (3 lagen):
-  radial-gradient(ellipse 80% 50% at 20% 20%, hsla(H, S%, 92%, 0.7), transparent 70%)
-  radial-gradient(ellipse 60% 40% at 80% 80%, hsla(H, S%, 90%, 0.5), transparent 60%)
-  linear-gradient(135deg, hsla(H, S-15%, 97%, 1), hsla(H, S-25%, 95%, 1), hsla(H, S-10%, 93%, 1))
-```
+### 2b. Hover states verbeteren
+- `.glass-hover-lift:hover`: voeg gekleurde shadow toe met CSS custom property `--tab-hue`:
+  ```css
+  box-shadow: 0 8px 32px hsla(var(--tab-hue, 234), 40%, 50%, 0.12), ...;
+  ```
+- `.glass-task-card:hover`: `border-color` iets feller maken (`hsla(234, 45%, 80%, 0.6)`)
 
-Dark mode variant (lagere lightness):
-```text
-  radial-gradient(ellipse 80% 50% at 20% 20%, hsla(H, S%, 20%, 0.5), transparent 70%)
-  radial-gradient(ellipse 60% 40% at 80% 80%, hsla(H, S%, 18%, 0.35), transparent 60%)
-  linear-gradient(135deg, hsla(H, S-15%, 8%, 1), hsla(H, S-25%, 6%, 1), hsla(222, 47%, 11%, 1))
-```
-
-Per kleur:
-
-| Kleur | Hue | Sat |
-|-------|-----|-----|
-| indigo | 234 | 55% |
-| teal | 174 | 50% |
-| slate | 215 | 35% |
-| amber | 38 | 60% |
-| violet | 270 | 50% |
-| rose | 345 | 55% |
-| emerald | 142 | 50% |
-| blue | 217 | 55% |
-
-Regels ~3707-3849 worden vervangen.
-
-### 2. Ambient Mesh Orbs versterken (7 kleuren)
-
-De enhanced ambient mesh secties (regels ~3856-4022) krijgen hogere opaciteit:
-
-```text
-Huidig: orb1=0.28, orb2=0.22, orb3=0.14
-Nieuw:  orb1=0.38, orb2=0.30, orb3=0.22
-```
-
-Dark mode:
-```text
-Huidig: orb1=0.24, orb2=0.18, orb3=0.12
-Nieuw:  orb1=0.30, orb2=0.22, orb3=0.16
-```
-
-Dit geldt voor alle 7 ambient mesh classes (rose, violet, slate, teal, amber, emerald, indigo). De eerder gedefinieerde indigo mesh op regels 3639-3657 wordt verwijderd (is een duplicate die wordt overschreven door de latere definitie op regel 4000).
-
-### 3. Glass-card specular highlight toevoegen
-
-De glass-card-* classes (regels ~349-1570) hebben al goede styling. Toevoeging: een specular `inset 0 1px 0` highlight in de box-shadow voor alle 7 kleuren, voor zover die er nog niet staat.
-
-Huidige indigo box-shadow heeft al `inset 0 1px 1px`. Controleer en uniformeer alle 7 kleuren zodat ze allemaal de specular highlight bevatten:
+### 2c. Scroll fade effect
+Nieuwe CSS utility class `.scroll-fade` met `mask-image` gradient aan boven- en onderkant:
 ```css
-inset 0 1px 0 hsla(H, S+10%, 95%, 0.7)
-```
-
-### 4. Glass-liquid-card-* kleurtint versterken
-
-De `glass-liquid-card-*` classes (regels ~700-818) krijgen een gekleurde achtergrond in plaats van alleen gekleurde shadows:
-
-```css
-.glass-liquid-card-indigo {
-  background: hsla(234, 45%, 97%, 0.7);
-  /* bestaande shadows blijven */
+.scroll-fade {
+  mask-image: linear-gradient(to bottom, transparent, black 20px, black calc(100% - 20px), transparent);
 }
 ```
+Toepassen op kanban kolom scroll containers en modal scroll areas.
 
-Dit voor alle 7 kleuren. Dark mode equivalent met lagere lightness.
+### 2d. Input focus glow
+De `.glass-input:focus-visible` en `.glass-search-input:focus` classes bestaan al met gekleurde rings. Versterking:
+- `.glass-search-input:focus`: ring opacity verhogen van 0.15 naar 0.20, border kleur toevoegen
+- Globale shadcn Input component: al correct gestyled met `focus-visible:ring-2`
 
-### 5. Tab indicator glow
+### 2e. Tab switch animatie
+In `src/components/ui/tabs.tsx`: voeg `data-[state=inactive]:animate-out data-[state=inactive]:fade-out-0 data-[state=active]:animate-in data-[state=active]:fade-in-0` toe aan TabsContent, of simpeler: `transition-opacity duration-300` class.
 
-De actieve tab bottom bar in `UnifiedDashboard.tsx` is een `<span>` met `h-0.5`. Dit wordt versterkt:
-- Van `h-0.5` naar `h-[3px]`
-- Toevoegen van een `shadow-[0_2px_8px_currentColor]` voor een glow effect
-
-Dit wordt gedaan in `src/pages/UnifiedDashboard.tsx` op de 6 tab indicator spans (regels ~198-199, ~216-217, etc.).
-
-### 6. Kanban kolom header gradient
-
-In `src/components/dashboard/MyTasksFlowSection.tsx` (regel ~759-760):
-- `border-t-2` wordt `border-t-[3px]`
-- De header gradient `from-white/60` wordt `from-tab-mijn-werk-50/40` voor een zachtgekleurde top
+### 2f. Badge glow
+In `src/index.css`: nieuwe utility classes voor urgente badges:
+```css
+.badge-glow-critical {
+  box-shadow: 0 0 8px hsla(0, 70%, 50%, 0.25);
+}
+.badge-glow-high {
+  box-shadow: 0 0 8px hsla(38, 70%, 50%, 0.20);
+}
+```
+In `src/components/PriorityBadge.tsx` of de urgency-badge component: de glow classes toepassen op CRITICAL/HIGH priorities.
 
 ---
 
@@ -112,15 +72,17 @@ In `src/components/dashboard/MyTasksFlowSection.tsx` (regel ~759-760):
 
 | Bestand | Wijziging |
 |---------|-----------|
-| `src/index.css` | Page-bg versterken (8 kleuren), ambient mesh opacity verhogen (7 kleuren), glass-liquid-card-* kleurtint, duplicate indigo mesh verwijderen |
-| `src/pages/UnifiedDashboard.tsx` | Tab indicator van h-0.5 naar h-[3px] + glow shadow (6 spans) |
-| `src/components/dashboard/MyTasksFlowSection.tsx` | border-t-2 naar border-t-[3px], header gradient kleurtint |
+| `src/hooks/useAiScoring.tsx` | Verwijder throw op regel 144, graceful fallback voor alle error types |
+| `supabase/functions/ai-task-scorer/index.ts` | Wrap AI gateway fetch in try-catch, retourneer JSON error ipv 500 |
+| `src/index.css` | `.glass-hover-lift` gekleurde shadow, `.scroll-fade` utility, input focus versterking, badge glow classes |
+| `src/components/ui/tabs.tsx` | TabsContent fade-in animatie |
+| `src/components/ui/urgency-badge.tsx` | Badge glow classes toepassen op urgente statussen |
 
 ## Wat NIET verandert
 
-- Geen functionaliteit, logica of data-flows
 - Geen database wijzigingen
-- Geen nieuwe componenten
-- TodayFocusCard: heeft al `glass-card-indigo` (correct)
-- Glass-card-* base styling: blijft intact (alleen specular highlight uniformeren)
 - Geen routing wijzigingen
+- Geen component structuur wijzigingen
+- Glass-card border kleuren: al correct geimplementeerd
+- Bestaande functionaliteit blijft identiek
+
