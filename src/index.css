@@ -280,14 +280,17 @@ All colors MUST be HSL.
 
   /* Glassmorphism Panel */
   .glass-panel {
-    background: rgba(255, 255, 255, 0.72);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    background: rgba(255, 255, 255, 0.65);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
     border: 1px solid hsla(220, 15%, 90%, 0.6);
+    box-shadow:
+      0 4px 24px -4px rgba(0, 0, 0, 0.08),
+      0 1px 2px rgba(0, 0, 0, 0.04);
   }
 
   .dark .glass-panel {
-    background: rgba(15, 23, 42, 0.72);
+    background: rgba(15, 23, 42, 0.65);
     border-color: hsla(220, 15%, 20%, 0.6);
   }
 
@@ -589,22 +592,37 @@ All colors MUST be HSL.
     border-color: rgba(255, 255, 255, 0.08);
   }
 
-  /* Task card glass - subtle on hover */
+  /* Task card glass - base + hover */
   .glass-task-card {
-    transition: all 0.2s ease-out;
+    background: rgba(255, 255, 255, 0.70);
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    box-shadow:
+      0 2px 8px rgba(0, 0, 0, 0.06),
+      0 8px 32px rgba(0, 0, 0, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   .glass-task-card:hover {
-    background: rgba(255, 255, 255, 0.85);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    background: rgba(255, 255, 255, 0.80);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.2),
-      0 4px 12px rgba(0, 0, 0, 0.08);
+      0 4px 12px rgba(0, 0, 0, 0.08),
+      0 16px 48px rgba(0, 0, 0, 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    transform: translateY(-1px);
+  }
+
+  .dark .glass-task-card {
+    background: rgba(30, 41, 59, 0.70);
+    border-color: rgba(255, 255, 255, 0.10);
   }
 
   .dark .glass-task-card:hover {
-    background: rgba(30, 41, 59, 0.85);
+    background: rgba(30, 41, 59, 0.80);
   }
 
   /* Tab Content Transition */
@@ -626,10 +644,10 @@ All colors MUST be HSL.
   .glass-liquid-card {
     position: relative;
     border-radius: 0.875rem;
-    background: rgba(255, 255, 255, 0.82);
-    backdrop-filter: blur(24px) saturate(180%);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.55);
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.50);
     
     /* P0: Performance optimizations */
     contain: layout style paint;
@@ -1907,8 +1925,8 @@ All colors MUST be HSL.
 
 /* Floating search input with indigo context */
 .glass-search-input {
-  background: rgba(255, 255, 255, 0.60);
-  backdrop-filter: blur(12px) saturate(150%);
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(16px) saturate(160%);
   -webkit-backdrop-filter: blur(12px) saturate(150%);
   border: 1px solid rgba(255, 255, 255, 0.35);
   box-shadow: 
@@ -2031,15 +2049,15 @@ All colors MUST be HSL.
   position: relative;
   overflow: hidden;
   border-radius: 0.75rem;
-  background: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.50);
+  backdrop-filter: blur(28px) saturate(170%);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+  border: 1px solid rgba(255, 255, 255, 0.40);
   box-shadow: 
-    0 4px 12px hsla(234, 45%, 52%, 0.08),
-    0 12px 32px hsla(234, 45%, 52%, 0.06),
-    0 24px 64px hsla(234, 45%, 52%, 0.04),
-    inset 0 1px 1px rgba(255, 255, 255, 0.15);
+    0 4px 16px hsla(234, 45%, 52%, 0.10),
+    0 12px 40px hsla(234, 45%, 52%, 0.08),
+    0 24px 64px hsla(234, 45%, 52%, 0.05),
+    inset 0 1px 1px rgba(255, 255, 255, 0.20);
   transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -2053,7 +2071,7 @@ All colors MUST be HSL.
 }
 
 .dark .glass-kanban-column-enhanced {
-  background: rgba(30, 41, 59, 0.55);
+  background: rgba(30, 41, 59, 0.50);
   border-color: rgba(255, 255, 255, 0.12);
   box-shadow: 
     0 4px 12px hsla(234, 45%, 15%, 0.25),
@@ -2422,24 +2440,7 @@ All colors MUST be HSL.
     0 0 0 1px hsla(270, 45%, 55%, 0.15);
 }
 
-/* Glass hover lift - shadow-only elevation (no transforms) */
-.glass-hover-lift {
-  transition: box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.glass-hover-lift:hover {
-  box-shadow:
-    0 8px 24px hsla(215, 25%, 48%, 0.12),
-    0 16px 48px hsla(215, 25%, 48%, 0.08),
-    inset 0 1px 2px rgba(255, 255, 255, 0.3);
-}
-
-.dark .glass-hover-lift:hover {
-  box-shadow:
-    0 8px 24px hsla(215, 25%, 15%, 0.35),
-    0 16px 48px hsla(215, 25%, 10%, 0.25),
-    inset 0 1px 2px rgba(255, 255, 255, 0.08);
-}
+/* DUPLICATE REMOVED - .glass-hover-lift is defined in the @layer base section above */
 
 /* ============================================
    PHASE 13: LIST ITEM GLASS & STATUS GLOW
@@ -2560,28 +2561,7 @@ All colors MUST be HSL.
   box-shadow: 0 4px 12px hsla(215, 25%, 15%, 0.25), 0 8px 32px hsla(215, 25%, 10%, 0.35);
 }
 
-/* Glass search input */
-.glass-search-input {
-  background: rgba(255, 255, 255, 0.60);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.40);
-  transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.glass-search-input:focus {
-  background: rgba(255, 255, 255, 0.80);
-  border-color: rgba(255, 255, 255, 0.50);
-}
-
-.dark .glass-search-input {
-  background: rgba(30, 41, 59, 0.60);
-  border-color: rgba(255, 255, 255, 0.12);
-}
-
-.dark .glass-search-input:focus {
-  background: rgba(30, 41, 59, 0.80);
-}
+/* DUPLICATE REMOVED - .glass-search-input is defined in the Phase 11 section above */
 
 /* Glass panel shadow for side panels */
 .glass-panel-shadow {
@@ -3294,19 +3274,7 @@ All colors MUST be HSL.
    CONTEXT-SPECIFIEKE VARIANTEN
    ============================================ */
 
-/* Card variant: zachte transparantie voor KPI's en content */
-.glass-liquid-card {
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.40);
-  border-radius: 0.75rem;
-}
-
-.dark .glass-liquid-card {
-  background: rgba(15, 23, 42, 0.72);
-  border-color: rgba(255, 255, 255, 0.12);
-}
+/* DUPLICATE REMOVED - .glass-liquid-card is defined in the @layer base section above */
 
 /* Overlay variant: solider voor modals & dialogs */
 .glass-liquid-overlay {
@@ -3434,25 +3402,7 @@ All colors MUST be HSL.
     inset 0 1px 0 rgba(255,255,255,0.20);
 }
 
-/* Subtielere variant voor kleinere elementen */
-.glass-hover-lift {
-  transition: 
-    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.glass-hover-lift:hover {
-  transform: translateY(-2px);
-  box-shadow:
-    0 6px 16px -4px rgba(0,0,0,0.10),
-    0 12px 24px -6px rgba(0,0,0,0.06);
-}
-
-.dark .glass-hover-lift:hover {
-  box-shadow:
-    0 6px 16px -4px rgba(0,0,0,0.30),
-    0 12px 24px -6px rgba(0,0,0,0.20);
-}
+/* DUPLICATE REMOVED - .glass-hover-lift is defined in the @layer base DND-STABLE section above */
 
 /* ============================================
    PREMIUM SPECULAR SYSTEM (GEFIXED)
@@ -3711,20 +3661,21 @@ All colors MUST be HSL.
    Premium liquid glass effect met zachte edge glow
    ============================================ */
 [data-sidebar="sidebar"] {
-  background: rgba(255, 255, 255, 0.92) !important;
-  backdrop-filter: blur(24px) saturate(180%) !important;
-  border-right: 1px solid rgba(255, 255, 255, 0.3) !important;
+  background: rgba(255, 255, 255, 0.88) !important;
+  backdrop-filter: blur(32px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(32px) saturate(180%) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.35) !important;
   box-shadow: 
-    4px 0 24px -8px rgba(0, 0, 0, 0.08),
+    4px 0 24px -8px rgba(0, 0, 0, 0.10),
     inset -1px 0 0 rgba(255, 255, 255, 0.5) !important;
 }
 
 .dark [data-sidebar="sidebar"] {
-  background: rgba(15, 23, 42, 0.92) !important;
-  border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
+  background: rgba(15, 23, 42, 0.88) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
   box-shadow:
-    4px 0 24px -8px rgba(0, 0, 0, 0.3),
-    inset -1px 0 0 rgba(255, 255, 255, 0.04) !important;
+    4px 0 24px -8px rgba(0, 0, 0, 0.35),
+    inset -1px 0 0 rgba(255, 255, 255, 0.06) !important;
 }
 
 /* Active sidebar menu item - enhanced glass highlight */
