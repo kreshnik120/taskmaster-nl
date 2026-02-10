@@ -456,7 +456,7 @@ export default function MyWeekCalendarSection() {
           icon={Inbox}
           title="Ongepland"
           value={animatedUnplanned}
-          variant="time"
+          variant="indigo"
         />
       </div>
 

@@ -60,7 +60,7 @@ export function RecruitmentKPIs() {
         title="Sollicitaties"
         value={recruitmentStats.newApplications}
         subtitle={`${recruitmentStats.totalApplications} totaal`}
-        variant="count"
+        variant="rose"
         onClick={() => navigate("/sollicitaties")}
       />
       <KPICard
@@ -68,7 +68,7 @@ export function RecruitmentKPIs() {
         title="Professionals"
         value={recruitmentStats.activeProfessionals}
         subtitle="actief"
-        variant="success"
+        variant="rose"
         onClick={() => navigate("/professionals")}
       />
       <KPICard
@@ -76,7 +76,7 @@ export function RecruitmentKPIs() {
         title="Klanten"
         value={recruitmentStats.totalClients}
         subtitle="totaal"
-        variant="time"
+        variant="rose"
         onClick={() => navigate("/klanten")}
       />
       <KPICard
@@ -84,7 +84,7 @@ export function RecruitmentKPIs() {
         title="Plaatsingen"
         value={recruitmentStats.placementsThisMonth}
         subtitle="deze maand"
-        variant="urgent"
+        variant="rose"
         onClick={() => navigate("/plaatsingen")}
       />
     </div>
