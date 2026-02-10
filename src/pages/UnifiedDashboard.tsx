@@ -20,7 +20,6 @@ const TAB_CONTEXT_MAP: Record<string, ContextColor> = {
 // Tab 1: Mijn Werk - Components
 import { TodayFocusCard } from "@/components/dashboard/TodayFocusCard";
 import { UpcomingRemindersWidget } from "@/components/UpcomingRemindersWidget";
-import { MyTasksFlowSection } from "@/components/dashboard/MyTasksFlowSection";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 
 // Tab 2: Team Overzicht - Components
@@ -42,6 +41,7 @@ import { UrgencyActionPanel } from "@/components/recruitment/UrgencyActionPanel"
 const EmbeddedListView = lazy(() => import("@/components/dashboard/EmbeddedListView"));
 const EmbeddedCalendarView = lazy(() => import("@/components/dashboard/EmbeddedCalendarView"));
 const EmbeddedOpvolgingView = lazy(() => import("@/components/dashboard/EmbeddedOpvolgingView"));
+const MyWeekCalendarSection = lazy(() => import("@/components/dashboard/MyWeekCalendarSection"));
 
 // Loading fallback component
 const TabLoadingFallback = () => (
@@ -282,7 +282,7 @@ export default function UnifiedDashboard() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Tab 1: Mijn Werk - Transparent container for ambient mesh visibility */}
+        {/* Tab 1: Mijn Werk - Week Calendar */}
         <TabsContent value="mijn-werk" className="mt-6">
           <div className="space-y-6">
             <div className="grid gap-6 md:grid-cols-2">
@@ -290,8 +290,10 @@ export default function UnifiedDashboard() {
               <UpcomingRemindersWidget />
             </div>
             
-            {/* Mijn Taken Kanban Flow */}
-            <MyTasksFlowSection />
+            {/* Mijn Weekkalender */}
+            <Suspense fallback={<TabLoadingFallback />}>
+              <MyWeekCalendarSection />
+            </Suspense>
           </div>
         </TabsContent>
 
