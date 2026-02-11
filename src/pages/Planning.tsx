@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CalendarDays, AlertCircle, TrendingUp, Plus } from "lucide-react";
-import { startOfWeek, format } from "date-fns";
+import { startOfWeek, format, addDays } from "date-fns";
 import { PageContainer } from "@/components/ui/page-container";
 import { PageHero } from "@/components/ui/page-hero";
 import { KPICard } from "@/components/ui/kpi-card";
@@ -12,6 +12,12 @@ import { PlanningLegenda } from "@/components/planning/PlanningLegenda";
 import { PlanningWeekKalender } from "@/components/planning/PlanningWeekKalender";
 import { PlanningLijstWeergave } from "@/components/planning/PlanningLijstWeergave";
 import { PlanningFilters } from "@/components/planning/PlanningFilters";
+import { DienstDetailSheet } from "@/components/planning/DienstDetailSheet";
+import { NieuweDienstModal } from "@/components/planning/NieuweDienstModal";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import type { DienstFilters, DienstData } from "@/hooks/useDienstenPlanning";
 
 function getDefaultWeekStart() {
@@ -35,7 +41,12 @@ const Planning = () => {
   const [showOpen, setShowOpen] = useState(true);
   const [showIngepland, setShowIngepland] = useState(true);
   const [compact, setCompact] = useState(true);
-  const [, setNieuweDienstOpen] = useState(false);
+  const [nieuweDienstOpen, setNieuweDienstOpen] = useState(false);
+  const [selectedDienst, setSelectedDienst] = useState<DienstData | null>(null);
+  const [editDienst, setEditDienst] = useState<DienstData | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DienstData | null>(null);
+
+  const queryClient = useQueryClient();
 
   // Keep filters.weekStart in sync with URL
   const activeFilters = useMemo(() => ({ ...filters, weekStart }), [filters, weekStart]);
@@ -62,9 +73,57 @@ const Planning = () => {
     [setSearchParams]
   );
 
-  const handleDienstClick = useCallback((_dienst: DienstData) => {
-    // Detail sheet wordt gebouwd in prompt #1C
+  const handleDienstClick = useCallback((dienst: DienstData) => {
+    setSelectedDienst(dienst);
   }, []);
+
+  const handleEditDienst = useCallback((dienst: DienstData) => {
+    setSelectedDienst(null);
+    setEditDienst(dienst);
+  }, []);
+
+  const handleCopyDienst = useCallback(async (dienst: DienstData) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const newDatum = format(addDays(new Date(dienst.datum), 1), "yyyy-MM-dd");
+    const { error } = await supabase.from("diensten").insert({
+      sublocation_id: dienst.sublocation?.id,
+      titel: dienst.titel,
+      datum: newDatum,
+      start_tijd: dienst.start_tijd,
+      eind_tijd: dienst.eind_tijd,
+      pauze_minuten: dienst.pauze_minuten,
+      gevraagd_functie_niveau: dienst.gevraagd_functie_niveau,
+      gevraagd_aantal: dienst.gevraagd_aantal,
+      werkvorm: dienst.werkvorm,
+      dienst_type: dienst.dienst_type,
+      tarief_per_uur: dienst.tarief_per_uur,
+      prive_opmerking: dienst.prive_opmerking,
+      publieke_opmerking: dienst.publieke_opmerking,
+      status: dienst.status === "geannuleerd" ? "concept" : dienst.status,
+      accepteerbaar: dienst.accepteerbaar,
+      bron: "gekopieerd",
+      org_id: dienst.org_id,
+      created_by: user.id,
+    });
+    if (error) { toast.error("Kopiëren mislukt"); return; }
+    toast.success(`Dienst gekopieerd naar ${newDatum}`);
+    queryClient.invalidateQueries({ queryKey: ["diensten-planning"] });
+  }, [queryClient]);
+
+  const handleDeleteDienst = useCallback((dienst: DienstData) => {
+    setDeleteTarget(dienst);
+  }, []);
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    const { error } = await supabase.from("diensten").delete().eq("id", deleteTarget.id);
+    if (error) { toast.error("Verwijderen mislukt"); return; }
+    toast.success("Dienst verwijderd");
+    setDeleteTarget(null);
+    setSelectedDienst(null);
+    queryClient.invalidateQueries({ queryKey: ["diensten-planning"] });
+  };
 
   return (
     <PageContainer contextColor="rose" className="space-y-6 p-6">
@@ -171,10 +230,50 @@ const Planning = () => {
           showIngepland={showIngepland}
           compact={compact}
           onDienstClick={handleDienstClick}
+          onEdit={handleEditDienst}
+          onCopy={handleCopyDienst}
+          onDelete={handleDeleteDienst}
         />
       ) : (
-        <PlanningLijstWeergave diensten={diensten} onDienstClick={handleDienstClick} />
+        <PlanningLijstWeergave
+          diensten={diensten}
+          onDienstClick={handleDienstClick}
+          onEdit={handleEditDienst}
+          onCopy={handleCopyDienst}
+          onDelete={handleDeleteDienst}
+        />
       )}
+
+      {/* Detail Sheet */}
+      <DienstDetailSheet
+        dienst={selectedDienst}
+        open={!!selectedDienst}
+        onClose={() => setSelectedDienst(null)}
+        onEdit={handleEditDienst}
+        onCopy={handleCopyDienst}
+        onDelete={handleDeleteDienst}
+      />
+
+      {/* Nieuwe / Edit Dienst Modal */}
+      <NieuweDienstModal
+        open={nieuweDienstOpen || !!editDienst}
+        onClose={() => { setNieuweDienstOpen(false); setEditDienst(null); }}
+        editDienst={editDienst}
+      />
+
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Dienst verwijderen?</AlertDialogTitle>
+            <AlertDialogDescription>Deze dienst wordt definitief verwijderd.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuleren</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete}>Verwijderen</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </PageContainer>
   );
 };
