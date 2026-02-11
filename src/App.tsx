@@ -26,6 +26,7 @@ import Sollicitaties from "./pages/Sollicitaties";
 import SollicitatiesArchief from "./pages/SollicitatiesArchief";
 import Klanten from "./pages/Klanten";
 import Plaatsingen from "./pages/Plaatsingen";
+import Planning from "./pages/Planning";
 import Gebruikers from "./pages/Gebruikers";
 import NotFound from "./pages/NotFound";
 import WhatsApp from "./pages/WhatsApp";
@@ -103,6 +104,7 @@ const App = () => (
             <Route path="/sollicitaties/archief" element={<SollicitatiesArchief />} />
             <Route path="/klanten" element={<Klanten />} />
             <Route path="/plaatsingen" element={<Plaatsingen />} />
+            <Route path="/planning" element={<Planning />} />
             <Route path="/gebruikers" element={<Gebruikers />} />
             <Route path="/bijlagen" element={<Bijlagen />} />
             <Route path="/notulen" element={<Notulen />} />
