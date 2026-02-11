@@ -1,85 +1,181 @@
 
-
-# Prompt #1B — Weekkalender + Filters + KPI's
+# Prompt #1C — Detail Sheet, Aanmaak Modal, Toewijzingen & Quick Actions
 
 ## Overzicht
 
-De Planning placeholder pagina wordt vervangen door een volledige weekkalender UI met 7 nieuwe componenten, 4 KPI-kaarten, filtersysteem met presets, en een alternatieve lijstweergave.
+4 nieuwe componenten + integratie met bestaande Planning.tsx. Bouwt voort op de bestaande database tabellen (diensten, dienst_toewijzingen), de useDienstenPlanning hook, en de UI componenten uit #1B.
 
 ---
 
-## Nieuwe Bestanden (7 componenten)
+## Nieuwe Bestanden (4 componenten)
 
-### 1. `src/components/planning/DienstStatusBadge.tsx`
-- Badge component met 7 statussen: concept, open, deels_bezet, volledig_bezet, voltooid, geannuleerd
-- Gebruikt shadcn `Badge variant="outline"` als basis
-- `size` prop: "default" | "xs" (kleiner voor compact kaarten)
-- Elke status heeft eigen kleuren voor light + dark mode (bijv. open = rose, deels_bezet = amber, volledig_bezet = emerald)
-- Geannuleerd krijgt `line-through` tekststijl
+### 1. `src/components/planning/DienstDetailSheet.tsx`
 
-### 2. `src/components/planning/DienstCard.tsx`
-- Twee modi via `compact` prop (default true)
-- Gekleurde linkerrand (`border-l-4`) per status
-- **Compact**: Tijd + mini badge, locatienaam (truncated), functieniveau + bezetting ratio
-- **Full**: Alle info horizontaal uitgespreid
-- Glass morphism: `bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm`
-- Geel bolletje indicator als er reacties zijn (toewijzingen met status positief/misschien)
-- `onClick` prop voor detail weergave
+Sheet (slide-over van rechts) met max-w-3xl voor twee-kolom layout.
 
-### 3. `src/components/planning/PlanningLegenda.tsx`
-- Horizontale rij met 6 gekleurde indicators (w-2.5 h-2.5 rounded-full)
-- Statussen: Open (rose), Deels bezet (amber), Bezet (emerald), Concept (slate), Met reactie (geel), Geannuleerd (grijs)
-- Flex-wrap voor mobile
+**Props:**
+- `dienst: DienstData | null`
+- `open: boolean`
+- `onClose: () => void`
+- `onEdit: (dienst: DienstData) => void`
+- `onCopy: (dienst: DienstData) => void`
+- `onDelete: (dienst: DienstData) => void`
 
-### 4. `src/components/planning/PlanningToolbar.tsx`
-- Links: ChevronLeft, "Vandaag" knop, ChevronRight, "Week 7 -- 09-02-2026 t/m 15-02-2026"
-- Rechts: View toggle (Kalender | Lijst) met active state
-- Props: `weekStart`, `onWeekChange`, `viewMode`, `onViewModeChange`
-- date-fns met NL locale, `getISOWeek()` voor weeknummer
+**Layout:**
+- Header: Sublocation naam + organisatie naam + DienstStatusBadge + sluiten knop
+- Actieknoppen (btn-group): Sluiten dienst (destructive), Bevestigen (groen, alleen als positieve reacties), Bewerken (outline), Kopieren (outline), Verwijderen (ghost destructive)
+- Twee kolommen via `grid grid-cols-1 md:grid-cols-2 gap-6`:
+  - **Links**: Dienst details als dl-lijst (datum via `format(date, "EEEE d MMMM yyyy", {locale: nl})`, tijden, netto uren, functieniveau badge, dienst type, werkvorm, tarief met euro formatting, status badge, accepteerbaar, bron, aangemaakt op). Prive opmerking in gele card met Lock icon. Publieke opmerking in neutrale card.
+  - **Rechts**: Opdrachtgever info uit `dienst.sublocation` relatie (organisatie naam, sublocation naam, adres, postcode, plaats, telefoon als tel: link, sector, doelgroep, publieke_opmerking)
+- Onderaan: `ToewijzingenBeheer` component (full width)
 
-### 5. `src/components/planning/PlanningWeekKalender.tsx`
-Het kerncomponent met twee secties:
-- **Sectie 1 "Openstaande diensten (X)"**: concept + open + deels_bezet, rose/amber accent
-- **Sectie 2 "Ingeplande diensten (X, Y uur)"**: volledig_bezet + voltooid, emerald/blue accent
-- 7 dagkolommen (ma-zo), vandaag gehighlight met ring-2
-- Per kolom: dagnaam + datum + aantal diensten + DienstCards gesorteerd op start_tijd
-- Lege dag: streepje "--"
-- Data via `splitByStatus()` uit de hook
-- Responsive: 1 col (mobile) -> 7 col (desktop) via grid
-- `showOpen` en `showIngepland` props om secties te tonen/verbergen
+**Acties (Supabase mutations):**
+- Sluiten: `supabase.from('diensten').update({status: 'geannuleerd'})` + toast + invalidate
+- Bevestigen: `supabase.from('dienst_toewijzingen').update({status: 'bevestigd'}).eq('dienst_id', dienst.id).in('status', ['positief'])` + toast + invalidate
+- Kopieren/Verwijderen: delegeert naar parent via props
+- Bewerken: delegeert naar `onEdit` prop
 
-### 6. `src/components/planning/PlanningLijstWeergave.tsx`
-- Tabelweergave als alternatief voor kalender
-- Kolommen: Datum & Tijd, Locatie, Functie, Bezetting (met mini voortgangsbalk), Status
-- Glass morphism tabel container
-- Klikbare rijen via `onDienstClick`
-- Lege state met Inbox icon
+**Bevestigingsdialoog:** AlertDialog voor destructieve acties (sluiten dienst, verwijderen)
 
-### 7. `src/components/planning/PlanningFilters.tsx`
-- Popover met 5 filters: Status, Bureau, Functieniveau, Opdrachtgever (via `useClientOrganizations`), Werkvorm
-- Filter presets: opslaan/laden/verwijderen via `dienst_filter_presets` tabel
-- Active filter count badge op de trigger knop
-- Reset knop om alle filters te wissen
+---
+
+### 2. `src/components/planning/ToewijzingenBeheer.tsx`
+
+Tabel component binnen de detail sheet.
+
+**Props:**
+- `dienst: DienstData`
+
+**Header:** "Toewijzingen & Reacties" + bezetting badge "(X/Y)" + Progress bar
+
+**Tabel kolommen:** Flexwerker (naam), Niveau (functie_niveau), Status (gekleurde badge), Reactie op (datum/tijd), Reactie door (naam), Acties (knoppen)
+
+**Status kleuren (toewijzing-specifiek):**
+- voorgesteld: slate
+- positief: amber
+- misschien: purple
+- bevestigd: emerald
+- afgewezen: rose
+- no_show: red
+- voltooid: blue
+
+**Acties per status:**
+- voorgesteld: Verwijderen (X knop) -- DELETE
+- positief: Bevestigen, Afwijzen, Ongedaan -- UPDATE status
+- misschien: Bevestigen, Afwijzen, Ongedaan -- UPDATE status
+- bevestigd: Ongedaan (terug naar positief) -- UPDATE status
+- afgewezen: Ongedaan (terug naar voorgesteld) -- UPDATE status
+
+**Professional toewijzen (onder tabel):**
+- Popover met Command/Combobox die zoekt in `professionals` tabel
+- Query: `supabase.from('professionals').select('id, full_name, functie_niveau, telefoonnummer, email').is('deleted_at', null).in('status', ['actief', 'beschikbaar']).ilike('full_name', '%search%').limit(20)`
+- Bij selectie: INSERT in `dienst_toewijzingen` met status 'voorgesteld'
+- Overlap error handling: catch trigger exception, toon toast.error
+
+Na elke mutatie: `queryClient.invalidateQueries({queryKey: ['diensten-planning']})`
+
+---
+
+### 3. `src/components/planning/NieuweDienstModal.tsx`
+
+Dialog (max-w-4xl) met twee-kolom layout, volgt InterviewSchedulingModal patroon.
+
+**Props:**
+- `open: boolean`
+- `onClose: () => void`
+- `editDienst: DienstData | null` (null = nieuw, anders = bewerken)
+
+**Linkerkolom -- Formulier (useState, geen react-hook-form):**
+
+1. **Opdrachtgever cascade (3 stappen):**
+   - Stap 1: Organisatie select via `useClientOrganizations()` hook (bestaat al)
+   - Stap 2: Locatie select -- query `client_locations` gefilterd op `client_org_id`
+   - Stap 3: Sublocation select -- query `client_sublocations` gefilterd op `location_id`
+   - Elke stap verschijnt pas na vorige selectie
+
+2. **Titel:** Input, autofill "[Org] - [Sublocation]" na locatie selectie, overschrijfbaar
+3. **Datum:** Datumpicker (Calendar + Popover, NL locale, min=vandaag, pointer-events-auto)
+4. **Tijden:** Twee Select components (start 06:00-23:00, eind 06:30-23:30, stappen van 30 min) + berekende duur
+5. **Pauze:** Select (0, 15, 30, 45, 60 min)
+6. **Functieniveau:** Select (HBO-V, VP4, VP3, VIG, Helpende 2)
+7. **Aantal:** Number input (1-10)
+8. **Werkvorm:** Select (ZZP, Uitzendkracht)
+9. **Dienst type:** Button group chips (Dag/Avond/Nacht/Weekend)
+10. **Tarief:** Number input met euro prefix (optioneel)
+11. **Herhaling:** Select (Geen/Dagelijks/Wekelijks/Tweewekelijks) + extra datumpicker bij herhaling + berekening "X diensten"
+12. **Opmerkingen:** Twee Textareas (prive + publiek)
+13. **Status:** Select (Concept/Open)
+14. **Accepteerbaar:** Checkbox
+
+**Rechterkolom -- Live Preview:**
+- Glass morphism card die live update met formulierwaarden
+- Toont samenvatting: locatie, datum, tijden, functie, werkvorm, tarief, herhaling info, status
+- Niet-ingevulde velden tonen als "--" in muted
+
+**Bij opslaan (nieuw):**
+1. Valideer verplichte velden (sublocation_id, datum, start_tijd, eind_tijd, titel)
+2. Haal user + org_id op via `supabase.auth.getUser()` + `user_organizations`
+3. INSERT in `diensten` tabel (netto_uren is GENERATED, niet meesturen)
+4. Bij herhaling: genereer extra INSERT records met verschoven datums + `herhaling_parent_id` + `bron='herhaling'`
+5. Toast + invalidate + sluiten
+
+**Bij opslaan (bewerken):**
+- UPDATE in plaats van INSERT
+- Toast "Dienst bijgewerkt!" + invalidate + sluiten
+
+---
+
+### 4. `src/components/planning/DienstQuickActions.tsx`
+
+Context menu (rechtermuisklik) op DienstCards.
+
+**Props:**
+- `dienst: DienstData`
+- `children: React.ReactNode` (de DienstCard als trigger)
+- `onOpen: (dienst: DienstData) => void`
+- `onEdit: (dienst: DienstData) => void`
+- `onCopy: (dienst: DienstData) => void`
+- `onDelete: (dienst: DienstData) => void`
+
+**Menu items:** Openen (Eye), Bewerken (Pencil), Kopieren (Copy), Publiceren (Send, alleen bij concept status), Separator, Verwijderen (Trash2, destructive)
+
+Gebruikt shadcn `ContextMenu` component.
 
 ---
 
 ## Bestaand Bestand Wijzigen
 
-### `src/pages/Planning.tsx` (volledig vervangen)
-- **State**: `weekStart` + `viewMode` in URL via `useSearchParams`, filters in React state, toggles (showOpen, showIngepland, compact)
-- **Data**: `useDienstenPlanning(filters)` met dynamische weekStart uit URL
-- **Layout**:
-  1. `PageHero` met "Nieuwe Dienst" knop (state toggle, modal komt in #1C)
-  2. 4 KPI-kaarten in grid via bestaande `KPICard` component:
-     - Vandaag (CalendarDays, variant="rose")
-     - Deze week (CalendarDays, variant="rose") 
-     - Open diensten (AlertCircle, variant="amber")
-     - Bezettingsgraad (TrendingUp, variant="emerald", suffix="%")
-  3. Filter toggles: Openstaand, Ingepland, Compact (kleine knoppen, altijd zichtbaar)
-  4. `PlanningToolbar` (weeknavigatie + view toggle)
-  5. `PlanningLegenda`
-  6. Conditie: `PlanningWeekKalender` of `PlanningLijstWeergave`
-- Skeleton loading state bij `isLoading`
+### `src/pages/Planning.tsx`
+
+**State toevoegen:**
+```
+const [selectedDienst, setSelectedDienst] = useState<DienstData | null>(null);
+const [nieuweDienstOpen, setNieuweDienstOpen] = useState(false);  // al aanwezig, maar nu gekoppeld
+const [editDienst, setEditDienst] = useState<DienstData | null>(null);
+```
+
+**Handlers toevoegen:**
+- `handleDienstClick`: `setSelectedDienst(dienst)` (vervangt huidige lege callback)
+- `handleCopyDienst`: INSERT kopie met datum+1, bron='gekopieerd', toast + invalidate
+- `handleDeleteDienst`: AlertDialog bevestiging, DELETE, toast + invalidate
+
+**Imports toevoegen:** DienstDetailSheet, NieuweDienstModal, DienstQuickActions
+
+**JSX toevoegen (na kalender/lijst content):**
+- `DienstDetailSheet` met selectedDienst state
+- `NieuweDienstModal` met nieuweDienstOpen + editDienst state
+
+**DienstCard wrapping:** In PlanningWeekKalender en PlanningLijstWeergave, de DienstCards wrappen met DienstQuickActions voor rechtermuisklik support. Dit vereist kleine aanpassingen in die componenten om `onEdit`, `onCopy`, `onDelete` callbacks door te geven.
+
+### `src/components/planning/PlanningWeekKalender.tsx`
+
+- Extra props: `onEdit`, `onCopy`, `onDelete` (optioneel)
+- DienstCards wrappen met DienstQuickActions
+
+### `src/components/planning/PlanningLijstWeergave.tsx`
+
+- Extra props: `onEdit`, `onCopy`, `onDelete` (optioneel)
+- Rijen wrappen met DienstQuickActions
 
 ---
 
@@ -87,14 +183,12 @@ Het kerncomponent met twee secties:
 
 | Bestand | Actie |
 |---------|-------|
-| `src/components/planning/DienstStatusBadge.tsx` | Nieuw |
-| `src/components/planning/DienstCard.tsx` | Nieuw |
-| `src/components/planning/PlanningLegenda.tsx` | Nieuw |
-| `src/components/planning/PlanningToolbar.tsx` | Nieuw |
-| `src/components/planning/PlanningWeekKalender.tsx` | Nieuw |
-| `src/components/planning/PlanningLijstWeergave.tsx` | Nieuw |
-| `src/components/planning/PlanningFilters.tsx` | Nieuw |
-| `src/pages/Planning.tsx` | Vervangen |
+| `src/components/planning/DienstDetailSheet.tsx` | Nieuw |
+| `src/components/planning/ToewijzingenBeheer.tsx` | Nieuw |
+| `src/components/planning/NieuweDienstModal.tsx` | Nieuw |
+| `src/components/planning/DienstQuickActions.tsx` | Nieuw |
+| `src/pages/Planning.tsx` | Wijzigen (state + handlers + imports + JSX) |
+| `src/components/planning/PlanningWeekKalender.tsx` | Wijzigen (extra props + QuickActions wrapper) |
+| `src/components/planning/PlanningLijstWeergave.tsx` | Wijzigen (extra props + QuickActions wrapper) |
 
-Totaal: 7 nieuwe bestanden + 1 vervangen. Geen database wijzigingen, geen nieuwe hooks (hergebruikt bestaande `useDienstenPlanning`, `useClientOrganizations`, `KPICard`).
-
+Totaal: 4 nieuwe bestanden + 3 wijzigingen. Geen database migraties nodig -- alle tabellen bestaan al.
