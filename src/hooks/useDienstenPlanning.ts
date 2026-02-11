@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeChannel } from "@/hooks/useRealtimeChannel";
-import { startOfWeek, endOfWeek, format, isToday } from "date-fns";
+import { startOfWeek, endOfWeek, format, isToday, parseISO } from "date-fns";
 import { useMemo } from "react";
 
 export interface DienstFilters {
@@ -102,7 +102,7 @@ export function useDienstenPlanning(filters: DienstFilters) {
   const queryClient = useQueryClient();
 
   const weekEnd = useMemo(() => {
-    const start = new Date(filters.weekStart);
+    const start = parseISO(filters.weekStart);
     return format(endOfWeek(start, { weekStartsOn: 1 }), "yyyy-MM-dd");
   }, [filters.weekStart]);
 
@@ -207,7 +207,7 @@ export function useDienstenPlanning(filters: DienstFilters) {
   // Stats
   const stats: PlanningStats = useMemo(() => {
     const notCancelled = rawDiensten.filter((d) => d.status !== "geannuleerd");
-    const vandaag = notCancelled.filter((d) => isToday(new Date(d.datum))).length;
+    const vandaag = notCancelled.filter((d) => isToday(parseISO(d.datum))).length;
     const dezeWeek = notCancelled.length;
     const openDiensten = rawDiensten.filter((d) =>
       ["open", "deels_bezet"].includes(d.status)

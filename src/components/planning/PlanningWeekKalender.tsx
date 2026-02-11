@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { format, addDays, isToday, isSameDay } from "date-fns";
+import { format, addDays, isToday, isSameDay, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { DienstCard } from "./DienstCard";
@@ -43,7 +43,7 @@ function DagKolom({
   onDelete?: (d: DienstData) => void;
 }) {
   const dagDiensten = diensten
-    .filter((d) => isSameDay(new Date(d.datum), dag))
+    .filter((d) => isSameDay(parseISO(d.datum), dag))
     .sort((a, b) => a.start_tijd.localeCompare(b.start_tijd));
 
   const vandaag = isToday(dag);

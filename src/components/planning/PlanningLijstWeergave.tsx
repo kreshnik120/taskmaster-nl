@@ -1,4 +1,4 @@
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Inbox } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -56,7 +56,7 @@ export function PlanningLijstWeergave({ diensten, onDienstClick, onEdit, onCopy,
           >
             <div>
               <div className="text-xs font-medium text-foreground">
-                {format(new Date(d.datum), "EEE d MMM", { locale: nl })}
+                {format(parseISO(d.datum), "EEE d MMM", { locale: nl })}
               </div>
               <div className="text-[10px] text-muted-foreground">
                 {formatTijd(d.start_tijd)}–{formatTijd(d.eind_tijd)} · {d.netto_uren}u
