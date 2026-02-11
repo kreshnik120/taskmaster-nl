@@ -100,11 +100,11 @@ const Planning = () => {
       tarief_per_uur: dienst.tarief_per_uur,
       prive_opmerking: dienst.prive_opmerking,
       publieke_opmerking: dienst.publieke_opmerking,
-      status: dienst.status === "geannuleerd" ? "concept" : dienst.status,
+      status: "concept",
       accepteerbaar: dienst.accepteerbaar,
       bron: "gekopieerd",
       org_id: dienst.org_id,
-      created_by: user.id,
+      aangemaakt_door: user.id,
     });
     if (error) { toast.error("Kopiëren mislukt"); return; }
     toast.success(`Dienst gekopieerd naar ${newDatum}`);

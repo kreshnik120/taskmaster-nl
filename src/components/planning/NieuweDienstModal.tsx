@@ -155,6 +155,10 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
       toast.error("Vul alle verplichte velden in");
       return;
     }
+    if (startTijd >= eindTijd) {
+      toast.error("Eindtijd moet na starttijd liggen");
+      return;
+    }
     setSaving(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -179,6 +183,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
         start_tijd: startTijd + ":00",
         eind_tijd: eindTijd + ":00",
         pauze_minuten: pauze,
+        netto_uren: duur,
         gevraagd_functie_niveau: functieNiveau || null,
         gevraagd_aantal: aantal,
         werkvorm: werkvorm || null,

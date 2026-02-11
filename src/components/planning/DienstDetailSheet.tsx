@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Lock, MessageSquare, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -60,6 +60,7 @@ export function DienstDetailSheet({ dienst, open, onClose, onEdit, onCopy, onDel
     if (error) { toast.error("Bevestigen mislukt"); return; }
     toast.success("Alle positieve reacties bevestigd");
     queryClient.invalidateQueries({ queryKey: ["diensten-planning"] });
+    onClose();
   };
 
   const bronLabel: Record<string, string> = {
@@ -117,7 +118,7 @@ export function DienstDetailSheet({ dienst, open, onClose, onEdit, onCopy, onDel
                 <h3 className="text-sm font-semibold text-foreground">Dienst details</h3>
                 <dl className="space-y-0">
                   <DetailRow label="Datum">
-                    {format(new Date(dienst.datum), "EEEE d MMMM yyyy", { locale: nl })}
+                    {format(parseISO(dienst.datum), "EEEE d MMMM yyyy", { locale: nl })}
                   </DetailRow>
                   <DetailRow label="Tijden">
                     {formatTijd(dienst.start_tijd)} tot {formatTijd(dienst.eind_tijd)}
@@ -133,7 +134,7 @@ export function DienstDetailSheet({ dienst, open, onClose, onEdit, onCopy, onDel
                   <DetailRow label="Accepteerbaar">{dienst.accepteerbaar ? "Ja" : "Nee"}</DetailRow>
                   <DetailRow label="Bron">{bronLabel[dienst.bron] ?? dienst.bron}</DetailRow>
                   <DetailRow label="Aangemaakt op">
-                    {format(new Date(dienst.created_at), "d MMM yyyy", { locale: nl })}
+                    {format(parseISO(dienst.created_at), "d MMM yyyy", { locale: nl })}
                   </DetailRow>
                 </dl>
 
