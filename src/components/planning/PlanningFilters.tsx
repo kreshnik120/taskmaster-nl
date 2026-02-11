@@ -168,7 +168,7 @@ export function PlanningFilters({ filters, onFiltersChange }: PlanningFiltersPro
             <SelectContent>
               <SelectItem value="all">Alle</SelectItem>
               {orgs.map((o) => (
-                <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
+                <SelectItem key={o.id} value={o.org_id || o.id}>{o.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>

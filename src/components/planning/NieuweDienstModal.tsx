@@ -36,7 +36,7 @@ const tijdOpties = (start: number, end: number) => {
 const startTijden = tijdOpties(6, 23);
 const eindTijden = tijdOpties(6, 23);
 const functieNiveaus = ["HBO-V", "VP4", "VP3", "VIG", "Helpende 2"];
-const dienstTypes = ["Dag", "Avond", "Nacht", "Weekend"];
+const dienstTypes = ["dag", "avond", "nacht", "weekend"];
 
 function berekeningDuur(start: string, eind: string, pauze: number): number {
   if (!start || !eind) return 0;
@@ -70,7 +70,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
   const [functieNiveau, setFunctieNiveau] = useState("");
   const [aantal, setAantal] = useState(1);
   const [werkvorm, setWerkvorm] = useState("ZZP");
-  const [dienstType, setDienstType] = useState("Dag");
+  const [dienstType, setDienstType] = useState("dag");
   const [tarief, setTarief] = useState("");
   const [herhaling, setHerhaling] = useState("geen");
   const [herhalingTot, setHerhalingTot] = useState<Date | undefined>();
@@ -119,7 +119,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
     setFunctieNiveau(editDienst.gevraagd_functie_niveau ?? "");
     setAantal(editDienst.gevraagd_aantal ?? 1);
     setWerkvorm(editDienst.werkvorm ?? "ZZP");
-    setDienstType(editDienst.dienst_type ?? "Dag");
+    setDienstType(editDienst.dienst_type ?? "dag");
     setTarief(editDienst.tarief_per_uur?.toString() ?? "");
     setHerhaling(editDienst.herhaling ?? "geen");
     setPriveOpmerking(editDienst.prive_opmerking ?? "");
@@ -137,7 +137,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
       setOrgId(""); setLocationId(""); setSublocationId("");
       setTitel(""); setDatum(new Date()); setStartTijd("07:00"); setEindTijd("15:00");
       setPauze(0); setFunctieNiveau(""); setAantal(1); setWerkvorm("ZZP");
-      setDienstType("Dag"); setTarief(""); setHerhaling("geen"); setHerhalingTot(undefined);
+      setDienstType("dag"); setTarief(""); setHerhaling("geen"); setHerhalingTot(undefined);
       setPriveOpmerking(""); setPubliekeOpmerking(""); setStatus("concept");
       setAccepteerbaar(true); setTitelManual(false);
     }
@@ -167,6 +167,11 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
         .limit(1)
         .single();
 
+      if (!userOrg?.org_id) {
+        toast.error("Geen organisatie gevonden voor je account");
+        return;
+      }
+
       const dienstData = {
         sublocation_id: targetSublocationId,
         titel: titel.trim(),
@@ -185,8 +190,8 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
         status,
         accepteerbaar,
         bron: isEdit ? editDienst!.bron : "handmatig",
-        org_id: userOrg?.org_id ?? user.id,
-        created_by: user.id,
+        org_id: userOrg.org_id,
+        aangemaakt_door: user.id,
       };
 
       if (isEdit) {
@@ -366,7 +371,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
               <div className="flex gap-1.5">
                 {dienstTypes.map((t) => (
                   <Button key={t} type="button" variant={dienstType === t ? "default" : "outline"} size="sm" className="h-7 text-[11px]" onClick={() => setDienstType(t)}>
-                    {t}
+                    {t.charAt(0).toUpperCase() + t.slice(1)}
                   </Button>
                 ))}
               </div>

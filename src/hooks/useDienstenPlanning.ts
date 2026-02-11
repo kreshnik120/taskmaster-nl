@@ -192,7 +192,10 @@ export function useDienstenPlanning(filters: DienstFilters) {
       );
     }
     if (filters.locatie !== "all") {
-      result = result.filter((d) => d.sublocation?.id === filters.locatie);
+      result = result.filter(
+        (d) => d.sublocation?.location?.organization?.org_id === filters.locatie
+          || d.sublocation?.id === filters.locatie
+      );
     }
     if (filters.werkvorm !== "all") {
       result = result.filter((d) => d.werkvorm === filters.werkvorm);
