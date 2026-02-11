@@ -1,4 +1,4 @@
-import { Clock, Trash2, CheckCircle2, Brain, Users, ChevronDown, ChevronUp, Briefcase, Building2, Link2, LogOut, RefreshCw, Archive, Paperclip, FileText, LayoutDashboard, MessageCircle, Receipt } from "lucide-react";
+import { Clock, Trash2, CheckCircle2, Brain, Users, ChevronDown, ChevronUp, Briefcase, Building2, Link2, LogOut, RefreshCw, Archive, Paperclip, FileText, LayoutDashboard, MessageCircle, Receipt, CalendarDays } from "lucide-react";
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarFooter } from "@/components/ui/sidebar";
@@ -77,6 +77,11 @@ const menuGroups: MenuGroup[] = [{
     title: "Plaatsingen",
     url: "/plaatsingen",
     icon: Link2,
+    requiresEdit: true
+  }, {
+    title: "Planning",
+    url: "/planning",
+    icon: CalendarDays,
     requiresEdit: true
   }, {
     title: "Facturatie",

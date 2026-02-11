@@ -2435,6 +2435,204 @@ export type Database = {
           },
         ]
       }
+      dienst_filter_presets: {
+        Row: {
+          created_at: string | null
+          filters: Json
+          id: string
+          naam: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          filters?: Json
+          id?: string
+          naam: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          filters?: Json
+          id?: string
+          naam?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      dienst_toewijzingen: {
+        Row: {
+          created_at: string | null
+          dienst_id: string
+          id: string
+          professional_id: string
+          reactie_door: string | null
+          reactie_op: string | null
+          status: string | null
+          toegewezen_door: string | null
+          toewijzing_notities: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          dienst_id: string
+          id?: string
+          professional_id: string
+          reactie_door?: string | null
+          reactie_op?: string | null
+          status?: string | null
+          toegewezen_door?: string | null
+          toewijzing_notities?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          dienst_id?: string
+          id?: string
+          professional_id?: string
+          reactie_door?: string | null
+          reactie_op?: string | null
+          status?: string | null
+          toegewezen_door?: string | null
+          toewijzing_notities?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dienst_toewijzingen_dienst_id_fkey"
+            columns: ["dienst_id"]
+            isOneToOne: false
+            referencedRelation: "diensten"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dienst_toewijzingen_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dienst_toewijzingen_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_admin_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dienst_toewijzingen_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      diensten: {
+        Row: {
+          aangemaakt_door: string | null
+          accepteerbaar: boolean | null
+          bron: string | null
+          created_at: string | null
+          datum: string
+          dienst_type: string | null
+          eind_tijd: string
+          gevraagd_aantal: number | null
+          gevraagd_functie_niveau: string | null
+          herhaling: string | null
+          herhaling_eind_datum: string | null
+          herhaling_parent_id: string | null
+          id: string
+          netto_uren: number | null
+          org_id: string
+          pauze_minuten: number | null
+          prive_opmerking: string | null
+          publieke_opmerking: string | null
+          start_tijd: string
+          status: string | null
+          sublocation_id: string
+          tarief_per_uur: number | null
+          titel: string
+          updated_at: string | null
+          werkvorm: string | null
+        }
+        Insert: {
+          aangemaakt_door?: string | null
+          accepteerbaar?: boolean | null
+          bron?: string | null
+          created_at?: string | null
+          datum: string
+          dienst_type?: string | null
+          eind_tijd: string
+          gevraagd_aantal?: number | null
+          gevraagd_functie_niveau?: string | null
+          herhaling?: string | null
+          herhaling_eind_datum?: string | null
+          herhaling_parent_id?: string | null
+          id?: string
+          netto_uren?: number | null
+          org_id: string
+          pauze_minuten?: number | null
+          prive_opmerking?: string | null
+          publieke_opmerking?: string | null
+          start_tijd: string
+          status?: string | null
+          sublocation_id: string
+          tarief_per_uur?: number | null
+          titel: string
+          updated_at?: string | null
+          werkvorm?: string | null
+        }
+        Update: {
+          aangemaakt_door?: string | null
+          accepteerbaar?: boolean | null
+          bron?: string | null
+          created_at?: string | null
+          datum?: string
+          dienst_type?: string | null
+          eind_tijd?: string
+          gevraagd_aantal?: number | null
+          gevraagd_functie_niveau?: string | null
+          herhaling?: string | null
+          herhaling_eind_datum?: string | null
+          herhaling_parent_id?: string | null
+          id?: string
+          netto_uren?: number | null
+          org_id?: string
+          pauze_minuten?: number | null
+          prive_opmerking?: string | null
+          publieke_opmerking?: string | null
+          start_tijd?: string
+          status?: string | null
+          sublocation_id?: string
+          tarief_per_uur?: number | null
+          titel?: string
+          updated_at?: string | null
+          werkvorm?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "diensten_herhaling_parent_id_fkey"
+            columns: ["herhaling_parent_id"]
+            isOneToOne: false
+            referencedRelation: "diensten"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "diensten_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "diensten_sublocation_id_fkey"
+            columns: ["sublocation_id"]
+            isOneToOne: false
+            referencedRelation: "client_sublocations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       document_audit_logs: {
         Row: {
           action: string
