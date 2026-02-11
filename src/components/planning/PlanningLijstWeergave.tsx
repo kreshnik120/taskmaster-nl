@@ -3,15 +3,19 @@ import { nl } from "date-fns/locale";
 import { Inbox } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DienstStatusBadge } from "./DienstStatusBadge";
+import { DienstQuickActions } from "./DienstQuickActions";
 import { Progress } from "@/components/ui/progress";
 import type { DienstData } from "@/hooks/useDienstenPlanning";
 
 interface PlanningLijstWeergaveProps {
   diensten: DienstData[];
   onDienstClick?: (dienst: DienstData) => void;
+  onEdit?: (dienst: DienstData) => void;
+  onCopy?: (dienst: DienstData) => void;
+  onDelete?: (dienst: DienstData) => void;
 }
 
-export function PlanningLijstWeergave({ diensten, onDienstClick }: PlanningLijstWeergaveProps) {
+export function PlanningLijstWeergave({ diensten, onDienstClick, onEdit, onCopy, onDelete }: PlanningLijstWeergaveProps) {
   if (diensten.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10">
@@ -39,7 +43,7 @@ export function PlanningLijstWeergave({ diensten, onDienstClick }: PlanningLijst
         const pct = Math.min(Math.round((bezet / gevraagd) * 100), 100);
         const formatTijd = (t: string) => t?.slice(0, 5) ?? "";
 
-        return (
+        const row = (
           <button
             key={d.id}
             onClick={() => onDienstClick?.(d)}
@@ -78,6 +82,19 @@ export function PlanningLijstWeergave({ diensten, onDienstClick }: PlanningLijst
             </div>
           </button>
         );
+
+        return onEdit && onCopy && onDelete ? (
+          <DienstQuickActions
+            key={d.id}
+            dienst={d}
+            onOpen={(di) => onDienstClick?.(di)}
+            onEdit={onEdit}
+            onCopy={onCopy}
+            onDelete={onDelete}
+          >
+            {row}
+          </DienstQuickActions>
+        ) : row;
       })}
     </div>
   );

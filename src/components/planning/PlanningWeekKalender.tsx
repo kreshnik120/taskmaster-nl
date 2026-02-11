@@ -3,6 +3,7 @@ import { format, addDays, isToday, isSameDay } from "date-fns";
 import { nl } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { DienstCard } from "./DienstCard";
+import { DienstQuickActions } from "./DienstQuickActions";
 import type { DienstData } from "@/hooks/useDienstenPlanning";
 
 interface PlanningWeekKalenderProps {
@@ -12,6 +13,9 @@ interface PlanningWeekKalenderProps {
   showIngepland: boolean;
   compact: boolean;
   onDienstClick?: (dienst: DienstData) => void;
+  onEdit?: (dienst: DienstData) => void;
+  onCopy?: (dienst: DienstData) => void;
+  onDelete?: (dienst: DienstData) => void;
 }
 
 function splitByStatus(diensten: DienstData[]) {
@@ -26,11 +30,17 @@ function DagKolom({
   diensten,
   compact,
   onDienstClick,
+  onEdit,
+  onCopy,
+  onDelete,
 }: {
   dag: Date;
   diensten: DienstData[];
   compact: boolean;
   onDienstClick?: (d: DienstData) => void;
+  onEdit?: (d: DienstData) => void;
+  onCopy?: (d: DienstData) => void;
+  onDelete?: (d: DienstData) => void;
 }) {
   const dagDiensten = diensten
     .filter((d) => isSameDay(new Date(d.datum), dag))
@@ -58,12 +68,20 @@ function DagKolom({
       </div>
       <div className="flex flex-col gap-1.5 flex-1">
         {dagDiensten.map((d) => (
-          <DienstCard
-            key={d.id}
-            dienst={d}
-            compact={compact}
-            onClick={() => onDienstClick?.(d)}
-          />
+          onEdit && onCopy && onDelete ? (
+            <DienstQuickActions
+              key={d.id}
+              dienst={d}
+              onOpen={(di) => onDienstClick?.(di)}
+              onEdit={onEdit}
+              onCopy={onCopy}
+              onDelete={onDelete}
+            >
+              <DienstCard dienst={d} compact={compact} onClick={() => onDienstClick?.(d)} />
+            </DienstQuickActions>
+          ) : (
+            <DienstCard key={d.id} dienst={d} compact={compact} onClick={() => onDienstClick?.(d)} />
+          )
         ))}
       </div>
     </div>
@@ -77,6 +95,9 @@ export function PlanningWeekKalender({
   showIngepland,
   compact,
   onDienstClick,
+  onEdit,
+  onCopy,
+  onDelete,
 }: PlanningWeekKalenderProps) {
   const start = new Date(weekStart);
   const dagen = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(start, i)), [weekStart]);
@@ -104,6 +125,9 @@ export function PlanningWeekKalender({
                 diensten={open}
                 compact={compact}
                 onDienstClick={onDienstClick}
+                onEdit={onEdit}
+                onCopy={onCopy}
+                onDelete={onDelete}
               />
             ))}
           </div>
@@ -126,6 +150,9 @@ export function PlanningWeekKalender({
                 diensten={ingepland}
                 compact={compact}
                 onDienstClick={onDienstClick}
+                onEdit={onEdit}
+                onCopy={onCopy}
+                onDelete={onDelete}
               />
             ))}
           </div>
