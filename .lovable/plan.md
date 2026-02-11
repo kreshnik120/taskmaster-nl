@@ -1,71 +1,104 @@
 
 
-# Fix 5 Planning Module Bugs
+# 7 Bugfixes Planning Module
 
-## Overzicht
+## Fix 1: `created_by` naar `aangemaakt_door` in Planning.tsx handleCopy (regel 107)
 
-5 gerichte bugfixes in 4 bestanden. Geen nieuwe bestanden, geen database wijzigingen.
-
----
-
-## Bug 1: dienst_type case mismatch (NieuweDienstModal.tsx)
-
-Database verwacht lowercase (`dag`, `avond`, `nacht`, `weekend`), formulier stuurt title case.
-
-**Wijzigingen:**
-- Regel 39: `dienstTypes` array naar lowercase waarden
-- Regel 73: Default state `"dag"` ipv `"Dag"`
-- Regel 122: Edit populate ook lowercase default
-- Regel 140: Reset ook lowercase default
-- Regel 367-370: Button labels tonen title case via `t.charAt(0).toUpperCase() + t.slice(1)`
+**Bestand:** `src/pages/Planning.tsx`
+**Regel 107:** `created_by: user.id` wordt `aangemaakt_door: user.id`
 
 ---
 
-## Bug 2: created_by veld bestaat niet (NieuweDienstModal.tsx)
+## Fix 2: Kopie status altijd "concept"
 
-Database kolom heet `aangemaakt_door`, niet `created_by`.
-
-**Wijziging:**
-- Regel 189: `created_by: user.id` wordt `aangemaakt_door: user.id`
-
----
-
-## Bug 3: org_id fallback naar user.id (NieuweDienstModal.tsx)
-
-Als `userOrg` null is, valt `org_id` terug op `user.id` wat een FK violation geeft.
-
-**Wijziging:**
-- Regel 188: Verwijder fallback `?? user.id`
-- Na regel 168: Early return met toast.error als `!userOrg?.org_id`
+**Bestand:** `src/pages/Planning.tsx`
+**Regel 103:** Huidige logica behoudt originele status (behalve geannuleerd). Wijzig naar:
+```
+status: "concept",
+```
+Dit voorkomt dat een kopie met status `volledig_bezet` verschijnt zonder toewijzingen.
 
 ---
 
-## Bug 4: Opdrachtgever filter matcht nooit (3 bestanden)
+## Fix 3: Stale data in DienstDetailSheet
 
-PlanningFilters stuurt `client_organizations.id` als waarde, maar DienstData bevat alleen `organization.org_id` (niet de PK). Ze matchen nooit.
-
-**Wijzigingen:**
-1. `src/hooks/useClientOrganizations.ts` — voeg `org_id` toe aan de select query
-2. `src/components/planning/PlanningFilters.tsx` — gebruik `o.org_id || o.id` als SelectItem value
-3. `src/hooks/useDienstenPlanning.ts` — wijzig locatie filter om te matchen op `organization.org_id` OF `sublocation.id`
+**Bestand:** `src/components/planning/DienstDetailSheet.tsx`
+**Probleem:** `dienst` prop is een snapshot die niet mee-update na mutaties (bevestigen, sluiten).
+**Fix:** Na `handleBevestigen` (regel 62) en `handleSluitenDienst` (regel 51): voeg `onClose()` toe zodat de sheet sluit na mutatie. `handleBevestigen` mist dit -- voeg `onClose()` toe na invalidate.
 
 ---
 
-## Bug 5: PlanningLegenda mist "Voltooid" status (PlanningLegenda.tsx)
+## Fix 4: Preset filter op ingelogde user_id
 
-**Wijziging:**
-- Voeg `{ label: "Voltooid", color: "bg-blue-400" }` toe na "Bezet" en voor "Concept"
+**Bestand:** `src/components/planning/PlanningFilters.tsx`
+**Regel 49-56:** Query haalt ALLE presets op zonder user_id filter.
+**Fix:** Haal user op en filter:
+```typescript
+const { data: presets = [] } = useQuery({
+  queryKey: ["dienst-filter-presets"],
+  queryFn: async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+    const { data, error } = await supabase
+      .from("dienst_filter_presets")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return data;
+  },
+});
+```
+
+---
+
+## Fix 5: Eindtijd > starttijd validatie
+
+**Bestand:** `src/components/planning/NieuweDienstModal.tsx`
+**Locatie:** In `handleSave` na de bestaande verplichte velden check (rond regel 154).
+**Fix:** Voeg check toe:
+```typescript
+if (startTijd >= eindTijd) {
+  toast.error("Eindtijd moet na starttijd liggen");
+  return;
+}
+```
+
+---
+
+## Fix 6: netto_uren toevoegen aan dienstData
+
+**Bestand:** `src/components/planning/NieuweDienstModal.tsx`
+**Regel 175-195:** Voeg `netto_uren: duur` toe aan het `dienstData` object. De `duur` variabele bestaat al (regel 146). Zonder dit blijven KPI's en detail sheet op 0.
+
+---
+
+## Fix 7: parseISO voor tijdzone-veilige datum parsing
+
+Vervang `new Date(dienst.datum)` door `parseISO(dienst.datum)` in 4 bestanden:
+
+| Bestand | Regels | Aantal |
+|---------|--------|--------|
+| `src/hooks/useDienstenPlanning.ts` | 105, 210 | 2 |
+| `src/components/planning/PlanningWeekKalender.tsx` | isSameDay call | 1 |
+| `src/components/planning/PlanningLijstWeergave.tsx` | format call regel 59 | 1 |
+| `src/components/planning/DienstDetailSheet.tsx` | format calls regel 120, 136 | 2 |
+
+Elke wijziging: import `parseISO` uit `date-fns` en vervang `new Date(string)` door `parseISO(string)`.
 
 ---
 
 ## Technisch Overzicht
 
-| Bestand | Wijzigingen |
-|---------|-------------|
-| `src/components/planning/NieuweDienstModal.tsx` | Bug 1 + 2 + 3 |
-| `src/hooks/useDienstenPlanning.ts` | Bug 4 (locatie filter) |
-| `src/hooks/useClientOrganizations.ts` | Bug 4 (org_id select) |
-| `src/components/planning/PlanningFilters.tsx` | Bug 4 (value naar org_id) |
-| `src/components/planning/PlanningLegenda.tsx` | Bug 5 |
+| Bestand | Fixes |
+|---------|-------|
+| `src/pages/Planning.tsx` | Fix 1 + 2 |
+| `src/components/planning/DienstDetailSheet.tsx` | Fix 3 + 7 |
+| `src/components/planning/PlanningFilters.tsx` | Fix 4 |
+| `src/components/planning/NieuweDienstModal.tsx` | Fix 5 + 6 |
+| `src/hooks/useDienstenPlanning.ts` | Fix 7 |
+| `src/components/planning/PlanningWeekKalender.tsx` | Fix 7 |
+| `src/components/planning/PlanningLijstWeergave.tsx` | Fix 7 |
 
-Totaal: 5 bestanden, minimale wijzigingen per bestand.
+Totaal: 7 bestanden, minimale gerichte wijzigingen.
+
