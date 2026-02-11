@@ -1,100 +1,103 @@
 
-# Glass Empty States Verbeteren (3 locaties)
+# Prompt #1A — Database Fundament + Data Hook + Routing
 
 ## Overzicht
 
-3 empty states upgraden naar het volledige glass morphism patroon met icon housing en context-afhankelijke berichten (geen data vs. geen zoekresultaten).
+Fundament voor de Diensten Planning module: 3 database tabellen met RLS + triggers, een data hook, placeholder pagina, routing en sidebar item.
 
 ---
 
-## Stap 1: KanbanColumn.tsx (regels 213-218)
+## Stap 1: Database Migratie
 
-Huidige empty state heeft al basis glass maar mist icon housing en context-onderscheid.
+Een enkele SQL migratie met:
 
-**Wijziging:** Vervang de simpele tekst door het volledige patroon met icon housing:
+### Tabel 1: `diensten`
+- Alle kolommen zoals gespecificeerd (id, org_id, sublocation_id, titel, datum, start/eind_tijd, pauze_minuten, netto_uren als GENERATED column, status/type/herhaling CHECK constraints, etc.)
+- FK naar `organizations(id)` en `client_sublocations(id)`
+- 5 indexes (datum, org, sublocation, status, datum+status)
+- `update_updated_at_column()` trigger (functie bestaat al)
+- RLS via `user_organizations` (select/insert/update/delete)
+- Realtime enabled
 
-```
-<div className="flex flex-col items-center justify-center py-12 px-8 text-center bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm rounded-lg border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] mx-2 mb-2">
-  <div className="p-4 rounded-full bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm mb-4">
-    <Inbox className="h-8 w-8 text-muted-foreground/50" />
-  </div>
-  <h3 className="text-base font-medium text-foreground mb-1">Geen taken</h3>
-  <p className="text-sm text-muted-foreground/70">Sleep hier om toe te voegen</p>
-</div>
-```
+### Tabel 2: `dienst_toewijzingen`
+- FK naar `diensten(id) ON DELETE CASCADE` en `professionals(id)`
+- UNIQUE(dienst_id, professional_id)
+- Status workflow: voorgesteld, positief, misschien, bevestigd, afgewezen, no_show, voltooid
+- RLS via dienst -> org keten
+- Realtime enabled
+- `update_updated_at_column()` trigger
 
-Geen extra prop nodig -- het Kanban board heeft geen zoekfilter op kolom-niveau, dus alleen de "geen data" variant is relevant.
+### Tabel 3: `dienst_filter_presets`
+- Persoonlijke filter opslag (user_id, naam, filters JSONB)
+- RLS: alleen eigen presets (user_id = auth.uid())
 
----
+### Trigger 1: Overlap Check
+- `check_dienst_overlap()` — voorkomt dat een professional twee overlappende diensten heeft (op basis van datum + tijden)
+- Wordt uitgevoerd BEFORE INSERT OR UPDATE op `dienst_toewijzingen`
 
-## Stap 2: Professionals.tsx (regels 688-693)
-
-Huidige empty state heeft glass container maar mist icon housing en onderscheid tussen geen data/geen zoekresultaten.
-
-**Wijziging:** Vervang de simpele `<p>` door het volledige patroon met conditie op `searchTerm` of actieve filters:
-
-```
-{filteredProfessionals.length === 0 && (
-  <div className="flex flex-col items-center justify-center py-12 px-8 text-center rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-    <div className="p-4 rounded-full bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm mb-4">
-      {hasActiveFilters ? (
-        <Search className="h-8 w-8 text-muted-foreground/50" />
-      ) : (
-        <Users className="h-8 w-8 text-muted-foreground/50" />
-      )}
-    </div>
-    <h3 className="text-base font-medium text-foreground mb-1">
-      {hasActiveFilters ? "Geen professionals gevonden" : "Nog geen professionals"}
-    </h3>
-    <p className="text-sm text-muted-foreground/70">
-      {hasActiveFilters
-        ? "Probeer andere filters of zoektermen"
-        : "Voeg je eerste professional toe om te beginnen"}
-    </p>
-  </div>
-)}
-```
-
-Een `hasActiveFilters` variabele wordt afgeleid: `searchTerm || filterFunctie !== "all" || filterWerkvorm !== "all" || filterStatus !== "all" || filterRegio`.
+### Trigger 2: Auto Status Update
+- `update_dienst_status()` — SECURITY DEFINER functie die automatisch de dienst status bijwerkt op basis van aantal bevestigde/positieve toewijzingen vs. gevraagd_aantal
+- Wordt uitgevoerd AFTER INSERT OR UPDATE OR DELETE op `dienst_toewijzingen`
+- Beschermt statussen 'concept', 'voltooid', 'geannuleerd' tegen automatische wijziging
 
 ---
 
-## Stap 3: Gebruikers.tsx (regels 456-459)
+## Stap 2: Data Hook — `src/hooks/useDienstenPlanning.ts`
 
-Huidige empty state is een platte `div` zonder glass of icons.
+Nieuw bestand, volgt het `useFacturen` patroon:
 
-**Wijziging:** Vervang door het volledige glass patroon met conditie op `searchTerm`:
+- **Interfaces**: `DienstFilters`, `DienstData`, `PlanningStats` zoals gespecificeerd
+- **Query**: TanStack Query met server-side week filtering (`.gte('datum', weekStart).lte('datum', weekEnd)`)
+- **Joins**: `client_sublocations` -> `client_locations` -> `client_organizations` + `dienst_toewijzingen` -> `professionals`
+- **Client-side filters**: status, bureau (via org name), functieniveau, locatie, werkvorm
+- **Stats berekening**: vandaag, dezeWeek, openDiensten, bezettingsgraad, totaalUrenWeek
+- **Realtime**: Twee `useRealtimeChannel` subscripties (diensten + dienst_toewijzingen) met 200ms debounce
+- **Helper**: `splitByStatus()` functie die diensten splitst in open vs. ingepland
+- **Query key**: `["diensten-planning", filters.weekStart, filters]`
 
+---
+
+## Stap 3: Placeholder Pagina — `src/pages/Planning.tsx`
+
+Nieuw bestand met:
+- `PageContainer` met `contextColor="rose"`
+- `PageHero` met titel "Planning", subtitel "Diensten & roosterbeheer", `CalendarDays` icon
+- Minimale placeholder die de hook aanroept met default filters (huidige week)
+- Toont laadstatus en aantal gevonden diensten
+
+---
+
+## Stap 4: Routing — `src/App.tsx`
+
+- Import `Planning` van `"./pages/Planning"`
+- Route `<Route path="/planning" element={<Planning />} />` na `/plaatsingen`
+
+---
+
+## Stap 5: Sidebar — `src/components/AppSidebar.tsx`
+
+- `CalendarDays` toevoegen aan lucide-react import (regel 1)
+- Menu item toevoegen in Recruitment groep, na "Plaatsingen" en voor "Facturatie":
+
+```text
+{
+  title: "Planning",
+  url: "/planning",
+  icon: CalendarDays,
+  requiresEdit: true
+}
 ```
-<div className="flex flex-col items-center justify-center py-12 px-8 text-center rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-  <div className="p-4 rounded-full bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm mb-4">
-    {searchTerm ? (
-      <Search className="h-8 w-8 text-muted-foreground/50" />
-    ) : (
-      <Users className="h-8 w-8 text-muted-foreground/50" />
-    )}
-  </div>
-  <h3 className="text-base font-medium text-foreground mb-1">
-    {searchTerm ? "Geen gebruikers gevonden" : "Nog geen medewerkers"}
-  </h3>
-  <p className="text-sm text-muted-foreground/70">
-    {searchTerm
-      ? `Geen resultaten voor "${searchTerm}"`
-      : "Klik op 'Nieuwe Medewerker Uitnodigen' om te beginnen"}
-  </p>
-</div>
-```
-
-`Users` en `Search` zijn al geimporteerd in dit bestand.
 
 ---
 
 ## Technisch Overzicht
 
-| Bestand | Wijziging |
-|---------|-----------|
-| `src/components/KanbanColumn.tsx` | Icon housing + verbeterde tekst in empty state |
-| `src/pages/Professionals.tsx` | Volledige glass empty state met filter-conditie |
-| `src/pages/Gebruikers.tsx` | Volledige glass empty state met zoek-conditie |
+| Onderdeel | Bestand | Actie |
+|-----------|---------|-------|
+| Database | SQL migratie | 3 tabellen + 2 triggers + RLS + indexes + realtime |
+| Hook | `src/hooks/useDienstenPlanning.ts` | Nieuw bestand |
+| Pagina | `src/pages/Planning.tsx` | Nieuw bestand |
+| Routing | `src/App.tsx` | 1 import + 1 route |
+| Sidebar | `src/components/AppSidebar.tsx` | 1 icon import + 1 menu item |
 
-Totaal: 3 bestanden, alleen CSS/JSX in bestaande empty state blokken. Geen nieuwe bestanden, geen database, geen hooks.
+Geen UI componenten (kalender, filters, modals) — die komen in prompt #1B.
