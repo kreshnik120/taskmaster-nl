@@ -1,79 +1,66 @@
 
 
-# PA-1 -- Smart Matching Engine: AI Suggesties bij Diensten
+# PA-2 -- Server-Side Matching Engine: Edge Function + Historie Score
 
 ## Overzicht
-Voeg een intelligent matching systeem toe aan de Planning module. Wanneer een planner een dienst opent in het DienstDetailSheet, toont het systeem automatisch de top-10 best passende beschikbare professionals met een 100-punten matchscore.
+Voeg een server-side matching engine toe via een backend function die een ECHTE historie score berekent (hoeveel keer een professional eerder bij dezelfde opdrachtgever heeft gewerkt). De client-side matching (PA-1) geeft historie altijd 0 punten. Een "Diepere analyse" knop in de UI triggert de server-side analyse.
 
-## Stap 1: Nieuwe Hook -- useDienstMatching.ts
+## Stap 1: Edge Function -- agent-dienst-matching/index.ts
 
-Nieuw bestand `src/hooks/useDienstMatching.ts`:
+Nieuw bestand `supabase/functions/agent-dienst-matching/index.ts`:
 
-- **3 parallelle queries**:
-  1. Actieve professionals voor de org (`professionals` tabel, max 200)
-  2. Beschikbaarheid op de dienstdatum (`professional_availability`)
-  3. Bestaande toewijzingen op die datum (`dienst_toewijzingen` met inner join op `diensten`)
+- Importeert `corsHeaders`, `createAdminClient`, `jsonResponse`, `handleCors`, `logInfo`, `logSuccess`, `logError` uit `_shared/core.ts`
+- **6 database queries**:
+  1. Dienst ophalen met sublocation/location/organization (voor client_org_id)
+  2. Actieve professionals (org_id, actief/beschikbaar, max 200)
+  3. Beschikbaarheid op datum
+  4. Dag-toewijzingen voor overlap check
+  5. Huidige toewijzingen aan deze dienst (skip lijst)
+  6. **HISTORIE**: eerdere bevestigde/voltooide toewijzingen bij dezelfde opdrachtgever (client_org_id)
+- **Scoring** (zelfde 100-punten systeem als client-side):
+  - Functieniveau (0-30), Beschikbaarheid (0-25), Certificeringen (0-20), Regio (0-15)
+  - **Historie (0-10) -- NIEUW**: >=5x eerder = 10pt, >=2x = 7pt, 1x = 4pt, 0x = 0pt
+- Logging naar `function_call_logs` tabel
+- Return: `{ success, action, matches, meta }`
 
-- **Client-side scoring** (100 punten max):
-  - Functieniveau (0-30): exact match met `gevraagd_functie_niveau`
-  - Beschikbaarheid (0-25): via SHIFT_MAP (dag->dag/hele_dag, etc.)
-  - Certificeringen (0-20): proportioneel aan `vereiste_certificeringen` match
-  - Regio (0-15): match op `sublocation.plaats` vs `regio` en `regio_voorkeur`
-  - Historie (0-10): placeholder voor toekomstige uitbreiding
+## Stap 2: Config.toml entry
 
-- **Filters**: al toegewezen professionals overslaan, gediskwalificeerden (overlap/niet beschikbaar) verbergen
-- **Output**: top 10 gesorteerd op score DESC
-- Queries alleen actief als dienst niet geannuleerd/voltooid is
+Voeg `[functions.agent-dienst-matching]` toe met `verify_jwt = false` aan `supabase/config.toml`.
 
-## Stap 2: Nieuw Component -- DienstMatchingSuggesties.tsx
+## Stap 3: Frontend Hook -- useAgentDienstMatching.ts
 
-Nieuw bestand `src/components/planning/DienstMatchingSuggesties.tsx`:
+Nieuw bestand `src/hooks/useAgentDienstMatching.ts`:
 
-- **Score cirkel** met kleurcodering: >= 70 emerald, >= 50 amber, < 50 slate
-- **Tooltip** met volledige score breakdown (5 categorieen met progress bars)
-- **Match reasons** als compacte chips
-- **"Toewijzen" knop** per professional
-- **Inklapbaar** (standaard open) met Sparkles icoon
-- **Violet themakleur** (onderscheid van teal/emerald)
-- Verbergt zichzelf bij geannuleerde/voltooide/volledig bezette diensten
+- `supabase.functions.invoke("agent-dienst-matching", { body })` aanroep
+- State: `isAnalyzing`, `agentMatches`, `executionTime`, `error`
+- `runAnalysis(dienst, action)` -- trigger server-side analyse
+- `clearResults()` -- reset state
 
-## Stap 3: DienstDetailSheet.tsx aanpassen
+## Stap 4: DienstMatchingSuggesties.tsx uitbreiden
 
-Wijzigingen aan `src/components/planning/DienstDetailSheet.tsx`:
+Wijzigingen aan `src/components/planning/DienstMatchingSuggesties.tsx`:
 
-- Import `DienstMatchingSuggesties` toevoegen (na regel 10)
-- `handleSuggestieAssign` functie toevoegen: insert in `dienst_toewijzingen` met status "voorgesteld"
-- Suggesties panel invoegen na `ToewijzingenBeheer` (na regel 251)
-
-## Stap 4: agentIntents.ts uitbreiden
-
-Wijzigingen aan `src/lib/agentIntents.ts`:
-
-- **4 nieuwe intents** toevoegen (na `general_query`, voor sluitende `}`):
-  - `suggest_professional` (match_agent)
-  - `find_replacement` (match_agent)
-  - `check_dienst_coverage` (report_agent)
-  - `plan_week_diensten` (schedule_agent)
-
-- **2 nieuwe page configs** toevoegen (na `/recruitment`, voor sluitende `}`):
-  - `/planning`: primaryAgent "match_agent", 5 intents
-  - `/beschikbaarheid`: primaryAgent "schedule_agent", 4 intents
-
-- **6 nieuwe keywords** in `detectIntentFromText`:
-  - suggestie, voorstel, vervanging, bezetting, rooster, weekplanning
+- Import `useAgentDienstMatching` + `Loader2` + `Zap` iconen
+- Voeg agent hook state toe in de component
+- Voeg "Diepere analyse (met werkhistorie)" knop toe onder de client-side resultaten:
+  - Zap icoon, violet outline stijl
+  - Loading state met Loader2 spinner
+  - Bij resultaten: server-side matches tonen met historie score highlight
+  - "Sluiten" knop om agent resultaten te verbergen
+  - Toewijzen knop per agent match
+  - Error weergave bij fouten
 
 ## Gewijzigde/Nieuwe Bestanden
 
-1. `src/hooks/useDienstMatching.ts` (nieuw) -- matching engine met 3 queries + scoring
-2. `src/components/planning/DienstMatchingSuggesties.tsx` (nieuw) -- suggesties UI
-3. `src/components/planning/DienstDetailSheet.tsx` (wijzig) -- integratie suggesties panel
-4. `src/lib/agentIntents.ts` (wijzig) -- 4 intents + 2 page configs + 6 keywords
+1. `supabase/functions/agent-dienst-matching/index.ts` (nieuw) -- server-side matching engine
+2. `supabase/config.toml` (wijzig) -- function config entry
+3. `src/hooks/useAgentDienstMatching.ts` (nieuw) -- frontend hook voor edge function
+4. `src/components/planning/DienstMatchingSuggesties.tsx` (wijzig) -- "Diepere analyse" knop + resultaten UI
 
 ## Technische Details
 
-- Scoring gebruikt dezelfde `SHIFT_MAP` als `useBeschikbaarheidIndicator` voor consistentie
-- Overlap check vergelijkt `start_tijd`/`eind_tijd` van diensten op dezelfde datum
-- `handleSuggestieAssign` gebruikt `dienst_toewijzingen` insert met status "voorgesteld" en valideert via bestaande database trigger `check_dienst_overlap`
-- Alle datum-operaties gebruiken `parseISO()`, geen `new Date(string)`
-- Geen database migraties nodig
+- Edge function gebruikt `createAdminClient()` (service role) voor volledige data toegang
+- Historie query haalt alle bevestigde/voltooide toewijzingen op en filtert client-side op `client_org_id` match
+- Geen database migraties nodig (`function_call_logs` tabel bestaat al)
+- Config.toml: `verify_jwt = false` (auth wordt niet vereist voor deze matching operatie)
 
