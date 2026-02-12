@@ -1,66 +1,45 @@
 
-
-# PA-2 -- Server-Side Matching Engine: Edge Function + Historie Score
+# PA-3 -- Chat Integratie voor Planning + Beschikbaarheid
 
 ## Overzicht
-Voeg een server-side matching engine toe via een backend function die een ECHTE historie score berekent (hoeveel keer een professional eerder bij dezelfde opdrachtgever heeft gewerkt). De client-side matching (PA-1) geeft historie altijd 0 punten. Een "Diepere analyse" knop in de UI triggert de server-side analyse.
+Maak de ChatWidget context-aware voor de Planning en Beschikbaarheid pagina's, en voeg een "Vraag aan AI" knop toe in het dienst detail paneel.
 
-## Stap 1: Edge Function -- agent-dienst-matching/index.ts
+## Stap 1: ChatWidget.tsx -- Imports uitbreiden
 
-Nieuw bestand `supabase/functions/agent-dienst-matching/index.ts`:
+- Voeg `CalendarDays` en `CalendarCheck2` toe aan de lucide-react import (regel 2)
+- Voeg `parseISO` toe aan de date-fns import (regel 28)
 
-- Importeert `corsHeaders`, `createAdminClient`, `jsonResponse`, `handleCors`, `logInfo`, `logSuccess`, `logError` uit `_shared/core.ts`
-- **6 database queries**:
-  1. Dienst ophalen met sublocation/location/organization (voor client_org_id)
-  2. Actieve professionals (org_id, actief/beschikbaar, max 200)
-  3. Beschikbaarheid op datum
-  4. Dag-toewijzingen voor overlap check
-  5. Huidige toewijzingen aan deze dienst (skip lijst)
-  6. **HISTORIE**: eerdere bevestigde/voltooide toewijzingen bij dezelfde opdrachtgever (client_org_id)
-- **Scoring** (zelfde 100-punten systeem als client-side):
-  - Functieniveau (0-30), Beschikbaarheid (0-25), Certificeringen (0-20), Regio (0-15)
-  - **Historie (0-10) -- NIEUW**: >=5x eerder = 10pt, >=2x = 7pt, 1x = 4pt, 0x = 0pt
-- Logging naar `function_call_logs` tabel
-- Return: `{ success, action, matches, meta }`
+## Stap 2: ChatWidget.tsx -- PAGE_CONTEXTS uitbreiden
 
-## Stap 2: Config.toml entry
+Voeg twee nieuwe entries toe na `/sollicitaties-archief` (regel 162), voor de sluitende `};` (regel 163):
 
-Voeg `[functions.agent-dienst-matching]` toe met `verify_jwt = false` aan `supabase/config.toml`.
+- `/planning`: label "Diensten Planning", icon CalendarDays, beschrijving met matching/scoring/bezetting details, 3 quickActions (Onbezette diensten, Matching uitleg, Planning tips)
+- `/beschikbaarheid`: label "Beschikbaarheid", icon CalendarCheck2, beschrijving met professional/shift/matrix details, 3 quickActions (Beschikbaarheid tips, Shift planning, Week optimaliseren)
 
-## Stap 3: Frontend Hook -- useAgentDienstMatching.ts
+## Stap 3: ChatWidget.tsx -- currentPageContext verrijken
 
-Nieuw bestand `src/hooks/useAgentDienstMatching.ts`:
+Vervang de useMemo op regels 239-266 met een versie die dynamisch de weekinfo toevoegt wanneer de gebruiker op `/planning` is en een `?week=` URL parameter aanwezig is. De description wordt verrijkt met "De gebruiker bekijkt de week van [datum]."
 
-- `supabase.functions.invoke("agent-dienst-matching", { body })` aanroep
-- State: `isAnalyzing`, `agentMatches`, `executionTime`, `error`
-- `runAnalysis(dienst, action)` -- trigger server-side analyse
-- `clearResults()` -- reset state
+## Stap 4: ChatWidget.tsx -- Custom event listener
 
-## Stap 4: DienstMatchingSuggesties.tsx uitbreiden
+Voeg een nieuw useEffect toe dat luistert naar het custom event `open-chat-with-context`. Dit event opent de chat met een vooringevulde prompt: `setIsOpen(true)`, `setShowWelcome(false)`, `setInput(prompt)`.
 
-Wijzigingen aan `src/components/planning/DienstMatchingSuggesties.tsx`:
+## Stap 5: DienstDetailSheet.tsx -- "Vraag aan AI" knop
 
-- Import `useAgentDienstMatching` + `Loader2` + `Zap` iconen
-- Voeg agent hook state toe in de component
-- Voeg "Diepere analyse (met werkhistorie)" knop toe onder de client-side resultaten:
-  - Zap icoon, violet outline stijl
-  - Loading state met Loader2 spinner
-  - Bij resultaten: server-side matches tonen met historie score highlight
-  - "Sluiten" knop om agent resultaten te verbergen
-  - Toewijzen knop per agent match
-  - Error weergave bij fouten
+- Voeg `Bot` toe aan de lucide-react import (regel 4)
+- Voeg na de DienstMatchingSuggesties (regel 272) een "Vraag aan AI assistent" knop toe:
+  - Alleen zichtbaar voor actieve diensten (niet geannuleerd/voltooid)
+  - Violet styling (border-violet-300, text-violet-700)
+  - Dispatcht `open-chat-with-context` event met volledige dienst context (titel, datum, type, tijden, status, locatie, functieniveau)
 
-## Gewijzigde/Nieuwe Bestanden
+## Gewijzigde Bestanden
 
-1. `supabase/functions/agent-dienst-matching/index.ts` (nieuw) -- server-side matching engine
-2. `supabase/config.toml` (wijzig) -- function config entry
-3. `src/hooks/useAgentDienstMatching.ts` (nieuw) -- frontend hook voor edge function
-4. `src/components/planning/DienstMatchingSuggesties.tsx` (wijzig) -- "Diepere analyse" knop + resultaten UI
+1. `src/components/AIAssistant/ChatWidget.tsx` (wijzig) -- imports, PAGE_CONTEXTS, useMemo verrijking, event listener
+2. `src/components/planning/DienstDetailSheet.tsx` (wijzig) -- Bot import, "Vraag aan AI" knop
 
 ## Technische Details
 
-- Edge function gebruikt `createAdminClient()` (service role) voor volledige data toegang
-- Historie query haalt alle bevestigde/voltooide toewijzingen op en filtert client-side op `client_org_id` match
-- Geen database migraties nodig (`function_call_logs` tabel bestaat al)
-- Config.toml: `verify_jwt = false` (auth wordt niet vereist voor deze matching operatie)
-
+- Geen nieuwe bestanden, geen database wijzigingen
+- Custom event patroon (`open-chat-with-context`) maakt losse koppeling mogelijk tussen DienstDetailSheet en ChatWidget
+- parseISO gebruikt voor veilige date parsing (consistent met codebase)
+- Bestaande PAGE_CONTEXTS entries worden niet gewijzigd
