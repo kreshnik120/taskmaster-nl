@@ -44,11 +44,13 @@ import {
   FileText,
   Settings,
   Download,
+  Zap,
 } from "lucide-react";
 
 // Facturatie Components
 import { FactuurExportDialog } from "@/components/facturatie";
  import { FacturatieCards } from "@/components/facturatie/FacturatieCards";
+import { AutoFacturatieDialog } from "@/components/facturatie/AutoFacturatieDialog";
 
 // Hooks & Types
 import { useFacturen } from "@/hooks/facturatie/useFacturen";
@@ -124,6 +126,7 @@ export default function Facturatie() {
   // Local state for search input
   const [localSearch, setLocalSearch] = useState(searchQuery);
   const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showAutoDialog, setShowAutoDialog] = useState(false);
   const debouncedSearch = useDebouncedValue(localSearch, 300);
 
   // Update URL when debounced search changes
@@ -248,6 +251,14 @@ export default function Facturatie() {
       {/* Page Header */}
       <PageHero title="Facturatie" subtitle="Beheer facturen, betalingen en herinneringen">
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setShowAutoDialog(true)}
+            className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+          >
+            <Zap className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Auto-factureren</span>
+          </Button>
           <Button
             variant="outline"
             onClick={() => navigate("/facturatie/instellingen")}
@@ -610,6 +621,9 @@ export default function Facturatie() {
           </div>
         </div>
       )}
+
+      {/* Auto-facturatie Dialog */}
+      <AutoFacturatieDialog open={showAutoDialog} onOpenChange={setShowAutoDialog} />
 
       {/* Export Dialog */}
       <FactuurExportDialog
