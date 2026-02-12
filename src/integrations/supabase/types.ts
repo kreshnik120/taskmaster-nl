@@ -2459,6 +2459,44 @@ export type Database = {
         }
         Relationships: []
       }
+      dienst_templates: {
+        Row: {
+          aangemaakt_door: string | null
+          created_at: string | null
+          id: string
+          naam: string
+          org_id: string
+          template_data: Json
+          updated_at: string | null
+        }
+        Insert: {
+          aangemaakt_door?: string | null
+          created_at?: string | null
+          id?: string
+          naam: string
+          org_id: string
+          template_data?: Json
+          updated_at?: string | null
+        }
+        Update: {
+          aangemaakt_door?: string | null
+          created_at?: string | null
+          id?: string
+          naam?: string
+          org_id?: string
+          template_data?: Json
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dienst_templates_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dienst_toewijzingen: {
         Row: {
           created_at: string | null
