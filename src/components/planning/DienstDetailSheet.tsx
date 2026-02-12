@@ -160,6 +160,25 @@ export function DienstDetailSheet({ dienst, open, onClose, onEdit, onCopy, onDel
                   <DetailRow label="Werkvorm">{dienst.werkvorm ?? "—"}</DetailRow>
                   <DetailRow label="Tarief">{formatTarief(dienst.tarief_per_uur)} /uur</DetailRow>
                   <DetailRow label="Gevraagd aantal">{dienst.gevraagd_aantal}</DetailRow>
+                  {dienst.gevraagd_aantal > 1 && (
+                    <div className="flex gap-1 mt-1 mb-1">
+                      {Array.from({ length: dienst.gevraagd_aantal }, (_, i) => i + 1).map((nr) => {
+                        const bezet = dienst.toewijzingen.some(
+                          (t) => t.positie_nr === nr && ["bevestigd", "positief"].includes(t.status)
+                        );
+                        return (
+                          <div key={nr} className={cn(
+                            "w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold",
+                            bezet
+                              ? "bg-emerald-500 text-white"
+                              : "bg-amber-100 text-amber-700 border border-amber-300"
+                          )} title={bezet ? `Positie ${nr}: Bezet` : `Positie ${nr}: Open`}>
+                            {nr}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                   <DetailRow label="Accepteerbaar">{dienst.accepteerbaar ? "Ja" : "Nee"}</DetailRow>
                   <DetailRow label="Bron">{bronLabel[dienst.bron] ?? dienst.bron}</DetailRow>
                   {dienst.is_spoed && (

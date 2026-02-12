@@ -2502,6 +2502,7 @@ export type Database = {
           created_at: string | null
           dienst_id: string
           id: string
+          positie_nr: number
           professional_id: string
           reactie_door: string | null
           reactie_op: string | null
@@ -2514,6 +2515,7 @@ export type Database = {
           created_at?: string | null
           dienst_id: string
           id?: string
+          positie_nr?: number
           professional_id: string
           reactie_door?: string | null
           reactie_op?: string | null
@@ -2526,6 +2528,7 @@ export type Database = {
           created_at?: string | null
           dienst_id?: string
           id?: string
+          positie_nr?: number
           professional_id?: string
           reactie_door?: string | null
           reactie_op?: string | null

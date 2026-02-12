@@ -62,6 +62,7 @@ export interface DienstData {
   toewijzingen: Array<{
     id: string;
     status: string;
+    positie_nr: number;
     reactie_op: string | null;
     reactie_door: string | null;
     toewijzing_notities: string | null;
@@ -149,8 +150,8 @@ export function useDienstenPlanning(filters: DienstFilters) {
               )
             )
           ),
-          dienst_toewijzingen (
-            id, status, reactie_op, reactie_door, toewijzing_notities,
+      dienst_toewijzingen (
+            id, status, positie_nr, reactie_op, reactie_door, toewijzing_notities,
             professionals!dienst_toewijzingen_professional_id_fkey (
               id, full_name, functie_niveau, telefoonnummer, email
             )
@@ -183,6 +184,7 @@ export function useDienstenPlanning(filters: DienstFilters) {
         toewijzingen: (d.dienst_toewijzingen || []).map((t: any) => ({
           id: t.id,
           status: t.status,
+          positie_nr: t.positie_nr || 1,
           reactie_op: t.reactie_op,
           reactie_door: t.reactie_door,
           toewijzing_notities: t.toewijzing_notities,
