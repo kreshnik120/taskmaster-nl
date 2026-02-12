@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeChannel } from "@/hooks/useRealtimeChannel";
-import { startOfWeek, endOfWeek, format, isToday, parseISO } from "date-fns";
+import { startOfWeek, endOfWeek, startOfMonth, addWeeks, format, isToday, parseISO } from "date-fns";
 import { useMemo } from "react";
 
 export interface DienstFilters {
@@ -13,6 +13,7 @@ export interface DienstFilters {
   certificering: string;
   spoed: string;
   weekStart: string;
+  viewMode?: "kalender" | "lijst" | "maand";
 }
 
 export interface DienstData {
@@ -112,12 +113,24 @@ export function splitByStatus(diensten: DienstData[]) {
 export function useDienstenPlanning(filters: DienstFilters) {
   const queryClient = useQueryClient();
 
-  const weekEnd = useMemo(() => {
+  const dateRange = useMemo(() => {
     const start = parseISO(filters.weekStart);
-    return format(endOfWeek(start, { weekStartsOn: 1 }), "yyyy-MM-dd");
-  }, [filters.weekStart]);
+    if (filters.viewMode === "maand") {
+      const monthStart = startOfMonth(start);
+      const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 });
+      const gridEnd = endOfWeek(addWeeks(gridStart, 5), { weekStartsOn: 1 });
+      return {
+        start: format(gridStart, "yyyy-MM-dd"),
+        end: format(gridEnd, "yyyy-MM-dd"),
+      };
+    }
+    return {
+      start: filters.weekStart,
+      end: format(endOfWeek(start, { weekStartsOn: 1 }), "yyyy-MM-dd"),
+    };
+  }, [filters.weekStart, filters.viewMode]);
 
-  const queryKey = ["diensten-planning", filters.weekStart, filters] as const;
+  const queryKey = ["diensten-planning", dateRange.start, dateRange.end, filters] as const;
 
   const { data: rawDiensten = [], isLoading, error } = useQuery({
     queryKey,
@@ -142,8 +155,8 @@ export function useDienstenPlanning(filters: DienstFilters) {
             )
           )
         `)
-        .gte("datum", filters.weekStart)
-        .lte("datum", weekEnd)
+        .gte("datum", dateRange.start)
+        .lte("datum", dateRange.end)
         .order("datum", { ascending: true })
         .order("start_tijd", { ascending: true });
 

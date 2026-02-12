@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
+import { cn } from "@/lib/utils";
 import { useSearchParams } from "react-router-dom";
 import { CalendarDays, AlertCircle, TrendingUp, Plus } from "lucide-react";
 import { startOfWeek, format, addDays, parseISO } from "date-fns";
@@ -11,6 +12,7 @@ import { PlanningToolbar } from "@/components/planning/PlanningToolbar";
 import { PlanningLegenda } from "@/components/planning/PlanningLegenda";
 import { PlanningWeekKalender } from "@/components/planning/PlanningWeekKalender";
 import { PlanningLijstWeergave } from "@/components/planning/PlanningLijstWeergave";
+import { PlanningMaandKalender } from "@/components/planning/PlanningMaandKalender";
 import { PlanningFilters } from "@/components/planning/PlanningFilters";
 import { DienstDetailSheet } from "@/components/planning/DienstDetailSheet";
 import { NieuweDienstModal } from "@/components/planning/NieuweDienstModal";
@@ -27,7 +29,7 @@ function getDefaultWeekStart() {
 const Planning = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const weekStart = searchParams.get("week") || getDefaultWeekStart();
-  const viewMode = (searchParams.get("view") as "kalender" | "lijst") || "kalender";
+  const viewMode = (searchParams.get("view") as "kalender" | "lijst" | "maand") || "kalender";
 
   const [filters, setFilters] = useState<DienstFilters>({
     status: "all",
@@ -51,7 +53,7 @@ const Planning = () => {
   const queryClient = useQueryClient();
 
   // Keep filters.weekStart in sync with URL
-  const activeFilters = useMemo(() => ({ ...filters, weekStart }), [filters, weekStart]);
+  const activeFilters = useMemo(() => ({ ...filters, weekStart, viewMode }), [filters, weekStart, viewMode]);
 
   const { diensten, isLoading, stats } = useDienstenPlanning(activeFilters);
 
@@ -66,7 +68,7 @@ const Planning = () => {
   );
 
   const handleViewChange = useCallback(
-    (mode: "kalender" | "lijst") => {
+    (mode: "kalender" | "lijst" | "maand") => {
       setSearchParams((p) => {
         p.set("view", mode);
         return p;
@@ -223,14 +225,29 @@ const Planning = () => {
 
       {/* Content */}
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
-          {Array.from({ length: 7 }).map((_, i) => (
+        <div className={cn(
+          "grid gap-2",
+          viewMode === "maand" ? "grid-cols-7" : "grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7"
+        )}>
+          {Array.from({ length: viewMode === "maand" ? 35 : 7 }).map((_, i) => (
             <div
               key={i}
               className="h-32 rounded-xl bg-white/30 dark:bg-slate-900/30 animate-pulse border border-white/20 dark:border-white/10"
             />
           ))}
         </div>
+      ) : viewMode === "maand" ? (
+        <PlanningMaandKalender
+          diensten={diensten}
+          weekStart={weekStart}
+          showOpen={showOpen}
+          showIngepland={showIngepland}
+          compact={compact}
+          onDienstClick={handleDienstClick}
+          onEdit={handleEditDienst}
+          onCopy={handleCopyDienst}
+          onDelete={handleDeleteDienst}
+        />
       ) : viewMode === "kalender" ? (
         <PlanningWeekKalender
           diensten={diensten}
