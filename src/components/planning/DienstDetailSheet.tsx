@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Lock, MessageSquare, X } from "lucide-react";
+import { Lock, MessageSquare, X, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -270,6 +270,22 @@ export function DienstDetailSheet({ dienst, open, onClose, onEdit, onCopy, onDel
 
             {/* AI Suggesties */}
             <DienstMatchingSuggesties dienst={dienst} onAssign={handleSuggestieAssign} />
+
+            {/* Vraag aan AI chat */}
+            {!["geannuleerd", "voltooid"].includes(dienst.status) && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/30"
+                onClick={() => {
+                  const dienstInfo = `Ik bekijk een dienst op ${format(parseISO(dienst.datum), 'd MMMM yyyy', { locale: nl })}. ${dienst.dienst_type ?? 'Dag'}dienst van ${dienst.start_tijd?.slice(0, 5) ?? '?'} tot ${dienst.eind_tijd?.slice(0, 5) ?? '?'}. Status: ${dienst.status}. Locatie: ${dienst.sublocation?.naam ?? 'onbekend'}. Gevraagd niveau: ${(dienst.gevraagd_functie_niveau as string[])?.join(', ') || 'niet gespecificeerd'}. Geef advies over de beste aanpak voor het invullen van deze dienst.`;
+                  window.dispatchEvent(new CustomEvent('open-chat-with-context', { detail: { prompt: dienstInfo } }));
+                }}
+              >
+                <Bot className="h-3.5 w-3.5 mr-1.5" />
+                Vraag aan AI assistent
+              </Button>
+            )}
           </div>
         </SheetContent>
       </Sheet>
