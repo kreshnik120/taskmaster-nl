@@ -1,13 +1,13 @@
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, CalendarDays, List } from "lucide-react";
-import { format, addWeeks, subWeeks, startOfWeek, getISOWeek, endOfWeek, parseISO } from "date-fns";
+import { ChevronLeft, ChevronRight, CalendarDays, List, Grid3X3 } from "lucide-react";
+import { format, addWeeks, subWeeks, startOfWeek, getISOWeek, endOfWeek, parseISO, startOfMonth, addMonths, subMonths } from "date-fns";
 import { nl } from "date-fns/locale";
 
 interface PlanningToolbarProps {
   weekStart: string;
   onWeekChange: (newWeekStart: string) => void;
-  viewMode: "kalender" | "lijst";
-  onViewModeChange: (mode: "kalender" | "lijst") => void;
+  viewMode: "kalender" | "lijst" | "maand";
+  onViewModeChange: (mode: "kalender" | "lijst" | "maand") => void;
 }
 
 export function PlanningToolbar({
@@ -16,13 +16,34 @@ export function PlanningToolbar({
   viewMode,
   onViewModeChange,
 }: PlanningToolbarProps) {
+  const isMaand = viewMode === "maand";
   const start = parseISO(weekStart);
   const end = endOfWeek(start, { weekStartsOn: 1 });
   const weekNr = getISOWeek(start);
 
+  const goPrev = () => {
+    if (isMaand) {
+      onWeekChange(format(startOfWeek(subMonths(startOfMonth(start), 1), { weekStartsOn: 1 }), "yyyy-MM-dd"));
+    } else {
+      onWeekChange(format(subWeeks(start, 1), "yyyy-MM-dd"));
+    }
+  };
+
+  const goNext = () => {
+    if (isMaand) {
+      onWeekChange(format(startOfWeek(addMonths(startOfMonth(start), 1), { weekStartsOn: 1 }), "yyyy-MM-dd"));
+    } else {
+      onWeekChange(format(addWeeks(start, 1), "yyyy-MM-dd"));
+    }
+  };
+
   const goToday = () => {
     onWeekChange(format(startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd"));
   };
+
+  const dateLabel = isMaand
+    ? format(startOfMonth(start), "MMMM yyyy", { locale: nl })
+    : `Week ${weekNr} — ${format(start, "dd-MM-yyyy", { locale: nl })} t/m ${format(end, "dd-MM-yyyy", { locale: nl })}`;
 
   return (
     <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -31,7 +52,7 @@ export function PlanningToolbar({
           variant="ghost"
           size="icon"
           className="h-8 w-8"
-          onClick={() => onWeekChange(format(subWeeks(start, 1), "yyyy-MM-dd"))}
+          onClick={goPrev}
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
@@ -42,13 +63,12 @@ export function PlanningToolbar({
           variant="ghost"
           size="icon"
           className="h-8 w-8"
-          onClick={() => onWeekChange(format(addWeeks(start, 1), "yyyy-MM-dd"))}
+          onClick={goNext}
         >
           <ChevronRight className="h-4 w-4" />
         </Button>
         <span className="text-sm font-semibold text-foreground ml-2">
-          Week {weekNr} — {format(start, "dd-MM-yyyy", { locale: nl })} t/m{" "}
-          {format(end, "dd-MM-yyyy", { locale: nl })}
+          {dateLabel}
         </span>
       </div>
 
@@ -60,7 +80,16 @@ export function PlanningToolbar({
           onClick={() => onViewModeChange("kalender")}
         >
           <CalendarDays className="h-3.5 w-3.5" />
-          Kalender
+          Week
+        </Button>
+        <Button
+          variant={viewMode === "maand" ? "default" : "ghost"}
+          size="sm"
+          className="h-8 rounded-none text-xs gap-1"
+          onClick={() => onViewModeChange("maand")}
+        >
+          <Grid3X3 className="h-3.5 w-3.5" />
+          Maand
         </Button>
         <Button
           variant={viewMode === "lijst" ? "default" : "ghost"}
