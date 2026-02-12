@@ -65,10 +65,11 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
   const [locationId, setLocationId] = useState("");
   const [sublocationId, setSublocationId] = useState("");
   const [titel, setTitel] = useState("");
-  const [datum, setDatum] = useState<Date | undefined>(new Date());
+  const [datums, setDatums] = useState<Date[]>([new Date()]);
   const [startTijd, setStartTijd] = useState("07:00");
   const [eindTijd, setEindTijd] = useState("15:00");
   const [pauze, setPauze] = useState(0);
+  const [pauzeManual, setPauzeManual] = useState(false);
   const [functieNiveaus_selected, setFunctieNiveausSelected] = useState<string[]>([]);
   const [aantal, setAantal] = useState(1);
   const [werkvorm, setWerkvorm] = useState("ZZP");
@@ -147,10 +148,11 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
   useEffect(() => {
     if (!editDienst || !open) return;
     setTitel(editDienst.titel);
-    setDatum(parseISO(editDienst.datum));
+    setDatums([parseISO(editDienst.datum)]);
     setStartTijd(editDienst.start_tijd?.slice(0, 5) ?? "07:00");
     setEindTijd(editDienst.eind_tijd?.slice(0, 5) ?? "15:00");
     setPauze(editDienst.pauze_minuten ?? 0);
+    setPauzeManual(true);
     setFunctieNiveausSelected(editDienst.gevraagd_functie_niveau ?? []);
     setAantal(editDienst.gevraagd_aantal ?? 1);
     setWerkvorm(editDienst.werkvorm ?? "ZZP");
@@ -192,8 +194,8 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
   useEffect(() => {
     if (!open) {
       setOrgId(""); setLocationId(""); setSublocationId("");
-      setTitel(""); setDatum(new Date()); setStartTijd("07:00"); setEindTijd("15:00");
-      setPauze(0); setFunctieNiveausSelected([]); setAantal(1); setWerkvorm("ZZP");
+      setTitel(""); setDatums([new Date()]); setStartTijd("07:00"); setEindTijd("15:00");
+      setPauze(0); setPauzeManual(false); setFunctieNiveausSelected([]); setAantal(1); setWerkvorm("ZZP");
       setDienstType("dag"); setTarief(""); setHerhaling("geen"); setHerhalingTot(undefined);
       setPriveOpmerking(""); setPubliekeOpmerking(""); setFlexwerkerOpmerking(""); setStatus("concept");
       setAccepteerbaar(true); setIsSlaapdienst(false); setSlaapStart("23:00"); setSlaapEind("06:00");
@@ -203,6 +205,24 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
   }, [open]);
 
   const duur = useMemo(() => berekeningDuur(startTijd, eindTijd, pauze), [startTijd, eindTijd, pauze]);
+
+  // Auto-pauze op basis van bruto uren (CAO-richtlijn)
+  useEffect(() => {
+    if (pauzeManual) return;
+    const brutoMinuten = (() => {
+      if (!startTijd || !eindTijd) return 0;
+      const [sh, sm] = startTijd.split(":").map(Number);
+      const [eh, em] = eindTijd.split(":").map(Number);
+      let min = (eh * 60 + em) - (sh * 60 + sm);
+      if (min <= 0) min += 24 * 60;
+      return min;
+    })();
+    const brutoUren = brutoMinuten / 60;
+    if (brutoUren > 10) setPauze(60);
+    else if (brutoUren > 8) setPauze(45);
+    else if (brutoUren > 5.5) setPauze(30);
+    else setPauze(0);
+  }, [startTijd, eindTijd, pauzeManual]);
 
   // Auto-detect dienst type based on times
   useEffect(() => {
@@ -220,13 +240,13 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
   }, [startTijd, eindTijd, titelManual]);
 
   const herhalingAantal = useMemo(() => {
-    if (herhaling === "geen" || !datum || !herhalingTot) return 0;
-    return berekenHerhalingen(datum, herhalingTot, herhaling);
-  }, [herhaling, datum, herhalingTot]);
+    if (herhaling === "geen" || datums.length === 0 || !herhalingTot) return 0;
+    return berekenHerhalingen(datums[0], herhalingTot, herhaling);
+  }, [herhaling, datums, herhalingTot]);
 
   const handleSave = async () => {
     const targetSublocationId = sublocationId || (editDienst?.sublocation?.id);
-    if (!targetSublocationId || !datum || !startTijd || !eindTijd || !titel.trim()) {
+    if (!targetSublocationId || datums.length === 0 || !startTijd || !eindTijd || !titel.trim()) {
       toast.error("Vul alle verplichte velden in");
       return;
     }
@@ -254,7 +274,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
       const dienstData = {
         sublocation_id: targetSublocationId,
         titel: titel.trim(),
-        datum: format(datum, "yyyy-MM-dd"),
+        datum: format(datums[0], "yyyy-MM-dd"),
         start_tijd: startTijd + ":00",
         eind_tijd: eindTijd + ":00",
         pauze_minuten: pauze,
@@ -283,50 +303,65 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
         if (error) throw error;
         toast.success("Dienst bijgewerkt!");
       } else {
-        const { data: inserted, error } = await supabase.from("diensten").insert(dienstData).select("id").single();
+        // Multi-date: maak 1 dienst per geselecteerde datum
+        const allDatums = datums.map(d => format(d, "yyyy-MM-dd"));
+        const insertRecords = allDatums.map(d => ({
+          ...dienstData,
+          datum: d,
+        }));
+
+        const { data: inserted, error } = await supabase
+          .from("diensten")
+          .insert(insertRecords)
+          .select("id");
         if (error) throw error;
 
-        // Pre-toewijzing aanmaken
-        if (preToewijzingId && inserted?.id) {
+        // Pre-toewijzing alleen op eerste dienst
+        if (preToewijzingId && inserted?.[0]?.id) {
           const { error: toewijzingError } = await supabase.from("dienst_toewijzingen").insert({
-            dienst_id: inserted.id,
+            dienst_id: inserted[0].id,
             professional_id: preToewijzingId,
             status: "toegewezen",
             toegewezen_door: user.id,
           });
           if (toewijzingError) {
             console.error("Pre-toewijzing error:", toewijzingError);
-            toast.error("Dienst aangemaakt, maar toewijzing is mislukt");
+            toast.error("Diensten aangemaakt, maar toewijzing is mislukt");
           }
         }
 
-        // Handle herhaling
-        if (herhaling !== "geen" && herhalingAantal > 0 && datum && herhalingTot) {
-          const herhalingRecords = [];
-          for (let i = 1; i <= herhalingAantal; i++) {
-            let newDatum: Date;
-            if (herhaling === "dagelijks") newDatum = addDays(datum, i);
-            else if (herhaling === "wekelijks") newDatum = addWeeks(datum, i);
-            else newDatum = addWeeks(datum, i * 2);
+        // Herhaling: voor ELKE ingevoegde dienst herhalingen aanmaken
+        if (herhaling !== "geen" && herhalingAantal > 0 && herhalingTot) {
+          const herhalingRecords: Array<typeof dienstData & { herhaling_parent_id: string; bron: string }> = [];
+          for (const parent of (inserted || [])) {
+            const parentDatum = parseISO(
+              allDatums[(inserted || []).indexOf(parent)]
+            );
+            for (let i = 1; i <= herhalingAantal; i++) {
+              let newDatum: Date;
+              if (herhaling === "dagelijks") newDatum = addDays(parentDatum, i);
+              else if (herhaling === "wekelijks") newDatum = addWeeks(parentDatum, i);
+              else newDatum = addWeeks(parentDatum, i * 2);
 
-            herhalingRecords.push({
-              ...dienstData,
-              datum: format(newDatum, "yyyy-MM-dd"),
-              herhaling_parent_id: inserted.id,
-              bron: "herhaling" as const,
-            });
+              herhalingRecords.push({
+                ...dienstData,
+                datum: format(newDatum, "yyyy-MM-dd"),
+                herhaling_parent_id: parent.id,
+                bron: "herhaling",
+              });
+            }
           }
           if (herhalingRecords.length > 0) {
             const { error: hErr } = await supabase.from("diensten").insert(herhalingRecords);
             if (hErr) {
               console.error("Herhaling error:", hErr);
-              toast.error(`Hoofddienst aangemaakt, maar ${herhalingAantal} herhalingen zijn mislukt`);
+              toast.error(`Diensten aangemaakt, maar herhalingen zijn mislukt`);
             }
           }
-          toast.success(`${herhalingAantal + 1} diensten aangemaakt!`);
-        } else {
-          toast.success("Dienst aangemaakt!");
         }
+
+        const totaal = allDatums.length * (1 + (herhaling !== "geen" ? herhalingAantal : 0));
+        toast.success(`${totaal} dienst${totaal > 1 ? "en" : ""} aangemaakt!`);
       }
 
       queryClient.invalidateQueries({ queryKey: ["diensten-planning"] });
@@ -392,18 +427,61 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs">Datum *</Label>
+              <Label className="text-xs">Datum{!isEdit && "(s)"} *</Label>
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" className={cn("w-full h-9 text-xs justify-start", !datum && "text-muted-foreground")}>
+                  <Button variant="outline" className={cn("w-full h-9 text-xs justify-start", datums.length === 0 && "text-muted-foreground")}>
                     <CalendarIcon className="h-3.5 w-3.5 mr-2" />
-                    {datum ? format(datum, "d MMMM yyyy", { locale: nl }) : "Kies datum"}
+                    {isEdit
+                      ? (datums[0] ? format(datums[0], "d MMMM yyyy", { locale: nl }) : "Kies datum")
+                      : datums.length === 0
+                        ? "Kies datum(s)"
+                        : datums.length === 1
+                          ? format(datums[0], "d MMMM yyyy", { locale: nl })
+                          : `${datums.length} datums geselecteerd`
+                    }
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar mode="single" selected={datum} onSelect={setDatum} locale={nl} disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))} className="p-3 pointer-events-auto" />
+                  {isEdit ? (
+                    <Calendar
+                      mode="single"
+                      selected={datums[0]}
+                      onSelect={(d) => d && setDatums([d])}
+                      locale={nl}
+                      disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
+                      className="p-3 pointer-events-auto"
+                    />
+                  ) : (
+                    <Calendar
+                      mode="multiple"
+                      selected={datums}
+                      onSelect={(d) => setDatums(d || [])}
+                      locale={nl}
+                      disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
+                      className="p-3 pointer-events-auto"
+                    />
+                  )}
                 </PopoverContent>
               </Popover>
+              {!isEdit && datums.length > 1 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {datums
+                    .sort((a, b) => a.getTime() - b.getTime())
+                    .map((d, i) => (
+                      <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-white/50 dark:bg-slate-800/50 border border-white/20 dark:border-white/10">
+                        {format(d, "d MMM", { locale: nl })}
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-destructive"
+                          onClick={() => setDatums(prev => prev.filter((_, idx) => idx !== i))}
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -429,13 +507,23 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
             )}
 
             <div className="space-y-1.5">
-              <Label className="text-xs">Pauze</Label>
-              <Select value={String(pauze)} onValueChange={(v) => setPauze(Number(v))}>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Pauze</Label>
+                {!pauzeManual && (
+                  <span className="text-[10px] text-muted-foreground">auto (CAO)</span>
+                )}
+              </div>
+              <Select value={String(pauze)} onValueChange={(v) => { setPauze(Number(v)); setPauzeManual(true); }}>
                 <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {[0, 15, 30, 45, 60].map((m) => <SelectItem key={m} value={String(m)}>{m} min</SelectItem>)}
                 </SelectContent>
               </Select>
+              {pauzeManual && (
+                <button type="button" className="text-[10px] text-muted-foreground hover:text-foreground underline" onClick={() => setPauzeManual(false)}>
+                  Terug naar auto
+                </button>
+              )}
             </div>
 
             {/* Slaapdienst */}
@@ -626,7 +714,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar mode="single" selected={herhalingTot} onSelect={setHerhalingTot} locale={nl} disabled={(d) => datum ? d <= datum : false} className="p-3 pointer-events-auto" />
+                    <Calendar mode="single" selected={herhalingTot} onSelect={setHerhalingTot} locale={nl} disabled={(d) => datums.length > 0 ? d <= datums[0] : false} className="p-3 pointer-events-auto" />
                   </PopoverContent>
                 </Popover>
                 {herhalingAantal > 0 && (
@@ -674,7 +762,14 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
               <h4 className="text-sm font-semibold text-foreground">Samenvatting</h4>
               <div className="space-y-2 text-xs">
                 <p className="font-medium text-foreground">{selectedOrgName || (isEdit ? editDienst?.sublocation?.location?.organization?.name : "—")} / {selectedSubName || (isEdit ? editDienst?.sublocation?.naam : "—")}</p>
-                <p className="text-muted-foreground">{datum ? format(datum, "EEEE d MMMM yyyy", { locale: nl }) : "—"}</p>
+                <p className="text-muted-foreground">
+                  {datums.length === 0
+                    ? "—"
+                    : datums.length === 1
+                      ? format(datums[0], "EEEE d MMMM yyyy", { locale: nl })
+                      : `${datums.length} datums: ${datums.sort((a, b) => a.getTime() - b.getTime()).map(d => format(d, "d MMM", { locale: nl })).join(", ")}`
+                  }
+                </p>
                 <p className="text-muted-foreground">
                   {startTijd} - {eindTijd} ({duur.toFixed(1)} uur)
                   {startTijd > eindTijd && " (nachtdienst)"}
