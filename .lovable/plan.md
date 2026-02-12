@@ -1,111 +1,81 @@
 
-
-# P0-A: Nachtdienst + Slaapdienst + Database Fundament
+# P0-B: Multi-Functieniveau + Certificeringen + 3e Opmerking + Pre-toewijzing
 
 ## Overzicht
-Deze prompt breidt de planning module uit met nachtdienst/slaapdienst-ondersteuning en legt het database-fundament voor toekomstige P0-B/C features. Het omvat 9 stappen verdeeld over database, types, UI en logica.
+Puur UI + logica wijzigingen, geen database migraties nodig (kolommen bestaan al uit P0-A). Wijzigingen in 4 bestanden.
 
 ---
 
-## Stap 1: Database migratie (2 SQL statements)
+## Stap 1: Multi-Functieniveau checkboxes (NieuweDienstModal.tsx)
 
-**Migratie A** -- Nieuwe kolommen + type-wijziging `gevraagd_functie_niveau` van TEXT naar TEXT[]:
-- `is_slaapdienst BOOLEAN DEFAULT false`
-- `slaap_start_tijd TIME`
-- `slaap_eind_tijd TIME`
-- `flexwerker_opmerking TEXT`
-- `vereiste_certificeringen TEXT[] DEFAULT '{}'`
-- `gevraagd_functie_niveau` ALTER naar `TEXT[]` met USING-clause die bestaande waarden migreert
+- Regel 38: Breid `functieNiveaus` array uit naar 10 opties: `["HBO", "HBO-V", "VP5", "VP4", "VP3", "VIG", "Helpende Plus", "Helpende", "BEG4", "BEG3"]`
+- Regel 71: Wijzig state van `const [functieNiveau, setFunctieNiveau] = useState("")` naar `const [functieNiveaus_selected, setFunctieNiveausSelected] = useState<string[]>([])`
+- Regel 123: Edit-populate wijzigen naar `setFunctieNiveausSelected(editDienst.gevraagd_functie_niveau ?? [])`
+- Regel 164: Reset wijzigen naar `setFunctieNiveausSelected([])`
+- Regel 227: Save wijzigen naar `gevraagd_functie_niveau: functieNiveaus_selected`
+- Regel 417-429: Vervang het 2-kolom grid (Select + Aantal) door:
+  - Checkbox grid (2 kolommen, 10 niveaus) met multi-select
+  - Daaronder een full-width "Aantal medewerkers" Input
+- Regel 537: Live preview update naar `functieNiveaus_selected.join(", ")`
 
-**Migratie B** -- Herbereken `netto_uren` GENERATED column voor over-middernacht ondersteuning:
-- DROP + re-ADD met CASE-expressie die `eind_tijd < start_tijd` afhandelt via `+24 hours`
+## Stap 2: Certificeringen checkbox-groep (NieuweDienstModal.tsx)
 
----
+- Nieuwe constante: `certificeringOpties = ["BHV", "SKJ", "Medicatie", "Tilliften", "Voorbehouden handelingen", "Agressie", "EMB", "EVC"]`
+- Nieuwe state: `const [certificeringen, setCertificeringen] = useState<string[]>([])`
+- Edit-populate: `setCertificeringen(editDienst.vereiste_certificeringen ?? [])`
+- Reset: `setCertificeringen([])`
+- Save: `vereiste_certificeringen: certificeringen`
+- UI: Na functieniveau checkboxes, conditioneel (alleen als >= 1 niveau geselecteerd) een tweede checkbox grid met certificeringen
+- Live preview: certificeringen tonen als ze geselecteerd zijn
 
-## Stap 2: TypeScript types (useDienstenPlanning.ts)
+## Stap 3: Flexwerker opmerking (NieuweDienstModal.tsx)
 
-DienstData interface uitbreiden met 5 nieuwe velden en `gevraagd_functie_niveau` wijzigen van `string | null` naar `string[]`. De `*` selector in de query haalt de nieuwe kolommen automatisch op.
+- Nieuwe state: `const [flexwerkerOpmerking, setFlexwerkerOpmerking] = useState("")`
+- Edit-populate: `setFlexwerkerOpmerking(editDienst.flexwerker_opmerking ?? "")`
+- Reset: `setFlexwerkerOpmerking("")`
+- Save: `flexwerker_opmerking: flexwerkerOpmerking || null`
+- UI: Drie opmerkingsvelden in volgorde: Publiek -> Flexwerker (nieuw) -> Prive
+  - Verplaats prive opmerking (huidige regel 492-495) ONDER publieke opmerking
+  - Voeg flexwerker opmerking ertussen met placeholder "Alleen zichtbaar na toewijzing (parkeercode, pincode, etc.)"
 
----
+## Stap 4: Detail sheet uitbreiden (DienstDetailSheet.tsx)
 
-## Stap 3: Nachtdienst tijdbereik (NieuweDienstModal.tsx)
+- Na functieniveau DetailRow (regel 133): certificeringen DetailRow toevoegen (conditioneel)
+- Na publieke opmerking blok (regel 163-171): flexwerker opmerking blok toevoegen in blauw kader met MessageSquare icon
 
-- Tijdopties uitbreiden van 6-23 naar 0-23
-- `berekeningDuur` aanpassen: als `minuten <= 0` dan `+= 24*60` (over middernacht)
-- Validatie wijzigen: `startTijd >= eindTijd` error vervangen door `startTijd === eindTijd` error (nachtdienst 22:00-07:00 is geldig)
+## Stap 5: Pre-toewijzing zoekfunctie (NieuweDienstModal.tsx)
 
----
+- Nieuwe states: `preToewijzingId`, `preToewijzingNaam`, `proSearch`, `proSearchOpen`, `debouncedProSearch`
+- Debounce effect (300ms) op proSearch
+- useQuery op `professionals` tabel: zoek op `full_name` met ILIKE, filter op `deleted_at IS NULL` en status `actief`/`beschikbaar`, limit 10
+- UI na "Aantal medewerkers": Popover met zoekbalk en resultatenlijst, of groen kader met geselecteerde naam + X-knop
+- Na succesvolle insert: automatisch `dienst_toewijzingen` record aanmaken met status "toegewezen"
+- Reset: alle pre-toewijzing states clearen
+- Live preview: geselecteerde flexwerker tonen
 
-## Stap 4: Slaapdienst UI (NieuweDienstModal.tsx)
+## Stap 6: Certificering filter (PlanningFilters.tsx + useDienstenPlanning.ts)
 
-- 3 nieuwe state variabelen: `isSlaapdienst`, `slaapStart`, `slaapEind`
-- Checkbox "Slaapdienst" na het pauze-veld
-- Bij checked: twee extra Select-velden (slaap start/eind) met indigo styling en border-left
-- Edit-populate en reset effects uitbreiden
-- `dienstData` object uitbreiden met `is_slaapdienst`, `slaap_start_tijd`, `slaap_eind_tijd`
-
----
-
-## Stap 5: Live preview uitbreiden (NieuweDienstModal.tsx)
-
-- Nachtdienst markering: `{startTijd > eindTijd && " (nachtdienst)"}` op de tijdregel
-- Slaapdienst info: bed-emoji + slaaptijden tonen wanneer actief
-
----
-
-## Stap 6: Detail sheet slaapdienst (DienstDetailSheet.tsx)
-
-Na de "Dienst type" rij, conditioneel tonen:
-- "Slaapdienst: Ja"
-- "Slaapperiode: HH:MM tot HH:MM"
-
----
-
-## Stap 7: Kopieer-functie uitbreiden (Planning.tsx)
-
-5 nieuwe velden toevoegen aan het insert-object in `handleCopyDienst`:
-- `is_slaapdienst`, `slaap_start_tijd`, `slaap_eind_tijd`, `flexwerker_opmerking`, `vereiste_certificeringen`
-- `gevraagd_functie_niveau` staat al in de kopie maar is nu een array -- dat werkt automatisch correct.
+- `DienstFilters` interface uitbreiden met `certificering: string` (default `"all"`)
+- PlanningFilters.tsx: nieuwe Select dropdown voor certificering met opties
+- useDienstenPlanning.ts: client-side filter toevoegen: `d.vereiste_certificeringen?.includes(filters.certificering)`
+- `getDefaultFilters()` uitbreiden met `certificering: "all"`
+- Planning.tsx: `filters` initial state en `activeCount` in PlanningFilters bijwerken
 
 ---
 
-## Stap 8: Dienst type auto-detectie (NieuweDienstModal.tsx)
-
-Nieuw `useEffect` dat `dienstType` automatisch instelt:
-- Over middernacht of startuur >= 22 of < 6 --> "nacht"
-- Startuur >= 15 --> "avond"
-- Anders --> "dag"
-- Alleen als titel niet handmatig is aangepast
-
----
-
-## Stap 9: Functieniveau backwards-compatibility (4 bestanden)
-
-Omdat `gevraagd_functie_niveau` nu een `TEXT[]` is:
-
-| Bestand | Wijziging |
-|---------|-----------|
-| `useDienstenPlanning.ts` | Interface: `string[]`, filter: `.includes()` i.p.v. `===` |
-| `DienstDetailSheet.tsx` | `.join(", ")` i.p.v. directe string weergave |
-| `DienstCard.tsx` | `.join(", ")` op beide plekken (compact + full) |
-| `NieuweDienstModal.tsx` | Save: `[functieNiveau]`, edit-populate: `?.[0]` |
-
----
-
-## Technisch overzicht -- alle bestandswijzigingen
+## Technisch overzicht
 
 | Bestand | Wijzigingen |
 |---------|-------------|
-| **Database** (migratie) | 6 kolommen + netto_uren herberekening |
-| `useDienstenPlanning.ts` | Interface + filter logica |
-| `NieuweDienstModal.tsx` | Tijdbereik, duurberekening, validatie, slaapdienst UI, auto-detectie, functieniveau array |
-| `DienstDetailSheet.tsx` | Slaapdienst weergave + functieniveau array |
-| `DienstCard.tsx` | Functieniveau array display |
-| `Planning.tsx` | Kopieer-functie uitbreiden |
+| `NieuweDienstModal.tsx` | Multi-select functieniveau, certificeringen, flexwerker opmerking, pre-toewijzing zoek |
+| `DienstDetailSheet.tsx` | Certificeringen DetailRow, flexwerker opmerking blauw kader |
+| `PlanningFilters.tsx` | Certificering filter dropdown, activeCount bijwerken |
+| `useDienstenPlanning.ts` | DienstFilters interface + certificering filter logica |
+| `Planning.tsx` | Initial filters state uitbreiden met certificering |
 
-## Risico's en aandachtspunten
+## Aandachtspunten
 
-- De `DROP COLUMN netto_uren` + re-ADD vereist dat er geen views/triggers afhankelijk zijn van deze kolom. De bestaande code stuurt `netto_uren` niet mee in INSERT/UPDATE (eerder gefixt), dus dit is veilig.
-- De `gevraagd_functie_niveau` TYPE-wijziging met USING-clause migreert bestaande data automatisch (NULL -> '{}', 'VIG' -> '{VIG}').
-- Weekend-detectie in auto-detectie gebruikt `new Date().getDay()` wat de huidige dag checkt, niet de dienstdatum. Dit wordt later in P0-B verbeterd.
-
+- Pre-toewijzing query filtert op `deleted_at IS NULL` en status IN ('actief', 'beschikbaar') -- beide kolommen zijn bevestigd aanwezig op de professionals tabel
+- Pre-toewijzing wordt NIET meegekopieerd bij kopieer-actie (kopie is altijd zonder toewijzing)
+- Certificeringen UI verschijnt alleen als >= 1 functieniveau is geselecteerd (conditioneel)
+- De opmerkingsvelden worden herschikt: Publiek -> Flexwerker -> Prive (was: Prive -> Publiek)
