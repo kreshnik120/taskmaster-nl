@@ -131,6 +131,11 @@ export function DienstDetailSheet({ dienst, open, onClose, onEdit, onCopy, onDel
                         : "—"}
                     </span>
                   </DetailRow>
+                  {dienst.vereiste_certificeringen?.length > 0 && (
+                    <DetailRow label="Certificeringen">
+                      <span className="font-semibold">{dienst.vereiste_certificeringen.join(", ")}</span>
+                    </DetailRow>
+                  )}
                   <DetailRow label="Dienst type">{dienst.dienst_type ?? "—"}</DetailRow>
                   {dienst.is_slaapdienst && (
                     <>
@@ -167,6 +172,16 @@ export function DienstDetailSheet({ dienst, open, onClose, onEdit, onCopy, onDel
                       <span className="text-[10px] font-medium text-muted-foreground">Publieke opmerking</span>
                     </div>
                     <p className="text-xs text-foreground">{dienst.publieke_opmerking}</p>
+                  </div>
+                )}
+
+                {dienst.flexwerker_opmerking && (
+                  <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/40 p-3">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <MessageSquare className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                      <span className="text-[10px] font-medium text-blue-700 dark:text-blue-400">Flexwerker opmerking (na toewijzing)</span>
+                    </div>
+                    <p className="text-xs text-blue-800 dark:text-blue-300">{dienst.flexwerker_opmerking}</p>
                   </div>
                 )}
               </div>

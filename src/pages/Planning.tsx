@@ -35,6 +35,7 @@ const Planning = () => {
     functieNiveau: "all",
     locatie: "all",
     werkvorm: "all",
+    certificering: "all",
     weekStart,
   });
 

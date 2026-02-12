@@ -28,6 +28,7 @@ export function PlanningFilters({ filters, onFiltersChange }: PlanningFiltersPro
     filters.functieNiveau,
     filters.locatie,
     filters.werkvorm,
+    filters.certificering,
   ].filter((v) => v !== "all").length;
 
   const update = (partial: Partial<DienstFilters>) =>
@@ -41,6 +42,7 @@ export function PlanningFilters({ filters, onFiltersChange }: PlanningFiltersPro
       functieNiveau: "all",
       locatie: "all",
       werkvorm: "all",
+      certificering: "all",
     });
 
   // Presets
@@ -154,11 +156,9 @@ export function PlanningFilters({ filters, onFiltersChange }: PlanningFiltersPro
             <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Alle</SelectItem>
-              <SelectItem value="HBO-V">HBO-V</SelectItem>
-              <SelectItem value="VP4">VP4</SelectItem>
-              <SelectItem value="VP3">VP3</SelectItem>
-              <SelectItem value="VIG">VIG</SelectItem>
-              <SelectItem value="Helpende 2">Helpende 2</SelectItem>
+              {["HBO", "HBO-V", "VP5", "VP4", "VP3", "VIG", "Helpende Plus", "Helpende", "BEG4", "BEG3"].map((n) => (
+                <SelectItem key={n} value={n}>{n}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -186,6 +186,20 @@ export function PlanningFilters({ filters, onFiltersChange }: PlanningFiltersPro
               <SelectItem value="all">Alle</SelectItem>
               <SelectItem value="ZZP">ZZP</SelectItem>
               <SelectItem value="Uitzendkracht">Uitzendkracht</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Certificering */}
+        <div className="space-y-1">
+          <label className="text-[11px] text-muted-foreground">Certificering</label>
+          <Select value={filters.certificering} onValueChange={(v) => update({ certificering: v })}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle</SelectItem>
+              {["BHV", "SKJ", "Medicatie", "Tilliften", "Voorbehouden handelingen", "Agressie", "EMB", "EVC"].map((c) => (
+                <SelectItem key={c} value={c}>{c}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

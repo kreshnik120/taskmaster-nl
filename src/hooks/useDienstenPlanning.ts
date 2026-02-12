@@ -10,6 +10,7 @@ export interface DienstFilters {
   functieNiveau: string;
   locatie: string;
   werkvorm: string;
+  certificering: string;
   weekStart: string;
 }
 
@@ -88,6 +89,7 @@ export function getDefaultFilters(): DienstFilters {
     functieNiveau: "all",
     locatie: "all",
     werkvorm: "all",
+    certificering: "all",
     weekStart: getDefaultWeekStart(),
   };
 }
@@ -204,6 +206,11 @@ export function useDienstenPlanning(filters: DienstFilters) {
     }
     if (filters.werkvorm !== "all") {
       result = result.filter((d) => d.werkvorm === filters.werkvorm);
+    }
+    if (filters.certificering !== "all") {
+      result = result.filter(
+        (d) => d.vereiste_certificeringen?.includes(filters.certificering)
+      );
     }
 
     return result;

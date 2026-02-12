@@ -35,15 +35,16 @@ const tijdOpties = (start: number, end: number) => {
 
 const startTijden = tijdOpties(0, 23);
 const eindTijden = tijdOpties(0, 23);
-const functieNiveaus = ["HBO-V", "VP4", "VP3", "VIG", "Helpende 2"];
+const functieNiveaus = ["HBO", "HBO-V", "VP5", "VP4", "VP3", "VIG", "Helpende Plus", "Helpende", "BEG4", "BEG3"];
 const dienstTypes = ["dag", "avond", "nacht", "weekend"];
+const certificeringOpties = ["BHV", "SKJ", "Medicatie", "Tilliften", "Voorbehouden handelingen", "Agressie", "EMB", "EVC"];
 
 function berekeningDuur(start: string, eind: string, pauze: number): number {
   if (!start || !eind) return 0;
   const [sh, sm] = start.split(":").map(Number);
   const [eh, em] = eind.split(":").map(Number);
   let minuten = (eh * 60 + em) - (sh * 60 + sm);
-  if (minuten <= 0) minuten += 24 * 60; // Over middernacht
+  if (minuten <= 0) minuten += 24 * 60;
   return Math.max(0, (minuten - pauze) / 60);
 }
 
@@ -68,7 +69,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
   const [startTijd, setStartTijd] = useState("07:00");
   const [eindTijd, setEindTijd] = useState("15:00");
   const [pauze, setPauze] = useState(0);
-  const [functieNiveau, setFunctieNiveau] = useState("");
+  const [functieNiveaus_selected, setFunctieNiveausSelected] = useState<string[]>([]);
   const [aantal, setAantal] = useState(1);
   const [werkvorm, setWerkvorm] = useState("ZZP");
   const [dienstType, setDienstType] = useState("dag");
@@ -77,13 +78,26 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
   const [herhalingTot, setHerhalingTot] = useState<Date | undefined>();
   const [priveOpmerking, setPriveOpmerking] = useState("");
   const [publiekeOpmerking, setPubliekeOpmerking] = useState("");
+  const [flexwerkerOpmerking, setFlexwerkerOpmerking] = useState("");
   const [status, setStatus] = useState("concept");
   const [accepteerbaar, setAccepteerbaar] = useState(true);
   const [isSlaapdienst, setIsSlaapdienst] = useState(false);
   const [slaapStart, setSlaapStart] = useState("23:00");
   const [slaapEind, setSlaapEind] = useState("06:00");
+  const [certificeringen, setCertificeringen] = useState<string[]>([]);
+  const [preToewijzingId, setPreToewijzingId] = useState<string | null>(null);
+  const [preToewijzingNaam, setPreToewijzingNaam] = useState("");
+  const [proSearch, setProSearch] = useState("");
+  const [proSearchOpen, setProSearchOpen] = useState(false);
+  const [debouncedProSearch, setDebouncedProSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [titelManual, setTitelManual] = useState(false);
+
+  // Debounce professional search
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedProSearch(proSearch), 300);
+    return () => clearTimeout(timer);
+  }, [proSearch]);
 
   // Cascade queries
   const { data: locations = [] } = useQuery({
@@ -104,6 +118,23 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
     enabled: !!locationId,
   });
 
+  // Professional search query
+  const { data: proResults = [], isLoading: proSearchLoading } = useQuery({
+    queryKey: ["pro-search-modal", debouncedProSearch],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("professionals")
+        .select("id, full_name, functie_niveau")
+        .is("deleted_at", null)
+        .in("status", ["actief", "beschikbaar"])
+        .ilike("full_name", `%${debouncedProSearch}%`)
+        .limit(10);
+      return data ?? [];
+    },
+    enabled: proSearchOpen && debouncedProSearch.length >= 2,
+    staleTime: 10000,
+  });
+
   // Auto-fill titel
   useEffect(() => {
     if (titelManual || isEdit) return;
@@ -120,7 +151,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
     setStartTijd(editDienst.start_tijd?.slice(0, 5) ?? "07:00");
     setEindTijd(editDienst.eind_tijd?.slice(0, 5) ?? "15:00");
     setPauze(editDienst.pauze_minuten ?? 0);
-    setFunctieNiveau(editDienst.gevraagd_functie_niveau?.[0] ?? "");
+    setFunctieNiveausSelected(editDienst.gevraagd_functie_niveau ?? []);
     setAantal(editDienst.gevraagd_aantal ?? 1);
     setWerkvorm(editDienst.werkvorm ?? "ZZP");
     setDienstType(editDienst.dienst_type ?? "dag");
@@ -128,13 +159,14 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
     setHerhaling(editDienst.herhaling ?? "geen");
     setPriveOpmerking(editDienst.prive_opmerking ?? "");
     setPubliekeOpmerking(editDienst.publieke_opmerking ?? "");
+    setFlexwerkerOpmerking(editDienst.flexwerker_opmerking ?? "");
     setStatus(editDienst.status);
     setAccepteerbaar(editDienst.accepteerbaar);
     setIsSlaapdienst(editDienst.is_slaapdienst ?? false);
     setSlaapStart(editDienst.slaap_start_tijd?.slice(0, 5) ?? "23:00");
     setSlaapEind(editDienst.slaap_eind_tijd?.slice(0, 5) ?? "06:00");
+    setCertificeringen(editDienst.vereiste_certificeringen ?? []);
     setTitelManual(true);
-    // Set org/location/sublocation from nested data
     if (editDienst.sublocation?.id) setSublocationId(editDienst.sublocation.id);
     if (editDienst.sublocation?.location?.organization) {
       const matchedOrg = orgs.find(o => o.name === editDienst.sublocation.location.organization.name);
@@ -161,10 +193,12 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
     if (!open) {
       setOrgId(""); setLocationId(""); setSublocationId("");
       setTitel(""); setDatum(new Date()); setStartTijd("07:00"); setEindTijd("15:00");
-      setPauze(0); setFunctieNiveau(""); setAantal(1); setWerkvorm("ZZP");
+      setPauze(0); setFunctieNiveausSelected([]); setAantal(1); setWerkvorm("ZZP");
       setDienstType("dag"); setTarief(""); setHerhaling("geen"); setHerhalingTot(undefined);
-      setPriveOpmerking(""); setPubliekeOpmerking(""); setStatus("concept");
-      setAccepteerbaar(true); setIsSlaapdienst(false); setSlaapStart("23:00"); setSlaapEind("06:00"); setTitelManual(false);
+      setPriveOpmerking(""); setPubliekeOpmerking(""); setFlexwerkerOpmerking(""); setStatus("concept");
+      setAccepteerbaar(true); setIsSlaapdienst(false); setSlaapStart("23:00"); setSlaapEind("06:00");
+      setCertificeringen([]); setPreToewijzingId(null); setPreToewijzingNaam(""); setProSearch(""); setProSearchOpen(false);
+      setTitelManual(false);
     }
   }, [open]);
 
@@ -184,6 +218,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
       setDienstType("dag");
     }
   }, [startTijd, eindTijd]);
+
   const herhalingAantal = useMemo(() => {
     if (herhaling === "geen" || !datum || !herhalingTot) return 0;
     return berekenHerhalingen(datum, herhalingTot, herhaling);
@@ -223,8 +258,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
         start_tijd: startTijd + ":00",
         eind_tijd: eindTijd + ":00",
         pauze_minuten: pauze,
-        
-        gevraagd_functie_niveau: functieNiveau ? [functieNiveau] : [],
+        gevraagd_functie_niveau: functieNiveaus_selected,
         gevraagd_aantal: aantal,
         werkvorm: werkvorm || null,
         dienst_type: dienstType,
@@ -232,6 +266,8 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
         herhaling,
         prive_opmerking: priveOpmerking || null,
         publieke_opmerking: publiekeOpmerking || null,
+        flexwerker_opmerking: flexwerkerOpmerking || null,
+        vereiste_certificeringen: certificeringen,
         status,
         accepteerbaar,
         is_slaapdienst: isSlaapdienst,
@@ -249,6 +285,20 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
       } else {
         const { data: inserted, error } = await supabase.from("diensten").insert(dienstData).select("id").single();
         if (error) throw error;
+
+        // Pre-toewijzing aanmaken
+        if (preToewijzingId && inserted?.id) {
+          const { error: toewijzingError } = await supabase.from("dienst_toewijzingen").insert({
+            dienst_id: inserted.id,
+            professional_id: preToewijzingId,
+            status: "toegewezen",
+            toegewezen_door: user.id,
+          });
+          if (toewijzingError) {
+            console.error("Pre-toewijzing error:", toewijzingError);
+            toast.error("Dienst aangemaakt, maar toewijzing is mislukt");
+          }
+        }
 
         // Handle herhaling
         if (herhaling !== "geen" && herhalingAantal > 0 && datum && herhalingTot) {
@@ -414,18 +464,108 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Functieniveau</Label>
-                <Select value={functieNiveau} onValueChange={setFunctieNiveau}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Kies niveau" /></SelectTrigger>
-                  <SelectContent>{functieNiveaus.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
-                </Select>
+            {/* Functieniveau checkboxes */}
+            <div className="space-y-2">
+              <Label className="text-xs">Functieniveau(s)</Label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {functieNiveaus.map((niveau) => (
+                  <label key={niveau} className="flex items-center gap-2 text-xs cursor-pointer">
+                    <Checkbox
+                      checked={functieNiveaus_selected.includes(niveau)}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setFunctieNiveausSelected(prev => [...prev, niveau]);
+                        } else {
+                          setFunctieNiveausSelected(prev => prev.filter(n => n !== niveau));
+                        }
+                      }}
+                    />
+                    {niveau}
+                  </label>
+                ))}
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Aantal</Label>
-                <Input type="number" min={1} max={10} className="h-9 text-xs" value={aantal} onChange={(e) => setAantal(Math.max(1, Math.min(10, Number(e.target.value))))} />
+            </div>
+
+            {/* Certificeringen */}
+            {functieNiveaus_selected.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-xs">Vereiste certificeringen</Label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {certificeringOpties.map((cert) => (
+                    <label key={cert} className="flex items-center gap-2 text-xs cursor-pointer">
+                      <Checkbox
+                        checked={certificeringen.includes(cert)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setCertificeringen(prev => [...prev, cert]);
+                          } else {
+                            setCertificeringen(prev => prev.filter(c => c !== cert));
+                          }
+                        }}
+                      />
+                      {cert}
+                    </label>
+                  ))}
+                </div>
               </div>
+            )}
+
+            {/* Aantal medewerkers */}
+            <div className="space-y-1.5">
+              <Label className="text-xs">Aantal medewerkers</Label>
+              <Input type="number" min={1} max={10} className="h-9 text-xs" value={aantal} onChange={(e) => setAantal(Math.max(1, Math.min(10, Number(e.target.value))))} />
+            </div>
+
+            {/* Pre-toewijzing */}
+            <div className="space-y-1.5">
+              <Label className="text-xs">Direct toewijzen (optioneel)</Label>
+              {preToewijzingId ? (
+                <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-white/30 dark:border-white/10 bg-emerald-50 dark:bg-emerald-900/20">
+                  <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300 flex-1">{preToewijzingNaam}</span>
+                  <Button type="button" variant="ghost" size="sm" className="h-6 px-1.5 text-[10px]" onClick={() => { setPreToewijzingId(null); setPreToewijzingNaam(""); }}>
+                    ✕
+                  </Button>
+                </div>
+              ) : (
+                <Popover open={proSearchOpen} onOpenChange={setProSearchOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full h-9 text-xs justify-start text-muted-foreground">
+                      Zoek flexwerker...
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-72 p-2" align="start">
+                    <Input
+                      className="h-8 text-xs mb-2"
+                      placeholder="Naam zoeken..."
+                      value={proSearch}
+                      onChange={(e) => setProSearch(e.target.value)}
+                      autoFocus
+                    />
+                    <div className="max-h-40 overflow-y-auto space-y-0.5">
+                      {proSearchLoading && <p className="text-xs text-muted-foreground p-2">Zoeken...</p>}
+                      {proResults.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          className="w-full text-left px-2 py-1.5 rounded text-xs hover:bg-accent/50 transition-colors"
+                          onClick={() => {
+                            setPreToewijzingId(p.id);
+                            setPreToewijzingNaam(`${p.full_name} (${p.functie_niveau ?? "—"})`);
+                            setProSearchOpen(false);
+                            setProSearch("");
+                          }}
+                        >
+                          <span className="font-medium">{p.full_name}</span>
+                          <span className="text-muted-foreground ml-1">— {p.functie_niveau ?? "—"}</span>
+                        </button>
+                      ))}
+                      {debouncedProSearch.length >= 2 && !proSearchLoading && proResults.length === 0 && (
+                        <p className="text-xs text-muted-foreground p-2">Geen resultaten</p>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -490,12 +630,16 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
             )}
 
             <div className="space-y-1.5">
-              <Label className="text-xs">Privé opmerking</Label>
-              <Textarea className="text-xs min-h-[60px]" value={priveOpmerking} onChange={(e) => setPriveOpmerking(e.target.value)} placeholder="Alleen zichtbaar voor bureau" />
+              <Label className="text-xs">Publieke opmerking</Label>
+              <Textarea className="text-xs min-h-[60px]" value={publiekeOpmerking} onChange={(e) => setPubliekeOpmerking(e.target.value)} placeholder="Zichtbaar voor alle flexwerkers" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Publieke opmerking</Label>
-              <Textarea className="text-xs min-h-[60px]" value={publiekeOpmerking} onChange={(e) => setPubliekeOpmerking(e.target.value)} placeholder="Zichtbaar voor flexwerkers" />
+              <Label className="text-xs">Flexwerker opmerking</Label>
+              <Textarea className="text-xs min-h-[60px]" value={flexwerkerOpmerking} onChange={(e) => setFlexwerkerOpmerking(e.target.value)} placeholder="Alleen zichtbaar na toewijzing (parkeercode, pincode, etc.)" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Privé opmerking</Label>
+              <Textarea className="text-xs min-h-[60px]" value={priveOpmerking} onChange={(e) => setPriveOpmerking(e.target.value)} placeholder="Alleen zichtbaar voor bureau" />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -534,8 +678,14 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
                   <p className="text-muted-foreground">🛏️ Slaapdienst: {slaapStart} - {slaapEind}</p>
                 )}
                 <p className="text-muted-foreground">
-                  {functieNiveau || "—"} · {dienstType} · {werkvorm}
+                  {functieNiveaus_selected.length > 0 ? functieNiveaus_selected.join(", ") : "—"} · {dienstType} · {werkvorm}
                 </p>
+                {certificeringen.length > 0 && (
+                  <p className="text-muted-foreground">Certificeringen: {certificeringen.join(", ")}</p>
+                )}
+                {preToewijzingNaam && (
+                  <p className="text-muted-foreground">👤 {preToewijzingNaam}</p>
+                )}
                 {aantal > 1 && <p className="text-muted-foreground">{aantal} medewerkers gevraagd</p>}
                 {tarief && <p className="text-muted-foreground">€{parseFloat(tarief).toFixed(2).replace(".", ",")} per uur</p>}
                 {herhaling !== "geen" && herhalingAantal > 0 && (
