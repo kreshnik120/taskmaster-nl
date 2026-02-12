@@ -539,8 +539,17 @@ verify_jwt = false
  # ADMIN IMPERSONATION
  # -----------------------------------------------------------------------------
  
- [functions.impersonate-user]
+[functions.impersonate-user]
+verify_jwt = false
+# Purpose: Admin-only function to impersonate other users via magic link
+# Auth: JWT validated in-code, only admins can use
+# Audit: All actions logged to admin_impersonation_log table
+
+ # -----------------------------------------------------------------------------
+ # DIENST MATCHING
+ # -----------------------------------------------------------------------------
+
+ [functions.agent-dienst-matching]
  verify_jwt = false
- # Purpose: Admin-only function to impersonate other users via magic link
- # Auth: JWT validated in-code, only admins can use
- # Audit: All actions logged to admin_impersonation_log table
+ # Purpose: Server-side professional matching engine with real historie scoring
+ # Auth: No JWT required (matching data is non-sensitive)
