@@ -1531,6 +1531,7 @@ Deno.serve(async (req: Request) => {
         const { error: notificationError } = await supabase
           .from('recruiter_notifications')
           .insert({
+            org_id: app.org_id,
             notification_type: 'diploma_upgrade',
             title: `Diploma geverifieerd: ${candidateName}`,
             message: `Het diploma van ${candidateName} is succesvol geverifieerd door DUO.`,

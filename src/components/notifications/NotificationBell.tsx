@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Bell, CheckCheck, ExternalLink } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -16,6 +17,7 @@ interface NotificationBellProps {
 }
 
 export function NotificationBell({ onNotificationClick }: NotificationBellProps) {
+  const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const { notifications, unreadCount, isLoading, markAsRead, markAllAsRead } =
     useUnreadNotifications();
@@ -24,8 +26,8 @@ export function NotificationBell({ onNotificationClick }: NotificationBellProps)
     const metadata = notification.metadata as Record<string, unknown>;
     const applicationId = metadata?.application_id as string;
     const taskId = metadata?.task_id as string;
-    
     markAsRead(notification.id);
+    setOpen(false);
     
     // Handle task assignment - navigate to task list with task highlight
     if (notification.notification_type === 'task_assigned' && taskId) {
@@ -55,7 +57,7 @@ export function NotificationBell({ onNotificationClick }: NotificationBellProps)
   };
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
