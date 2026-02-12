@@ -125,9 +125,21 @@ export function DienstDetailSheet({ dienst, open, onClose, onEdit, onCopy, onDel
                   </DetailRow>
                   <DetailRow label="Netto uren">{dienst.netto_uren} uur</DetailRow>
                   <DetailRow label="Functieniveau">
-                    <span className="font-semibold">{dienst.gevraagd_functie_niveau ?? "—"}</span>
+                    <span className="font-semibold">
+                      {dienst.gevraagd_functie_niveau?.length > 0
+                        ? dienst.gevraagd_functie_niveau.join(", ")
+                        : "—"}
+                    </span>
                   </DetailRow>
                   <DetailRow label="Dienst type">{dienst.dienst_type ?? "—"}</DetailRow>
+                  {dienst.is_slaapdienst && (
+                    <>
+                      <DetailRow label="Slaapdienst">Ja</DetailRow>
+                      <DetailRow label="Slaapperiode">
+                        {dienst.slaap_start_tijd?.slice(0, 5) ?? "—"} tot {dienst.slaap_eind_tijd?.slice(0, 5) ?? "—"}
+                      </DetailRow>
+                    </>
+                  )}
                   <DetailRow label="Werkvorm">{dienst.werkvorm ?? "—"}</DetailRow>
                   <DetailRow label="Tarief">{formatTarief(dienst.tarief_per_uur)} /uur</DetailRow>
                   <DetailRow label="Gevraagd aantal">{dienst.gevraagd_aantal}</DetailRow>

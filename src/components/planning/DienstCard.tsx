@@ -63,7 +63,7 @@ export function DienstCard({ dienst, compact = true, onClick }: DienstCardProps)
         <div className="flex items-center gap-1 mt-0.5 text-[10px] text-muted-foreground/80">
           <Building2 className="h-3 w-3 shrink-0" />
           <span className="truncate">
-            {dienst.gevraagd_functie_niveau ?? "–"}
+            {dienst.gevraagd_functie_niveau?.length > 0 ? dienst.gevraagd_functie_niveau.join(", ") : "–"}
           </span>
           <span>·</span>
           <span>{bezet}/{gevraagd} bezet</span>
@@ -104,7 +104,7 @@ export function DienstCard({ dienst, compact = true, onClick }: DienstCardProps)
       </div>
       <div className="shrink-0">
         <span className="text-xs font-medium text-muted-foreground">
-          {dienst.gevraagd_functie_niveau ?? "–"}
+          {dienst.gevraagd_functie_niveau?.length > 0 ? dienst.gevraagd_functie_niveau.join(", ") : "–"}
         </span>
       </div>
       <div className="shrink-0 w-20 space-y-0.5">
