@@ -1,34 +1,60 @@
 
+# 3 P1 Features: Spoed, Kleur & 24-uurs Diensten
 
-# Fix: Rol toewijzen werkt niet (database constraint mismatch)
+## Overzicht
+Drie nieuwe features voor de Planning module in exact 8 bestanden + 1 database migratie.
 
-## Probleem
-De edge function `manage-users` gebruikt `upsert({ onConflict: "user_id" })` maar de database heeft alleen een unique constraint op `(user_id, role)` -- niet op `user_id` alleen. Hierdoor faalt elke rol-toewijzing met error `42P10`.
+## Stap 1: Database Migratie
+Twee nieuwe kolommen toevoegen aan de `diensten` tabel:
+- `is_spoed` (BOOLEAN, default false) -- markeer urgente diensten
+- `kleur` (TEXT, default null) -- kleurcodering voor visuele categorisatie
 
-## Oplossing
+## Stap 2: Hook Updates (`useDienstenPlanning.ts`)
+- `DienstData` interface: `is_spoed` en `kleur` velden toevoegen
+- `DienstFilters` interface: `spoed` filter toevoegen
+- `getDefaultFilters()`: `spoed: "all"` toevoegen
+- Client-side filters: spoed filtering logica toevoegen
 
-### Stap 1: Database migratie
-Voeg een unique constraint toe op `user_id` alleen (aangezien elke gebruiker maar 1 rol heeft):
+## Stap 3: NieuweDienstModal (`NieuweDienstModal.tsx`)
+- Nieuwe state: `isSpoed`, `kleur`, `show24hConfirm`
+- Edit-populate: `is_spoed` en `kleur` inladen bij bewerken
+- Reset on close: nieuwe state meenemen
+- dienstData object: `is_spoed` en `kleur` meegeven bij opslaan
+- 24-uurs detectie: blokkade (start === eind error) verwijderen
+- 24-uurs bevestigingsdialoog via useEffect + AlertDialog
+- UI: Spoed toggle (Checkbox) + Kleur kiezer (7 opties incl. "Geen")
+- Live preview: spoed en kleur tonen in samenvatting
 
-```sql
-ALTER TABLE public.user_roles
-  DROP CONSTRAINT IF EXISTS user_roles_user_id_role_key;
+## Stap 4: DienstCard (`DienstCard.tsx`)
+- Compact mode: spoed emoji voor tijden, kleur als border override
+- Full mode: SPOED badge, kleur border override
 
-ALTER TABLE public.user_roles
-  ADD CONSTRAINT user_roles_user_id_unique UNIQUE (user_id);
-```
+## Stap 5: PlanningLijstWeergave (`PlanningLijstWeergave.tsx`)
+- Kleur dot + spoed emoji voor datum in elke rij
 
-Dit vervangt de `(user_id, role)` constraint door een `(user_id)` constraint, zodat de upsert correct werkt.
+## Stap 6: DienstDetailSheet (`DienstDetailSheet.tsx`)
+- Spoed DetailRow met emoji
+- Kleur DetailRow met visuele kleur-indicator
 
-### Stap 2: Erik's rol toewijzen
-Na de migratie, via de UI de rol "user" (of gewenste rol) toewijzen aan Erik. Dit zal nu wel werken.
+## Stap 7: PlanningFilters (`PlanningFilters.tsx`)
+- Spoed filter dropdown (Alle / Alleen spoed / Geen spoed)
+- activeCount, reset, preset save/load bijwerken
+
+## Stap 8: Planning.tsx
+- Initial filters: `spoed: "all"` toevoegen
+- handleCopyDienst: `is_spoed` en `kleur` meekoopieren
 
 ---
 
 ## Technisch overzicht
 
-| Component | Wijziging |
-|-----------|-----------|
-| Database | Unique constraint wijzigen van `(user_id, role)` naar `(user_id)` |
-| Edge function | Geen wijziging nodig -- `onConflict: "user_id"` klopt dan |
-
+| Bestand | Wijzigingen |
+|---------|-------------|
+| Database migratie | `is_spoed BOOLEAN`, `kleur TEXT` |
+| `useDienstenPlanning.ts` | Interface + filter + default |
+| `NieuweDienstModal.tsx` | State, populate, save, 24h dialoog, UI controls |
+| `DienstCard.tsx` | Spoed emoji, kleur border |
+| `PlanningLijstWeergave.tsx` | Kleur dot, spoed emoji |
+| `DienstDetailSheet.tsx` | 2 nieuwe DetailRows |
+| `PlanningFilters.tsx` | Spoed dropdown + preset support |
+| `Planning.tsx` | Default filter + copy handler |
