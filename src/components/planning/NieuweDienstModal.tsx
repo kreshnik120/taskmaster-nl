@@ -129,7 +129,25 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
     setTitelManual(true);
     // Set org/location/sublocation from nested data
     if (editDienst.sublocation?.id) setSublocationId(editDienst.sublocation.id);
-  }, [editDienst, open]);
+    if (editDienst.sublocation?.location?.organization) {
+      const matchedOrg = orgs.find(o => o.name === editDienst.sublocation.location.organization.name);
+      if (matchedOrg) setOrgId(matchedOrg.id);
+    }
+  }, [editDienst, open, orgs]);
+
+  // Edit mode: resolve locationId from sublocation
+  useEffect(() => {
+    if (!isEdit || !editDienst?.sublocation?.id || locations.length === 0 || locationId) return;
+    const findLocation = async () => {
+      const { data } = await supabase
+        .from("client_sublocations")
+        .select("location_id")
+        .eq("id", editDienst.sublocation.id)
+        .single();
+      if (data?.location_id) setLocationId(data.location_id);
+    };
+    findLocation();
+  }, [isEdit, editDienst, locations, locationId]);
 
   // Reset on close
   useEffect(() => {
@@ -225,7 +243,10 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
           }
           if (herhalingRecords.length > 0) {
             const { error: hErr } = await supabase.from("diensten").insert(herhalingRecords);
-            if (hErr) console.error("Herhaling error:", hErr);
+            if (hErr) {
+              console.error("Herhaling error:", hErr);
+              toast.error(`Hoofddienst aangemaakt, maar ${herhalingAantal} herhalingen zijn mislukt`);
+            }
           }
           toast.success(`${herhalingAantal + 1} diensten aangemaakt!`);
         } else {
@@ -256,41 +277,39 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
           {/* Left: Form */}
           <div className="space-y-4">
             {/* Cascade org/loc/subloc */}
-            {!isEdit && (
-              <>
+            <>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Organisatie *</Label>
+                <Select value={orgId} onValueChange={(v) => { setOrgId(v); setLocationId(""); setSublocationId(""); }}>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Kies organisatie" /></SelectTrigger>
+                  <SelectContent>
+                    {orgs.map((o) => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              {orgId && (
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Organisatie *</Label>
-                  <Select value={orgId} onValueChange={(v) => { setOrgId(v); setLocationId(""); setSublocationId(""); }}>
-                    <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Kies organisatie" /></SelectTrigger>
+                  <Label className="text-xs">Locatie *</Label>
+                  <Select value={locationId} onValueChange={(v) => { setLocationId(v); setSublocationId(""); }}>
+                    <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Kies locatie" /></SelectTrigger>
                     <SelectContent>
-                      {orgs.map((o) => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
+                      {locations.map((l) => <SelectItem key={l.id} value={l.id}>{l.naam}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
-                {orgId && (
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Locatie *</Label>
-                    <Select value={locationId} onValueChange={(v) => { setLocationId(v); setSublocationId(""); }}>
-                      <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Kies locatie" /></SelectTrigger>
-                      <SelectContent>
-                        {locations.map((l) => <SelectItem key={l.id} value={l.id}>{l.naam}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                {locationId && (
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Afdeling *</Label>
-                    <Select value={sublocationId} onValueChange={setSublocationId}>
-                      <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Kies afdeling" /></SelectTrigger>
-                      <SelectContent>
-                        {sublocations.map((s) => <SelectItem key={s.id} value={s.id}>{s.naam}{s.plaats ? ` — ${s.plaats}` : ""}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </>
-            )}
+              )}
+              {locationId && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Afdeling *</Label>
+                  <Select value={sublocationId} onValueChange={setSublocationId}>
+                    <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Kies afdeling" /></SelectTrigger>
+                    <SelectContent>
+                      {sublocations.map((s) => <SelectItem key={s.id} value={s.id}>{s.naam}{s.plaats ? ` — ${s.plaats}` : ""}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </>
 
             <div className="space-y-1.5">
               <Label className="text-xs">Titel *</Label>

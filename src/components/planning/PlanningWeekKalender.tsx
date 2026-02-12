@@ -4,7 +4,7 @@ import { nl } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { DienstCard } from "./DienstCard";
 import { DienstQuickActions } from "./DienstQuickActions";
-import type { DienstData } from "@/hooks/useDienstenPlanning";
+import { splitByStatus, type DienstData } from "@/hooks/useDienstenPlanning";
 
 interface PlanningWeekKalenderProps {
   diensten: DienstData[];
@@ -16,13 +16,6 @@ interface PlanningWeekKalenderProps {
   onEdit?: (dienst: DienstData) => void;
   onCopy?: (dienst: DienstData) => void;
   onDelete?: (dienst: DienstData) => void;
-}
-
-function splitByStatus(diensten: DienstData[]) {
-  return {
-    open: diensten.filter((d) => ["open", "deels_bezet", "concept"].includes(d.status)),
-    ingepland: diensten.filter((d) => ["volledig_bezet", "voltooid"].includes(d.status)),
-  };
 }
 
 function DagKolom({

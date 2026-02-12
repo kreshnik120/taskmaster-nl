@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Check, X, Undo2, UserPlus, Search, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -33,13 +33,19 @@ export function ToewijzingenBeheer({ dienst }: ToewijzingenBeheerProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const bezet = dienst.toewijzingen.filter((t) => ["bevestigd", "positief"].includes(t.status)).length;
   const gevraagd = dienst.gevraagd_aantal || 1;
   const pct = Math.min(Math.round((bezet / gevraagd) * 100), 100);
 
   const { data: professionals = [], isLoading: searchLoading } = useQuery({
-    queryKey: ["professionals-search", search],
+    queryKey: ["professionals-search", debouncedSearch],
     queryFn: async () => {
       let q = supabase
         .from("professionals")
@@ -47,12 +53,12 @@ export function ToewijzingenBeheer({ dienst }: ToewijzingenBeheerProps) {
         .is("deleted_at", null)
         .in("status", ["actief", "beschikbaar"])
         .limit(20);
-      if (search) q = q.ilike("full_name", `%${search}%`);
+      if (debouncedSearch) q = q.ilike("full_name", `%${debouncedSearch}%`);
       const { data, error } = await q;
       if (error) throw error;
       return data ?? [];
     },
-    enabled: searchOpen,
+    enabled: searchOpen && debouncedSearch.length > 0,
     staleTime: 10000,
   });
 

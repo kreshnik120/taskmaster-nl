@@ -170,8 +170,8 @@ export function PlanningFilters({ filters, onFiltersChange }: PlanningFiltersPro
             <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Alle</SelectItem>
-              {orgs.map((o) => (
-                <SelectItem key={o.id} value={o.org_id || o.id}>{o.name}</SelectItem>
+              {orgs.filter((o) => o.org_id).map((o) => (
+                <SelectItem key={o.id} value={o.org_id!}>{o.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>

@@ -210,7 +210,7 @@ export function useDienstenPlanning(filters: DienstFilters) {
     const vandaag = notCancelled.filter((d) => isToday(parseISO(d.datum))).length;
     const dezeWeek = notCancelled.length;
     const openDiensten = rawDiensten.filter((d) =>
-      ["open", "deels_bezet"].includes(d.status)
+      ["open", "deels_bezet", "concept"].includes(d.status)
     ).length;
 
     const activeTotal = rawDiensten.filter(
