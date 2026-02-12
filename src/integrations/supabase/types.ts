@@ -2584,6 +2584,7 @@ export type Database = {
           is_slaapdienst: boolean | null
           is_spoed: boolean | null
           kleur: string | null
+          lock_version: number
           netto_uren: number | null
           org_id: string
           pauze_minuten: number | null
@@ -2618,6 +2619,7 @@ export type Database = {
           is_slaapdienst?: boolean | null
           is_spoed?: boolean | null
           kleur?: string | null
+          lock_version?: number
           netto_uren?: number | null
           org_id: string
           pauze_minuten?: number | null
@@ -2652,6 +2654,7 @@ export type Database = {
           is_slaapdienst?: boolean | null
           is_spoed?: boolean | null
           kleur?: string | null
+          lock_version?: number
           netto_uren?: number | null
           org_id?: string
           pauze_minuten?: number | null

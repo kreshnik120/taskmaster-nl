@@ -414,8 +414,21 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
       };
 
       if (isEdit) {
-        const { error } = await supabase.from("diensten").update(dienstData).eq("id", editDienst!.id);
+        const { data: updated, error } = await supabase
+          .from("diensten")
+          .update(dienstData)
+          .eq("id", editDienst!.id)
+          .eq("lock_version", editDienst!.lock_version)
+          .select("id")
+          .maybeSingle();
+
         if (error) throw error;
+        if (!updated) {
+          toast.error("Deze dienst is ondertussen door iemand anders gewijzigd. Sluit het formulier en probeer opnieuw.", { duration: 6000 });
+          queryClient.invalidateQueries({ queryKey: ["diensten-planning"] });
+          setSaving(false);
+          return;
+        }
         toast.success("Dienst bijgewerkt!");
       } else {
         // Multi-date: maak 1 dienst per geselecteerde datum

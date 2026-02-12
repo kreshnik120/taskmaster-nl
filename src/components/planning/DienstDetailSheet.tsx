@@ -43,8 +43,20 @@ export function DienstDetailSheet({ dienst, open, onClose, onEdit, onCopy, onDel
   const formatTarief = (n: number | null) => n != null ? `€${n.toFixed(2).replace(".", ",")}` : "—";
 
   const handleSluitenDienst = async () => {
-    const { error } = await supabase.from("diensten").update({ status: "geannuleerd" }).eq("id", dienst.id);
+    const { data: updated, error } = await supabase
+      .from("diensten")
+      .update({ status: "geannuleerd" })
+      .eq("id", dienst.id)
+      .eq("lock_version", dienst.lock_version)
+      .select("id")
+      .maybeSingle();
+
     if (error) { toast.error("Kon dienst niet sluiten"); return; }
+    if (!updated) {
+      toast.error("Dienst is ondertussen gewijzigd. Vernieuw de pagina.");
+      setConfirmAction(null);
+      return;
+    }
     toast.success("Dienst gesloten");
     setConfirmAction(null);
     queryClient.invalidateQueries({ queryKey: ["diensten-planning"] });
