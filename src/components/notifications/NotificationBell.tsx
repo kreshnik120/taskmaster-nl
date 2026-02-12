@@ -56,6 +56,16 @@ export function NotificationBell({ onNotificationClick }: NotificationBellProps)
     }
   };
 
+  const getNotificationColor = (type: string) => {
+    switch (type) {
+      case "task_assigned": return "border-l-primary";
+      case "subtask_assignment": return "border-l-teal-500";
+      case "diploma_upgrade": return "border-l-emerald-500";
+      case "vog_verified": return "border-l-amber-500";
+      default: return "border-l-muted-foreground/30";
+    }
+  };
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -106,7 +116,7 @@ export function NotificationBell({ onNotificationClick }: NotificationBellProps)
               {notifications.map((notification) => (
                 <div
                   key={notification.id}
-                  className="flex cursor-pointer items-start gap-3 px-4 py-3 rounded-lg transition-all duration-150 hover:bg-white/60 dark:hover:bg-slate-800/60 hover:shadow-[0_1px_4px_rgba(0,0,0,0.04)]"
+                  className={`flex cursor-pointer items-start gap-3 px-4 py-3 border-l-2 rounded-r-lg transition-all duration-150 hover:bg-white/60 dark:hover:bg-slate-800/60 hover:shadow-[0_1px_4px_rgba(0,0,0,0.04)] ${getNotificationColor(notification.notification_type)}`}
                   onClick={() => handleNotificationClick(notification)}
                 >
                   <span className="mt-0.5 text-lg">
