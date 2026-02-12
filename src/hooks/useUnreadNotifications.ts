@@ -21,24 +21,48 @@ export function useUnreadNotifications() {
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       
-      const { data, error } = await supabase
-        .from("recruiter_notifications")
-        .select("*")
-        .is("read_at", null)
-        .in("notification_type", ["diploma_upgrade", "vog_verified", "subtask_assignment", "task_assigned"])
-        .order("created_at", { ascending: false })
-        .limit(20);
+      if (!user) return [];
 
-      if (error) throw error;
-      
-      const filtered = (data || []).filter((notification) => {
+      // Personal notification types: filter strictly on user_id
+      const personalTypes = ["subtask_assignment", "task_assigned"];
+      // Org-wide notification types: visible to all org members
+      const orgTypes = ["diploma_upgrade", "vog_verified"];
+
+      const [personalResult, orgResult] = await Promise.all([
+        supabase
+          .from("recruiter_notifications")
+          .select("*")
+          .is("read_at", null)
+          .eq("user_id", user.id)
+          .in("notification_type", personalTypes)
+          .order("created_at", { ascending: false })
+          .limit(10),
+        supabase
+          .from("recruiter_notifications")
+          .select("*")
+          .is("read_at", null)
+          .in("notification_type", orgTypes)
+          .order("created_at", { ascending: false })
+          .limit(10),
+      ]);
+
+      if (personalResult.error) throw personalResult.error;
+      if (orgResult.error) throw orgResult.error;
+
+      const allNotifications = [...(personalResult.data || []), ...(orgResult.data || [])];
+
+      // Filter out self-triggered notifications
+      const filtered = allNotifications.filter((notification) => {
         const metadata = notification.metadata as Record<string, unknown> | null;
         if (!metadata) return true;
         const triggeredBy = (metadata.triggered_by ?? metadata.assigned_by) as string | undefined;
-        return !(triggeredBy && triggeredBy === user?.id);
+        return !(triggeredBy && triggeredBy === user.id);
       });
-      
-      return filtered as RecruiterNotification[];
+
+      // Sort by created_at descending
+      filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      return filtered.slice(0, 20) as RecruiterNotification[];
     },
     staleTime: 30000,
   });
