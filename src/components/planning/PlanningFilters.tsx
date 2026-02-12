@@ -63,10 +63,10 @@ export function PlanningFilters({ filters, onFiltersChange }: PlanningFiltersPro
 
   const savePreset = async () => {
     if (!presetName.trim()) return;
-    const { status, bureau, functieNiveau, locatie, werkvorm } = filters;
+    const { status, bureau, functieNiveau, locatie, werkvorm, certificering } = filters;
     const { error } = await supabase.from("dienst_filter_presets").insert({
       naam: presetName.trim(),
-      filters: { status, bureau, functieNiveau, locatie, werkvorm },
+      filters: { status, bureau, functieNiveau, locatie, werkvorm, certificering },
       user_id: (await supabase.auth.getUser()).data.user?.id,
     });
     if (error) {
@@ -92,6 +92,7 @@ export function PlanningFilters({ filters, onFiltersChange }: PlanningFiltersPro
       functieNiveau: preset.filters.functieNiveau ?? "all",
       locatie: preset.filters.locatie ?? "all",
       werkvorm: preset.filters.werkvorm ?? "all",
+      certificering: preset.filters.certificering ?? "all",
     });
     toast.success("Filter preset geladen");
   };
