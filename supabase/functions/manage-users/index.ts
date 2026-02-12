@@ -236,6 +236,96 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "delete_user": {
+        const { user_id } = params as { user_id: string };
+        
+        if (!user_id) {
+          return new Response(
+            JSON.stringify({ error: "user_id is verplicht" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Get target user info before deletion
+        const { data: targetUser } = await adminClient.auth.admin.getUserById(user_id);
+        const targetEmail = targetUser?.user?.email || user_id;
+
+        console.log(`[manage-users] Deleting user: ${targetEmail} (by ${adminEmail})`);
+
+        // Step 1: Nullify FK references to profiles table
+        const nullifyProfileRefs = await Promise.allSettled([
+          adminClient.from("tasks").update({ assignee_id: null }).eq("assignee_id", user_id),
+          adminClient.from("tasks").update({ reporter_id: null }).eq("reporter_id", user_id),
+          adminClient.from("tasks").update({ accepted_by: null }).eq("accepted_by", user_id),
+          adminClient.from("subtasks").update({ assignee_id: null }).eq("assignee_id", user_id),
+          adminClient.from("comments").delete().eq("author_id", user_id),
+          adminClient.from("task_action_history").update({ created_by: null }).eq("created_by", user_id),
+          adminClient.from("task_action_history").update({ completed_by: null }).eq("completed_by", user_id),
+          adminClient.from("meeting_minutes").update({ approved_by: null }).eq("approved_by", user_id),
+          adminClient.from("meeting_minute_attachments").update({ uploaded_by: null }).eq("uploaded_by", user_id),
+          adminClient.from("tasks_recurrence").update({ assignee_id: null }).eq("assignee_id", user_id),
+        ]);
+
+        for (const d of nullifyProfileRefs) {
+          if (d.status === "rejected") {
+            console.warn(`[manage-users] Nullify profile ref warning:`, d.reason);
+          }
+        }
+
+        // Step 2: Delete ALL related records (user_id FK to auth.users and profiles)
+        const deletions = await Promise.allSettled([
+          adminClient.from("user_roles").delete().eq("user_id", user_id),
+          adminClient.from("user_organizations").delete().eq("user_id", user_id),
+          adminClient.from("system_events").delete().eq("user_id", user_id),
+          adminClient.from("user_column_preferences").delete().eq("user_id", user_id),
+          adminClient.from("user_widget_preferences").delete().eq("user_id", user_id),
+          adminClient.from("recruiter_notifications").delete().eq("user_id", user_id),
+          adminClient.from("ai_knowledge_base").delete().eq("user_id", user_id),
+          adminClient.from("ai_chat_messages").delete().eq("user_id", user_id),
+          adminClient.from("ai_chat_feedback").delete().eq("user_id", user_id),
+          adminClient.from("ai_learning_events").delete().eq("user_id", user_id),
+          adminClient.from("conversation_context").delete().eq("user_id", user_id),
+          adminClient.from("dienst_filter_presets").delete().eq("user_id", user_id),
+          adminClient.from("meeting_attendees").delete().eq("user_id", user_id),
+          adminClient.from("message_feedback").delete().eq("user_id", user_id),
+          adminClient.from("response_validations").delete().eq("user_id", user_id),
+          adminClient.from("training_documents").delete().eq("user_id", user_id),
+          adminClient.from("watches").delete().eq("user_id", user_id),
+          adminClient.from("time_entries").delete().eq("user_id", user_id),
+          adminClient.from("application_notes").delete().eq("user_id", user_id),
+          adminClient.from("agent_goals").delete().eq("user_id", user_id),
+          adminClient.from("admin_impersonation_log").delete().eq("admin_user_id", user_id),
+          adminClient.from("admin_impersonation_log").delete().eq("target_user_id", user_id),
+        ]);
+
+        for (const d of deletions) {
+          if (d.status === "rejected") {
+            console.warn(`[manage-users] Related deletion warning:`, d.reason);
+          }
+        }
+
+        // Step 3: Delete profile (after all FK refs are cleared)
+        await adminClient.from("profiles").delete().eq("id", user_id);
+
+        // Delete the auth user
+        const { error: deleteError } = await adminClient.auth.admin.deleteUser(user_id);
+
+        if (deleteError) {
+          console.error("[manage-users] Error deleting user:", deleteError);
+          return new Response(
+            JSON.stringify({ error: "Kon gebruiker niet verwijderen", details: deleteError.message }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        console.log(`[manage-users] User deleted: ${targetEmail} (by ${adminEmail})`);
+
+        return new Response(
+          JSON.stringify({ success: true, message: `Gebruiker ${targetEmail} volledig verwijderd` }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Onbekende actie: ${action}` }),

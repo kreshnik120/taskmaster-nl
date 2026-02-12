@@ -46,8 +46,9 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
-   RefreshCw,
-   UserCheck
+  RefreshCw,
+  UserCheck,
+  Trash2
 } from "lucide-react";
 import { toast } from "sonner";
  import {
@@ -93,7 +94,8 @@ export default function Gebruikers() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState<'admin' | 'manager' | 'user'>('user');
-   const [impersonateTarget, setImpersonateTarget] = useState<{ id: string; email: string; name: string } | null>(null);
+  const [impersonateTarget, setImpersonateTarget] = useState<{ id: string; email: string; name: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; email: string; name: string } | null>(null);
   const queryClient = useQueryClient();
 
   // Fetch users
@@ -267,7 +269,34 @@ export default function Gebruikers() {
        impersonateMutation.mutate(impersonateTarget.id);
      }
    };
- 
+
+  // Delete user mutation
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const { data, error } = await supabase.functions.invoke("manage-users", {
+        body: { action: "delete_user", user_id: userId },
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Verwijderen mislukt');
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["managed-users"] });
+      toast.success(data.message || 'Gebruiker verwijderd');
+      setDeleteTarget(null);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Kon gebruiker niet verwijderen");
+      setDeleteTarget(null);
+    },
+  });
+
+  const handleDeleteConfirm = () => {
+    if (deleteTarget) {
+      deleteUserMutation.mutate(deleteTarget.id);
+    }
+  };
+
   return (
     <AdminOnly
       fallback={
@@ -544,6 +573,19 @@ export default function Gebruikers() {
                                >
                                  <UserCheck className="h-4 w-4" />
                                </Button>
+                               <Button
+                                 variant="ghost"
+                                 size="icon"
+                                 className="h-8 w-8 text-destructive hover:text-destructive"
+                                 onClick={() => setDeleteTarget({
+                                   id: user.id,
+                                   email: user.email,
+                                   name: user.raw_user_meta_data?.name || user.email
+                                 })}
+                                 title="Gebruiker verwijderen"
+                               >
+                                 <Trash2 className="h-4 w-4" />
+                               </Button>
                              </div>
                           )}
                         </TableCell>
@@ -625,6 +667,42 @@ export default function Gebruikers() {
                  <>
                    <UserCheck className="mr-2 h-4 w-4" />
                    Inloggen als {impersonateTarget?.name?.split(' ')[0] || 'gebruiker'}
+                 </>
+               )}
+             </AlertDialogAction>
+           </AlertDialogFooter>
+         </AlertDialogContent>
+       </AlertDialog>
+
+       {/* Delete User Confirmation Dialog */}
+       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+         <AlertDialogContent>
+           <AlertDialogHeader>
+             <AlertDialogTitle>Gebruiker definitief verwijderen</AlertDialogTitle>
+             <AlertDialogDescription>
+               Weet je zeker dat je{" "}
+               <span className="font-semibold">{deleteTarget?.name}</span>{" "}
+               ({deleteTarget?.email}) wilt verwijderen?
+               <br /><br />
+               Dit verwijdert het account en alle gerelateerde data permanent. Deze actie kan niet ongedaan worden gemaakt.
+             </AlertDialogDescription>
+           </AlertDialogHeader>
+           <AlertDialogFooter>
+             <AlertDialogCancel>Annuleren</AlertDialogCancel>
+             <AlertDialogAction
+               onClick={handleDeleteConfirm}
+               disabled={deleteUserMutation.isPending}
+               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+             >
+               {deleteUserMutation.isPending ? (
+                 <>
+                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                   Verwijderen...
+                 </>
+               ) : (
+                 <>
+                   <Trash2 className="mr-2 h-4 w-4" />
+                   Definitief verwijderen
                  </>
                )}
              </AlertDialogAction>
