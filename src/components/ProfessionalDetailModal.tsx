@@ -20,6 +20,8 @@ import {
   Home, Cake, Upload, MoreHorizontal, FileText, Download, Eye, XCircle
 } from "lucide-react";
 import { PlacementHistory } from "./PlacementHistory";
+import { BeschikbaarheidMiniKalender } from "./beschikbaarheid/BeschikbaarheidMiniKalender";
+import { CalendarCheck2 } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { SublocationSelectorPanel } from "./SublocationSelectorPanel";
@@ -459,11 +461,12 @@ export function ProfessionalDetailModal({
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full mt-4">
           {/* Apple style tabs - text only, no icons */}
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="profiel">Profiel</TabsTrigger>
             <TabsTrigger value="ervaring">Ervaring</TabsTrigger>
             <TabsTrigger value="historiek">Historiek</TabsTrigger>
             <TabsTrigger value="plaatsing">Plaatsing</TabsTrigger>
+            <TabsTrigger value="beschikbaarheid">Beschikbaarheid</TabsTrigger>
           </TabsList>
 
           <TabsContent value="profiel" className="space-y-4 mt-6">
@@ -1056,6 +1059,10 @@ export function ProfessionalDetailModal({
               }}
               onSuccess={onSuccess}
             />
+          </TabsContent>
+
+          <TabsContent value="beschikbaarheid" className="mt-6">
+            <BeschikbaarheidMiniKalender professionalId={professional.id} />
           </TabsContent>
         </Tabs>
 

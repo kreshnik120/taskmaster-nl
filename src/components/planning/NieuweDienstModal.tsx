@@ -3,6 +3,9 @@ import { format, addDays, differenceInCalendarDays, addWeeks, parseISO } from "d
 import { nl } from "date-fns/locale";
 import { CalendarIcon, Loader2, Plus, Trash2, BookmarkPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useBeschikbaarheidIndicator } from "@/hooks/useBeschikbaarheidIndicator";
+import { BeschikbaarheidDot } from "@/components/beschikbaarheid/BeschikbaarheidDot";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -101,6 +104,10 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
   const [templateNaamInput, setTemplateNaamInput] = useState("");
   const [showTemplateSaveDialog, setShowTemplateSaveDialog] = useState(false);
   const [deleteTemplateTarget, setDeleteTemplateTarget] = useState<string | null>(null);
+
+  // Beschikbaarheid indicator voor pre-toewijzing
+  const indicatorDate = datums?.[0] ? format(datums[0], "yyyy-MM-dd") : undefined;
+  const { getStatus: getBeschikbaarheidStatus } = useBeschikbaarheidIndicator(indicatorDate, dienstType);
 
   // Debounce professional search
   useEffect(() => {
@@ -798,22 +805,28 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
                     />
                     <div className="max-h-40 overflow-y-auto space-y-0.5">
                       {proSearchLoading && <p className="text-xs text-muted-foreground p-2">Zoeken...</p>}
-                      {proResults.map((p) => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          className="w-full text-left px-2 py-1.5 rounded text-xs hover:bg-accent/50 transition-colors"
-                          onClick={() => {
-                            setPreToewijzingId(p.id);
-                            setPreToewijzingNaam(`${p.full_name} (${p.functie_niveau ?? "—"})`);
-                            setProSearchOpen(false);
-                            setProSearch("");
-                          }}
-                        >
-                          <span className="font-medium">{p.full_name}</span>
-                          <span className="text-muted-foreground ml-1">— {p.functie_niveau ?? "—"}</span>
-                        </button>
-                      ))}
+                      <TooltipProvider>
+                      {proResults.map((p) => {
+                        const bStatus = indicatorDate ? getBeschikbaarheidStatus(p.id) : undefined;
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            className="w-full text-left px-2 py-1.5 rounded text-xs hover:bg-accent/50 transition-colors flex items-center gap-1.5"
+                            onClick={() => {
+                              setPreToewijzingId(p.id);
+                              setPreToewijzingNaam(`${p.full_name} (${p.functie_niveau ?? "—"})`);
+                              setProSearchOpen(false);
+                              setProSearch("");
+                            }}
+                          >
+                            {bStatus && <BeschikbaarheidDot status={bStatus} showLabel={bStatus === "niet_beschikbaar"} />}
+                            <span className="font-medium">{p.full_name}</span>
+                            <span className="text-muted-foreground ml-1">— {p.functie_niveau ?? "—"}</span>
+                          </button>
+                        );
+                      })}
+                      </TooltipProvider>
                       {debouncedProSearch.length >= 2 && !proSearchLoading && proResults.length === 0 && (
                         <p className="text-xs text-muted-foreground p-2">Geen resultaten</p>
                       )}
