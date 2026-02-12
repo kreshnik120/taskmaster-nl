@@ -217,7 +217,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
     } else {
       setDienstType("dag");
     }
-  }, [startTijd, eindTijd]);
+  }, [startTijd, eindTijd, titelManual]);
 
   const herhalingAantal = useMemo(() => {
     if (herhaling === "geen" || !datum || !herhalingTot) return 0;
@@ -476,7 +476,11 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
                         if (checked) {
                           setFunctieNiveausSelected(prev => [...prev, niveau]);
                         } else {
-                          setFunctieNiveausSelected(prev => prev.filter(n => n !== niveau));
+                          setFunctieNiveausSelected(prev => {
+                            const next = prev.filter(n => n !== niveau);
+                            if (next.length === 0) setCertificeringen([]);
+                            return next;
+                          });
                         }
                       }}
                     />
@@ -516,7 +520,8 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
               <Input type="number" min={1} max={10} className="h-9 text-xs" value={aantal} onChange={(e) => setAantal(Math.max(1, Math.min(10, Number(e.target.value))))} />
             </div>
 
-            {/* Pre-toewijzing */}
+            {/* Pre-toewijzing — alleen bij nieuwe dienst */}
+            {!isEdit && (
             <div className="space-y-1.5">
               <Label className="text-xs">Direct toewijzen (optioneel)</Label>
               {preToewijzingId ? (
@@ -567,6 +572,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
                 </Popover>
               )}
             </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
