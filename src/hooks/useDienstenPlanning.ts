@@ -22,7 +22,7 @@ export interface DienstData {
   eind_tijd: string;
   pauze_minuten: number;
   netto_uren: number;
-  gevraagd_functie_niveau: string | null;
+  gevraagd_functie_niveau: string[];
   gevraagd_aantal: number;
   werkvorm: string | null;
   dienst_type: string;
@@ -33,6 +33,11 @@ export interface DienstData {
   accepteerbaar: boolean;
   herhaling: string;
   bron: string;
+  is_slaapdienst: boolean;
+  slaap_start_tijd: string | null;
+  slaap_eind_tijd: string | null;
+  flexwerker_opmerking: string | null;
+  vereiste_certificeringen: string[];
   created_at: string;
   sublocation: {
     id: string;
@@ -188,7 +193,7 @@ export function useDienstenPlanning(filters: DienstFilters) {
     }
     if (filters.functieNiveau !== "all") {
       result = result.filter(
-        (d) => d.gevraagd_functie_niveau === filters.functieNiveau
+        (d) => d.gevraagd_functie_niveau?.includes(filters.functieNiveau)
       );
     }
     if (filters.locatie !== "all") {

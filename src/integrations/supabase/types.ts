@@ -2536,23 +2536,28 @@ export type Database = {
           datum: string
           dienst_type: string | null
           eind_tijd: string
+          flexwerker_opmerking: string | null
           gevraagd_aantal: number | null
-          gevraagd_functie_niveau: string | null
+          gevraagd_functie_niveau: string[] | null
           herhaling: string | null
           herhaling_eind_datum: string | null
           herhaling_parent_id: string | null
           id: string
+          is_slaapdienst: boolean | null
           netto_uren: number | null
           org_id: string
           pauze_minuten: number | null
           prive_opmerking: string | null
           publieke_opmerking: string | null
+          slaap_eind_tijd: string | null
+          slaap_start_tijd: string | null
           start_tijd: string
           status: string | null
           sublocation_id: string
           tarief_per_uur: number | null
           titel: string
           updated_at: string | null
+          vereiste_certificeringen: string[] | null
           werkvorm: string | null
         }
         Insert: {
@@ -2563,23 +2568,28 @@ export type Database = {
           datum: string
           dienst_type?: string | null
           eind_tijd: string
+          flexwerker_opmerking?: string | null
           gevraagd_aantal?: number | null
-          gevraagd_functie_niveau?: string | null
+          gevraagd_functie_niveau?: string[] | null
           herhaling?: string | null
           herhaling_eind_datum?: string | null
           herhaling_parent_id?: string | null
           id?: string
+          is_slaapdienst?: boolean | null
           netto_uren?: number | null
           org_id: string
           pauze_minuten?: number | null
           prive_opmerking?: string | null
           publieke_opmerking?: string | null
+          slaap_eind_tijd?: string | null
+          slaap_start_tijd?: string | null
           start_tijd: string
           status?: string | null
           sublocation_id: string
           tarief_per_uur?: number | null
           titel: string
           updated_at?: string | null
+          vereiste_certificeringen?: string[] | null
           werkvorm?: string | null
         }
         Update: {
@@ -2590,23 +2600,28 @@ export type Database = {
           datum?: string
           dienst_type?: string | null
           eind_tijd?: string
+          flexwerker_opmerking?: string | null
           gevraagd_aantal?: number | null
-          gevraagd_functie_niveau?: string | null
+          gevraagd_functie_niveau?: string[] | null
           herhaling?: string | null
           herhaling_eind_datum?: string | null
           herhaling_parent_id?: string | null
           id?: string
+          is_slaapdienst?: boolean | null
           netto_uren?: number | null
           org_id?: string
           pauze_minuten?: number | null
           prive_opmerking?: string | null
           publieke_opmerking?: string | null
+          slaap_eind_tijd?: string | null
+          slaap_start_tijd?: string | null
           start_tijd?: string
           status?: string | null
           sublocation_id?: string
           tarief_per_uur?: number | null
           titel?: string
           updated_at?: string | null
+          vereiste_certificeringen?: string[] | null
           werkvorm?: string | null
         }
         Relationships: [

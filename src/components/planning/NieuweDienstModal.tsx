@@ -33,8 +33,8 @@ const tijdOpties = (start: number, end: number) => {
   return opts;
 };
 
-const startTijden = tijdOpties(6, 23);
-const eindTijden = tijdOpties(6, 23);
+const startTijden = tijdOpties(0, 23);
+const eindTijden = tijdOpties(0, 23);
 const functieNiveaus = ["HBO-V", "VP4", "VP3", "VIG", "Helpende 2"];
 const dienstTypes = ["dag", "avond", "nacht", "weekend"];
 
@@ -42,8 +42,9 @@ function berekeningDuur(start: string, eind: string, pauze: number): number {
   if (!start || !eind) return 0;
   const [sh, sm] = start.split(":").map(Number);
   const [eh, em] = eind.split(":").map(Number);
-  const minuten = (eh * 60 + em) - (sh * 60 + sm) - pauze;
-  return Math.max(0, minuten / 60);
+  let minuten = (eh * 60 + em) - (sh * 60 + sm);
+  if (minuten <= 0) minuten += 24 * 60; // Over middernacht
+  return Math.max(0, (minuten - pauze) / 60);
 }
 
 function berekenHerhalingen(startDatum: Date, totDatum: Date, type: string): number {
@@ -78,6 +79,9 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
   const [publiekeOpmerking, setPubliekeOpmerking] = useState("");
   const [status, setStatus] = useState("concept");
   const [accepteerbaar, setAccepteerbaar] = useState(true);
+  const [isSlaapdienst, setIsSlaapdienst] = useState(false);
+  const [slaapStart, setSlaapStart] = useState("23:00");
+  const [slaapEind, setSlaapEind] = useState("06:00");
   const [saving, setSaving] = useState(false);
   const [titelManual, setTitelManual] = useState(false);
 
@@ -116,7 +120,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
     setStartTijd(editDienst.start_tijd?.slice(0, 5) ?? "07:00");
     setEindTijd(editDienst.eind_tijd?.slice(0, 5) ?? "15:00");
     setPauze(editDienst.pauze_minuten ?? 0);
-    setFunctieNiveau(editDienst.gevraagd_functie_niveau ?? "");
+    setFunctieNiveau(editDienst.gevraagd_functie_niveau?.[0] ?? "");
     setAantal(editDienst.gevraagd_aantal ?? 1);
     setWerkvorm(editDienst.werkvorm ?? "ZZP");
     setDienstType(editDienst.dienst_type ?? "dag");
@@ -126,6 +130,9 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
     setPubliekeOpmerking(editDienst.publieke_opmerking ?? "");
     setStatus(editDienst.status);
     setAccepteerbaar(editDienst.accepteerbaar);
+    setIsSlaapdienst(editDienst.is_slaapdienst ?? false);
+    setSlaapStart(editDienst.slaap_start_tijd?.slice(0, 5) ?? "23:00");
+    setSlaapEind(editDienst.slaap_eind_tijd?.slice(0, 5) ?? "06:00");
     setTitelManual(true);
     // Set org/location/sublocation from nested data
     if (editDienst.sublocation?.id) setSublocationId(editDienst.sublocation.id);
@@ -157,11 +164,26 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
       setPauze(0); setFunctieNiveau(""); setAantal(1); setWerkvorm("ZZP");
       setDienstType("dag"); setTarief(""); setHerhaling("geen"); setHerhalingTot(undefined);
       setPriveOpmerking(""); setPubliekeOpmerking(""); setStatus("concept");
-      setAccepteerbaar(true); setTitelManual(false);
+      setAccepteerbaar(true); setIsSlaapdienst(false); setSlaapStart("23:00"); setSlaapEind("06:00"); setTitelManual(false);
     }
   }, [open]);
 
   const duur = useMemo(() => berekeningDuur(startTijd, eindTijd, pauze), [startTijd, eindTijd, pauze]);
+
+  // Auto-detect dienst type based on times
+  useEffect(() => {
+    if (!startTijd || !eindTijd || titelManual) return;
+    const startHour = parseInt(startTijd.split(":")[0]);
+    if (startTijd > eindTijd) {
+      setDienstType("nacht");
+    } else if (startHour >= 22 || startHour < 6) {
+      setDienstType("nacht");
+    } else if (startHour >= 15) {
+      setDienstType("avond");
+    } else {
+      setDienstType("dag");
+    }
+  }, [startTijd, eindTijd]);
   const herhalingAantal = useMemo(() => {
     if (herhaling === "geen" || !datum || !herhalingTot) return 0;
     return berekenHerhalingen(datum, herhalingTot, herhaling);
@@ -173,8 +195,8 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
       toast.error("Vul alle verplichte velden in");
       return;
     }
-    if (startTijd >= eindTijd) {
-      toast.error("Eindtijd moet na starttijd liggen");
+    if (startTijd === eindTijd) {
+      toast.error("Start- en eindtijd mogen niet gelijk zijn");
       return;
     }
     setSaving(true);
@@ -202,7 +224,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
         eind_tijd: eindTijd + ":00",
         pauze_minuten: pauze,
         
-        gevraagd_functie_niveau: functieNiveau || null,
+        gevraagd_functie_niveau: functieNiveau ? [functieNiveau] : [],
         gevraagd_aantal: aantal,
         werkvorm: werkvorm || null,
         dienst_type: dienstType,
@@ -212,6 +234,9 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
         publieke_opmerking: publiekeOpmerking || null,
         status,
         accepteerbaar,
+        is_slaapdienst: isSlaapdienst,
+        slaap_start_tijd: isSlaapdienst ? slaapStart + ":00" : null,
+        slaap_eind_tijd: isSlaapdienst ? slaapEind + ":00" : null,
         bron: isEdit ? editDienst!.bron : "handmatig",
         org_id: userOrg.org_id,
         aangemaakt_door: user.id,
@@ -347,7 +372,11 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
                 </Select>
               </div>
             </div>
-            {duur > 0 && <p className="text-[10px] text-muted-foreground">({duur.toFixed(1)} uur netto)</p>}
+            {duur > 0 && (
+              <p className="text-[10px] text-muted-foreground">
+                ({duur.toFixed(1)} uur netto){startTijd > eindTijd && " — nachtdienst"}
+              </p>
+            )}
 
             <div className="space-y-1.5">
               <Label className="text-xs">Pauze</Label>
@@ -357,6 +386,32 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
                   {[0, 15, 30, 45, 60].map((m) => <SelectItem key={m} value={String(m)}>{m} min</SelectItem>)}
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Slaapdienst */}
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <Checkbox checked={isSlaapdienst} onCheckedChange={(c) => setIsSlaapdienst(c === true)} />
+                Slaapdienst
+              </label>
+              {isSlaapdienst && (
+                <div className="grid grid-cols-2 gap-3 pl-6 border-l-2 border-indigo-300 dark:border-indigo-700">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-indigo-600 dark:text-indigo-400">Slaap start</Label>
+                    <Select value={slaapStart} onValueChange={setSlaapStart}>
+                      <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>{tijdOpties(0, 23).map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-indigo-600 dark:text-indigo-400">Slaap eind</Label>
+                    <Select value={slaapEind} onValueChange={setSlaapEind}>
+                      <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>{tijdOpties(0, 23).map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -470,8 +525,14 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
               <div className="space-y-2 text-xs">
                 <p className="font-medium text-foreground">{selectedOrgName || (isEdit ? editDienst?.sublocation?.location?.organization?.name : "—")} / {selectedSubName || (isEdit ? editDienst?.sublocation?.naam : "—")}</p>
                 <p className="text-muted-foreground">{datum ? format(datum, "EEEE d MMMM yyyy", { locale: nl }) : "—"}</p>
-                <p className="text-muted-foreground">{startTijd} - {eindTijd} ({duur.toFixed(1)} uur)</p>
+                <p className="text-muted-foreground">
+                  {startTijd} - {eindTijd} ({duur.toFixed(1)} uur)
+                  {startTijd > eindTijd && " (nachtdienst)"}
+                </p>
                 {pauze > 0 && <p className="text-muted-foreground">Pauze: {pauze} min</p>}
+                {isSlaapdienst && (
+                  <p className="text-muted-foreground">🛏️ Slaapdienst: {slaapStart} - {slaapEind}</p>
+                )}
                 <p className="text-muted-foreground">
                   {functieNiveau || "—"} · {dienstType} · {werkvorm}
                 </p>
