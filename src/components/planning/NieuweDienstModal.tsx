@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { format, addDays, differenceInCalendarDays, addWeeks } from "date-fns";
+import { format, addDays, differenceInCalendarDays, addWeeks, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { CalendarIcon, Loader2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -112,7 +112,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
   useEffect(() => {
     if (!editDienst || !open) return;
     setTitel(editDienst.titel);
-    setDatum(new Date(editDienst.datum));
+    setDatum(parseISO(editDienst.datum));
     setStartTijd(editDienst.start_tijd?.slice(0, 5) ?? "07:00");
     setEindTijd(editDienst.eind_tijd?.slice(0, 5) ?? "15:00");
     setPauze(editDienst.pauze_minuten ?? 0);
@@ -201,7 +201,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
         start_tijd: startTijd + ":00",
         eind_tijd: eindTijd + ":00",
         pauze_minuten: pauze,
-        netto_uren: duur,
+        
         gevraagd_functie_niveau: functieNiveau || null,
         gevraagd_aantal: aantal,
         werkvorm: werkvorm || null,
