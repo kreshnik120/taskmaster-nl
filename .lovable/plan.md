@@ -1,81 +1,99 @@
 
-# Beschikbaarheid: WeekKalender UI + Mutations + Filters + Legenda
+# B-3 -- Cross-Module Integratie (Beschikbaarheid)
 
 ## Overzicht
-Bouw de volledige weekkalender UI voor de Beschikbaarheid module bovenop het B-1 fundament. Omvat een mutations hook, toolbar, 3-state cel editor, weekmatrix, filters, legenda, en volledige pagina-integratie.
+Beschikbaarheid is momenteel een eiland. Deze integratie voegt beschikbaarheidsindicatoren toe aan alle plekken waar planners professionals zien of toewijzen: zoekresultaten, pre-toewijzing, en het professional detail modal.
 
-## Stap 1: Nieuwe Hook -- useBeschikbaarheidMutations.ts
+## Stap 1: useBeschikbaarheidIndicator hook (nieuw)
 
-Nieuw bestand `src/hooks/useBeschikbaarheidMutations.ts`:
+Nieuw bestand `src/hooks/useBeschikbaarheidIndicator.ts`.
 
-- **upsertBeschikbaarheid**: Checkt of entry bestaat (select op professional_id + date + shift), update als ja, insert als nee
-- **deleteBeschikbaarheid**: Verwijdert entry (zet terug naar "onbekend")
-- Beide invalideren `beschikbaarheid-entries` query key na succes
-- Toast bij fouten
+Lichtgewicht hook die beschikbaarheid ophaalt voor 1 specifieke datum. Wordt gebruikt in ToewijzingenBeheer en NieuweDienstModal.
 
-## Stap 2: BeschikbaarheidToolbar.tsx
+- **Input**: `date: string` (yyyy-MM-dd), `dienstType?: string` (dag/avond/nacht/weekend)
+- **Query**: Haalt alle `professional_availability` entries op voor die datum
+- **Functie** `getStatus(professionalId)` retourneert `"beschikbaar" | "niet_beschikbaar" | "onbekend"`
+- Shift-mapping logica: `dag` checkt shift `dag` en `hele_dag`, `avond` checkt `avond` en `hele_dag`, `nacht` checkt `nacht` en `hele_dag`, `weekend` checkt alle shifts
+- Query key: `["beschikbaarheid-indicator", date]`
+- `staleTime: 30000` (data verandert niet heel snel)
 
-Nieuw bestand `src/components/beschikbaarheid/BeschikbaarheidToolbar.tsx`:
+## Stap 2: useProfessionalWeekBeschikbaarheid hook (nieuw)
 
-- Volgt PlanningToolbar patroon maar zonder view mode toggle
-- ChevronLeft/Right voor week navigatie, "Vandaag" knop
-- Week label: "Week X -- dd MMM t/m dd MMM yyyy"
-- Gebruikt `parseISO` voor weekStart
+Nieuw bestand `src/hooks/useProfessionalWeekBeschikbaarheid.ts`.
 
-## Stap 3: BeschikbaarheidCelEditor.tsx
+Per-professional week data met realtime. Wordt gebruikt in de MiniKalender in ProfessionalDetailModal.
 
-Nieuw bestand `src/components/beschikbaarheid/BeschikbaarheidCelEditor.tsx`:
+- **Input**: `professionalId: string`, `weekStart: string`
+- **Query**: Haalt `professional_availability` entries op voor 1 professional, 1 week
+- **Realtime**: `useRealtimeChannel` op `professional_availability` met filter op `professional_id`
+- Retourneert `availability: AvailabilityEntry[]`, `isLoading`
 
-- Enkele shift-knop (8x8 rounded) met 3-state toggle via klik:
-  - Onbekend (slate) -> Beschikbaar (emerald) -> Niet beschikbaar (rose) -> Onbekend
-- Labels: D/A/N voor dag/avond/nacht
-- Tooltip met shift naam en huidige status
-- aria-label voor accessibility
+## Stap 3: BeschikbaarheidDot component (nieuw)
 
-## Stap 4: BeschikbaarheidWeekKalender.tsx
+Nieuw bestand `src/components/beschikbaarheid/BeschikbaarheidDot.tsx`.
 
-Nieuw bestand `src/components/beschikbaarheid/BeschikbaarheidWeekKalender.tsx`:
+Herbruikbare indicator dot met tooltip:
 
-- Matrix: professionals (Y-as) x 7 dagen (X-as)
-- Elke cel bevat 3 shift-knoppen (D/A/N) via BeschikbaarheidCelEditor
-- Sticky eerste kolom met professional naam + functieniveau
-- Vandaag-kolom met teal highlight
-- Horizontaal scrollbaar op overflow
-- Empty state bij geen professionals
+- Props: `status: "beschikbaar" | "niet_beschikbaar" | "onbekend"`, `showLabel?: boolean`, `size?: "sm" | "md"`
+- Kleuren: emerald (beschikbaar), rose (niet beschikbaar), slate (onbekend)
+- Tooltip met status tekst
+- Optioneel tekstlabel naast de dot (bijv. "niet beschikbaar" bij rode dots)
+- Compact: `w-2.5 h-2.5` (sm) of `w-3 h-3` (md) rounded-full
 
-## Stap 5: BeschikbaarheidFilters.tsx
+## Stap 4: BeschikbaarheidMiniKalender component (nieuw)
 
-Nieuw bestand `src/components/beschikbaarheid/BeschikbaarheidFilters.tsx`:
+Nieuw bestand `src/components/beschikbaarheid/BeschikbaarheidMiniKalender.tsx`.
 
-- Popover met 4 filters: Functieniveau, Werkvorm, Status, Regio
-- Badge count voor actieve filters
-- Reset knop
-- Geen presets (simpeler dan planning)
+Compacte weekview voor 1 professional, voor gebruik in ProfessionalDetailModal:
 
-## Stap 6: BeschikbaarheidLegenda.tsx
+- Props: `professionalId: string`
+- Interne state voor `weekStart` met week-navigatie (prev/next/vandaag)
+- Hergebruikt `useProfessionalWeekBeschikbaarheid` voor data
+- Hergebruikt `useBeschikbaarheidMutations` voor toggle
+- Hergebruikt bestaande `BeschikbaarheidCelEditor` voor D/A/N knoppen
+- Hergebruikt `BeschikbaarheidLegenda`
+- 7-kolommen grid (ma-zo) met D/A/N per dag
+- "Volledig overzicht" link naar `/beschikbaarheid`
 
-Nieuw bestand `src/components/beschikbaarheid/BeschikbaarheidLegenda.tsx`:
+## Stap 5: ToewijzingenBeheer.tsx aanpassen
 
-- 3 kleur-items: Beschikbaar (emerald), Niet beschikbaar (rose), Onbekend (slate)
-- D/A/N shift-uitleg
-- Volgt PlanningLegenda patroon
+In de professional zoekresultaten (CommandItem, regels 291-304):
 
-## Stap 7: Beschikbaarheid.tsx -- Volledige vervanging
+- Importeer en gebruik `useBeschikbaarheidIndicator` met `dienst.datum` en `dienst.dienst_type`
+- Voeg `BeschikbaarheidDot` toe naast elke professional naam in de zoeklijst
+- Bij rode dot: extra tekst "niet beschikbaar" voor duidelijkheid
 
-Vervang de placeholder pagina volledig:
+## Stap 6: NieuweDienstModal.tsx aanpassen
 
-- Importeer alle nieuwe componenten + mutations hook
-- `handleWeekChange` via `setSearchParams`
-- `handleToggle` callback met 3-state logica: onbekend->beschikbaar->niet->onbekend
-- Layout: PageHero -> KPI Cards -> Toolbar + Filters balk -> Legenda -> WeekKalender -> Telling
-- Skeleton loading state (5 rijen)
-- Telling onderaan: "X professionals weergegeven"
+In de pre-toewijzing zoekresultaten (regels 799-816):
+
+- Importeer en gebruik `useBeschikbaarheidIndicator` met `datums[0]` (eerste geselecteerde datum) en `dienstType`
+- Voeg `BeschikbaarheidDot` toe naast elke professional in de search results
+- Dot alleen tonen als er minimaal 1 datum geselecteerd is
+
+## Stap 7: ProfessionalDetailModal.tsx aanpassen
+
+Voeg een 5e tab "Beschikbaarheid" toe aan het Tabs component:
+
+- TabsList wijzigen van `grid-cols-4` naar `grid-cols-5`
+- Nieuwe `TabsTrigger value="beschikbaarheid"` met label "Beschikbaarheid"
+- Nieuwe `TabsContent value="beschikbaarheid"` met:
+  - `BeschikbaarheidMiniKalender` component met `professionalId={professional.id}`
+  - Link "Volledig overzicht openen" die navigeert naar `/beschikbaarheid`
 
 ## Gewijzigde/Nieuwe Bestanden
-1. `src/hooks/useBeschikbaarheidMutations.ts` (nieuw) -- upsert + delete mutations
-2. `src/components/beschikbaarheid/BeschikbaarheidToolbar.tsx` (nieuw) -- week navigatie
-3. `src/components/beschikbaarheid/BeschikbaarheidCelEditor.tsx` (nieuw) -- 3-state shift knop
-4. `src/components/beschikbaarheid/BeschikbaarheidWeekKalender.tsx` (nieuw) -- matrix
-5. `src/components/beschikbaarheid/BeschikbaarheidFilters.tsx` (nieuw) -- filter popover
-6. `src/components/beschikbaarheid/BeschikbaarheidLegenda.tsx` (nieuw) -- legenda
-7. `src/pages/Beschikbaarheid.tsx` (vervangen) -- volledige pagina integratie
+
+1. `src/hooks/useBeschikbaarheidIndicator.ts` (nieuw) -- lichtgewicht datum-lookup
+2. `src/hooks/useProfessionalWeekBeschikbaarheid.ts` (nieuw) -- per-professional week data
+3. `src/components/beschikbaarheid/BeschikbaarheidDot.tsx` (nieuw) -- indicator dot
+4. `src/components/beschikbaarheid/BeschikbaarheidMiniKalender.tsx` (nieuw) -- mini weekkalender
+5. `src/components/planning/ToewijzingenBeheer.tsx` (wijzig) -- dots in zoekresultaten
+6. `src/components/planning/NieuweDienstModal.tsx` (wijzig) -- dots in pre-toewijzing
+7. `src/components/ProfessionalDetailModal.tsx` (wijzig) -- 5e tab met mini-kalender
+
+## Technische Details
+
+- Shift-mapping: `dienst_type === "dag"` checkt shifts `["dag", "hele_dag"]`, `"avond"` checkt `["avond", "hele_dag"]`, `"nacht"` checkt `["nacht", "hele_dag"]`, `"weekend"` checkt alle shifts
+- Geen extra database migraties nodig
+- Alle nieuwe hooks volgen het bestaande `useRealtimeChannel` patroon met 200ms debounce
+- `useBeschikbaarheidIndicator` is bewust lichtgewicht: 1 query per datum, geen realtime (data wordt toch ververst via de bestaande channels)
