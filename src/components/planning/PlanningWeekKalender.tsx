@@ -92,7 +92,7 @@ export function PlanningWeekKalender({
   onCopy,
   onDelete,
 }: PlanningWeekKalenderProps) {
-  const start = new Date(weekStart);
+  const start = parseISO(weekStart);
   const dagen = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(start, i)), [weekStart]);
 
   const { open, ingepland } = useMemo(() => splitByStatus(diensten), [diensten]);

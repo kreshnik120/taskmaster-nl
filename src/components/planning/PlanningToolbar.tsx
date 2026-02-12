@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, CalendarDays, List } from "lucide-react";
-import { format, addWeeks, subWeeks, startOfWeek, getISOWeek, endOfWeek } from "date-fns";
+import { format, addWeeks, subWeeks, startOfWeek, getISOWeek, endOfWeek, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 
 interface PlanningToolbarProps {
@@ -16,7 +16,7 @@ export function PlanningToolbar({
   viewMode,
   onViewModeChange,
 }: PlanningToolbarProps) {
-  const start = new Date(weekStart);
+  const start = parseISO(weekStart);
   const end = endOfWeek(start, { weekStartsOn: 1 });
   const weekNr = getISOWeek(start);
 
