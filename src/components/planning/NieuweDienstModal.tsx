@@ -245,6 +245,15 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
     }
   }, [startTijd, eindTijd, titelManual]);
 
+  // 24-uurs detectie
+  useEffect(() => {
+    if (startTijd && eindTijd && startTijd === eindTijd) {
+      setShow24hConfirm(true);
+    } else {
+      setShow24hConfirm(false);
+    }
+  }, [startTijd, eindTijd]);
+
   const herhalingAantal = useMemo(() => {
     if (herhaling === "geen" || datums.length === 0 || !herhalingTot) return 0;
     return berekenHerhalingen(datums[0], herhalingTot, herhaling);
