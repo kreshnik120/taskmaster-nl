@@ -69,6 +69,9 @@ export function PlanningMaandKalender({
           return (
             <div
               key={dateKey}
+              tabIndex={0}
+              role="gridcell"
+              aria-label={`${format(day, "EEEE d MMMM", { locale: nl })}, ${visibleDiensten.length} diensten`}
               className={cn(
                 "min-h-[90px] border-b border-r border-border p-1 transition-colors",
                 !inMonth && "opacity-40 bg-muted/20",
@@ -92,7 +95,7 @@ export function PlanningMaandKalender({
                     key={dienst.id}
                     onClick={() => onDienstClick(dienst)}
                     className={cn(
-                      "text-[9px] leading-tight px-1 py-0.5 rounded cursor-pointer truncate",
+                      "text-[10px] leading-tight px-1 py-0.5 rounded cursor-pointer truncate",
                       "hover:bg-white/60 dark:hover:bg-slate-800/60 transition-colors",
                       dienst.status === "concept" && "bg-slate-100/60 dark:bg-slate-800/40 text-muted-foreground",
                       dienst.status === "open" && "bg-amber-50/60 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300",
@@ -108,7 +111,10 @@ export function PlanningMaandKalender({
                   </div>
                 ))}
                 {visibleDiensten.length > MAX_VISIBLE && (
-                  <div className="text-[9px] text-muted-foreground pl-1 font-medium">
+                  <div
+                    className="text-[10px] text-primary font-medium pl-1 cursor-pointer hover:underline"
+                    onClick={() => onDienstClick(visibleDiensten[MAX_VISIBLE])}
+                  >
                     +{visibleDiensten.length - MAX_VISIBLE} meer
                   </div>
                 )}

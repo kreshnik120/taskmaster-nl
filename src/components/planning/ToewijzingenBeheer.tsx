@@ -55,6 +55,10 @@ export function ToewijzingenBeheer({ dienst }: ToewijzingenBeheerProps) {
   const [selectedPositie, setSelectedPositie] = useState(1);
 
   useEffect(() => {
+    setSelectedPositie(1);
+  }, [dienst.id]);
+
+  useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(timer);
   }, [search]);
@@ -116,7 +120,7 @@ export function ToewijzingenBeheer({ dienst }: ToewijzingenBeheerProps) {
       dienst_id: dienst.id,
       professional_id: professionalId,
       status: "voorgesteld",
-      positie_nr: isMultiPositie ? selectedPositie : 1,
+      positie_nr: isMultiPositie ? Math.min(selectedPositie, gevraagd) : 1,
       toegewezen_door: user?.id,
     });
     if (error) {

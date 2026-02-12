@@ -172,7 +172,11 @@ export function DienstDetailSheet({ dienst, open, onClose, onEdit, onCopy, onDel
                             bezet
                               ? "bg-emerald-500 text-white"
                               : "bg-amber-100 text-amber-700 border border-amber-300"
-                          )} title={bezet ? `Positie ${nr}: Bezet` : `Positie ${nr}: Open`}>
+                          )}
+                            title={bezet ? `Positie ${nr}: Bezet` : `Positie ${nr}: Open`}
+                            aria-label={bezet ? `Positie ${nr}: Bezet` : `Positie ${nr}: Open`}
+                            role="img"
+                          >
                             {nr}
                           </div>
                         );

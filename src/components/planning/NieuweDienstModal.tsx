@@ -98,6 +98,9 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
   const [kleur, setKleur] = useState<string | null>(null);
   const [show24hConfirm, setShow24hConfirm] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState("none");
+  const [templateNaamInput, setTemplateNaamInput] = useState("");
+  const [showTemplateSaveDialog, setShowTemplateSaveDialog] = useState(false);
+  const [deleteTemplateTarget, setDeleteTemplateTarget] = useState<string | null>(null);
 
   // Debounce professional search
   useEffect(() => {
@@ -160,7 +163,10 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
     setSelectedTemplate(templateId);
     if (templateId === "none") return;
     const tmpl = templates?.find((t: any) => t.id === templateId);
-    if (!tmpl?.template_data) return;
+    if (!tmpl?.template_data || typeof tmpl.template_data !== "object") {
+      toast.error("Template data is ongeldig");
+      return;
+    }
     const d = tmpl.template_data as Record<string, any>;
     if (d.location_id) setLocationId(d.location_id);
     if (d.sublocation_id) setSublocationId(d.sublocation_id);
@@ -186,9 +192,8 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
     toast.success(`Template "${tmpl.naam}" geladen`);
   };
 
-  const handleSaveAsTemplate = async () => {
-    const templateNaam = window.prompt("Geef een naam voor de template:");
-    if (!templateNaam?.trim()) return;
+  const handleSaveAsTemplate = async (naam: string) => {
+    if (!naam.trim()) return;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user || !orgId) { toast.error("Niet ingelogd of geen organisatie geselecteerd"); return; }
     const { data: userOrg } = await supabase
@@ -208,7 +213,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
       pauze_manual: pauzeManual,
       functie_niveaus: functieNiveaus_selected,
       certificeringen,
-      gevraagd_aantal: aantal,
+      gevraagd_aantal: Math.max(1, aantal),
       werkvorm: werkvorm || null,
       dienst_type: dienstType,
       tarief_per_uur: tarief ? parseFloat(tarief) : null,
@@ -224,17 +229,16 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
     };
     const { error } = await supabase.from("dienst_templates" as any).insert({
       org_id: userOrg.org_id,
-      naam: templateNaam.trim(),
+      naam: naam.trim(),
       template_data: templateData,
       aangemaakt_door: user.id,
     });
     if (error) { toast.error("Template opslaan mislukt"); return; }
-    toast.success(`Template "${templateNaam}" opgeslagen`);
+    toast.success(`Template "${naam}" opgeslagen`);
     queryClient.invalidateQueries({ queryKey: ["dienst-templates"] });
   };
 
   const handleDeleteTemplate = async (templateId: string) => {
-    if (!confirm("Template verwijderen?")) return;
     const { error } = await supabase.from("dienst_templates" as any).delete().eq("id", templateId);
     if (error) { toast.error("Verwijderen mislukt"); return; }
     toast.success("Template verwijderd");
@@ -309,6 +313,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
       setAccepteerbaar(true); setIsSlaapdienst(false); setSlaapStart("23:00"); setSlaapEind("06:00");
       setCertificeringen([]); setPreToewijzingId(null); setPreToewijzingNaam(""); setProSearch(""); setProSearchOpen(false);
       setTitelManual(false); setIsSpoed(false); setKleur(null); setShow24hConfirm(false); setSelectedTemplate("none");
+      setShowTemplateSaveDialog(false); setTemplateNaamInput(""); setDeleteTemplateTarget(null);
     }
   }, [open]);
 
@@ -392,7 +397,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
         eind_tijd: eindTijd + ":00",
         pauze_minuten: pauze,
         gevraagd_functie_niveau: functieNiveaus_selected,
-        gevraagd_aantal: aantal,
+        gevraagd_aantal: Math.max(1, aantal),
         werkvorm: werkvorm || null,
         dienst_type: dienstType,
         tarief_per_uur: tarief ? parseFloat(tarief) : null,
@@ -569,7 +574,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
                   </Select>
                   {selectedTemplate && selectedTemplate !== "none" && (
                     <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0"
-                      onClick={() => handleDeleteTemplate(selectedTemplate)}
+                      onClick={() => setDeleteTemplateTarget(selectedTemplate)}
                       title="Template verwijderen">
                       <Trash2 className="h-3.5 w-3.5 text-destructive" />
                     </Button>
@@ -1002,7 +1007,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
 
         <DialogFooter className="gap-2 sm:gap-0">
           {!isEdit && (
-            <Button variant="secondary" size="sm" className="text-xs" onClick={handleSaveAsTemplate} disabled={saving}>
+            <Button variant="secondary" size="sm" className="text-xs" onClick={() => setShowTemplateSaveDialog(true)} disabled={saving}>
               <BookmarkPlus className="h-3.5 w-3.5 mr-1" />
               Opslaan als template
             </Button>
@@ -1028,6 +1033,45 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
         <AlertDialogFooter>
           <AlertDialogCancel onClick={() => setShow24hConfirm(false)}>Annuleren</AlertDialogCancel>
           <AlertDialogAction onClick={() => setShow24hConfirm(false)}>Ja, 24-uurs dienst</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    {/* Template opslaan dialog */}
+    <AlertDialog open={showTemplateSaveDialog} onOpenChange={(o) => { if (!o) { setShowTemplateSaveDialog(false); setTemplateNaamInput(""); } }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Template opslaan</AlertDialogTitle>
+          <AlertDialogDescription>
+            Geef een naam voor deze template. De huidige instellingen worden opgeslagen (behalve datum en status).
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="py-2">
+          <Input className="h-9 text-xs" placeholder="Template naam..." value={templateNaamInput}
+            onChange={(e) => setTemplateNaamInput(e.target.value)} autoFocus />
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Annuleren</AlertDialogCancel>
+          <AlertDialogAction disabled={!templateNaamInput.trim()}
+            onClick={() => { handleSaveAsTemplate(templateNaamInput.trim()); setShowTemplateSaveDialog(false); setTemplateNaamInput(""); }}>
+            Opslaan
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    {/* Template verwijderen dialog */}
+    <AlertDialog open={!!deleteTemplateTarget} onOpenChange={(o) => !o && setDeleteTemplateTarget(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Template verwijderen?</AlertDialogTitle>
+          <AlertDialogDescription>Deze template wordt definitief verwijderd.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Annuleren</AlertDialogCancel>
+          <AlertDialogAction onClick={() => { handleDeleteTemplate(deleteTemplateTarget!); setDeleteTemplateTarget(null); }}>
+            Verwijderen
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
