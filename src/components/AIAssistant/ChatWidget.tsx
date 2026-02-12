@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { X, Send, Loader2, Sparkles, Calendar, ListTodo, Clock, RotateCcw, Image as ImageIcon, X as XIcon, GripVertical, Bot, MapPin, Users, Briefcase, Building2, Brain, LayoutDashboard } from 'lucide-react';
+import { X, Send, Loader2, Sparkles, Calendar, CalendarDays, CalendarCheck2, ListTodo, Clock, RotateCcw, Image as ImageIcon, X as XIcon, GripVertical, Bot, MapPin, Users, Briefcase, Building2, Brain, LayoutDashboard } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -25,7 +25,7 @@ import { AIMemoryPanel } from './AIMemoryPanel';
 import { AgentActionCard, AgentActionData } from './AgentActionCard';
 import { FeedbackReminderBanner } from './FeedbackReminderBanner';
 import { Badge } from '@/components/ui/badge';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import { logger } from '@/lib/logger';
 
@@ -160,6 +160,26 @@ const PAGE_CONTEXTS: Record<string, PageContext> = {
       { icon: Briefcase, label: 'Statistieken', prompt: 'Geef statistieken van afgeronde sollicitaties' },
     ]
   },
+  '/planning': {
+    label: 'Diensten Planning',
+    description: 'Dienstenplanning module met weekkalender, maandoverzicht en lijstweergave. Features: AI matching suggesties met 100-punts scoring (functieniveau 30pt, beschikbaarheid 25pt, certificeringen 20pt, regio 15pt, historie 10pt), spoed markering, kleur codering, templates, multi-date aanmaak, pauze auto-berekening, per-positie tracking. Dienst statussen: concept, open_voor_aanmelding, in_behandeling, bevestigd, geannuleerd, voltooid. Bezetting wordt visueel weergegeven per dienst.',
+    icon: CalendarDays,
+    quickActions: [
+      { icon: CalendarDays, label: 'Onbezette diensten', prompt: 'Welke diensten deze week zijn nog niet volledig bezet en hebben professionals nodig?' },
+      { icon: Sparkles, label: 'Matching uitleg', prompt: 'Leg uit hoe de AI matching suggesties werken. Wat betekenen de scores en hoe kan ik de beste professional kiezen?' },
+      { icon: Users, label: 'Planning tips', prompt: 'Geef tips voor efficiënt roosteren in de zorgsector. Waar moet ik op letten bij het plannen van dag-, avond- en nachtdiensten?' },
+    ]
+  },
+  '/beschikbaarheid': {
+    label: 'Beschikbaarheid',
+    description: 'Beschikbaarheidsoverzicht van professionals per week. Matrix met professionals (rijen) × 7 dagen (kolommen), per dag 3 shifts: dag, avond, nacht. Status per shift: beschikbaar (groen), niet beschikbaar (rood), onbekend (grijs). Integratie met dienstenplanning — beschikbaarheid wordt meegewogen in AI matching score.',
+    icon: CalendarCheck2,
+    quickActions: [
+      { icon: CalendarCheck2, label: 'Beschikbaarheid tips', prompt: 'Hoe kan ik het beste de beschikbaarheid van mijn team beheren? Geef tips voor het invullen en bijhouden van shifts.' },
+      { icon: Users, label: 'Shift planning', prompt: 'Leg de verschillende shift types uit (dag, avond, nacht, hele dag) en hoe ze gekoppeld zijn aan de dienstenplanning.' },
+      { icon: Clock, label: 'Week optimaliseren', prompt: 'Hoe optimaliseer ik de weekplanning? Waar moet ik op letten qua beschikbaarheid, functieniveaus en certificeringen?' },
+    ]
+  },
 };
 
 const DEFAULT_PAGE_CONTEXT: PageContext = {
@@ -253,16 +273,32 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
       }
     }
     
-    // Check for exact match first
+    // Resolve page context
+    let context: PageContext;
     if (PAGE_CONTEXTS[currentPath]) {
-      return PAGE_CONTEXTS[currentPath];
+      context = PAGE_CONTEXTS[currentPath];
+    } else {
+      const basePath = '/' + currentPath.split('/')[1];
+      context = PAGE_CONTEXTS[basePath] || DEFAULT_PAGE_CONTEXT;
     }
-    // Check for partial match (e.g., /sollicitaties/123 → /sollicitaties)
-    const basePath = '/' + currentPath.split('/')[1];
-    if (PAGE_CONTEXTS[basePath]) {
-      return PAGE_CONTEXTS[basePath];
+
+    // Enrich /planning with current week from URL params
+    if (currentPath === '/planning') {
+      const weekParam = params.get('week');
+      if (weekParam) {
+        try {
+          const weekLabel = format(parseISO(weekParam), 'd MMMM yyyy', { locale: nl });
+          return {
+            ...context,
+            description: context.description + ` De gebruiker bekijkt de week van ${weekLabel}.`,
+          };
+        } catch {
+          // Invalid date, return default context
+        }
+      }
     }
-    return DEFAULT_PAGE_CONTEXT;
+
+    return context;
   }, [currentPath, location.search]);
   
   const [isOpen, setIsOpen] = useState(false);
@@ -331,6 +367,20 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
       setIsUserTyping(false);
     }
   }, [input]);
+
+  // Open chat from external components via custom event
+  useEffect(() => {
+    const handleOpenChatWithContext = (event: Event) => {
+      const customEvent = event as CustomEvent<{ prompt: string }>;
+      if (customEvent.detail?.prompt) {
+        setIsOpen(true);
+        setShowWelcome(false);
+        setInput(customEvent.detail.prompt);
+      }
+    };
+    window.addEventListener('open-chat-with-context', handleOpenChatWithContext);
+    return () => window.removeEventListener('open-chat-with-context', handleOpenChatWithContext);
+  }, []);
 
   // Check authentication status
   useEffect(() => {
