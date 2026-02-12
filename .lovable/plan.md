@@ -1,104 +1,60 @@
 
+# 6 Gerichte Fixes — Planning Module
 
-# 7 Bugfixes Planning Module
+## Fix 1: Edit modus cascade selects tonen en vullen (NieuweDienstModal.tsx)
 
-## Fix 1: `created_by` naar `aangemaakt_door` in Planning.tsx handleCopy (regel 107)
+**Stap 1 — Edit useEffect: orgId populeren (regel 112-132)**
+Na regel 131 (`setSublocationId`), voeg orgId lookup toe op basis van org name match met orgs array. Voeg `orgs` toe aan dependency array.
 
-**Bestand:** `src/pages/Planning.tsx`
-**Regel 107:** `created_by: user.id` wordt `aangemaakt_door: user.id`
+**Stap 2 — Nieuw useEffect: locationId ophalen (na regel 132)**
+Voeg useEffect toe die `location_id` ophaalt uit `client_sublocations` zodra edit mode actief is en locations geladen zijn. Voorkomt dat locationId leeg blijft.
 
----
-
-## Fix 2: Kopie status altijd "concept"
-
-**Bestand:** `src/pages/Planning.tsx`
-**Regel 103:** Huidige logica behoudt originele status (behalve geannuleerd). Wijzig naar:
-```
-status: "concept",
-```
-Dit voorkomt dat een kopie met status `volledig_bezet` verschijnt zonder toewijzingen.
+**Stap 3 — Wrapper verwijderen (regel 259 + 293)**
+Verwijder `{!isEdit && (` op regel 259 en bijbehorende `)}` op regel 293. Cascade selects worden altijd getoond.
 
 ---
 
-## Fix 3: Stale data in DienstDetailSheet
+## Fix 2: Concept toevoegen aan openDiensten stat (useDienstenPlanning.ts)
 
-**Bestand:** `src/components/planning/DienstDetailSheet.tsx`
-**Probleem:** `dienst` prop is een snapshot die niet mee-update na mutaties (bevestigen, sluiten).
-**Fix:** Na `handleBevestigen` (regel 62) en `handleSluitenDienst` (regel 51): voeg `onClose()` toe zodat de sheet sluit na mutatie. `handleBevestigen` mist dit -- voeg `onClose()` toe na invalidate.
+**Regel 212-214:** Voeg `"concept"` toe aan het status filter array zodat de KPI "Open diensten" overeenkomt met het aantal kaarten in de "Openstaand" sectie.
 
 ---
 
-## Fix 4: Preset filter op ingelogde user_id
+## Fix 3: Organisaties zonder org_id uit dropdown filteren (PlanningFilters.tsx)
 
-**Bestand:** `src/components/planning/PlanningFilters.tsx`
-**Regel 49-56:** Query haalt ALLE presets op zonder user_id filter.
-**Fix:** Haal user op en filter:
-```typescript
-const { data: presets = [] } = useQuery({
-  queryKey: ["dienst-filter-presets"],
-  queryFn: async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return [];
-    const { data, error } = await supabase
-      .from("dienst_filter_presets")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-    if (error) throw error;
-    return data;
-  },
-});
-```
+**Regel 173-175:** Filter `orgs` array met `.filter((o) => o.org_id)` en gebruik `value={o.org_id!}` zodat er nooit een fallback naar `o.id` plaatsvindt.
 
 ---
 
-## Fix 5: Eindtijd > starttijd validatie
+## Fix 4: 300ms debounce op professional zoek-input (ToewijzingenBeheer.tsx)
 
-**Bestand:** `src/components/planning/NieuweDienstModal.tsx`
-**Locatie:** In `handleSave` na de bestaande verplichte velden check (rond regel 154).
-**Fix:** Voeg check toe:
-```typescript
-if (startTijd >= eindTijd) {
-  toast.error("Eindtijd moet na starttijd liggen");
-  return;
-}
-```
+**Stap 1:** Voeg `useEffect` toe aan import (regel 1).
+**Stap 2:** Voeg `debouncedSearch` state + useEffect timer toe na bestaande state declarations.
+**Stap 3:** Vervang `search` door `debouncedSearch` in queryKey, ilike filter, en enabled conditie. Enabled wordt `searchOpen && debouncedSearch.length > 0`.
 
 ---
 
-## Fix 6: netto_uren toevoegen aan dienstData
+## Fix 5: splitByStatus importeren i.p.v. dupliceren (PlanningWeekKalender.tsx)
 
-**Bestand:** `src/components/planning/NieuweDienstModal.tsx`
-**Regel 175-195:** Voeg `netto_uren: duur` toe aan het `dienstData` object. De `duur` variabele bestaat al (regel 146). Zonder dit blijven KPI's en detail sheet op 0.
+**Stap 1:** Verwijder lokale `splitByStatus` functie (regels 21-26).
+**Stap 2:** Wijzig import op regel 7 naar `import { splitByStatus, type DienstData } from "@/hooks/useDienstenPlanning"`.
 
 ---
 
-## Fix 7: parseISO voor tijdzone-veilige datum parsing
+## Fix 6: Herhaling errors tonen via toast (NieuweDienstModal.tsx)
 
-Vervang `new Date(dienst.datum)` door `parseISO(dienst.datum)` in 4 bestanden:
-
-| Bestand | Regels | Aantal |
-|---------|--------|--------|
-| `src/hooks/useDienstenPlanning.ts` | 105, 210 | 2 |
-| `src/components/planning/PlanningWeekKalender.tsx` | isSameDay call | 1 |
-| `src/components/planning/PlanningLijstWeergave.tsx` | format call regel 59 | 1 |
-| `src/components/planning/DienstDetailSheet.tsx` | format calls regel 120, 136 | 2 |
-
-Elke wijziging: import `parseISO` uit `date-fns` en vervang `new Date(string)` door `parseISO(string)`.
+**Regel 228:** Na `console.error` een `toast.error` toevoegen met info over mislukte herhalingen.
 
 ---
 
 ## Technisch Overzicht
 
-| Bestand | Fixes |
-|---------|-------|
-| `src/pages/Planning.tsx` | Fix 1 + 2 |
-| `src/components/planning/DienstDetailSheet.tsx` | Fix 3 + 7 |
-| `src/components/planning/PlanningFilters.tsx` | Fix 4 |
-| `src/components/planning/NieuweDienstModal.tsx` | Fix 5 + 6 |
-| `src/hooks/useDienstenPlanning.ts` | Fix 7 |
-| `src/components/planning/PlanningWeekKalender.tsx` | Fix 7 |
-| `src/components/planning/PlanningLijstWeergave.tsx` | Fix 7 |
+| Bestand | Fix |
+|---------|-----|
+| NieuweDienstModal.tsx | Fix 1 + 6 |
+| useDienstenPlanning.ts | Fix 2 |
+| PlanningFilters.tsx | Fix 3 |
+| ToewijzingenBeheer.tsx | Fix 4 |
+| PlanningWeekKalender.tsx | Fix 5 |
 
-Totaal: 7 bestanden, minimale gerichte wijzigingen.
-
+Totaal: 5 bestanden, 6 fixes.
