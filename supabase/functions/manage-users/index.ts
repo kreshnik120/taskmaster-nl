@@ -11,6 +11,7 @@ interface UserWithRole {
   created_at: string;
   raw_user_meta_data: Record<string, unknown>;
   role: string | null;
+  profile_name: string | null;
 }
 
 Deno.serve(async (req) => {
@@ -95,13 +96,21 @@ Deno.serve(async (req) => {
 
         const roleMap = new Map(roles?.map(r => [r.user_id, r.role]) || []);
 
-        // Combine users with roles
+        // Get all profiles for name fallback
+        const { data: profiles } = await adminClient
+          .from("profiles")
+          .select("id, name");
+
+        const profileNameMap = new Map(profiles?.map(p => [p.id, p.name]) || []);
+
+        // Combine users with roles and profile names
         const usersWithRoles: UserWithRole[] = authUsers.users.map(u => ({
           id: u.id,
           email: u.email || "Onbekend",
           created_at: u.created_at,
           raw_user_meta_data: u.user_metadata || {},
           role: roleMap.get(u.id) || null,
+          profile_name: profileNameMap.get(u.id) || null,
         }));
 
         // Sort by created_at desc

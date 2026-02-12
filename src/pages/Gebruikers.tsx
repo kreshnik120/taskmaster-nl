@@ -70,6 +70,7 @@ interface UserWithRole {
   created_at: string;
   raw_user_meta_data: { name?: string };
   role: string | null;
+  profile_name: string | null;
 }
 
 interface UserInvitation {
@@ -199,9 +200,13 @@ export default function Gebruikers() {
   });
 
   // Filter users
+  const getUserDisplayName = (user: UserWithRole) => {
+    return user.raw_user_meta_data?.name || user.profile_name || "—";
+  };
+
   const filteredUsers = users?.filter((user) => {
     const searchLower = searchTerm.toLowerCase();
-    const name = user.raw_user_meta_data?.name?.toLowerCase() || "";
+    const name = getUserDisplayName(user).toLowerCase();
     const email = user.email.toLowerCase();
     return name.includes(searchLower) || email.includes(searchLower);
   });
@@ -523,7 +528,7 @@ export default function Gebruikers() {
                     return (
                       <TableRow key={user.id} className="table-row-hover-violet">
                         <TableCell className="font-medium">
-                          {user.raw_user_meta_data?.name || "—"}
+                          {getUserDisplayName(user)}
                         </TableCell>
                         <TableCell>{user.email}</TableCell>
                         <TableCell className="text-muted-foreground">
@@ -564,11 +569,11 @@ export default function Gebruikers() {
                                  variant="ghost"
                                  size="icon"
                                  className="h-8 w-8"
-                                 onClick={() => setImpersonateTarget({
-                                   id: user.id,
-                                   email: user.email,
-                                   name: user.raw_user_meta_data?.name || user.email
-                                 })}
+                               onClick={() => setImpersonateTarget({
+                                    id: user.id,
+                                    email: user.email,
+                                    name: getUserDisplayName(user)
+                                  })}
                                  title="Inloggen als deze gebruiker"
                                >
                                  <UserCheck className="h-4 w-4" />
@@ -577,11 +582,11 @@ export default function Gebruikers() {
                                  variant="ghost"
                                  size="icon"
                                  className="h-8 w-8 text-destructive hover:text-destructive"
-                                 onClick={() => setDeleteTarget({
-                                   id: user.id,
-                                   email: user.email,
-                                   name: user.raw_user_meta_data?.name || user.email
-                                 })}
+                                onClick={() => setDeleteTarget({
+                                    id: user.id,
+                                    email: user.email,
+                                    name: getUserDisplayName(user)
+                                  })}
                                  title="Gebruiker verwijderen"
                                >
                                  <Trash2 className="h-4 w-4" />
