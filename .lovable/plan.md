@@ -1,55 +1,38 @@
 
-# 7 Display Fixes voor Planning Kaarten en Lijstweergave
+# Gebruiker Erik Hendriks volledig verwijderen
 
-Zeven chirurgische fixes in 3 bestanden om ontbrekende data-weergaven te herstellen.
+## Wat er moet gebeuren
+De gebruiker Erik Hendriks (erik@inforzo.nl) moet volledig worden verwijderd uit het systeem, inclusief alle gerelateerde data.
 
----
+## Gevonden data
+- **Auth user**: `fe32904f-5e40-4a61-80c6-7c7acf10b46e`
+- **user_roles**: 1 record
+- **profiles**: 1 record
+- **user_organizations**: 2 records
 
-## Fix 1: Functieniveau array weergave in lijstmodus
-**Bestand**: `PlanningLijstWeergave.tsx`, regels 71-74
+## Aanpak
 
-Huidige code toont het array-object direct. Wijzig naar `.join(", ")` met fallback, plus `truncate` class.
+### Stap 1: `delete_user` action toevoegen aan edge function
+Voeg een nieuw `case "delete_user"` toe aan `supabase/functions/manage-users/index.ts` dat:
+1. Gerelateerde records verwijdert (user_roles, profiles, user_organizations)
+2. De auth user verwijdert via `adminClient.auth.admin.deleteUser()`
+3. Alleen door admins uitgevoerd kan worden (al afgedekt door bestaande auth check)
 
-## Fix 2: Slaapdienst indicator in DienstCard compact
-**Bestand**: `DienstCard.tsx`, regel 70 (na de bestaande bezet-info div)
+### Stap 2: Delete knop toevoegen aan Gebruikers pagina
+In `src/pages/Gebruikers.tsx`:
+- Nieuwe `deleteUserMutation` toevoegen die de edge function aanroept
+- Een delete-knop (prullenbak icoon) toevoegen naast "Rol wijzigen" en impersonatie
+- Bevestigingsdialoog met AlertDialog voordat de gebruiker definitief wordt verwijderd
+- Bescherming: admin kan zichzelf niet verwijderen
 
-Voeg een slaapdienst emoji indicator toe wanneer `dienst.is_slaapdienst` waar is, binnen het compact info-blok (regels 63-70).
-
-## Fix 3: Certificeringen in DienstCard full mode
-**Bestand**: `DienstCard.tsx`, regels 105-108
-
-Na de functieniveau span in full mode, voeg een conditionele certificeringen-weergave toe met haakjes-notatie.
-
-## Fix 4: Herhaling-kinderen krijgen herhaling "geen"
-**Bestand**: `NieuweDienstModal.tsx`, regels 346-351
-
-Voeg `herhaling: "geen"` toe aan het herhalingRecords push-object zodat child-diensten geen verwarrende herhalingswaarde hebben.
-
-## Fix 5: Dienst type in lijstweergave
-**Bestand**: `PlanningLijstWeergave.tsx`, regel 62
-
-Voeg `d.dienst_type` toe achter de uren-weergave.
-
-## Fix 6: Werkvorm badge in DienstCard compact
-**Bestand**: `DienstCard.tsx`, regels 68-69
-
-Voeg `dienst.werkvorm` toe tussen functieniveau en bezetting, met separator.
-
-## Fix 7: Nachtdienst indicator in lijstweergave
-**Bestand**: `PlanningLijstWeergave.tsx`, regel 59
-
-Voeg nachtdienst- en slaapdienst-emoji's toe achter de datum.
+### Stap 3: Direct Erik Hendriks verwijderen
+Na deployment van de edge function, de delete actie aanroepen voor deze specifieke gebruiker.
 
 ---
 
 ## Technisch overzicht
 
-| Bestand | Regels | Wijziging |
-|---------|--------|-----------|
-| `PlanningLijstWeergave.tsx` | 71-74 | `.join(", ")` voor functieniveau array |
-| `PlanningLijstWeergave.tsx` | 62 | Dienst type toevoegen |
-| `PlanningLijstWeergave.tsx` | 59 | Nacht/slaap emoji's |
-| `DienstCard.tsx` | 63-70 | Slaapdienst emoji in compact |
-| `DienstCard.tsx` | 68-69 | Werkvorm toevoegen in compact |
-| `DienstCard.tsx` | 105-108 | Certificeringen in full mode |
-| `NieuweDienstModal.tsx` | 346-351 | `herhaling: "geen"` in child records |
+| Bestand | Wijziging |
+|---------|-----------|
+| `manage-users/index.ts` | Nieuw `delete_user` case: verwijdert user_roles, profiles, user_organizations, en auth user |
+| `Gebruikers.tsx` | Delete mutation, bevestigingsdialoog, prullenbak-knop per gebruiker |
