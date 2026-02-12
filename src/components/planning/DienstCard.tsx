@@ -42,12 +42,14 @@ export function DienstCard({ dienst, compact = true, onClick }: DienstCardProps)
           "bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm",
           "border border-white/30 dark:border-white/10",
           "hover:bg-white/70 dark:hover:bg-slate-800/50 hover:shadow-sm",
-          borderColorMap[dienst.status] ?? "border-l-slate-300",
+          dienst.kleur ? "" : (borderColorMap[dienst.status] ?? "border-l-slate-300"),
           isGeannuleerd && "opacity-60"
         )}
+        style={dienst.kleur ? { borderLeftColor: dienst.kleur } : undefined}
       >
         <div className="flex items-center justify-between gap-1 mb-0.5">
           <span className="text-xs font-medium text-foreground truncate">
+            {dienst.is_spoed && <span className="mr-0.5">🚨</span>}
             {formatTijd(dienst.start_tijd)}–{formatTijd(dienst.eind_tijd)}
           </span>
           <div className="flex items-center gap-1">
@@ -87,12 +89,18 @@ export function DienstCard({ dienst, compact = true, onClick }: DienstCardProps)
         "border border-white/30 dark:border-white/10",
         "hover:bg-white/70 dark:hover:bg-slate-800/50 hover:shadow-sm",
         "flex items-center gap-4",
-        borderColorMap[dienst.status] ?? "border-l-slate-300",
+        dienst.kleur ? "" : (borderColorMap[dienst.status] ?? "border-l-slate-300"),
         isGeannuleerd && "opacity-60"
       )}
+      style={dienst.kleur ? { borderLeftColor: dienst.kleur } : undefined}
     >
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
+          {dienst.is_spoed && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300">
+              SPOED
+            </span>
+          )}
           <span className="text-sm font-medium text-foreground">
             {formatTijd(dienst.start_tijd)}–{formatTijd(dienst.eind_tijd)}
           </span>

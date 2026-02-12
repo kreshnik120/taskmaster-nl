@@ -2544,6 +2544,8 @@ export type Database = {
           herhaling_parent_id: string | null
           id: string
           is_slaapdienst: boolean | null
+          is_spoed: boolean | null
+          kleur: string | null
           netto_uren: number | null
           org_id: string
           pauze_minuten: number | null
@@ -2576,6 +2578,8 @@ export type Database = {
           herhaling_parent_id?: string | null
           id?: string
           is_slaapdienst?: boolean | null
+          is_spoed?: boolean | null
+          kleur?: string | null
           netto_uren?: number | null
           org_id: string
           pauze_minuten?: number | null
@@ -2608,6 +2612,8 @@ export type Database = {
           herhaling_parent_id?: string | null
           id?: string
           is_slaapdienst?: boolean | null
+          is_spoed?: boolean | null
+          kleur?: string | null
           netto_uren?: number | null
           org_id?: string
           pauze_minuten?: number | null

@@ -11,6 +11,7 @@ export interface DienstFilters {
   locatie: string;
   werkvorm: string;
   certificering: string;
+  spoed: string;
   weekStart: string;
 }
 
@@ -39,6 +40,8 @@ export interface DienstData {
   slaap_eind_tijd: string | null;
   flexwerker_opmerking: string | null;
   vereiste_certificeringen: string[];
+  is_spoed: boolean;
+  kleur: string | null;
   created_at: string;
   sublocation: {
     id: string;
@@ -90,6 +93,7 @@ export function getDefaultFilters(): DienstFilters {
     locatie: "all",
     werkvorm: "all",
     certificering: "all",
+    spoed: "all",
     weekStart: getDefaultWeekStart(),
   };
 }
@@ -211,6 +215,9 @@ export function useDienstenPlanning(filters: DienstFilters) {
       result = result.filter(
         (d) => d.vereiste_certificeringen?.includes(filters.certificering)
       );
+    }
+    if (filters.spoed !== "all") {
+      result = result.filter((d) => d.is_spoed === (filters.spoed === "ja"));
     }
 
     return result;

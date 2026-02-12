@@ -150,6 +150,18 @@ export function DienstDetailSheet({ dienst, open, onClose, onEdit, onCopy, onDel
                   <DetailRow label="Gevraagd aantal">{dienst.gevraagd_aantal}</DetailRow>
                   <DetailRow label="Accepteerbaar">{dienst.accepteerbaar ? "Ja" : "Nee"}</DetailRow>
                   <DetailRow label="Bron">{bronLabel[dienst.bron] ?? dienst.bron}</DetailRow>
+                  {dienst.is_spoed && (
+                    <DetailRow label="Spoed">
+                      <span className="text-red-600 dark:text-red-400 font-semibold">🚨 JA</span>
+                    </DetailRow>
+                  )}
+                  {dienst.kleur && (
+                    <DetailRow label="Kleur">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: dienst.kleur }} />
+                      </span>
+                    </DetailRow>
+                  )}
                   <DetailRow label="Aangemaakt op">
                     {format(parseISO(dienst.created_at), "d MMM yyyy", { locale: nl })}
                   </DetailRow>

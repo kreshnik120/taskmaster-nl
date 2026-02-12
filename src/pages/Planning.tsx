@@ -36,6 +36,7 @@ const Planning = () => {
     locatie: "all",
     werkvorm: "all",
     certificering: "all",
+    spoed: "all",
     weekStart,
   });
 
@@ -108,6 +109,8 @@ const Planning = () => {
       slaap_eind_tijd: dienst.slaap_eind_tijd,
       flexwerker_opmerking: dienst.flexwerker_opmerking,
       vereiste_certificeringen: dienst.vereiste_certificeringen,
+      is_spoed: dienst.is_spoed,
+      kleur: dienst.kleur,
       bron: "gekopieerd",
       org_id: dienst.org_id,
       aangemaakt_door: user.id,

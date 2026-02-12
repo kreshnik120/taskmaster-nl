@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { supabase } from "@/integrations/supabase/client";
@@ -93,6 +94,9 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
   const [debouncedProSearch, setDebouncedProSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [titelManual, setTitelManual] = useState(false);
+  const [isSpoed, setIsSpoed] = useState(false);
+  const [kleur, setKleur] = useState<string | null>(null);
+  const [show24hConfirm, setShow24hConfirm] = useState(false);
 
   // Debounce professional search
   useEffect(() => {
@@ -168,6 +172,8 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
     setSlaapStart(editDienst.slaap_start_tijd?.slice(0, 5) ?? "23:00");
     setSlaapEind(editDienst.slaap_eind_tijd?.slice(0, 5) ?? "06:00");
     setCertificeringen(editDienst.vereiste_certificeringen ?? []);
+    setIsSpoed(editDienst.is_spoed ?? false);
+    setKleur(editDienst.kleur ?? null);
     setTitelManual(true);
     if (editDienst.sublocation?.id) setSublocationId(editDienst.sublocation.id);
     if (editDienst.sublocation?.location?.organization) {
@@ -200,7 +206,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
       setPriveOpmerking(""); setPubliekeOpmerking(""); setFlexwerkerOpmerking(""); setStatus("concept");
       setAccepteerbaar(true); setIsSlaapdienst(false); setSlaapStart("23:00"); setSlaapEind("06:00");
       setCertificeringen([]); setPreToewijzingId(null); setPreToewijzingNaam(""); setProSearch(""); setProSearchOpen(false);
-      setTitelManual(false);
+      setTitelManual(false); setIsSpoed(false); setKleur(null); setShow24hConfirm(false);
     }
   }, [open]);
 
@@ -250,10 +256,6 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
       toast.error("Vul alle verplichte velden in");
       return;
     }
-    if (startTijd === eindTijd) {
-      toast.error("Start- en eindtijd mogen niet gelijk zijn");
-      return;
-    }
     setSaving(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -296,6 +298,8 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
         bron: isEdit ? editDienst!.bron : "handmatig",
         org_id: userOrg.org_id,
         aangemaakt_door: user.id,
+        is_spoed: isSpoed,
+        kleur: kleur,
       };
 
       if (isEdit) {
@@ -378,6 +382,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
   const selectedSubName = sublocations.find((s) => s.id === sublocationId)?.naam;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -755,6 +760,42 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
                 </label>
               </div>
             </div>
+
+            {/* Spoed markering */}
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <Checkbox checked={isSpoed} onCheckedChange={(c) => setIsSpoed(c === true)} />
+                🚨 Spoed
+              </label>
+            </div>
+
+            {/* Kleur codering */}
+            <div className="space-y-1.5">
+              <Label className="text-xs">Kleur (optioneel)</Label>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { value: null, label: "Geen", bg: "bg-white dark:bg-slate-800 border-2 border-dashed border-gray-300 dark:border-gray-600" },
+                  { value: "#ef4444", label: "Rood", bg: "bg-red-500" },
+                  { value: "#f97316", label: "Oranje", bg: "bg-orange-500" },
+                  { value: "#eab308", label: "Geel", bg: "bg-yellow-500" },
+                  { value: "#22c55e", label: "Groen", bg: "bg-green-500" },
+                  { value: "#3b82f6", label: "Blauw", bg: "bg-blue-500" },
+                  { value: "#a855f7", label: "Paars", bg: "bg-purple-500" },
+                ].map((c) => (
+                  <button
+                    key={c.label}
+                    type="button"
+                    title={c.label}
+                    className={cn(
+                      "w-7 h-7 rounded-full transition-all",
+                      c.bg,
+                      kleur === c.value ? "ring-2 ring-offset-2 ring-primary" : "hover:scale-110"
+                    )}
+                    onClick={() => setKleur(c.value)}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* Right: Live preview */}
@@ -795,6 +836,13 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
                     {herhaling} t/m {herhalingTot ? format(herhalingTot, "d MMM", { locale: nl }) : "—"} → {herhalingAantal + 1} diensten
                   </p>
                 )}
+                {isSpoed && <p className="text-red-600 dark:text-red-400 font-semibold">🚨 SPOED</p>}
+                {kleur && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: kleur }} />
+                    <span className="text-muted-foreground">Kleurcode</span>
+                  </div>
+                )}
                 <p className="text-muted-foreground">Status: {status === "concept" ? "Concept" : "Open"}</p>
               </div>
             </div>
@@ -810,5 +858,22 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* 24-uurs bevestiging */}
+    <AlertDialog open={show24hConfirm} onOpenChange={(o) => !o && setShow24hConfirm(false)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>24-uurs dienst</AlertDialogTitle>
+          <AlertDialogDescription>
+            Start- en eindtijd zijn gelijk. Dit wordt een 24-uurs dienst ({berekeningDuur(startTijd, eindTijd, pauze).toFixed(1)} uur netto). Wil je doorgaan?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={() => setShow24hConfirm(false)}>Annuleren</AlertDialogCancel>
+          <AlertDialogAction onClick={() => setShow24hConfirm(false)}>Ja, 24-uurs dienst</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  </>
   );
 }

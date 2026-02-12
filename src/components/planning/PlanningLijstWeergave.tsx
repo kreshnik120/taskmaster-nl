@@ -56,6 +56,8 @@ export function PlanningLijstWeergave({ diensten, onDienstClick, onEdit, onCopy,
           >
             <div>
               <div className="text-xs font-medium text-foreground">
+                {d.kleur && <span className="inline-block w-2.5 h-2.5 rounded-full mr-1 align-middle" style={{ backgroundColor: d.kleur }} />}
+                {d.is_spoed && <span className="mr-0.5">🚨</span>}
                 {format(parseISO(d.datum), "EEE d MMM", { locale: nl })}
                 {d.dienst_type === "nacht" && " 🌙"}
                 {d.is_slaapdienst && " 🛏️"}

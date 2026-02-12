@@ -29,6 +29,7 @@ export function PlanningFilters({ filters, onFiltersChange }: PlanningFiltersPro
     filters.locatie,
     filters.werkvorm,
     filters.certificering,
+    filters.spoed,
   ].filter((v) => v !== "all").length;
 
   const update = (partial: Partial<DienstFilters>) =>
@@ -43,6 +44,7 @@ export function PlanningFilters({ filters, onFiltersChange }: PlanningFiltersPro
       locatie: "all",
       werkvorm: "all",
       certificering: "all",
+      spoed: "all",
     });
 
   // Presets
@@ -63,10 +65,10 @@ export function PlanningFilters({ filters, onFiltersChange }: PlanningFiltersPro
 
   const savePreset = async () => {
     if (!presetName.trim()) return;
-    const { status, bureau, functieNiveau, locatie, werkvorm, certificering } = filters;
+    const { status, bureau, functieNiveau, locatie, werkvorm, certificering, spoed } = filters;
     const { error } = await supabase.from("dienst_filter_presets").insert({
       naam: presetName.trim(),
-      filters: { status, bureau, functieNiveau, locatie, werkvorm, certificering },
+      filters: { status, bureau, functieNiveau, locatie, werkvorm, certificering, spoed },
       user_id: (await supabase.auth.getUser()).data.user?.id,
     });
     if (error) {
@@ -93,6 +95,7 @@ export function PlanningFilters({ filters, onFiltersChange }: PlanningFiltersPro
       locatie: preset.filters.locatie ?? "all",
       werkvorm: preset.filters.werkvorm ?? "all",
       certificering: preset.filters.certificering ?? "all",
+      spoed: preset.filters.spoed ?? "all",
     });
     toast.success("Filter preset geladen");
   };
@@ -201,6 +204,19 @@ export function PlanningFilters({ filters, onFiltersChange }: PlanningFiltersPro
               {["BHV", "SKJ", "Medicatie", "Tilliften", "Voorbehouden handelingen", "Agressie", "EMB", "EVC"].map((c) => (
                 <SelectItem key={c} value={c}>{c}</SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Spoed */}
+        <div className="space-y-1">
+          <label className="text-[11px] text-muted-foreground">Spoed</label>
+          <Select value={filters.spoed} onValueChange={(v) => update({ spoed: v })}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle</SelectItem>
+              <SelectItem value="ja">Alleen spoed</SelectItem>
+              <SelectItem value="nee">Geen spoed</SelectItem>
             </SelectContent>
           </Select>
         </div>
