@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { format, addDays, differenceInCalendarDays, addWeeks, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
-import { CalendarIcon, Loader2, Plus } from "lucide-react";
+import { CalendarIcon, Loader2, Plus, Trash2, BookmarkPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -97,6 +97,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
   const [isSpoed, setIsSpoed] = useState(false);
   const [kleur, setKleur] = useState<string | null>(null);
   const [show24hConfirm, setShow24hConfirm] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState("none");
 
   // Debounce professional search
   useEffect(() => {
@@ -139,6 +140,107 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
     enabled: proSearchOpen && debouncedProSearch.length >= 2,
     staleTime: 10000,
   });
+
+  // Templates ophalen
+  const { data: templates } = useQuery({
+    queryKey: ["dienst-templates", orgId],
+    queryFn: async () => {
+      if (!orgId) return [];
+      const { data } = await supabase
+        .from("dienst_templates")
+        .select("id, naam, template_data")
+        .eq("org_id", orgId)
+        .order("naam");
+      return data || [];
+    },
+    enabled: !!orgId && !isEdit,
+  });
+
+  const handleLoadTemplate = (templateId: string) => {
+    setSelectedTemplate(templateId);
+    if (templateId === "none") return;
+    const tmpl = templates?.find((t: any) => t.id === templateId);
+    if (!tmpl?.template_data) return;
+    const d = tmpl.template_data as Record<string, any>;
+    if (d.location_id) setLocationId(d.location_id);
+    if (d.sublocation_id) setSublocationId(d.sublocation_id);
+    if (d.titel) { setTitel(d.titel); setTitelManual(true); }
+    if (d.start_tijd) setStartTijd(d.start_tijd);
+    if (d.eind_tijd) setEindTijd(d.eind_tijd);
+    if (d.pauze_minuten != null) { setPauze(d.pauze_minuten); setPauzeManual(d.pauze_manual ?? false); }
+    if (d.functie_niveaus) setFunctieNiveausSelected(d.functie_niveaus);
+    if (d.certificeringen) setCertificeringen(d.certificeringen);
+    if (d.gevraagd_aantal) setAantal(d.gevraagd_aantal);
+    if (d.werkvorm) setWerkvorm(d.werkvorm);
+    if (d.dienst_type) setDienstType(d.dienst_type);
+    if (d.tarief_per_uur != null) setTarief(String(d.tarief_per_uur));
+    if (d.herhaling) setHerhaling(d.herhaling);
+    if (d.publieke_opmerking) setPubliekeOpmerking(d.publieke_opmerking);
+    if (d.flexwerker_opmerking) setFlexwerkerOpmerking(d.flexwerker_opmerking);
+    if (d.prive_opmerking) setPriveOpmerking(d.prive_opmerking);
+    setIsSlaapdienst(d.is_slaapdienst ?? false);
+    if (d.slaap_start_tijd) setSlaapStart(d.slaap_start_tijd);
+    if (d.slaap_eind_tijd) setSlaapEind(d.slaap_eind_tijd);
+    setIsSpoed(d.is_spoed ?? false);
+    if (d.kleur) setKleur(d.kleur);
+    toast.success(`Template "${tmpl.naam}" geladen`);
+  };
+
+  const handleSaveAsTemplate = async () => {
+    const templateNaam = window.prompt("Geef een naam voor de template:");
+    if (!templateNaam?.trim()) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || !orgId) { toast.error("Niet ingelogd of geen organisatie geselecteerd"); return; }
+    const { data: userOrg } = await supabase
+      .from("user_organizations")
+      .select("org_id")
+      .eq("user_id", user.id)
+      .limit(1)
+      .single();
+    if (!userOrg) { toast.error("Geen organisatie gevonden"); return; }
+    const templateData = {
+      sublocation_id: sublocationId || null,
+      location_id: locationId || null,
+      titel: titel || null,
+      start_tijd: startTijd || null,
+      eind_tijd: eindTijd || null,
+      pauze_minuten: pauze,
+      pauze_manual: pauzeManual,
+      functie_niveaus: functieNiveaus_selected,
+      certificeringen,
+      gevraagd_aantal: aantal,
+      werkvorm: werkvorm || null,
+      dienst_type: dienstType,
+      tarief_per_uur: tarief ? parseFloat(tarief) : null,
+      herhaling,
+      publieke_opmerking: publiekeOpmerking || null,
+      flexwerker_opmerking: flexwerkerOpmerking || null,
+      prive_opmerking: priveOpmerking || null,
+      is_slaapdienst: isSlaapdienst,
+      slaap_start_tijd: slaapStart || null,
+      slaap_eind_tijd: slaapEind || null,
+      is_spoed: isSpoed,
+      kleur: kleur || null,
+    };
+    const { error } = await supabase.from("dienst_templates" as any).insert({
+      org_id: userOrg.org_id,
+      naam: templateNaam.trim(),
+      template_data: templateData,
+      aangemaakt_door: user.id,
+    });
+    if (error) { toast.error("Template opslaan mislukt"); return; }
+    toast.success(`Template "${templateNaam}" opgeslagen`);
+    queryClient.invalidateQueries({ queryKey: ["dienst-templates"] });
+  };
+
+  const handleDeleteTemplate = async (templateId: string) => {
+    if (!confirm("Template verwijderen?")) return;
+    const { error } = await supabase.from("dienst_templates" as any).delete().eq("id", templateId);
+    if (error) { toast.error("Verwijderen mislukt"); return; }
+    toast.success("Template verwijderd");
+    setSelectedTemplate("none");
+    queryClient.invalidateQueries({ queryKey: ["dienst-templates"] });
+  };
 
   // Auto-fill titel
   useEffect(() => {
@@ -206,7 +308,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
       setPriveOpmerking(""); setPubliekeOpmerking(""); setFlexwerkerOpmerking(""); setStatus("concept");
       setAccepteerbaar(true); setIsSlaapdienst(false); setSlaapStart("23:00"); setSlaapEind("06:00");
       setCertificeringen([]); setPreToewijzingId(null); setPreToewijzingNaam(""); setProSearch(""); setProSearchOpen(false);
-      setTitelManual(false); setIsSpoed(false); setKleur(null); setShow24hConfirm(false);
+      setTitelManual(false); setIsSpoed(false); setKleur(null); setShow24hConfirm(false); setSelectedTemplate("none");
     }
   }, [open]);
 
@@ -435,6 +537,32 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
                 </div>
               )}
             </>
+
+            {orgId && !isEdit && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Template</Label>
+                <div className="flex gap-2">
+                  <Select value={selectedTemplate} onValueChange={handleLoadTemplate}>
+                    <SelectTrigger className="h-9 text-xs flex-1">
+                      <SelectValue placeholder="Kies een template..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Geen template</SelectItem>
+                      {templates?.map((t: any) => (
+                        <SelectItem key={t.id} value={t.id}>{t.naam}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedTemplate && selectedTemplate !== "none" && (
+                    <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0"
+                      onClick={() => handleDeleteTemplate(selectedTemplate)}
+                      title="Template verwijderen">
+                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label className="text-xs">Titel *</Label>
@@ -859,6 +987,12 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
+          {!isEdit && (
+            <Button variant="secondary" size="sm" className="text-xs" onClick={handleSaveAsTemplate} disabled={saving}>
+              <BookmarkPlus className="h-3.5 w-3.5 mr-1" />
+              Opslaan als template
+            </Button>
+          )}
           <Button variant="outline" onClick={onClose} disabled={saving}>Annuleren</Button>
           <Button onClick={handleSave} disabled={saving}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
