@@ -57,9 +57,11 @@ export function PlanningLijstWeergave({ diensten, onDienstClick, onEdit, onCopy,
             <div>
               <div className="text-xs font-medium text-foreground">
                 {format(parseISO(d.datum), "EEE d MMM", { locale: nl })}
+                {d.dienst_type === "nacht" && " 🌙"}
+                {d.is_slaapdienst && " 🛏️"}
               </div>
               <div className="text-[10px] text-muted-foreground">
-                {formatTijd(d.start_tijd)}–{formatTijd(d.eind_tijd)} · {d.netto_uren}u
+                {formatTijd(d.start_tijd)}–{formatTijd(d.eind_tijd)} · {d.netto_uren}u · {d.dienst_type}
               </div>
             </div>
             <div>
@@ -69,8 +71,8 @@ export function PlanningLijstWeergave({ diensten, onDienstClick, onEdit, onCopy,
               </div>
             </div>
             <div className="flex items-center">
-              <span className="text-[11px] font-medium text-muted-foreground">
-                {d.gevraagd_functie_niveau ?? "–"}
+              <span className="text-[11px] font-medium text-muted-foreground truncate">
+                {d.gevraagd_functie_niveau?.length > 0 ? d.gevraagd_functie_niveau.join(", ") : "–"}
               </span>
             </div>
             <div className="flex flex-col justify-center gap-0.5">

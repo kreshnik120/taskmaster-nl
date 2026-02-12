@@ -347,6 +347,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
                 ...dienstData,
                 datum: format(newDatum, "yyyy-MM-dd"),
                 herhaling_parent_id: parent.id,
+                herhaling: "geen",
                 bron: "herhaling",
               });
             }
