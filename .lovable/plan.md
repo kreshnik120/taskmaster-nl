@@ -1,38 +1,26 @@
 
-# Gebruiker Erik Hendriks volledig verwijderen
 
-## Wat er moet gebeuren
-De gebruiker Erik Hendriks (erik@inforzo.nl) moet volledig worden verwijderd uit het systeem, inclusief alle gerelateerde data.
+# Taken toewijzen + Gebruikersnamen bijwerken
 
-## Gevonden data
-- **Auth user**: `fe32904f-5e40-4a61-80c6-7c7acf10b46e`
-- **user_roles**: 1 record
-- **profiles**: 1 record
-- **user_organizations**: 2 records
+## Stap 1: Alle 20 verweesd taken toewijzen aan Erik Hendriks
+Alle taken waar `assignee_id IS NULL` worden bijgewerkt naar Erik's account (`7fdc4755-d9e8-4468-b1ad-16fa80270aab`). Hetzelfde voor `reporter_id` waar dat NULL is.
 
-## Aanpak
+## Stap 2: Profielnamen bijwerken in database
+Directe data-updates in de `profiles` tabel:
 
-### Stap 1: `delete_user` action toevoegen aan edge function
-Voeg een nieuw `case "delete_user"` toe aan `supabase/functions/manage-users/index.ts` dat:
-1. Gerelateerde records verwijdert (user_roles, profiles, user_organizations)
-2. De auth user verwijdert via `adminClient.auth.admin.deleteUser()`
-3. Alleen door admins uitgevoerd kan worden (al afgedekt door bestaande auth check)
+| Email | Was | Wordt |
+|-------|-----|-------|
+| k.atashi@citozorg.nl | Kreshnik | Kreshnik Atashi |
+| erik@abczorg.nl | Erik van ABCzorg | Erik Hendriks |
+| admin@abczorg.nl | Marianne | Marianne Greven |
+| d.caro@abczorg.nl | D. Caro | Dilmar Caro |
+| l.pattipeilohy@citozorg.nl | Leonie Pattipeilohy | (al compleet) |
 
-### Stap 2: Delete knop toevoegen aan Gebruikers pagina
-In `src/pages/Gebruikers.tsx`:
-- Nieuwe `deleteUserMutation` toevoegen die de edge function aanroept
-- Een delete-knop (prullenbak icoon) toevoegen naast "Rol wijzigen" en impersonatie
-- Bevestigingsdialoog met AlertDialog voordat de gebruiker definitief wordt verwijderd
-- Bescherming: admin kan zichzelf niet verwijderen
+## Stap 3: Gebruikerspagina naam-weergave verbeteren
+In `src/pages/Gebruikers.tsx` toont de naam kolom nu `user.raw_user_meta_data?.name` wat uit auth metadata komt. Dit moet als fallback ook het `profiles.name` veld gebruiken. Aangezien de edge function `list_users` al auth user metadata teruggeeft, voegen we daar ook het profiel-name veld aan toe zodat er altijd een naam zichtbaar is.
 
-### Stap 3: Direct Erik Hendriks verwijderen
-Na deployment van de edge function, de delete actie aanroepen voor deze specifieke gebruiker.
+### Technisch
+- **Edge function** (`manage-users/index.ts`): Bij `list_users`, ook `profiles` tabel joinen om `name` op te halen als fallback
+- **Frontend** (`Gebruikers.tsx`): Toon `profile_name` als `raw_user_meta_data.name` leeg is
+- **Database**: 4x UPDATE op `profiles.name`, 20x UPDATE op `tasks.assignee_id` en `tasks.reporter_id`
 
----
-
-## Technisch overzicht
-
-| Bestand | Wijziging |
-|---------|-----------|
-| `manage-users/index.ts` | Nieuw `delete_user` case: verwijdert user_roles, profiles, user_organizations, en auth user |
-| `Gebruikers.tsx` | Delete mutation, bevestigingsdialoog, prullenbak-knop per gebruiker |
