@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CalendarDays, AlertCircle, TrendingUp, Plus } from "lucide-react";
-import { startOfWeek, format, addDays } from "date-fns";
+import { startOfWeek, format, addDays, parseISO } from "date-fns";
 import { PageContainer } from "@/components/ui/page-container";
 import { PageHero } from "@/components/ui/page-hero";
 import { KPICard } from "@/components/ui/kpi-card";
@@ -85,7 +85,7 @@ const Planning = () => {
   const handleCopyDienst = useCallback(async (dienst: DienstData) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const newDatum = format(addDays(new Date(dienst.datum), 1), "yyyy-MM-dd");
+    const newDatum = format(addDays(parseISO(dienst.datum), 1), "yyyy-MM-dd");
     const { error } = await supabase.from("diensten").insert({
       sublocation_id: dienst.sublocation?.id,
       titel: dienst.titel,
