@@ -1,116 +1,66 @@
 
-# Dienst Templates Systeem
+
+# Maandweergave voor Diensten Planning
 
 ## Overzicht
-Herbruikbaar template systeem voor de planningsmodule. Gebruikers slaan dienst-instellingen op als templates en laden deze bij het aanmaken van nieuwe diensten. Templates zijn per organisatie beschikbaar.
+Voeg een derde weergavemodus "Maand" toe naast de bestaande "Kalender" (week) en "Lijst" weergaven. De maandweergave toont een 7-koloms, 6-rijen kalender-grid met alle diensten van de geselecteerde maand.
 
-## Stap 1: Database Migratie
+## Wijzigingen
 
-Nieuwe tabel `dienst_templates` met:
-- `id`, `org_id`, `naam`, `template_data` (JSONB), `aangemaakt_door`, timestamps
-- RLS: SELECT/INSERT op org-basis, UPDATE/DELETE alleen door eigenaar
-- Index op `org_id` en `aangemaakt_door`
-- `updated_at` trigger
-- Realtime publicatie
+### 1. PlanningToolbar.tsx -- Maand navigatie en toggle
+- ViewMode type uitbreiden naar `"kalender" | "lijst" | "maand"`
+- Imports: `startOfMonth`, `addMonths`, `subMonths`, `Grid3X3`
+- Navigatie aanpassen: bij maand-modus navigeer per maand i.p.v. per week
+- Datelabel: toon "februari 2026" i.p.v. "Week X -- dd-MM t/m dd-MM"
+- Derde toggle-knop "Maand" met Grid3X3 icon toevoegen tussen Week en Lijst
 
-```sql
-CREATE TABLE dienst_templates (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  naam TEXT NOT NULL,
-  template_data JSONB NOT NULL DEFAULT '{}',
-  aangemaakt_door UUID REFERENCES auth.users(id),
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
+### 2. useDienstenPlanning.ts -- Bredere date range
+- `DienstFilters` interface uitbreiden met optioneel `viewMode` veld
+- Date range berekening: bij maand-modus ophalen van 6 weken (42 dagen) data
+  - gridStart = startOfWeek(startOfMonth(start))
+  - gridEnd = endOfWeek(gridStart + 5 weken)
+- Query keys en `.gte()/.lte()` aanpassen naar dynamische date range
+- Extra imports: `startOfMonth`, `addWeeks`
 
-CREATE INDEX idx_dienst_templates_org ON dienst_templates(org_id);
-CREATE INDEX idx_dienst_templates_user ON dienst_templates(aangemaakt_door);
+### 3. Planning.tsx -- Routing en rendering
+- ViewMode type uitbreiden naar `"kalender" | "lijst" | "maand"`
+- `handleViewChange` type uitbreiden
+- `activeFilters` uitbreiden met `viewMode`
+- Conditie toevoegen: `viewMode === "maand"` rendert `PlanningMaandKalender`
+- Loading skeleton: 35 cellen i.p.v. 7 bij maand-modus
+- Import toevoegen: `PlanningMaandKalender`
 
-ALTER TABLE dienst_templates ENABLE ROW LEVEL SECURITY;
+### 4. PlanningMaandKalender.tsx -- Nieuw component
+Volledig nieuw component met:
 
--- RLS: org-leden kunnen lezen en aanmaken
-CREATE POLICY "dienst_templates_select" ON dienst_templates FOR SELECT USING (
-  org_id IN (SELECT org_id FROM user_organizations WHERE user_id = auth.uid())
-);
-CREATE POLICY "dienst_templates_insert" ON dienst_templates FOR INSERT WITH CHECK (
-  org_id IN (SELECT org_id FROM user_organizations WHERE user_id = auth.uid())
-);
--- Alleen eigenaar kan wijzigen/verwijderen
-CREATE POLICY "dienst_templates_update" ON dienst_templates FOR UPDATE USING (
-  aangemaakt_door = auth.uid()
-);
-CREATE POLICY "dienst_templates_delete" ON dienst_templates FOR DELETE USING (
-  aangemaakt_door = auth.uid()
-);
+**Grid structuur:**
+- Header rij: ma, di, wo, do, vr, za, zo
+- 6 weken x 7 dagen = 42 dag-cellen
 
-CREATE TRIGGER update_dienst_templates_updated_at
-  BEFORE UPDATE ON dienst_templates
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+**Per dag-cel:**
+- Dagnummer met count indicator
+- Max 3 diensten zichtbaar, daarna "+X meer" tekst
+- Status-kleuren (concept=grijs, open=amber, deels_bezet=oranje, volledig_bezet=groen, voltooid=blauw)
+- Custom kleur als border-left override
+- Spoed indicator (emoji)
+- Klik opent DienstDetailSheet
 
-ALTER PUBLICATION supabase_realtime ADD TABLE dienst_templates;
-```
+**Visuele behandeling:**
+- Dagen buiten huidige maand: verlaagde opacity
+- Vandaag: gemarkeerd met ring/border
+- Responsive: compacte weergave op kleinere schermen
 
-## Stap 2: NieuweDienstModal.tsx Wijzigingen
+**Props interface:**
+- diensten, weekStart, showOpen, showIngepland, compact
+- onDienstClick, onEdit, onCopy, onDelete
 
-### A. Imports uitbreiden
-Toevoegen aan lucide-react import: `Trash2`, `BookmarkPlus`
+## Gewijzigde bestanden
+1. `src/components/planning/PlanningToolbar.tsx` (bestaand)
+2. `src/hooks/useDienstenPlanning.ts` (bestaand)
+3. `src/pages/Planning.tsx` (bestaand)
+4. `src/components/planning/PlanningMaandKalender.tsx` (nieuw)
 
-### B. Nieuwe state
-```typescript
-const [selectedTemplate, setSelectedTemplate] = useState("none");
-```
+## Technisch detail
 
-### C. Templates ophalen (useQuery)
-Query op `dienst_templates` gefilterd op `org_id`, alleen bij nieuw aanmaken (niet edit).
+De date range berekening in de hook is cruciaal: bij maand-modus moet de query 42 dagen ophalen (6 volle weken) zodat ook dagen van de vorige/volgende maand die in het grid vallen, diensten tonen. De `startOfWeek(startOfMonth(...))` constructie garandeert dat het grid altijd op maandag begint.
 
-### D. Template laden handler
-`handleLoadTemplate(templateId)` -- vult alle formuliervelden in vanuit `template_data` JSONB. Datum en status worden NIET overgenomen.
-
-### E. Opslaan als template handler
-`handleSaveAsTemplate()` -- vraagt naam via `window.prompt`, slaat huidige formulierwaarden op als JSONB in `template_data`.
-
-### F. Template verwijderen handler
-`handleDeleteTemplate(templateId)` -- verwijdert template na bevestiging.
-
-### G. Template selector UI
-Na de cascade selectie (org/locatie/afdeling), een Select dropdown met:
-- "Geen template" als default
-- Alle org templates als opties
-- Trash-icon naast dropdown bij geselecteerde template
-- Alleen zichtbaar bij nieuw aanmaken, NIET bij edit
-
-### H. Footer aanpassing
-Extra knop "Opslaan als template" met BookmarkPlus icon, links van Annuleren. Alleen bij nieuw aanmaken.
-
-### I. Reset bij sluiten
-`setSelectedTemplate("none")` toevoegen aan bestaande reset useEffect.
-
-## Template Data Structuur
-
-De `template_data` JSONB slaat alle velden op BEHALVE datum en status:
-
-| Veld | Type | Beschrijving |
-|------|------|-------------|
-| sublocation_id | uuid | Afdeling |
-| location_id | uuid | Locatie |
-| titel | text | Diensttitel |
-| start_tijd | text | Starttijd (HH:MM) |
-| eind_tijd | text | Eindtijd (HH:MM) |
-| pauze_minuten | number | Pauze in minuten |
-| pauze_manual | boolean | Handmatige pauze |
-| functie_niveaus | text[] | Vereiste niveaus |
-| certificeringen | text[] | Vereiste certificeringen |
-| gevraagd_aantal | number | Aantal medewerkers |
-| werkvorm | text | ZZP/Loondienst |
-| dienst_type | text | dag/avond/nacht/weekend |
-| tarief_per_uur | number | Uurtarief |
-| herhaling | text | Herhalingspatroon |
-| opmerkingen | text | Publiek/flexwerker/prive |
-| slaapdienst velden | mixed | Slaapdienst configuratie |
-| is_spoed | boolean | Spoedmarkering |
-| kleur | text | Kleurcode |
-
-## Gewijzigde Bestanden
-1. Database migratie (nieuw)
-2. `src/components/planning/NieuweDienstModal.tsx` (bestaand, uitbreiden)
