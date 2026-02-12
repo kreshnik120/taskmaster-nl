@@ -1,45 +1,86 @@
 
-# PA-3 -- Chat Integratie voor Planning + Beschikbaarheid
+# FA-1 -- Auto-Facturatie Engine
 
 ## Overzicht
-Maak de ChatWidget context-aware voor de Planning en Beschikbaarheid pagina's, en voeg een "Vraag aan AI" knop toe in het dienst detail paneel.
+Bouw een auto-facturatie engine die automatisch concept facturen genereert vanuit voltooide diensten. Bestaat uit een backend function, frontend hook, wizard-dialog en integratie in de Facturatie pagina.
 
-## Stap 1: ChatWidget.tsx -- Imports uitbreiden
+## Stap 1: Edge Function -- agent-auto-facturatie/index.ts (NIEUW)
 
-- Voeg `CalendarDays` en `CalendarCheck2` toe aan de lucide-react import (regel 2)
-- Voeg `parseISO` toe aan de date-fns import (regel 28)
+Nieuw bestand `supabase/functions/agent-auto-facturatie/index.ts`:
 
-## Stap 2: ChatWidget.tsx -- PAGE_CONTEXTS uitbreiden
+- Importeert `corsHeaders`, `createAdminClient`, `jsonResponse`, `handleCors`, `logInfo`, `logSuccess`, `logError` uit `_shared/core.ts`
+- Twee acties: `preview` en `generate`
+- **6 database stappen**:
+  1. Query factureerbare diensten: status='voltooid', datum BETWEEN period_start/period_end, met JOINs naar dienst_toewijzingen, professionals, client_sublocations, client_locations, client_organizations
+  2. Query reeds gefactureerde toewijzingen via factuur_regel.urenstaat_id (exclude set)
+  3. Filter stap 1 resultaat: verwijder al gefactureerde toewijzingen
+  4. Groepeer per opdrachtgever (client_org_id) met totalen
+  5a. **Preview**: return opdrachtgevers met toewijzingen + totalen
+  5b. **Generate**: voor elke (geselecteerde) opdrachtgever: insert factuur (CONCEPT/VERKOOP) + factuur_regels met urenstaat_id koppeling
+- BTW: 21% standaard, bedragen afgerond op 2 decimalen
+- Vervaldatum: factuurdatum + 30 dagen
+- Referentie: "Auto-facturatie {period_start} t/m {period_end}"
+- Logging naar function_call_logs
+- Input validatie: org_id + period_start + period_end verplicht
 
-Voeg twee nieuwe entries toe na `/sollicitaties-archief` (regel 162), voor de sluitende `};` (regel 163):
+## Stap 2: Config.toml entry
 
-- `/planning`: label "Diensten Planning", icon CalendarDays, beschrijving met matching/scoring/bezetting details, 3 quickActions (Onbezette diensten, Matching uitleg, Planning tips)
-- `/beschikbaarheid`: label "Beschikbaarheid", icon CalendarCheck2, beschrijving met professional/shift/matrix details, 3 quickActions (Beschikbaarheid tips, Shift planning, Week optimaliseren)
+Voeg toe aan `supabase/config.toml` (na agent-dienst-matching, regel 555):
 
-## Stap 3: ChatWidget.tsx -- currentPageContext verrijken
+```text
+[functions.agent-auto-facturatie]
+verify_jwt = false
+# Purpose: Auto-generate concept invoices from completed shifts
+```
 
-Vervang de useMemo op regels 239-266 met een versie die dynamisch de weekinfo toevoegt wanneer de gebruiker op `/planning` is en een `?week=` URL parameter aanwezig is. De description wordt verrijkt met "De gebruiker bekijkt de week van [datum]."
+## Stap 3: Frontend Hook -- useAutoFacturatie.ts (NIEUW)
 
-## Stap 4: ChatWidget.tsx -- Custom event listener
+Nieuw bestand `src/hooks/facturatie/useAutoFacturatie.ts`:
 
-Voeg een nieuw useEffect toe dat luistert naar het custom event `open-chat-with-context`. Dit event opent de chat met een vooringevulde prompt: `setIsOpen(true)`, `setShowWelcome(false)`, `setInput(prompt)`.
+- `fetchPreview(periodStart, periodEnd)`: haalt org_id op via user_organizations, roept edge function aan met action='preview'
+- `generateFacturen(periodStart, periodEnd, selectedOpdrachtgeverIds?)`: roept edge function aan met action='generate', invalidates facturen + stats queries via FACTURATIE_QUERY_KEYS
+- `reset()`: reset alle state
+- State: isLoading, preview, generateResult, error
 
-## Stap 5: DienstDetailSheet.tsx -- "Vraag aan AI" knop
+## Stap 4: UI Component -- AutoFacturatieDialog.tsx (NIEUW)
 
-- Voeg `Bot` toe aan de lucide-react import (regel 4)
-- Voeg na de DienstMatchingSuggesties (regel 272) een "Vraag aan AI assistent" knop toe:
-  - Alleen zichtbaar voor actieve diensten (niet geannuleerd/voltooid)
-  - Violet styling (border-violet-300, text-violet-700)
-  - Dispatcht `open-chat-with-context` event met volledige dienst context (titel, datum, type, tijden, status, locatie, functieniveau)
+Nieuw bestand `src/components/facturatie/AutoFacturatieDialog.tsx`:
 
-## Gewijzigde Bestanden
+- 3-staps wizard dialog:
+  - **Stap 1 - Periode**: Quick-select knoppen "Vorige maand" (default) en "Deze maand", "Preview ophalen" knop met Zap icoon
+  - **Stap 2 - Preview**: Totalen bovenaan, per opdrachtgever: checkbox + naam + diensten/uren + bedrag, expandable toewijzingen detail, "Genereer N facturen" knop
+  - **Stap 3 - Resultaat**: Success icoon, per factuur: factuurnummer + opdrachtgever + totaal + link naar detail pagina, "Sluiten" knop
+- Emerald theme, max-w-2xl, ScrollArea max-height 400px
+- NL currency format + NL locale datums
 
-1. `src/components/AIAssistant/ChatWidget.tsx` (wijzig) -- imports, PAGE_CONTEXTS, useMemo verrijking, event listener
-2. `src/components/planning/DienstDetailSheet.tsx` (wijzig) -- Bot import, "Vraag aan AI" knop
+## Stap 5: Facturatie.tsx aanpassen
+
+Wijzigingen aan `src/pages/Facturatie.tsx`:
+
+- Voeg `Zap` toe aan lucide-react imports (regel 33-47)
+- Import `AutoFacturatieDialog` (na regel 51)
+- State: `const [showAutoDialog, setShowAutoDialog] = useState(false)` (na regel 126)
+- "Auto-factureren" knop in PageHero, VOOR de "Instellingen" knop, emerald styling met Zap icoon
+- Render `<AutoFacturatieDialog open={showAutoDialog} onOpenChange={setShowAutoDialog} />`
+
+## Stap 6: hooks/facturatie/index.ts aanpassen
+
+Voeg export toe: `export { useAutoFacturatie } from './useAutoFacturatie';`
+
+## Gewijzigde/Nieuwe Bestanden
+
+1. `supabase/functions/agent-auto-facturatie/index.ts` (nieuw) -- edge function met preview + generate
+2. `supabase/config.toml` (wijzig) -- function config entry
+3. `src/hooks/facturatie/useAutoFacturatie.ts` (nieuw) -- frontend hook
+4. `src/components/facturatie/AutoFacturatieDialog.tsx` (nieuw) -- wizard dialog
+5. `src/pages/Facturatie.tsx` (wijzig) -- knop + dialog integratie
+6. `src/hooks/facturatie/index.ts` (wijzig) -- export toevoegen
 
 ## Technische Details
 
-- Geen nieuwe bestanden, geen database wijzigingen
-- Custom event patroon (`open-chat-with-context`) maakt losse koppeling mogelijk tussen DienstDetailSheet en ChatWidget
-- parseISO gebruikt voor veilige date parsing (consistent met codebase)
-- Bestaande PAGE_CONTEXTS entries worden niet gewijzigd
+- Edge function gebruikt `createAdminClient()` (service role) voor volledige data toegang
+- Dubbele facturatie preventie via check op factuur_regel.urenstaat_id (exclude reeds gefactureerde toewijzingen)
+- BTW berekening met `?? 21` (nullish coalescing, consistent met bestaande facturatie logica)
+- Factuurnummer wordt automatisch gegenereerd door bestaande database trigger
+- FACTURATIE_QUERY_KEYS uit `./constants.ts` voor query invalidation
+- Geen database migraties nodig (alle tabellen bestaan al)
