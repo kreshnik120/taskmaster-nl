@@ -1,26 +1,34 @@
 
 
-# Taken toewijzen + Gebruikersnamen bijwerken
+# Fix: Rol toewijzen werkt niet (database constraint mismatch)
 
-## Stap 1: Alle 20 verweesd taken toewijzen aan Erik Hendriks
-Alle taken waar `assignee_id IS NULL` worden bijgewerkt naar Erik's account (`7fdc4755-d9e8-4468-b1ad-16fa80270aab`). Hetzelfde voor `reporter_id` waar dat NULL is.
+## Probleem
+De edge function `manage-users` gebruikt `upsert({ onConflict: "user_id" })` maar de database heeft alleen een unique constraint op `(user_id, role)` -- niet op `user_id` alleen. Hierdoor faalt elke rol-toewijzing met error `42P10`.
 
-## Stap 2: Profielnamen bijwerken in database
-Directe data-updates in de `profiles` tabel:
+## Oplossing
 
-| Email | Was | Wordt |
-|-------|-----|-------|
-| k.atashi@citozorg.nl | Kreshnik | Kreshnik Atashi |
-| erik@abczorg.nl | Erik van ABCzorg | Erik Hendriks |
-| admin@abczorg.nl | Marianne | Marianne Greven |
-| d.caro@abczorg.nl | D. Caro | Dilmar Caro |
-| l.pattipeilohy@citozorg.nl | Leonie Pattipeilohy | (al compleet) |
+### Stap 1: Database migratie
+Voeg een unique constraint toe op `user_id` alleen (aangezien elke gebruiker maar 1 rol heeft):
 
-## Stap 3: Gebruikerspagina naam-weergave verbeteren
-In `src/pages/Gebruikers.tsx` toont de naam kolom nu `user.raw_user_meta_data?.name` wat uit auth metadata komt. Dit moet als fallback ook het `profiles.name` veld gebruiken. Aangezien de edge function `list_users` al auth user metadata teruggeeft, voegen we daar ook het profiel-name veld aan toe zodat er altijd een naam zichtbaar is.
+```sql
+ALTER TABLE public.user_roles
+  DROP CONSTRAINT IF EXISTS user_roles_user_id_role_key;
 
-### Technisch
-- **Edge function** (`manage-users/index.ts`): Bij `list_users`, ook `profiles` tabel joinen om `name` op te halen als fallback
-- **Frontend** (`Gebruikers.tsx`): Toon `profile_name` als `raw_user_meta_data.name` leeg is
-- **Database**: 4x UPDATE op `profiles.name`, 20x UPDATE op `tasks.assignee_id` en `tasks.reporter_id`
+ALTER TABLE public.user_roles
+  ADD CONSTRAINT user_roles_user_id_unique UNIQUE (user_id);
+```
+
+Dit vervangt de `(user_id, role)` constraint door een `(user_id)` constraint, zodat de upsert correct werkt.
+
+### Stap 2: Erik's rol toewijzen
+Na de migratie, via de UI de rol "user" (of gewenste rol) toewijzen aan Erik. Dit zal nu wel werken.
+
+---
+
+## Technisch overzicht
+
+| Component | Wijziging |
+|-----------|-----------|
+| Database | Unique constraint wijzigen van `(user_id, role)` naar `(user_id)` |
+| Edge function | Geen wijziging nodig -- `onConflict: "user_id"` klopt dan |
 
