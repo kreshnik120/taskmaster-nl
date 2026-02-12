@@ -1,77 +1,71 @@
 
 
-# Kwaliteitsaudit Fixes (10 issues)
+# Beschikbaarheid: Database + Hook + Routing + Sidebar
 
 ## Overzicht
-Tien backwards-compatible fixes voor de planning module: database constraints, verwijdering van `window.prompt()`/`confirm()`, validatie, accessibility en UX-verbeteringen.
+Bouw het fundament voor de Beschikbaarheid module: ontbrekende database kolommen toevoegen, een data hook aanmaken, routing configureren, sidebar menu-item toevoegen, en een placeholder pagina met KPI cards neerzetten.
 
-## Stap 1: Database Migratie -- 3 CHECK constraints
+## Stap 1: Database Migratie
+
+De tabel `professional_availability` bestaat al. De migratie voegt toe:
 
 ```sql
-ALTER TABLE diensten ADD CONSTRAINT chk_gevraagd_aantal CHECK (gevraagd_aantal > 0);
-ALTER TABLE diensten ADD CONSTRAINT chk_pauze_minuten CHECK (pauze_minuten >= 0 AND pauze_minuten <= 480);
-ALTER TABLE dienst_toewijzingen ADD CONSTRAINT chk_positie_nr_positive CHECK (positie_nr > 0);
+-- A. Notities kolom
+ALTER TABLE professional_availability ADD COLUMN IF NOT EXISTS opmerking TEXT;
+
+-- B. Updated_at + trigger (hergebruikt bestaande update_updated_at_column functie)
+ALTER TABLE professional_availability ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+CREATE TRIGGER update_professional_availability_updated_at
+  BEFORE UPDATE ON professional_availability
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- C. Composite index voor week-queries
+CREATE INDEX IF NOT EXISTS idx_pa_professional_date ON professional_availability(professional_id, date);
+
+-- D. Realtime inschakelen
+ALTER PUBLICATION supabase_realtime ADD TABLE professional_availability;
 ```
 
-Alle bestaande data voldoet al (defaults zijn 1, 0 en 1 respectievelijk).
+## Stap 2: Hook -- useBeschikbaarheid.ts
 
-## Stap 2: NieuweDienstModal.tsx -- 5 fixes
+Nieuw bestand `src/hooks/useBeschikbaarheid.ts` met:
 
-### A. `window.prompt()` vervangen door AlertDialog
-- Nieuwe states: `templateNaamInput`, `showTemplateSaveDialog`
-- "Opslaan als template" knop opent een AlertDialog met Input veld
-- `handleSaveAsTemplate` krijgt een `naam: string` parameter i.p.v. `window.prompt()`
+- **Interfaces**: `BeschikbaarheidFilters`, `AvailabilityEntry`, `ProfessionalBeschikbaarheid`, `BeschikbaarheidStats`
+- **Query 1**: Professionals ophalen (actief/beschikbaar) met client-side filters (functieNiveau, werkvorm, status, regio)
+- **Query 2**: Beschikbaarheid entries voor de weekrange (gte/lte op date)
+- **Combinatie**: `useMemo` die professionals koppelt aan hun availability entries
+- **Stats**: Berekening van totaalProfessionals, beschikbaarVandaag, onbekend, dekkingsgraad
+- **Realtime**: Twee `useRealtimeChannel` subscriptions (professional_availability + professionals)
+- Volgt exact het patroon van `useDienstenPlanning.ts`
 
-### B. `confirm()` vervangen door AlertDialog voor template delete
-- Nieuwe state: `deleteTemplateTarget`
-- Trash knop zet `deleteTemplateTarget` i.p.v. direct `confirm()`
-- AlertDialog met bevestiging roept `handleDeleteTemplate` aan
+## Stap 3: Routing -- App.tsx
 
-### C. Template data validatie
-- In `handleLoadTemplate`: type check toevoegen op `tmpl.template_data`
-- Bij ongeldige data: `toast.error("Template data is ongeldig")` en return
+- Import `Beschikbaarheid` pagina toevoegen
+- Route `/beschikbaarheid` toevoegen na `/planning` en voor `/gebruikers`
 
-### D. gevraagd_aantal validatie
-- In `handleSave`: `gevraagd_aantal: Math.max(1, aantal)`
-- In `handleSaveAsTemplate`: idem
+## Stap 4: Sidebar -- AppSidebar.tsx
 
-### E. Nieuwe states resetten bij sluiten
-- `setShowTemplateSaveDialog(false)`, `setTemplateNaamInput("")`, `setDeleteTemplateTarget(null)` in de reset useEffect (regel 302-313)
+- `CalendarCheck2` toevoegen aan lucide-react import
+- Menu-item "Beschikbaarheid" toevoegen in de Recruitment groep, na Planning en voor Facturatie
+- `requiresEdit: true` (zelfde als andere recruitment items)
 
-## Stap 3: ToewijzingenBeheer.tsx -- 2 fixes
+## Stap 5: Placeholder Pagina -- Beschikbaarheid.tsx
 
-### A. selectedPositie reset bij dienst switch
-```typescript
-useEffect(() => {
-  setSelectedPositie(1);
-}, [dienst.id]);
-```
+Nieuw bestand `src/pages/Beschikbaarheid.tsx`:
 
-### B. positie_nr validatie bij toewijzen
-```typescript
-positie_nr: isMultiPositie ? Math.min(selectedPositie, gevraagd) : 1,
-```
-
-## Stap 4: PlanningMaandKalender.tsx -- 3 fixes
-
-### A. Dag-cellen accessibility
-- `tabIndex={0}`, `role="gridcell"`, `aria-label` met datum en aantal diensten
-
-### B. "+X meer" klikbaar
-- Click handler op "+X meer" tekst die eerste niet-zichtbare dienst opent
-- Cursor en hover styling toevoegen
-
-### C. Tekst vergroten
-- Dienst items van `text-[9px]` naar `text-[10px]`
-
-## Stap 5: DienstDetailSheet.tsx -- aria-labels
-
-Positie bolletjes krijgen `aria-label` en `role="img"` naast de bestaande `title`.
+- `PageContainer` met `contextColor="teal"`
+- `PageHero` met CalendarCheck2 icoon, titel "Beschikbaarheid", subtitle
+- 4 KPI Cards in een grid:
+  - Totaal Professionals (teal)
+  - Beschikbaar Vandaag (teal)
+  - Onbekend (amber)
+  - Dekkingsgraad (emerald, met % suffix)
+- Placeholder content blokken voor weekkalender en professional lijst (worden in B-2 uitgebouwd)
+- Week-parameter in URL via `useSearchParams`
 
 ## Gewijzigde Bestanden
-1. Database migratie (nieuw) -- 3 CHECK constraints
-2. `src/components/planning/NieuweDienstModal.tsx` -- template dialogs, validatie, reset
-3. `src/components/planning/ToewijzingenBeheer.tsx` -- positie reset + validatie
-4. `src/components/planning/PlanningMaandKalender.tsx` -- accessibility + tekst
-5. `src/components/planning/DienstDetailSheet.tsx` -- aria-labels
-
+1. Database migratie (nieuw) -- opmerking, updated_at, index, realtime
+2. `src/hooks/useBeschikbaarheid.ts` (nieuw) -- data hook
+3. `src/pages/Beschikbaarheid.tsx` (nieuw) -- placeholder pagina
+4. `src/App.tsx` -- route toevoegen
+5. `src/components/AppSidebar.tsx` -- menu-item toevoegen
