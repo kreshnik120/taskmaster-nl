@@ -4825,24 +4825,30 @@ export type Database = {
           date: string
           id: string
           is_available: boolean
+          opmerking: string | null
           professional_id: string
           shift: string
+          updated_at: string
         }
         Insert: {
           created_at?: string
           date: string
           id?: string
           is_available?: boolean
+          opmerking?: string | null
           professional_id: string
           shift: string
+          updated_at?: string
         }
         Update: {
           created_at?: string
           date?: string
           id?: string
           is_available?: boolean
+          opmerking?: string | null
           professional_id?: string
           shift?: string
+          updated_at?: string
         }
         Relationships: [
           {
