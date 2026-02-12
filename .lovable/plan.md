@@ -1,93 +1,73 @@
 
-# Optimistic Locking voor Diensten
+# Per-Positie Tracking voor Diensten
 
 ## Overzicht
-Voorkom dat twee gebruikers tegelijkertijd dezelfde dienst overschrijven door een `lock_version` kolom toe te voegen met automatische verhoging bij elke update.
+Wanneer een dienst meerdere medewerkers vraagt (gevraagd_aantal > 1), worden toewijzingen gekoppeld aan specifieke posities (1, 2, 3...). Dit maakt het bezettingsoverzicht per positie zichtbaar en voorkomt overbezetting.
 
 ## Stap 1: Database Migratie
 
 ```sql
-ALTER TABLE diensten ADD COLUMN lock_version INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE dienst_toewijzingen ADD COLUMN positie_nr INTEGER NOT NULL DEFAULT 1;
 
-CREATE OR REPLACE FUNCTION increment_lock_version()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.lock_version := OLD.lock_version + 1;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+ALTER TABLE dienst_toewijzingen DROP CONSTRAINT IF EXISTS dienst_toewijzingen_dienst_id_professional_id_key;
 
-CREATE TRIGGER trg_diensten_lock_version
-  BEFORE UPDATE ON diensten
-  FOR EACH ROW
-  EXECUTE FUNCTION increment_lock_version();
+ALTER TABLE dienst_toewijzingen ADD CONSTRAINT dienst_toewijzingen_dienst_positie_professional_key
+  UNIQUE (dienst_id, positie_nr, professional_id);
+
+CREATE INDEX idx_dt_positie ON dienst_toewijzingen(dienst_id, positie_nr);
 ```
 
-Bestaande diensten krijgen automatisch `lock_version = 0`.
+- Bestaande toewijzingen krijgen automatisch `positie_nr = 1`
+- Oude UNIQUE constraint wordt verwijderd en vervangen door een die positie_nr bevat
 
-## Stap 2: DienstData Interface
+## Stap 2: DienstData Interface en Mapping
 
 **Bestand: `src/hooks/useDienstenPlanning.ts`**
 
-Voeg `lock_version: number` toe aan de `DienstData` interface (na `kleur`). Het veld wordt automatisch opgehaald door de `select("*")` query.
+- Voeg `positie_nr: number` toe aan de toewijzingen array in de `DienstData` interface (na `status`)
+- Voeg `positie_nr: t.positie_nr || 1` toe aan de toewijzingen mapping (regel 183-196)
+- Voeg `positie_nr` toe aan de select query van `dienst_toewijzingen` (regel 152-153)
 
-## Stap 3: Edit Save met Lock Check
+## Stap 3: ToewijzingenBeheer.tsx -- Grootste wijziging
 
-**Bestand: `src/components/planning/NieuweDienstModal.tsx`** (regel 416-418)
+### A. Nieuwe imports en state
+- Importeer `Select`, `SelectTrigger`, `SelectValue`, `SelectContent`, `SelectItem`, `Label`
+- Voeg `useMemo` toe aan React imports
+- Nieuwe state: `const [selectedPositie, setSelectedPositie] = useState(1)`
 
-Huidige code:
-```typescript
-const { error } = await supabase.from("diensten").update(dienstData).eq("id", editDienst!.id);
-if (error) throw error;
-```
+### B. Bezetting per positie berekenen
+Vervang de huidige eenvoudige `bezet` berekening door een `useMemo` die bij `gevraagd_aantal > 1` telt hoeveel unieke posities bezet zijn (via `Set`).
 
-Nieuwe code:
-```typescript
-const { data: updated, error } = await supabase
-  .from("diensten")
-  .update(dienstData)
-  .eq("id", editDienst!.id)
-  .eq("lock_version", editDienst!.lock_version)
-  .select("id")
-  .single();
+### C. Positie selector bij toevoegen
+Wanneer `gevraagd_aantal > 1`, toon een Select dropdown boven de professional zoekfunctie waarmee de gebruiker een positie kiest. Elke optie toont "Positie X (open)" of "Positie X (naam)".
 
-if (error?.code === "PGRST116" || !updated) {
-  toast.error("Deze dienst is ondertussen door iemand anders gewijzigd. Sluit het formulier en probeer opnieuw.", { duration: 6000 });
-  queryClient.invalidateQueries({ queryKey: ["diensten-planning"] });
-  setSaving(false);
-  return;
-}
-if (error) throw error;
-```
+### D. Positie meesturen bij insert
+De `assignProfessional` functie stuurt `positie_nr: selectedPositie` mee bij de insert.
 
-PostgREST code `PGRST116` = "geen rij gevonden" (0 rows matched), wat betekent dat de `lock_version` niet meer klopt.
+### E. Gegroepeerde weergave
+Wanneer `gevraagd_aantal > 1`: toon toewijzingen gegroepeerd per positie met "Positie X -- Bezet/Open" labels. Per positie worden de toewijzingsrijen getoond. Bij `gevraagd_aantal = 1`: bestaande flat lijst behouden (geen regressie).
 
-## Stap 4: Sluiten Dienst met Lock Check
+## Stap 4: DienstCard.tsx -- Bezetting per positie
 
-**Bestand: `src/components/planning/DienstDetailSheet.tsx`** (regel 45-46)
+Vervang de huidige `bezet` berekening door een `useMemo` die bij `gevraagd_aantal > 1` het aantal bezette posities telt via `Set<number>` i.p.v. het totaal aantal bevestigde toewijzingen.
 
-Dezelfde patroon toepassen op `handleSluitenDienst`:
-```typescript
-const { data: updated, error } = await supabase
-  .from("diensten")
-  .update({ status: "geannuleerd" })
-  .eq("id", dienst.id)
-  .eq("lock_version", dienst.lock_version)
-  .select("id")
-  .single();
+Importeer `useMemo` uit React.
 
-if (error?.code === "PGRST116" || !updated) {
-  toast.error("Dienst is ondertussen gewijzigd. Vernieuw de pagina.");
-  return;
-}
-```
+## Stap 5: NieuweDienstModal.tsx -- Pre-toewijzing
 
-## Stap 5: Kopieer Operatie -- Geen Wijziging Nodig
+Bij de pre-toewijzing insert (regel 448-453), voeg `positie_nr: 1` toe aan het insert object.
 
-De `handleCopyDienst` in `Planning.tsx` doet een INSERT (regel 93) en stuurt geen `lock_version` mee. Dit is correct en hoeft niet aangepast.
+## Stap 6: DienstDetailSheet.tsx -- Positie indicators
+
+Na de "Gevraagd aantal" DetailRow (regel 162), toon visuele ronde positie-indicators wanneer `gevraagd_aantal > 1`:
+- Bezette posities: groene cirkel met nummer
+- Open posities: amber cirkel met nummer
+- Elk bolletje toont een tooltip met status
 
 ## Gewijzigde Bestanden
 1. Database migratie (nieuw)
-2. `src/hooks/useDienstenPlanning.ts` -- interface uitbreiding
-3. `src/components/planning/NieuweDienstModal.tsx` -- edit save lock check
-4. `src/components/planning/DienstDetailSheet.tsx` -- sluiten lock check
+2. `src/hooks/useDienstenPlanning.ts` -- interface + mapping + select query
+3. `src/components/planning/ToewijzingenBeheer.tsx` -- groepering, positie selector, bezettingsberekening
+4. `src/components/planning/DienstCard.tsx` -- bezettingsberekening per positie
+5. `src/components/planning/NieuweDienstModal.tsx` -- positie_nr bij pre-toewijzing
+6. `src/components/planning/DienstDetailSheet.tsx` -- visuele positie indicators
