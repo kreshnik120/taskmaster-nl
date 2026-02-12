@@ -450,6 +450,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
             dienst_id: inserted[0].id,
             professional_id: preToewijzingId,
             status: "toegewezen",
+            positie_nr: 1,
             toegewezen_door: user.id,
           });
           if (toewijzingError) {

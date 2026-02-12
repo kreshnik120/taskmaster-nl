@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { DienstStatusBadge } from "./DienstStatusBadge";
 import { Building2 } from "lucide-react";
@@ -20,9 +21,16 @@ const borderColorMap: Record<string, string> = {
 };
 
 export function DienstCard({ dienst, compact = true, onClick }: DienstCardProps) {
-  const bezet = dienst.toewijzingen.filter((t) =>
-    ["bevestigd", "positief"].includes(t.status)
-  ).length;
+  const bezet = useMemo(() => {
+    if (dienst.gevraagd_aantal <= 1) {
+      return dienst.toewijzingen?.filter((t) => ["bevestigd", "positief"].includes(t.status)).length || 0;
+    }
+    const bezetSet = new Set<number>();
+    dienst.toewijzingen
+      ?.filter((t) => ["bevestigd", "positief"].includes(t.status))
+      .forEach((t) => bezetSet.add(t.positie_nr));
+    return bezetSet.size;
+  }, [dienst]);
   const gevraagd = dienst.gevraagd_aantal || 1;
   const bezettingPct = Math.min(Math.round((bezet / gevraagd) * 100), 100);
 
