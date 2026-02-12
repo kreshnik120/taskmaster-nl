@@ -1,99 +1,79 @@
 
-# B-3 -- Cross-Module Integratie (Beschikbaarheid)
+
+# PA-1 -- Smart Matching Engine: AI Suggesties bij Diensten
 
 ## Overzicht
-Beschikbaarheid is momenteel een eiland. Deze integratie voegt beschikbaarheidsindicatoren toe aan alle plekken waar planners professionals zien of toewijzen: zoekresultaten, pre-toewijzing, en het professional detail modal.
+Voeg een intelligent matching systeem toe aan de Planning module. Wanneer een planner een dienst opent in het DienstDetailSheet, toont het systeem automatisch de top-10 best passende beschikbare professionals met een 100-punten matchscore.
 
-## Stap 1: useBeschikbaarheidIndicator hook (nieuw)
+## Stap 1: Nieuwe Hook -- useDienstMatching.ts
 
-Nieuw bestand `src/hooks/useBeschikbaarheidIndicator.ts`.
+Nieuw bestand `src/hooks/useDienstMatching.ts`:
 
-Lichtgewicht hook die beschikbaarheid ophaalt voor 1 specifieke datum. Wordt gebruikt in ToewijzingenBeheer en NieuweDienstModal.
+- **3 parallelle queries**:
+  1. Actieve professionals voor de org (`professionals` tabel, max 200)
+  2. Beschikbaarheid op de dienstdatum (`professional_availability`)
+  3. Bestaande toewijzingen op die datum (`dienst_toewijzingen` met inner join op `diensten`)
 
-- **Input**: `date: string` (yyyy-MM-dd), `dienstType?: string` (dag/avond/nacht/weekend)
-- **Query**: Haalt alle `professional_availability` entries op voor die datum
-- **Functie** `getStatus(professionalId)` retourneert `"beschikbaar" | "niet_beschikbaar" | "onbekend"`
-- Shift-mapping logica: `dag` checkt shift `dag` en `hele_dag`, `avond` checkt `avond` en `hele_dag`, `nacht` checkt `nacht` en `hele_dag`, `weekend` checkt alle shifts
-- Query key: `["beschikbaarheid-indicator", date]`
-- `staleTime: 30000` (data verandert niet heel snel)
+- **Client-side scoring** (100 punten max):
+  - Functieniveau (0-30): exact match met `gevraagd_functie_niveau`
+  - Beschikbaarheid (0-25): via SHIFT_MAP (dag->dag/hele_dag, etc.)
+  - Certificeringen (0-20): proportioneel aan `vereiste_certificeringen` match
+  - Regio (0-15): match op `sublocation.plaats` vs `regio` en `regio_voorkeur`
+  - Historie (0-10): placeholder voor toekomstige uitbreiding
 
-## Stap 2: useProfessionalWeekBeschikbaarheid hook (nieuw)
+- **Filters**: al toegewezen professionals overslaan, gediskwalificeerden (overlap/niet beschikbaar) verbergen
+- **Output**: top 10 gesorteerd op score DESC
+- Queries alleen actief als dienst niet geannuleerd/voltooid is
 
-Nieuw bestand `src/hooks/useProfessionalWeekBeschikbaarheid.ts`.
+## Stap 2: Nieuw Component -- DienstMatchingSuggesties.tsx
 
-Per-professional week data met realtime. Wordt gebruikt in de MiniKalender in ProfessionalDetailModal.
+Nieuw bestand `src/components/planning/DienstMatchingSuggesties.tsx`:
 
-- **Input**: `professionalId: string`, `weekStart: string`
-- **Query**: Haalt `professional_availability` entries op voor 1 professional, 1 week
-- **Realtime**: `useRealtimeChannel` op `professional_availability` met filter op `professional_id`
-- Retourneert `availability: AvailabilityEntry[]`, `isLoading`
+- **Score cirkel** met kleurcodering: >= 70 emerald, >= 50 amber, < 50 slate
+- **Tooltip** met volledige score breakdown (5 categorieen met progress bars)
+- **Match reasons** als compacte chips
+- **"Toewijzen" knop** per professional
+- **Inklapbaar** (standaard open) met Sparkles icoon
+- **Violet themakleur** (onderscheid van teal/emerald)
+- Verbergt zichzelf bij geannuleerde/voltooide/volledig bezette diensten
 
-## Stap 3: BeschikbaarheidDot component (nieuw)
+## Stap 3: DienstDetailSheet.tsx aanpassen
 
-Nieuw bestand `src/components/beschikbaarheid/BeschikbaarheidDot.tsx`.
+Wijzigingen aan `src/components/planning/DienstDetailSheet.tsx`:
 
-Herbruikbare indicator dot met tooltip:
+- Import `DienstMatchingSuggesties` toevoegen (na regel 10)
+- `handleSuggestieAssign` functie toevoegen: insert in `dienst_toewijzingen` met status "voorgesteld"
+- Suggesties panel invoegen na `ToewijzingenBeheer` (na regel 251)
 
-- Props: `status: "beschikbaar" | "niet_beschikbaar" | "onbekend"`, `showLabel?: boolean`, `size?: "sm" | "md"`
-- Kleuren: emerald (beschikbaar), rose (niet beschikbaar), slate (onbekend)
-- Tooltip met status tekst
-- Optioneel tekstlabel naast de dot (bijv. "niet beschikbaar" bij rode dots)
-- Compact: `w-2.5 h-2.5` (sm) of `w-3 h-3` (md) rounded-full
+## Stap 4: agentIntents.ts uitbreiden
 
-## Stap 4: BeschikbaarheidMiniKalender component (nieuw)
+Wijzigingen aan `src/lib/agentIntents.ts`:
 
-Nieuw bestand `src/components/beschikbaarheid/BeschikbaarheidMiniKalender.tsx`.
+- **4 nieuwe intents** toevoegen (na `general_query`, voor sluitende `}`):
+  - `suggest_professional` (match_agent)
+  - `find_replacement` (match_agent)
+  - `check_dienst_coverage` (report_agent)
+  - `plan_week_diensten` (schedule_agent)
 
-Compacte weekview voor 1 professional, voor gebruik in ProfessionalDetailModal:
+- **2 nieuwe page configs** toevoegen (na `/recruitment`, voor sluitende `}`):
+  - `/planning`: primaryAgent "match_agent", 5 intents
+  - `/beschikbaarheid`: primaryAgent "schedule_agent", 4 intents
 
-- Props: `professionalId: string`
-- Interne state voor `weekStart` met week-navigatie (prev/next/vandaag)
-- Hergebruikt `useProfessionalWeekBeschikbaarheid` voor data
-- Hergebruikt `useBeschikbaarheidMutations` voor toggle
-- Hergebruikt bestaande `BeschikbaarheidCelEditor` voor D/A/N knoppen
-- Hergebruikt `BeschikbaarheidLegenda`
-- 7-kolommen grid (ma-zo) met D/A/N per dag
-- "Volledig overzicht" link naar `/beschikbaarheid`
-
-## Stap 5: ToewijzingenBeheer.tsx aanpassen
-
-In de professional zoekresultaten (CommandItem, regels 291-304):
-
-- Importeer en gebruik `useBeschikbaarheidIndicator` met `dienst.datum` en `dienst.dienst_type`
-- Voeg `BeschikbaarheidDot` toe naast elke professional naam in de zoeklijst
-- Bij rode dot: extra tekst "niet beschikbaar" voor duidelijkheid
-
-## Stap 6: NieuweDienstModal.tsx aanpassen
-
-In de pre-toewijzing zoekresultaten (regels 799-816):
-
-- Importeer en gebruik `useBeschikbaarheidIndicator` met `datums[0]` (eerste geselecteerde datum) en `dienstType`
-- Voeg `BeschikbaarheidDot` toe naast elke professional in de search results
-- Dot alleen tonen als er minimaal 1 datum geselecteerd is
-
-## Stap 7: ProfessionalDetailModal.tsx aanpassen
-
-Voeg een 5e tab "Beschikbaarheid" toe aan het Tabs component:
-
-- TabsList wijzigen van `grid-cols-4` naar `grid-cols-5`
-- Nieuwe `TabsTrigger value="beschikbaarheid"` met label "Beschikbaarheid"
-- Nieuwe `TabsContent value="beschikbaarheid"` met:
-  - `BeschikbaarheidMiniKalender` component met `professionalId={professional.id}`
-  - Link "Volledig overzicht openen" die navigeert naar `/beschikbaarheid`
+- **6 nieuwe keywords** in `detectIntentFromText`:
+  - suggestie, voorstel, vervanging, bezetting, rooster, weekplanning
 
 ## Gewijzigde/Nieuwe Bestanden
 
-1. `src/hooks/useBeschikbaarheidIndicator.ts` (nieuw) -- lichtgewicht datum-lookup
-2. `src/hooks/useProfessionalWeekBeschikbaarheid.ts` (nieuw) -- per-professional week data
-3. `src/components/beschikbaarheid/BeschikbaarheidDot.tsx` (nieuw) -- indicator dot
-4. `src/components/beschikbaarheid/BeschikbaarheidMiniKalender.tsx` (nieuw) -- mini weekkalender
-5. `src/components/planning/ToewijzingenBeheer.tsx` (wijzig) -- dots in zoekresultaten
-6. `src/components/planning/NieuweDienstModal.tsx` (wijzig) -- dots in pre-toewijzing
-7. `src/components/ProfessionalDetailModal.tsx` (wijzig) -- 5e tab met mini-kalender
+1. `src/hooks/useDienstMatching.ts` (nieuw) -- matching engine met 3 queries + scoring
+2. `src/components/planning/DienstMatchingSuggesties.tsx` (nieuw) -- suggesties UI
+3. `src/components/planning/DienstDetailSheet.tsx` (wijzig) -- integratie suggesties panel
+4. `src/lib/agentIntents.ts` (wijzig) -- 4 intents + 2 page configs + 6 keywords
 
 ## Technische Details
 
-- Shift-mapping: `dienst_type === "dag"` checkt shifts `["dag", "hele_dag"]`, `"avond"` checkt `["avond", "hele_dag"]`, `"nacht"` checkt `["nacht", "hele_dag"]`, `"weekend"` checkt alle shifts
-- Geen extra database migraties nodig
-- Alle nieuwe hooks volgen het bestaande `useRealtimeChannel` patroon met 200ms debounce
-- `useBeschikbaarheidIndicator` is bewust lichtgewicht: 1 query per datum, geen realtime (data wordt toch ververst via de bestaande channels)
+- Scoring gebruikt dezelfde `SHIFT_MAP` als `useBeschikbaarheidIndicator` voor consistentie
+- Overlap check vergelijkt `start_tijd`/`eind_tijd` van diensten op dezelfde datum
+- `handleSuggestieAssign` gebruikt `dienst_toewijzingen` insert met status "voorgesteld" en valideert via bestaande database trigger `check_dienst_overlap`
+- Alle datum-operaties gebruiken `parseISO()`, geen `new Date(string)`
+- Geen database migraties nodig
+
