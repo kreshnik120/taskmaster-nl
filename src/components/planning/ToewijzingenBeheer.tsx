@@ -1,5 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { Check, X, Undo2, UserPlus, Search, Loader2 } from "lucide-react";
+import { useBeschikbaarheidIndicator } from "@/hooks/useBeschikbaarheidIndicator";
+import { BeschikbaarheidDot } from "@/components/beschikbaarheid/BeschikbaarheidDot";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -78,6 +81,8 @@ export function ToewijzingenBeheer({ dienst }: ToewijzingenBeheerProps) {
   }, [dienst, isMultiPositie]);
 
   const pct = Math.min(Math.round((bezet / gevraagd) * 100), 100);
+
+  const { getStatus: getBeschikbaarheidStatus } = useBeschikbaarheidIndicator(dienst.datum, dienst.dienst_type);
 
   const { data: professionals = [], isLoading: searchLoading } = useQuery({
     queryKey: ["professionals-search", debouncedSearch],
@@ -288,20 +293,28 @@ export function ToewijzingenBeheer({ dienst }: ToewijzingenBeheerProps) {
                 )}
               </CommandEmpty>
               <CommandGroup>
-                {professionals.map((p) => (
-                  <CommandItem
-                    key={p.id}
-                    value={p.id}
-                    onSelect={() => assignProfessional(p.id)}
-                  >
-                    <div className="flex flex-col">
-                      <span className="text-sm font-medium">{p.full_name}</span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {p.functie_niveau ?? "—"} · {p.telefoonnummer ?? "—"}
-                      </span>
-                    </div>
-                  </CommandItem>
-                ))}
+                <TooltipProvider>
+                {professionals.map((p) => {
+                  const bStatus = getBeschikbaarheidStatus(p.id);
+                  return (
+                    <CommandItem
+                      key={p.id}
+                      value={p.id}
+                      onSelect={() => assignProfessional(p.id)}
+                    >
+                      <div className="flex items-center gap-2 w-full">
+                        <BeschikbaarheidDot status={bStatus} showLabel={bStatus === "niet_beschikbaar"} />
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-sm font-medium">{p.full_name}</span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {p.functie_niveau ?? "—"} · {p.telefoonnummer ?? "—"}
+                          </span>
+                        </div>
+                      </div>
+                    </CommandItem>
+                  );
+                })}
+                </TooltipProvider>
               </CommandGroup>
             </CommandList>
           </Command>
