@@ -43,6 +43,7 @@ export interface DienstData {
   vereiste_certificeringen: string[];
   is_spoed: boolean;
   kleur: string | null;
+  lock_version: number;
   created_at: string;
   sublocation: {
     id: string;
