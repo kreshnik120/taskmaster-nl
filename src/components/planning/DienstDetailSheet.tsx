@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DienstStatusBadge } from "./DienstStatusBadge";
 import { ToewijzingenBeheer } from "./ToewijzingenBeheer";
+import { DienstMatchingSuggesties } from "./DienstMatchingSuggesties";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -61,6 +62,23 @@ export function DienstDetailSheet({ dienst, open, onClose, onEdit, onCopy, onDel
     setConfirmAction(null);
     queryClient.invalidateQueries({ queryKey: ["diensten-planning"] });
     onClose();
+  };
+
+  const handleSuggestieAssign = async (professionalId: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase.from("dienst_toewijzingen").insert({
+      dienst_id: dienst.id,
+      professional_id: professionalId,
+      status: "voorgesteld",
+      positie_nr: 1,
+      toegewezen_door: user?.id,
+    });
+    if (error) {
+      toast.error(error.message.includes("overlap") ? "Overlappende dienst gevonden" : error.message);
+      return;
+    }
+    toast.success("Professional toegevoegd vanuit AI suggestie");
+    queryClient.invalidateQueries({ queryKey: ["diensten-planning"] });
   };
 
   const handleBevestigen = async () => {
@@ -249,6 +267,9 @@ export function DienstDetailSheet({ dienst, open, onClose, onEdit, onCopy, onDel
 
             {/* Toewijzingen */}
             <ToewijzingenBeheer dienst={dienst} />
+
+            {/* AI Suggesties */}
+            <DienstMatchingSuggesties dienst={dienst} onAssign={handleSuggestieAssign} />
           </div>
         </SheetContent>
       </Sheet>

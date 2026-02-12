@@ -238,6 +238,42 @@ export const ALL_INTENTS: Record<string, IntentDefinition> = {
     icon: "❓",
     agent: "learn_agent",
   },
+
+  // Planning Agent - Smart Matching & Scheduling
+  suggest_professional: {
+    id: "suggest_professional",
+    label: "Professional suggereren",
+    description: "Zoek de best passende professional voor een dienst",
+    icon: "✨",
+    agent: "match_agent",
+    requiresPayload: ["dienst_id"],
+    examples: ["Wie past het beste bij deze dienst?", "Stel iemand voor", "Beste match"],
+  },
+  find_replacement: {
+    id: "find_replacement",
+    label: "Vervanging zoeken",
+    description: "Zoek een vervangende professional",
+    icon: "🔄",
+    agent: "match_agent",
+    requiresPayload: ["dienst_id"],
+    examples: ["Zoek vervanging", "Wie kan overnemen?", "Alternatief zoeken"],
+  },
+  check_dienst_coverage: {
+    id: "check_dienst_coverage",
+    label: "Bezetting checken",
+    description: "Check de bezettingsgraad van diensten",
+    icon: "📊",
+    agent: "report_agent",
+    examples: ["Hoeveel diensten zijn onbezet?", "Bezetting deze week", "Open diensten"],
+  },
+  plan_week_diensten: {
+    id: "plan_week_diensten",
+    label: "Week plannen",
+    description: "Plan diensten voor een hele week",
+    icon: "📅",
+    agent: "schedule_agent",
+    examples: ["Plan volgende week", "Weekplanning maken", "Rooster invullen"],
+  },
 };
 
 // Page-specific agent configurations
@@ -377,6 +413,36 @@ export const PAGE_AGENT_CONFIG: Record<string, PageAgentConfig> = {
     ],
     contextFields: ["pipeline_stage", "urgency_filter"],
   },
+  "/planning": {
+    primaryAgent: "match_agent",
+    intents: [
+      ALL_INTENTS.suggest_professional,
+      ALL_INTENTS.find_replacement,
+      ALL_INTENTS.check_dienst_coverage,
+      ALL_INTENTS.plan_week_diensten,
+      ALL_INTENTS.send_email,
+    ],
+    contextFields: [
+      "selected_dienst_id",
+      "selected_datum",
+      "view_mode",
+      "selected_professional_id",
+    ],
+  },
+  "/beschikbaarheid": {
+    primaryAgent: "schedule_agent",
+    intents: [
+      ALL_INTENTS.check_availability,
+      ALL_INTENTS.suggest_professional,
+      ALL_INTENTS.create_task,
+      ALL_INTENTS.send_email,
+    ],
+    contextFields: [
+      "selected_week",
+      "selected_professional_id",
+      "filter_functie_niveau",
+    ],
+  },
 };
 
 // Default config for unlisted pages
@@ -485,6 +551,12 @@ export function detectIntentFromText(text: string, pageConfig: PageAgentConfig):
     document: "request_documents",
     gesprek: "schedule_interview",
     interview: "schedule_interview",
+    suggestie: "suggest_professional",
+    voorstel: "suggest_professional",
+    vervanging: "find_replacement",
+    bezetting: "check_dienst_coverage",
+    rooster: "plan_week_diensten",
+    weekplanning: "plan_week_diensten",
   };
 
   for (const [keyword, intentId] of Object.entries(keywordMap)) {
