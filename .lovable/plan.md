@@ -1,66 +1,93 @@
 
-
-# Maandweergave voor Diensten Planning
+# Optimistic Locking voor Diensten
 
 ## Overzicht
-Voeg een derde weergavemodus "Maand" toe naast de bestaande "Kalender" (week) en "Lijst" weergaven. De maandweergave toont een 7-koloms, 6-rijen kalender-grid met alle diensten van de geselecteerde maand.
+Voorkom dat twee gebruikers tegelijkertijd dezelfde dienst overschrijven door een `lock_version` kolom toe te voegen met automatische verhoging bij elke update.
 
-## Wijzigingen
+## Stap 1: Database Migratie
 
-### 1. PlanningToolbar.tsx -- Maand navigatie en toggle
-- ViewMode type uitbreiden naar `"kalender" | "lijst" | "maand"`
-- Imports: `startOfMonth`, `addMonths`, `subMonths`, `Grid3X3`
-- Navigatie aanpassen: bij maand-modus navigeer per maand i.p.v. per week
-- Datelabel: toon "februari 2026" i.p.v. "Week X -- dd-MM t/m dd-MM"
-- Derde toggle-knop "Maand" met Grid3X3 icon toevoegen tussen Week en Lijst
+```sql
+ALTER TABLE diensten ADD COLUMN lock_version INTEGER NOT NULL DEFAULT 0;
 
-### 2. useDienstenPlanning.ts -- Bredere date range
-- `DienstFilters` interface uitbreiden met optioneel `viewMode` veld
-- Date range berekening: bij maand-modus ophalen van 6 weken (42 dagen) data
-  - gridStart = startOfWeek(startOfMonth(start))
-  - gridEnd = endOfWeek(gridStart + 5 weken)
-- Query keys en `.gte()/.lte()` aanpassen naar dynamische date range
-- Extra imports: `startOfMonth`, `addWeeks`
+CREATE OR REPLACE FUNCTION increment_lock_version()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.lock_version := OLD.lock_version + 1;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
-### 3. Planning.tsx -- Routing en rendering
-- ViewMode type uitbreiden naar `"kalender" | "lijst" | "maand"`
-- `handleViewChange` type uitbreiden
-- `activeFilters` uitbreiden met `viewMode`
-- Conditie toevoegen: `viewMode === "maand"` rendert `PlanningMaandKalender`
-- Loading skeleton: 35 cellen i.p.v. 7 bij maand-modus
-- Import toevoegen: `PlanningMaandKalender`
+CREATE TRIGGER trg_diensten_lock_version
+  BEFORE UPDATE ON diensten
+  FOR EACH ROW
+  EXECUTE FUNCTION increment_lock_version();
+```
 
-### 4. PlanningMaandKalender.tsx -- Nieuw component
-Volledig nieuw component met:
+Bestaande diensten krijgen automatisch `lock_version = 0`.
 
-**Grid structuur:**
-- Header rij: ma, di, wo, do, vr, za, zo
-- 6 weken x 7 dagen = 42 dag-cellen
+## Stap 2: DienstData Interface
 
-**Per dag-cel:**
-- Dagnummer met count indicator
-- Max 3 diensten zichtbaar, daarna "+X meer" tekst
-- Status-kleuren (concept=grijs, open=amber, deels_bezet=oranje, volledig_bezet=groen, voltooid=blauw)
-- Custom kleur als border-left override
-- Spoed indicator (emoji)
-- Klik opent DienstDetailSheet
+**Bestand: `src/hooks/useDienstenPlanning.ts`**
 
-**Visuele behandeling:**
-- Dagen buiten huidige maand: verlaagde opacity
-- Vandaag: gemarkeerd met ring/border
-- Responsive: compacte weergave op kleinere schermen
+Voeg `lock_version: number` toe aan de `DienstData` interface (na `kleur`). Het veld wordt automatisch opgehaald door de `select("*")` query.
 
-**Props interface:**
-- diensten, weekStart, showOpen, showIngepland, compact
-- onDienstClick, onEdit, onCopy, onDelete
+## Stap 3: Edit Save met Lock Check
 
-## Gewijzigde bestanden
-1. `src/components/planning/PlanningToolbar.tsx` (bestaand)
-2. `src/hooks/useDienstenPlanning.ts` (bestaand)
-3. `src/pages/Planning.tsx` (bestaand)
-4. `src/components/planning/PlanningMaandKalender.tsx` (nieuw)
+**Bestand: `src/components/planning/NieuweDienstModal.tsx`** (regel 416-418)
 
-## Technisch detail
+Huidige code:
+```typescript
+const { error } = await supabase.from("diensten").update(dienstData).eq("id", editDienst!.id);
+if (error) throw error;
+```
 
-De date range berekening in de hook is cruciaal: bij maand-modus moet de query 42 dagen ophalen (6 volle weken) zodat ook dagen van de vorige/volgende maand die in het grid vallen, diensten tonen. De `startOfWeek(startOfMonth(...))` constructie garandeert dat het grid altijd op maandag begint.
+Nieuwe code:
+```typescript
+const { data: updated, error } = await supabase
+  .from("diensten")
+  .update(dienstData)
+  .eq("id", editDienst!.id)
+  .eq("lock_version", editDienst!.lock_version)
+  .select("id")
+  .single();
 
+if (error?.code === "PGRST116" || !updated) {
+  toast.error("Deze dienst is ondertussen door iemand anders gewijzigd. Sluit het formulier en probeer opnieuw.", { duration: 6000 });
+  queryClient.invalidateQueries({ queryKey: ["diensten-planning"] });
+  setSaving(false);
+  return;
+}
+if (error) throw error;
+```
+
+PostgREST code `PGRST116` = "geen rij gevonden" (0 rows matched), wat betekent dat de `lock_version` niet meer klopt.
+
+## Stap 4: Sluiten Dienst met Lock Check
+
+**Bestand: `src/components/planning/DienstDetailSheet.tsx`** (regel 45-46)
+
+Dezelfde patroon toepassen op `handleSluitenDienst`:
+```typescript
+const { data: updated, error } = await supabase
+  .from("diensten")
+  .update({ status: "geannuleerd" })
+  .eq("id", dienst.id)
+  .eq("lock_version", dienst.lock_version)
+  .select("id")
+  .single();
+
+if (error?.code === "PGRST116" || !updated) {
+  toast.error("Dienst is ondertussen gewijzigd. Vernieuw de pagina.");
+  return;
+}
+```
+
+## Stap 5: Kopieer Operatie -- Geen Wijziging Nodig
+
+De `handleCopyDienst` in `Planning.tsx` doet een INSERT (regel 93) en stuurt geen `lock_version` mee. Dit is correct en hoeft niet aangepast.
+
+## Gewijzigde Bestanden
+1. Database migratie (nieuw)
+2. `src/hooks/useDienstenPlanning.ts` -- interface uitbreiding
+3. `src/components/planning/NieuweDienstModal.tsx` -- edit save lock check
+4. `src/components/planning/DienstDetailSheet.tsx` -- sluiten lock check
