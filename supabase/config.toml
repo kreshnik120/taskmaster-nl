@@ -553,3 +553,11 @@ verify_jwt = false
  verify_jwt = false
  # Purpose: Server-side professional matching engine with real historie scoring
  # Auth: No JWT required (matching data is non-sensitive)
+
+ # -----------------------------------------------------------------------------
+ # AUTO-FACTURATIE
+ # -----------------------------------------------------------------------------
+
+ [functions.agent-auto-facturatie]
+ verify_jwt = false
+ # Purpose: Auto-generate concept invoices from completed shifts

@@ -17,3 +17,6 @@ export { useCreateBetaling } from './useCreateBetaling';
 
 // Export hooks
 export { useFactuurExport } from './useFactuurExport';
+
+// Auto-facturatie
+export { useAutoFacturatie } from './useAutoFacturatie';
