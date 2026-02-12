@@ -1,71 +1,81 @@
 
-
-# Beschikbaarheid: Database + Hook + Routing + Sidebar
+# Beschikbaarheid: WeekKalender UI + Mutations + Filters + Legenda
 
 ## Overzicht
-Bouw het fundament voor de Beschikbaarheid module: ontbrekende database kolommen toevoegen, een data hook aanmaken, routing configureren, sidebar menu-item toevoegen, en een placeholder pagina met KPI cards neerzetten.
+Bouw de volledige weekkalender UI voor de Beschikbaarheid module bovenop het B-1 fundament. Omvat een mutations hook, toolbar, 3-state cel editor, weekmatrix, filters, legenda, en volledige pagina-integratie.
 
-## Stap 1: Database Migratie
+## Stap 1: Nieuwe Hook -- useBeschikbaarheidMutations.ts
 
-De tabel `professional_availability` bestaat al. De migratie voegt toe:
+Nieuw bestand `src/hooks/useBeschikbaarheidMutations.ts`:
 
-```sql
--- A. Notities kolom
-ALTER TABLE professional_availability ADD COLUMN IF NOT EXISTS opmerking TEXT;
+- **upsertBeschikbaarheid**: Checkt of entry bestaat (select op professional_id + date + shift), update als ja, insert als nee
+- **deleteBeschikbaarheid**: Verwijdert entry (zet terug naar "onbekend")
+- Beide invalideren `beschikbaarheid-entries` query key na succes
+- Toast bij fouten
 
--- B. Updated_at + trigger (hergebruikt bestaande update_updated_at_column functie)
-ALTER TABLE professional_availability ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
-CREATE TRIGGER update_professional_availability_updated_at
-  BEFORE UPDATE ON professional_availability
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+## Stap 2: BeschikbaarheidToolbar.tsx
 
--- C. Composite index voor week-queries
-CREATE INDEX IF NOT EXISTS idx_pa_professional_date ON professional_availability(professional_id, date);
+Nieuw bestand `src/components/beschikbaarheid/BeschikbaarheidToolbar.tsx`:
 
--- D. Realtime inschakelen
-ALTER PUBLICATION supabase_realtime ADD TABLE professional_availability;
-```
+- Volgt PlanningToolbar patroon maar zonder view mode toggle
+- ChevronLeft/Right voor week navigatie, "Vandaag" knop
+- Week label: "Week X -- dd MMM t/m dd MMM yyyy"
+- Gebruikt `parseISO` voor weekStart
 
-## Stap 2: Hook -- useBeschikbaarheid.ts
+## Stap 3: BeschikbaarheidCelEditor.tsx
 
-Nieuw bestand `src/hooks/useBeschikbaarheid.ts` met:
+Nieuw bestand `src/components/beschikbaarheid/BeschikbaarheidCelEditor.tsx`:
 
-- **Interfaces**: `BeschikbaarheidFilters`, `AvailabilityEntry`, `ProfessionalBeschikbaarheid`, `BeschikbaarheidStats`
-- **Query 1**: Professionals ophalen (actief/beschikbaar) met client-side filters (functieNiveau, werkvorm, status, regio)
-- **Query 2**: Beschikbaarheid entries voor de weekrange (gte/lte op date)
-- **Combinatie**: `useMemo` die professionals koppelt aan hun availability entries
-- **Stats**: Berekening van totaalProfessionals, beschikbaarVandaag, onbekend, dekkingsgraad
-- **Realtime**: Twee `useRealtimeChannel` subscriptions (professional_availability + professionals)
-- Volgt exact het patroon van `useDienstenPlanning.ts`
+- Enkele shift-knop (8x8 rounded) met 3-state toggle via klik:
+  - Onbekend (slate) -> Beschikbaar (emerald) -> Niet beschikbaar (rose) -> Onbekend
+- Labels: D/A/N voor dag/avond/nacht
+- Tooltip met shift naam en huidige status
+- aria-label voor accessibility
 
-## Stap 3: Routing -- App.tsx
+## Stap 4: BeschikbaarheidWeekKalender.tsx
 
-- Import `Beschikbaarheid` pagina toevoegen
-- Route `/beschikbaarheid` toevoegen na `/planning` en voor `/gebruikers`
+Nieuw bestand `src/components/beschikbaarheid/BeschikbaarheidWeekKalender.tsx`:
 
-## Stap 4: Sidebar -- AppSidebar.tsx
+- Matrix: professionals (Y-as) x 7 dagen (X-as)
+- Elke cel bevat 3 shift-knoppen (D/A/N) via BeschikbaarheidCelEditor
+- Sticky eerste kolom met professional naam + functieniveau
+- Vandaag-kolom met teal highlight
+- Horizontaal scrollbaar op overflow
+- Empty state bij geen professionals
 
-- `CalendarCheck2` toevoegen aan lucide-react import
-- Menu-item "Beschikbaarheid" toevoegen in de Recruitment groep, na Planning en voor Facturatie
-- `requiresEdit: true` (zelfde als andere recruitment items)
+## Stap 5: BeschikbaarheidFilters.tsx
 
-## Stap 5: Placeholder Pagina -- Beschikbaarheid.tsx
+Nieuw bestand `src/components/beschikbaarheid/BeschikbaarheidFilters.tsx`:
 
-Nieuw bestand `src/pages/Beschikbaarheid.tsx`:
+- Popover met 4 filters: Functieniveau, Werkvorm, Status, Regio
+- Badge count voor actieve filters
+- Reset knop
+- Geen presets (simpeler dan planning)
 
-- `PageContainer` met `contextColor="teal"`
-- `PageHero` met CalendarCheck2 icoon, titel "Beschikbaarheid", subtitle
-- 4 KPI Cards in een grid:
-  - Totaal Professionals (teal)
-  - Beschikbaar Vandaag (teal)
-  - Onbekend (amber)
-  - Dekkingsgraad (emerald, met % suffix)
-- Placeholder content blokken voor weekkalender en professional lijst (worden in B-2 uitgebouwd)
-- Week-parameter in URL via `useSearchParams`
+## Stap 6: BeschikbaarheidLegenda.tsx
 
-## Gewijzigde Bestanden
-1. Database migratie (nieuw) -- opmerking, updated_at, index, realtime
-2. `src/hooks/useBeschikbaarheid.ts` (nieuw) -- data hook
-3. `src/pages/Beschikbaarheid.tsx` (nieuw) -- placeholder pagina
-4. `src/App.tsx` -- route toevoegen
-5. `src/components/AppSidebar.tsx` -- menu-item toevoegen
+Nieuw bestand `src/components/beschikbaarheid/BeschikbaarheidLegenda.tsx`:
+
+- 3 kleur-items: Beschikbaar (emerald), Niet beschikbaar (rose), Onbekend (slate)
+- D/A/N shift-uitleg
+- Volgt PlanningLegenda patroon
+
+## Stap 7: Beschikbaarheid.tsx -- Volledige vervanging
+
+Vervang de placeholder pagina volledig:
+
+- Importeer alle nieuwe componenten + mutations hook
+- `handleWeekChange` via `setSearchParams`
+- `handleToggle` callback met 3-state logica: onbekend->beschikbaar->niet->onbekend
+- Layout: PageHero -> KPI Cards -> Toolbar + Filters balk -> Legenda -> WeekKalender -> Telling
+- Skeleton loading state (5 rijen)
+- Telling onderaan: "X professionals weergegeven"
+
+## Gewijzigde/Nieuwe Bestanden
+1. `src/hooks/useBeschikbaarheidMutations.ts` (nieuw) -- upsert + delete mutations
+2. `src/components/beschikbaarheid/BeschikbaarheidToolbar.tsx` (nieuw) -- week navigatie
+3. `src/components/beschikbaarheid/BeschikbaarheidCelEditor.tsx` (nieuw) -- 3-state shift knop
+4. `src/components/beschikbaarheid/BeschikbaarheidWeekKalender.tsx` (nieuw) -- matrix
+5. `src/components/beschikbaarheid/BeschikbaarheidFilters.tsx` (nieuw) -- filter popover
+6. `src/components/beschikbaarheid/BeschikbaarheidLegenda.tsx` (nieuw) -- legenda
+7. `src/pages/Beschikbaarheid.tsx` (vervangen) -- volledige pagina integratie
