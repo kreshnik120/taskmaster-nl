@@ -66,8 +66,13 @@ export function DienstCard({ dienst, compact = true, onClick }: DienstCardProps)
             {dienst.gevraagd_functie_niveau?.length > 0 ? dienst.gevraagd_functie_niveau.join(", ") : "–"}
           </span>
           <span>·</span>
-          <span>{bezet}/{gevraagd} bezet</span>
+          <span>{dienst.werkvorm ?? "–"}</span>
+          <span>·</span>
+          <span>{bezet}/{gevraagd}</span>
         </div>
+        {dienst.is_slaapdienst && (
+          <span className="text-[10px] text-indigo-500">🛏️</span>
+        )}
       </button>
     );
   }
@@ -106,6 +111,11 @@ export function DienstCard({ dienst, compact = true, onClick }: DienstCardProps)
         <span className="text-xs font-medium text-muted-foreground">
           {dienst.gevraagd_functie_niveau?.length > 0 ? dienst.gevraagd_functie_niveau.join(", ") : "–"}
         </span>
+        {dienst.vereiste_certificeringen?.length > 0 && (
+          <span className="text-[10px] text-muted-foreground/60 ml-1">
+            ({dienst.vereiste_certificeringen.join(", ")})
+          </span>
+        )}
       </div>
       <div className="shrink-0 w-20 space-y-0.5">
         <span className="text-[10px] text-muted-foreground">{bezet}/{gevraagd}</span>
