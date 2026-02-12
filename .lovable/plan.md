@@ -1,25 +1,15 @@
 
-# 4 Kritieke Fixes — Planning Module
+# Fix: Kopiëren datum+1 timezone bug
 
-## Fix 1: Verwijder `netto_uren` uit INSERT (NieuweDienstModal.tsx)
-Verwijder regel 204 (`netto_uren: duur,`) uit het `dienstData` object. De database berekent dit automatisch via een GENERATED column. De `duur` variabele blijft bestaan voor de live preview.
+## Bestand: `src/pages/Planning.tsx`
 
-## Fix 2: Timezone-fix weekkalender (PlanningWeekKalender.tsx)
-Regel 95: `new Date(weekStart)` wordt `parseISO(weekStart)`. Import is al aanwezig op regel 2.
+Twee minimale wijzigingen:
 
-## Fix 3: Timezone-fix toolbar (PlanningToolbar.tsx)
-Regel 3: voeg `parseISO` toe aan de date-fns import. Regel 19: `new Date(weekStart)` wordt `parseISO(weekStart)`.
+1. **Regel 4** — `parseISO` toevoegen aan import:
+   `import { startOfWeek, format, addDays, parseISO } from "date-fns";`
 
-## Fix 4: Timezone-fix edit datum (NieuweDienstModal.tsx)
-Regel 2: voeg `parseISO` toe aan de date-fns import. Regel 115: `new Date(editDienst.datum)` wordt `parseISO(editDienst.datum)`.
+2. **Regel 88** — `new Date(dienst.datum)` vervangen door `parseISO(dienst.datum)`:
+   `const newDatum = format(addDays(parseISO(dienst.datum), 1), "yyyy-MM-dd");`
 
-## Technisch overzicht
-
-| # | Bestand | Regel(s) | Wijziging |
-|---|---------|----------|-----------|
-| 1 | NieuweDienstModal.tsx | 204 | Verwijder `netto_uren: duur,` |
-| 2 | PlanningWeekKalender.tsx | 95 | `parseISO(weekStart)` |
-| 3 | PlanningToolbar.tsx | 3, 19 | Import + `parseISO(weekStart)` |
-| 4 | NieuweDienstModal.tsx | 2, 115 | Import + `parseISO(editDienst.datum)` |
-
-Totaal: 3 bestanden, 4 minimale wijzigingen.
+## Verificatie
+Kopieer een dienst van 12-02-2026 → kopie moet op 13-02-2026 verschijnen (niet op 12-02-2026).
