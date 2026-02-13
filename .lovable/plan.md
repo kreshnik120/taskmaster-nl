@@ -1,23 +1,37 @@
 
+# PR-1 -- Professional Chat Verrijking
 
-# Fix: agent-auto-facturatie .catch() Error
+## Overzicht
+Upgrade de /professionals chat integratie naar enterprise niveau: verrijkte PAGE_CONTEXT, betere quick actions, dynamische URL-param verrijking, 3 nieuwe intents en 5 keywords.
 
-## Problem
-`supabase.from('function_call_logs').insert({...}).catch(() => {})` fails because Supabase's `.insert()` returns a `PostgrestFilterBuilder`, not a native `Promise`. The `.catch()` method is not available on it.
+## Stap 1: ChatWidget.tsx -- /professionals PAGE_CONTEXT vervangen (regel 63-71)
 
-## Solution
-Replace `.catch(() => {})` with `.then(() => {})` (which IS available on PostgrestFilterBuilder and suppresses the result), or simply remove the chaining and ignore the result with a standalone await wrapped in try/catch.
+Vervang het bestaande blok door een verrijkte versie met:
+- Uitgebreide description (talent search, bulk-acties, completeness score, functieniveaus, werkvormen, statussen, KPIs, zoek-fallback)
+- 3 nieuwe quickActions: "Talent zoeken" (Users), "Profiel tips" (Sparkles), "Beschikbaarheid" (MapPin)
 
-The simplest fix: remove `.catch(() => {})` from both logging calls (lines ~148 and ~196) since the insert already returns `{ error }` without throwing. Just ignore the return value.
+## Stap 2: ChatWidget.tsx -- Dynamische verrijking (na regel 332, voor return context)
 
-## Changes
+Voeg /professionals enrichment toe:
+- Leest `status` param (actief/inactief/op_pauze) en `functie_niveau` param uit URL
+- Voegt filter info toe aan description
 
-**File: `supabase/functions/agent-auto-facturatie/index.ts`**
+## Stap 3: agentIntents.ts -- 3 nieuwe intents (na regel 311, voor de `};`)
 
-Two occurrences to fix:
+Voeg toe aan ALL_INTENTS:
+- `talent_search`: search_agent, met examples
+- `profile_completeness`: search_agent, met examples
+- `export_professionals`: report_agent, met examples
 
-1. **Line ~148** (preview logging): Change `}).catch(() => {});` to `});` (remove `.catch(() => {})`)
-2. **Line ~196** (generate logging): Change `}).catch(() => {});` to `});` (remove `.catch(() => {})`)
+## Stap 4: agentIntents.ts -- /professionals PAGE_AGENT_CONFIG vervangen (regel 346-355)
 
-## Technical Detail
-Supabase JS client methods like `.insert()` return a thenable `PostgrestBuilder` but `.catch()` is not defined on it. Simply awaiting or ignoring the return handles errors gracefully since Supabase never throws -- it returns `{ data, error }`.
+Vervang door uitgebreide versie met 7 intents (talent_search, search_skills, check_availability, match_professional, profile_completeness, export_professionals, send_email) en 4 contextFields.
+
+## Stap 5: agentIntents.ts -- 5 keywords (na regel 614)
+
+Voeg toe aan keywordMap: professional, talent, profiel, incompleet, exporteer.
+
+## Gewijzigde Bestanden
+
+1. `src/components/AIAssistant/ChatWidget.tsx` (wijzig) -- PAGE_CONTEXT upgrade + dynamische verrijking
+2. `src/lib/agentIntents.ts` (wijzig) -- 3 intents, PAGE_AGENT_CONFIG uitbreiden, 5 keywords
