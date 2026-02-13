@@ -162,22 +162,12 @@ const PAGE_CONTEXTS: Record<string, PageContext> = {
   },
   '/planning': {
     label: 'Diensten Planning',
-    description: 'Dienstenplanning module met weekkalender, maandoverzicht en lijstweergave. Features: AI matching suggesties met 100-punts scoring (functieniveau 30pt, beschikbaarheid 25pt, certificeringen 20pt, regio 15pt, historie 10pt), spoed markering, kleur codering, templates, multi-date aanmaak, pauze auto-berekening, per-positie tracking. Dienst statussen: concept, open_voor_aanmelding, in_behandeling, bevestigd, geannuleerd, voltooid. Bezetting wordt visueel weergegeven per dienst.',
+    description: 'Dienstenplanning module met weekkalender, maandoverzicht en lijstweergave. Bevat ook de Beschikbaarheid tab met overzicht van professionals per week (dag/avond/nacht shifts). Features: AI matching suggesties met 100-punts scoring (functieniveau 30pt, beschikbaarheid 25pt, certificeringen 20pt, regio 15pt, historie 10pt), spoed markering, kleur codering, templates, multi-date aanmaak, pauze auto-berekening, per-positie tracking. Dienst statussen: concept, open_voor_aanmelding, in_behandeling, bevestigd, geannuleerd, voltooid. Bezetting wordt visueel weergegeven per dienst.',
     icon: CalendarDays,
     quickActions: [
       { icon: CalendarDays, label: 'Onbezette diensten', prompt: 'Welke diensten deze week zijn nog niet volledig bezet en hebben professionals nodig?' },
+      { icon: CalendarCheck2, label: 'Beschikbaarheid check', prompt: 'Hoe kan ik snel zien welke professionals beschikbaar zijn voor een specifieke dag en shift? Leg het beschikbaarheidsoverzicht uit.' },
       { icon: Sparkles, label: 'Matching uitleg', prompt: 'Leg uit hoe de AI matching suggesties werken. Wat betekenen de scores en hoe kan ik de beste professional kiezen?' },
-      { icon: Users, label: 'Planning tips', prompt: 'Geef tips voor efficiënt roosteren in de zorgsector. Waar moet ik op letten bij het plannen van dag-, avond- en nachtdiensten?' },
-    ]
-  },
-  '/beschikbaarheid': {
-    label: 'Beschikbaarheid',
-    description: 'Beschikbaarheidsoverzicht van professionals per week. Matrix met professionals (rijen) × 7 dagen (kolommen), per dag 3 shifts: dag, avond, nacht. Status per shift: beschikbaar (groen), niet beschikbaar (rood), onbekend (grijs). Integratie met dienstenplanning — beschikbaarheid wordt meegewogen in AI matching score.',
-    icon: CalendarCheck2,
-    quickActions: [
-      { icon: CalendarCheck2, label: 'Beschikbaarheid tips', prompt: 'Hoe kan ik het beste de beschikbaarheid van mijn team beheren? Geef tips voor het invullen en bijhouden van shifts.' },
-      { icon: Users, label: 'Shift planning', prompt: 'Leg de verschillende shift types uit (dag, avond, nacht, hele dag) en hoe ze gekoppeld zijn aan de dienstenplanning.' },
-      { icon: Clock, label: 'Week optimaliseren', prompt: 'Hoe optimaliseer ik de weekplanning? Waar moet ik op letten qua beschikbaarheid, functieniveaus en certificeringen?' },
     ]
   },
   '/facturatie': {
@@ -292,20 +282,29 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
       context = PAGE_CONTEXTS[basePath] || DEFAULT_PAGE_CONTEXT;
     }
 
-    // Enrich /planning with current week from URL params
+    // Enrich /planning with current week and tab from URL params
     if (currentPath === '/planning') {
+      let enrichedContext = context;
       const weekParam = params.get('week');
       if (weekParam) {
         try {
           const weekLabel = format(parseISO(weekParam), 'd MMMM yyyy', { locale: nl });
-          return {
-            ...context,
-            description: context.description + ` De gebruiker bekijkt de week van ${weekLabel}.`,
+          enrichedContext = {
+            ...enrichedContext,
+            description: enrichedContext.description + ` De gebruiker bekijkt de week van ${weekLabel}.`,
           };
         } catch {
-          // Invalid date, return default context
+          // Invalid date, continue
         }
       }
+      const tabParam = params.get('tab');
+      if (tabParam === 'beschikbaarheid') {
+        enrichedContext = {
+          ...enrichedContext,
+          description: enrichedContext.description + ' De gebruiker bekijkt de Beschikbaarheid tab.',
+        };
+      }
+      if (enrichedContext !== context) return enrichedContext;
     }
 
     // Enrich /facturatie with current filter from URL params

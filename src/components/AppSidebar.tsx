@@ -1,4 +1,4 @@
-import { Clock, Trash2, CheckCircle2, Brain, Users, ChevronDown, ChevronUp, Briefcase, Building2, Link2, LogOut, RefreshCw, Archive, Paperclip, FileText, LayoutDashboard, MessageCircle, Receipt, CalendarDays, CalendarCheck2 } from "lucide-react";
+import { Clock, Trash2, CheckCircle2, Brain, Users, ChevronDown, ChevronUp, Briefcase, Building2, Link2, LogOut, RefreshCw, Archive, Paperclip, FileText, LayoutDashboard, MessageCircle, Receipt, CalendarDays } from "lucide-react";
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarFooter } from "@/components/ui/sidebar";
@@ -32,105 +32,60 @@ interface MenuGroup {
   defaultOpen: boolean | 'conditional';
   items: MenuItem[];
 }
-const menuGroups: MenuGroup[] = [{
-  label: "Mijn Werk",
-  defaultOpen: true,
-  items: [{
-    title: "Dashboard",
-    url: "/dashboard",
-    icon: LayoutDashboard,
-    badge: 'taskCount'
-  }, {
-    title: "WhatsApp",
-    url: "/whatsapp",
-    icon: MessageCircle,
-    badge: 'whatsappUnreadCount'
-}, {
-  title: "Bijlagen",
-    url: "/bijlagen",
-    icon: Paperclip
-  }, {
-    title: "Notulen",
-    url: "/notulen",
-    icon: FileText,
-    badge: 'pendingMinutesCount'
-  }]
-}, {
-  label: "Recruitment",
-  defaultOpen: true,
-  items: [{
-    title: "Sollicitaties",
-    url: "/sollicitaties",
-    icon: Briefcase,
-    requiresEdit: true
-  }, {
-    title: "Professionals",
-    url: "/professionals",
-    icon: Users,
-    requiresEdit: true
-  }, {
-    title: "Klanten",
-    url: "/klanten",
-    icon: Building2,
-    requiresEdit: true
-  }, {
-    title: "Plaatsingen",
-    url: "/plaatsingen",
-    icon: Link2,
-    requiresEdit: true
-  }, {
-    title: "Planning",
-    url: "/planning",
-    icon: CalendarDays,
-    requiresEdit: true
-  }, {
-    title: "Beschikbaarheid",
-    url: "/beschikbaarheid",
-    icon: CalendarCheck2,
-    requiresEdit: true
-  }, {
-    title: "Facturatie",
-    url: "/facturatie",
-    icon: Receipt,
-    requiresEdit: true
-  }]
-}, {
-  label: "Analyse & AI",
-  defaultOpen: 'conditional',
-  items: [{
-    title: "AI Training",
-    url: "/ai-training",
-    icon: Brain,
-    badge: 'validationCount',
-    requiresAdmin: true
-  }, {
-    title: "Gebruikers",
-    url: "/gebruikers",
-    icon: Users,
-    requiresAdmin: true
-  }]
-}, {
-  label: "Archief",
-  defaultOpen: false,
-  items: [{
-    title: "Afgeronde taken",
-    url: "/afgerond",
-    icon: CheckCircle2
-  }, {
-    title: "Verwijderde taken",
-    url: "/verwijderd",
-    icon: Trash2
-  }, {
-    title: "Sollicitaties archief",
-    url: "/sollicitaties-archief",
-    icon: Archive,
-    requiresEdit: true
-  }, {
-    title: "Tijdregistratie",
-    url: "/tijdregistratie",
-    icon: Clock
-  }]
-}];
+const menuGroups: MenuGroup[] = [
+  {
+    label: "Overzicht",
+    defaultOpen: true,
+    items: [
+      { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, badge: 'taskCount' as const },
+    ],
+  },
+  {
+    label: "Recruitment",
+    defaultOpen: true,
+    items: [
+      { title: "Sollicitaties", url: "/sollicitaties", icon: Briefcase, requiresEdit: true },
+      { title: "Professionals", url: "/professionals", icon: Users, requiresEdit: true },
+      { title: "Klanten", url: "/klanten", icon: Building2, requiresEdit: true },
+      { title: "Plaatsingen", url: "/plaatsingen", icon: Link2, requiresEdit: true },
+    ],
+  },
+  {
+    label: "Planning & Rooster",
+    defaultOpen: true,
+    items: [
+      { title: "Planning", url: "/planning", icon: CalendarDays, requiresEdit: true },
+      { title: "Tijdregistratie", url: "/tijdregistratie", icon: Clock },
+    ],
+  },
+  {
+    label: "Facturatie",
+    defaultOpen: false,
+    items: [
+      { title: "Facturatie", url: "/facturatie", icon: Receipt, requiresEdit: true },
+    ],
+  },
+  {
+    label: "Communicatie & Docs",
+    defaultOpen: false,
+    items: [
+      { title: "WhatsApp", url: "/whatsapp", icon: MessageCircle, badge: 'whatsappUnreadCount' as const },
+      { title: "Bijlagen", url: "/bijlagen", icon: Paperclip },
+      { title: "Notulen", url: "/notulen", icon: FileText, badge: 'pendingMinutesCount' as const },
+    ],
+  },
+  {
+    label: "Beheer",
+    defaultOpen: false,
+    items: [
+      { title: "AI Training", url: "/ai-training", icon: Brain, badge: 'validationCount' as const, requiresAdmin: true },
+      { title: "Gebruikers", url: "/gebruikers", icon: Users, requiresAdmin: true },
+      { title: "Afgerond", url: "/afgerond", icon: CheckCircle2 },
+      { title: "Verwijderd", url: "/verwijderd", icon: Trash2 },
+      { title: "Archief", url: "/sollicitaties-archief", icon: Archive, requiresEdit: true },
+    ],
+  },
+];
 interface CollapsibleGroupProps {
   group: MenuGroup;
   activeTaskCount?: number;
@@ -220,10 +175,12 @@ export function AppSidebar() {
   const whatsappUnreadCount = useWhatsAppUnreadCount();
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
-    "Mijn Werk": true,
+    "Overzicht": true,
     "Recruitment": true,
-    "Analyse & AI": isAdmin(),
-    "Archief": false,
+    "Planning & Rooster": true,
+    "Facturatie": false,
+    "Communicatie & Docs": false,
+    "Beheer": isAdmin(),
   });
 
   const toggleGroup = (label: string) => {
