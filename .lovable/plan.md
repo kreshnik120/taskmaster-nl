@@ -1,87 +1,75 @@
 
-
-# S15 Kwaliteitsaudit -- 13 Bugfixes & Optimalisaties
+# NAV-1 -- Navigatie Herstructurering + Planning Tabs
 
 ## Overzicht
-13 gerichte fixes uit de kwaliteitsaudit. Alleen bugfixes en optimalisaties, geen nieuwe features of styling.
+Enterprise navigatie herstructurering: sidebar hergroeperen in 6 logische blokken, Beschikbaarheid wordt een tab binnen Planning, en de Dashboard Recruitment tab wordt verwijderd. Geen nieuwe features, geen styling -- alleen structuurwijzigingen.
 
----
+## Wijziging 1 -- AppSidebar.tsx: menuGroups herstructureren
 
-## FIX 1 -- Lock Version Increment (CRITICAL)
-**Bestand:** `src/components/planning/NieuweDienstModal.tsx` (regel 431)
-- Wijzig `.update(dienstData)` naar `.update({ ...dienstData, lock_version: (editDienst!.lock_version ?? 0) + 1 })`
-- Maakt optimistic locking functioneel
+**Bestand:** `src/components/AppSidebar.tsx`
 
-## FIX 2 -- Nachtdienst Overlap Check (CRITICAL)
-**Bestand:** `src/hooks/useDienstMatching.ts` (regel 166-169)
-- Vervang string-vergelijking door `toMin()` helper en `overlaps()` functie die middernacht-overschrijding correct afhandelt
-- Voeg helpers toe direct boven de `heeftOverlap` variabele
+- **Regel 1:** Verwijder `CalendarCheck2` uit de lucide-react import (niet meer nodig als sidebar icon)
+- **Regels 35-133:** Vervang de hele `menuGroups` array door 6 nieuwe groepen:
+  1. **Overzicht** (defaultOpen: true) -- Dashboard
+  2. **Recruitment** (defaultOpen: true) -- Sollicitaties, Professionals, Klanten, Plaatsingen
+  3. **Planning & Rooster** (defaultOpen: true) -- Planning, Tijdregistratie
+  4. **Facturatie** (defaultOpen: false) -- Facturatie
+  5. **Communicatie & Docs** (defaultOpen: false) -- WhatsApp, Bijlagen, Notulen
+  6. **Beheer** (defaultOpen: false) -- AI Training, Gebruikers, Afgerond, Verwijderd, Archief
+- **Regels 222-227:** Update `openGroups` state naar de 6 nieuwe groep labels
 
-## FIX 3 -- Beschikbaarheid Upsert Race Condition (HIGH)
-**Bestand:** `src/hooks/useBeschikbaarheidMutations.ts` (regel 27-53)
-- Vervang select-then-insert patroon door native `.upsert()` met `onConflict: "professional_id,date,shift"`
-- UNIQUE constraint bestaat al in de database (verified)
+Beschikbaarheid verdwijnt als apart sidebar item (wordt tab in Planning).
 
-## FIX 4 -- Overbetaling Blokkering (HIGH)
-**Bestand:** `src/components/facturatie/BetalingRegistrerenDialog.tsx` (regel 88)
-- Wijzig `canSubmit` naar: `bedragNum > 0 && !isCreating && !isOverpayment`
-- De waarschuwings-Alert voor overbetaling bestaat al (regel 189-196), submit wordt nu ook geblokkeerd
+## Wijziging 2 -- Planning.tsx: Beschikbaarheid als tab
 
-## FIX 5 -- BTW Afrondingsfout (HIGH)
-**Bestand:** `src/hooks/facturatie/useCreateFactuur.ts` (regel 41-49)
-- Voeg `round2` helper toe en rond elk subtotaal en BTW-bedrag per regel af naar 2 decimalen
+**Bestand:** `src/pages/Planning.tsx`
 
-## FIX 6 -- Beschikbaarheid O(n^2) Performance (MEDIUM)
-**Bestand:** `src/components/beschikbaarheid/BeschikbaarheidWeekKalender.tsx`
-- Voeg `availabilityMap` useMemo toe die een Map bouwt met `pro.id|date|shift` keys
-- Vervang `.find()` in de render loop door `.get()` lookup
+- **Imports toevoegen:** `lazy`, `Suspense` uit react; `CalendarCheck2`, `Loader2` uit lucide-react; `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent` uit ui/tabs
+- **Lazy import:** `const BeschikbaarheidContent = lazy(() => import("@/pages/Beschikbaarheid"));`
+- **URL param:** `const activeTab = searchParams.get("tab") || "diensten";` + `handleTabChange` callback
+- **Return structuur:** Wrap alle bestaande content in `<Tabs>` met twee tabs:
+  - **Diensten** tab: bevat alle bestaande Planning content (KPI's, toggles, toolbar, legenda, kalender, sheets, modals)
+  - **Beschikbaarheid** tab: lazy-loaded `<BeschikbaarheidContent />` met Suspense fallback
+- Week URL param wordt automatisch gedeeld tussen beide tabs
 
-## FIX 7 -- ChatWidget Memory Leak (HIGH)
-**Bestand:** `src/components/AIAssistant/ChatWidget.tsx`
-- Voeg `jobTrackingCleanupRef = useRef<(() => void) | null>(null)` toe
-- Vang cleanup op bij aanroep: `jobTrackingCleanupRef.current = startJobProgressTracking(...)`
-- Voeg cleanup useEffect toe voor unmount
+## Wijziging 3 -- App.tsx: Beschikbaarheid redirect
 
-## FIX 8 -- Gecombineerde Filters (MEDIUM)
-**Bestand:** `src/hooks/useDienstenPlanning.ts` (regel 205-239)
-- Combineer 7 opeenvolgende `.filter()` calls tot 1 enkele filter met alle condities
-
-## FIX 9 -- Zoek Minimumlengte (LOW)
-**Bestand:** `src/components/planning/ToewijzingenBeheer.tsx` (regel 101)
-- Wijzig `debouncedSearch.length > 0` naar `debouncedSearch.length >= 2`
-
-## FIX 10 -- Bezetting Utility Extractie (MEDIUM)
-- Maak nieuw bestand `src/utils/bezetting.ts` met `berekenBezetting()` functie
-- Refactor `DienstCard.tsx` (regel 24-35) en `ToewijzingenBeheer.tsx` (regel 72-83) om de utility te gebruiken
-
-## FIX 11 -- ErrorBoundary op Routes (MEDIUM)
 **Bestand:** `src/App.tsx`
-- Wrap `<Layout />` in `<ErrorBoundary fallbackTitle="Er is iets misgegaan">` zodat alle authenticated routes beschermd zijn
 
-## FIX 12 -- Auto Dienst-Type Verkeerde Flag (LOW)
-**Bestand:** `src/components/planning/NieuweDienstModal.tsx`
-- Voeg `dienstTypeManual` state toe (regel ~80)
-- Vervang `titelManual` guard in useEffect (regel 349) door `dienstTypeManual`
-- Zet `setDienstTypeManual(true)` bij handmatige selectie (regel 861)
-- Reset in resetForm (regel 322)
+- Verwijder `import Beschikbaarheid from "./pages/Beschikbaarheid"` (regel 30)
+- Vervang de `/beschikbaarheid` route door een redirect: `<Navigate to="/planning?tab=beschikbaarheid" replace />`
 
-## FIX 13 -- Herhaling Index Bounds Check (LOW)
-**Bestand:** `src/components/planning/NieuweDienstModal.tsx` (regel 478-480)
-- Voeg bounds check toe: `if (parentIdx < 0 || parentIdx >= allDatums.length) continue;`
+## Wijziging 4 -- ChatWidget.tsx: PAGE_CONTEXTS merge
 
----
+**Bestand:** `src/components/AIAssistant/ChatWidget.tsx`
 
-## Gewijzigde Bestanden (8 bestanden, 1 nieuw)
+- **Verwijder** de hele `/beschikbaarheid` entry uit PAGE_CONTEXTS (regels 173-182)
+- **Update** de `/planning` entry (regels 163-172): voeg beschikbaarheid info toe aan description en voeg een "Beschikbaarheid check" quick action toe met CalendarCheck2 icon
+- **Voeg enrichment toe** (na regel 308): detecteer `tab=beschikbaarheid` URL param en voeg " De gebruiker bekijkt de Beschikbaarheid tab." toe aan de context description
 
-1. `src/components/planning/NieuweDienstModal.tsx` -- FIX 1, 12, 13
-2. `src/hooks/useDienstMatching.ts` -- FIX 2
-3. `src/hooks/useBeschikbaarheidMutations.ts` -- FIX 3
-4. `src/components/facturatie/BetalingRegistrerenDialog.tsx` -- FIX 4
-5. `src/hooks/facturatie/useCreateFactuur.ts` -- FIX 5
-6. `src/components/beschikbaarheid/BeschikbaarheidWeekKalender.tsx` -- FIX 6
-7. `src/components/AIAssistant/ChatWidget.tsx` -- FIX 7
-8. `src/hooks/useDienstenPlanning.ts` -- FIX 8
-9. `src/components/planning/ToewijzingenBeheer.tsx` -- FIX 9
-10. `src/utils/bezetting.ts` (NIEUW) -- FIX 10
-11. `src/components/planning/DienstCard.tsx` -- FIX 10
-12. `src/App.tsx` -- FIX 11
+## Wijziging 5 -- UnifiedDashboard.tsx: Recruitment tab verwijderen
+
+**Bestand:** `src/pages/UnifiedDashboard.tsx`
+
+- **Regel 19:** Verwijder `'recruitment': 'rose'` uit TAB_CONTEXT_MAP
+- **Regels 279-296:** Verwijder de hele Recruitment TabsTrigger
+- **Regels 377-385:** Verwijder de hele Recruitment TabsContent
+- **Regel 183:** Wijzig grid van `grid-cols-3 md:grid-cols-6` naar `grid-cols-3 md:grid-cols-5`
+- Behoud RecruitmentKPIs en UrgencyActionPanel imports (hergebruik later)
+
+## Gewijzigde Bestanden
+
+1. `src/components/AppSidebar.tsx` -- sidebar hergroepering (6 blokken)
+2. `src/pages/Planning.tsx` -- Tabs wrapper (Diensten + Beschikbaarheid)
+3. `src/App.tsx` -- /beschikbaarheid redirect, import verwijderd
+4. `src/components/AIAssistant/ChatWidget.tsx` -- PAGE_CONTEXTS merge
+5. `src/pages/UnifiedDashboard.tsx` -- Recruitment tab verwijderd
+
+## Verificatie
+
+- Sidebar toont 6 groepen, geen "Beschikbaarheid" als apart item
+- /planning toont twee tabs: Diensten en Beschikbaarheid
+- /beschikbaarheid redirect naar /planning?tab=beschikbaarheid
+- Dashboard heeft 5 tabs (geen Recruitment)
+- Week navigatie gedeeld tussen Diensten en Beschikbaarheid tabs
+- ChatWidget context op /planning bevat beschikbaarheid info
