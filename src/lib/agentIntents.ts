@@ -274,6 +274,41 @@ export const ALL_INTENTS: Record<string, IntentDefinition> = {
     agent: "schedule_agent",
     examples: ["Plan volgende week", "Weekplanning maken", "Rooster invullen"],
   },
+
+  // Facturatie Agent - Factuur & Betaling Management
+  create_factuur: {
+    id: "create_factuur",
+    label: "Factuur aanmaken",
+    description: "Maak een nieuwe factuur aan",
+    icon: "🧾",
+    agent: "report_agent",
+    examples: ["Maak een factuur", "Nieuwe factuur aanmaken", "Factuur opstellen"],
+  },
+  check_openstaand: {
+    id: "check_openstaand",
+    label: "Openstaand checken",
+    description: "Bekijk openstaande en vervallen facturen",
+    icon: "💰",
+    agent: "report_agent",
+    examples: ["Welke facturen staan open?", "Vervallen facturen", "Openstaand bedrag"],
+  },
+  send_herinnering: {
+    id: "send_herinnering",
+    label: "Herinnering sturen",
+    description: "Verstuur een betalingsherinnering",
+    icon: "📬",
+    agent: "report_agent",
+    requiresPayload: ["factuur_id"],
+    examples: ["Stuur een herinnering", "Betalingsherinnering versturen", "Herinnering voor factuur"],
+  },
+  auto_facturatie: {
+    id: "auto_facturatie",
+    label: "Auto-facturatie",
+    description: "Genereer automatisch facturen vanuit voltooide diensten",
+    icon: "⚡",
+    agent: "report_agent",
+    examples: ["Auto-factureren", "Genereer facturen automatisch", "Diensten factureren"],
+  },
 };
 
 // Page-specific agent configurations
@@ -443,6 +478,20 @@ export const PAGE_AGENT_CONFIG: Record<string, PageAgentConfig> = {
       "filter_functie_niveau",
     ],
   },
+  "/facturatie": {
+    primaryAgent: "report_agent",
+    intents: [
+      ALL_INTENTS.create_factuur,
+      ALL_INTENTS.check_openstaand,
+      ALL_INTENTS.send_herinnering,
+      ALL_INTENTS.auto_facturatie,
+    ],
+    contextFields: [
+      "factuur_id",
+      "status_filter",
+      "type_filter",
+    ],
+  },
 };
 
 // Default config for unlisted pages
@@ -557,6 +606,12 @@ export function detectIntentFromText(text: string, pageConfig: PageAgentConfig):
     bezetting: "check_dienst_coverage",
     rooster: "plan_week_diensten",
     weekplanning: "plan_week_diensten",
+    factuur: "create_factuur",
+    facturen: "check_openstaand",
+    openstaand: "check_openstaand",
+    vervallen: "check_openstaand",
+    herinnering: "send_herinnering",
+    facturatie: "auto_facturatie",
   };
 
   for (const [keyword, intentId] of Object.entries(keywordMap)) {

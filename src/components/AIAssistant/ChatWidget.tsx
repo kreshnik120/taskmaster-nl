@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { X, Send, Loader2, Sparkles, Calendar, CalendarDays, CalendarCheck2, ListTodo, Clock, RotateCcw, Image as ImageIcon, X as XIcon, GripVertical, Bot, MapPin, Users, Briefcase, Building2, Brain, LayoutDashboard } from 'lucide-react';
+import { X, Send, Loader2, Sparkles, Calendar, CalendarDays, CalendarCheck2, ListTodo, Clock, RotateCcw, Image as ImageIcon, X as XIcon, GripVertical, Bot, MapPin, Users, Briefcase, Building2, Brain, LayoutDashboard, Receipt, Euro } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -180,6 +180,16 @@ const PAGE_CONTEXTS: Record<string, PageContext> = {
       { icon: Clock, label: 'Week optimaliseren', prompt: 'Hoe optimaliseer ik de weekplanning? Waar moet ik op letten qua beschikbaarheid, functieniveaus en certificeringen?' },
     ]
   },
+  '/facturatie': {
+    label: 'Facturatie',
+    description: 'Facturatie module voor beheer van facturen, betalingen en herinneringen. Features: auto-facturatie (vanuit voltooide diensten), concept→definitief→verzonden workflow, 3 herinneringsniveaus, betaling registratie, PDF export, CSV/XLSX export. Factuur types: verkoopfactuur, self-billing, inkoopfactuur, creditnota. Statussen: concept, definitief, verzonden, herinnering 1/2/3, betwist, betaald, afgeboekt. KPIs: openstaand bedrag, vervallen facturen, betaald deze week, omzet dit kwartaal.',
+    icon: Receipt,
+    quickActions: [
+      { icon: Euro, label: 'Openstaand overzicht', prompt: 'Geef uitleg over de factuurstatussen en wat ik moet doen met vervallen facturen. Wanneer stuur ik herinnering 1, 2 en 3?' },
+      { icon: Receipt, label: 'Auto-facturatie uitleg', prompt: 'Leg uit hoe de auto-facturatie werkt. Hoe worden diensten automatisch omgezet naar concept facturen?' },
+      { icon: Sparkles, label: 'Facturatie tips', prompt: 'Geef tips voor efficiënt factuurbeheer in de zorgsector. Hoe zorg ik dat facturen op tijd betaald worden?' },
+    ]
+  },
 };
 
 const DEFAULT_PAGE_CONTEXT: PageContext = {
@@ -295,6 +305,29 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
         } catch {
           // Invalid date, return default context
         }
+      }
+    }
+
+    // Enrich /facturatie with current filter from URL params
+    if (currentPath === '/facturatie') {
+      const statusParam = params.get('status');
+      if (statusParam) {
+        const statusLabels: Record<string, string> = {
+          'CONCEPT': 'concept',
+          'DEFINITIEF': 'definitief',
+          'VERZONDEN': 'verzonden',
+          'HERINNERING_1': 'herinnering 1',
+          'HERINNERING_2': 'herinnering 2',
+          'HERINNERING_3': 'herinnering 3',
+          'BETWIST': 'betwist',
+          'BETAALD': 'betaald',
+          'AFGEBOEKT': 'afgeboekt',
+        };
+        const label = statusLabels[statusParam] || statusParam;
+        return {
+          ...context,
+          description: context.description + ` De gebruiker bekijkt facturen met status "${label}".`,
+        };
       }
     }
 
