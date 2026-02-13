@@ -97,6 +97,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
   const [debouncedProSearch, setDebouncedProSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [titelManual, setTitelManual] = useState(false);
+  const [dienstTypeManual, setDienstTypeManual] = useState(false);
   const [isSpoed, setIsSpoed] = useState(false);
   const [kleur, setKleur] = useState<string | null>(null);
   const [show24hConfirm, setShow24hConfirm] = useState(false);
@@ -319,7 +320,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
       setPriveOpmerking(""); setPubliekeOpmerking(""); setFlexwerkerOpmerking(""); setStatus("concept");
       setAccepteerbaar(true); setIsSlaapdienst(false); setSlaapStart("23:00"); setSlaapEind("06:00");
       setCertificeringen([]); setPreToewijzingId(null); setPreToewijzingNaam(""); setProSearch(""); setProSearchOpen(false);
-      setTitelManual(false); setIsSpoed(false); setKleur(null); setShow24hConfirm(false); setSelectedTemplate("none");
+      setTitelManual(false); setDienstTypeManual(false); setIsSpoed(false); setKleur(null); setShow24hConfirm(false); setSelectedTemplate("none");
       setShowTemplateSaveDialog(false); setTemplateNaamInput(""); setDeleteTemplateTarget(null);
     }
   }, [open]);
@@ -346,7 +347,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
 
   // Auto-detect dienst type based on times
   useEffect(() => {
-    if (!startTijd || !eindTijd || titelManual) return;
+    if (!startTijd || !eindTijd || dienstTypeManual) return;
     const startHour = parseInt(startTijd.split(":")[0]);
     if (startTijd > eindTijd) {
       setDienstType("nacht");
@@ -357,7 +358,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
     } else {
       setDienstType("dag");
     }
-  }, [startTijd, eindTijd, titelManual]);
+  }, [startTijd, eindTijd, dienstTypeManual]);
 
   // 24-uurs detectie
   useEffect(() => {
@@ -428,7 +429,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
       if (isEdit) {
         const { data: updated, error } = await supabase
           .from("diensten")
-          .update(dienstData)
+          .update({ ...dienstData, lock_version: (editDienst!.lock_version ?? 0) + 1 })
           .eq("id", editDienst!.id)
           .eq("lock_version", editDienst!.lock_version)
           .select("id")
@@ -475,9 +476,9 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
         if (herhaling !== "geen" && herhalingAantal > 0 && herhalingTot) {
           const herhalingRecords: Array<typeof dienstData & { herhaling_parent_id: string; bron: string }> = [];
           for (const parent of (inserted || [])) {
-            const parentDatum = parseISO(
-              allDatums[(inserted || []).indexOf(parent)]
-            );
+            const parentIdx = (inserted || []).indexOf(parent);
+            if (parentIdx < 0 || parentIdx >= allDatums.length) continue;
+            const parentDatum = parseISO(allDatums[parentIdx]);
             for (let i = 1; i <= herhalingAantal; i++) {
               let newDatum: Date;
               if (herhaling === "dagelijks") newDatum = addDays(parentDatum, i);
@@ -858,7 +859,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
               <Label className="text-xs">Dienst type</Label>
               <div className="flex gap-1.5">
                 {dienstTypes.map((t) => (
-                  <Button key={t} type="button" variant={dienstType === t ? "default" : "outline"} size="sm" className="h-7 text-[11px]" onClick={() => setDienstType(t)}>
+                  <Button key={t} type="button" variant={dienstType === t ? "default" : "outline"} size="sm" className="h-7 text-[11px]" onClick={() => { setDienstType(t); setDienstTypeManual(true); }}>
                     {t.charAt(0).toUpperCase() + t.slice(1)}
                   </Button>
                 ))}

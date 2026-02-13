@@ -38,13 +38,15 @@ export function useCreateFactuur() {
         };
       });
 
+      const round2 = (n: number) => Math.round(n * 100) / 100;
+
       const totals = regelsMetTotals.reduce((acc, r) => {
-        const sub = r.aantal * r.prijs;
-        const btw = sub * (r.btw_percentage / 100);
+        const sub = round2(r.aantal * r.prijs);
+        const btw = round2(sub * (r.btw_percentage / 100));
         return {
-          subtotaal: acc.subtotaal + sub,
-          btw_bedrag: acc.btw_bedrag + btw,
-          totaal: acc.totaal + sub + btw,
+          subtotaal: round2(acc.subtotaal + sub),
+          btw_bedrag: round2(acc.btw_bedrag + btw),
+          totaal: round2(acc.totaal + sub + btw),
         };
       }, { subtotaal: 0, btw_bedrag: 0, totaal: 0 });
 

@@ -25,32 +25,19 @@ export function useBeschikbaarheidMutations() {
 
   const upsertMutation = useMutation({
     mutationFn: async (params: UpsertParams) => {
-      const { data: existing } = await supabase
+      const { error } = await supabase
         .from("professional_availability")
-        .select("id")
-        .eq("professional_id", params.professional_id)
-        .eq("date", params.date)
-        .eq("shift", params.shift)
-        .maybeSingle();
-
-      if (existing) {
-        const { error } = await supabase
-          .from("professional_availability")
-          .update({ is_available: params.is_available, opmerking: params.opmerking ?? null })
-          .eq("id", existing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("professional_availability")
-          .insert({
+        .upsert(
+          {
             professional_id: params.professional_id,
             date: params.date,
             shift: params.shift,
             is_available: params.is_available,
             opmerking: params.opmerking ?? null,
-          });
-        if (error) throw error;
-      }
+          },
+          { onConflict: "professional_id,date,shift" }
+        );
+      if (error) throw error;
     },
     onSuccess: () => invalidate(),
     onError: () => toast.error("Beschikbaarheid opslaan mislukt"),

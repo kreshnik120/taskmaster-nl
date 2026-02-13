@@ -85,7 +85,7 @@ export function BetalingRegistrerenDialog({
   const isPartialPayment = bedragNum < openstaandBedrag && bedragNum > 0;
   const nieuwOpenstaand = Math.max(0, openstaandBedrag - bedragNum);
   const isFullPayment = nieuwOpenstaand === 0 && bedragNum > 0;
-  const canSubmit = bedragNum > 0 && !isCreating;
+  const canSubmit = bedragNum > 0 && !isCreating && !isOverpayment;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
