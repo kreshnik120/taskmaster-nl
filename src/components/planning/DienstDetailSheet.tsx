@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Lock, MessageSquare, X, Bot } from "lucide-react";
+import { Lock, MessageSquare, Bot, CalendarDays, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -25,12 +25,21 @@ interface DienstDetailSheetProps {
 
 function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex justify-between py-1.5 border-b border-white/10 dark:border-white/5 last:border-0">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="text-xs font-medium text-foreground text-right">{children}</dd>
+    <div className="flex justify-between items-baseline py-1.5 px-2 -mx-2 rounded-md border-b border-white/10 dark:border-white/5 last:border-0 hover:bg-white/30 dark:hover:bg-white/5 transition-colors duration-200" style={{ transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)" }}>
+      <dt className="text-xs text-muted-foreground/80 shrink-0">{label}</dt>
+      <dd className="text-xs font-medium text-foreground text-right ml-2">{children}</dd>
     </div>
   );
 }
+
+const statusHeaderTint: Record<string, string> = {
+  concept: "from-slate-100/60 to-transparent dark:from-slate-800/30",
+  open: "from-rose-50/60 to-transparent dark:from-rose-900/20",
+  deels_bezet: "from-amber-50/60 to-transparent dark:from-amber-900/20",
+  volledig_bezet: "from-emerald-50/60 to-transparent dark:from-emerald-900/20",
+  voltooid: "from-blue-50/60 to-transparent dark:from-blue-900/20",
+  geannuleerd: "from-gray-100/60 to-transparent dark:from-gray-800/30",
+};
 
 export function DienstDetailSheet({ dienst, open, onClose, onEdit, onCopy, onDelete }: DienstDetailSheetProps) {
   const queryClient = useQueryClient();
@@ -42,6 +51,8 @@ export function DienstDetailSheet({ dienst, open, onClose, onEdit, onCopy, onDel
   const isAfgelopen = ["geannuleerd", "voltooid"].includes(dienst.status);
   const formatTijd = (t: string) => t?.slice(0, 5) ?? "";
   const formatTarief = (n: number | null) => n != null ? `€${n.toFixed(2).replace(".", ",")}` : "—";
+
+  const dienstSubtitel = `${dienst.dienst_type ?? "Dienst"} ${formatTijd(dienst.start_tijd)}–${formatTijd(dienst.eind_tijd)}`;
 
   const handleSluitenDienst = async () => {
     const { data: updated, error } = await supabase
@@ -100,52 +111,66 @@ export function DienstDetailSheet({ dienst, open, onClose, onEdit, onCopy, onDel
     geimporteerd: "Geïmporteerd",
   };
 
+  const headerTint = statusHeaderTint[dienst.status] ?? statusHeaderTint.concept;
+
   return (
     <>
       <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-        <SheetContent side="right" className="w-full max-w-3xl overflow-y-auto p-0 sm:max-w-3xl">
-          <SheetHeader className="px-6 pt-6 pb-4 border-b border-white/10 dark:border-white/5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <SheetTitle className="text-base truncate">
-                  {dienst.sublocation?.location?.organization?.name} / {dienst.sublocation?.naam}
-                </SheetTitle>
-                <div className="mt-1">
+        <SheetContent side="right" className="w-full max-w-3xl overflow-y-auto scroll-smooth p-0 sm:max-w-3xl">
+          {/* Header with status-dependent gradient */}
+          <SheetHeader className={cn("px-6 pt-6 pb-4 border-b border-white/10 dark:border-white/5 bg-gradient-to-b", headerTint)}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 space-y-0.5">
+                <div className="flex items-center gap-2.5">
+                  <SheetTitle className="text-base truncate">
+                    {dienst.sublocation?.location?.organization?.name} / {dienst.sublocation?.naam}
+                  </SheetTitle>
                   <DienstStatusBadge status={dienst.status} />
                 </div>
+                <p className="text-xs text-muted-foreground/70 tracking-wide">
+                  {dienstSubtitel} · {format(parseISO(dienst.datum), "d MMM yyyy", { locale: nl })}
+                </p>
               </div>
             </div>
           </SheetHeader>
 
-          <div className="px-6 py-4 space-y-6">
-            {/* Action buttons */}
-            <div className="flex flex-wrap gap-2">
-              {!isAfgelopen && (
-                <Button variant="destructive" size="sm" className="h-8 text-xs" onClick={() => setConfirmAction("sluiten")}>
-                  Sluiten dienst
+          <div className="px-6 py-5 space-y-8">
+            {/* Action buttons — grouped with separator */}
+            <div className="flex items-center justify-between">
+              <div className="flex flex-wrap gap-2">
+                {heeftPositieveReacties && (
+                  <Button size="sm" className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleBevestigen}>
+                    Bevestigen
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onEdit(dienst)}>
+                  Bewerken
                 </Button>
-              )}
-              {heeftPositieveReacties && (
-                <Button size="sm" className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleBevestigen}>
-                  Bevestigen
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onCopy(dienst)}>
+                  Kopiëren
                 </Button>
-              )}
-              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onEdit(dienst)}>
-                Bewerken
-              </Button>
-              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onCopy(dienst)}>
-                Kopiëren
-              </Button>
-              <Button variant="ghost" size="sm" className="h-8 text-xs text-destructive hover:text-destructive" onClick={() => onDelete(dienst)}>
-                Verwijderen
-              </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="h-5 border-l border-white/20 dark:border-white/10" />
+                {!isAfgelopen && (
+                  <Button variant="outline" size="sm" className="h-8 text-xs text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => setConfirmAction("sluiten")}>
+                    Sluiten
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" className="h-8 text-xs text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => onDelete(dienst)}>
+                  Verwijderen
+                </Button>
+              </div>
             </div>
 
-            {/* Two column layout */}
+            {/* Two column layout — glass cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Left: Dienst details */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-foreground">Dienst details</h3>
+              <div className="rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/20 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] p-4 space-y-3">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                  <CalendarDays className="h-4 w-4 text-muted-foreground/60" />
+                  Dienst details
+                </h3>
                 <dl className="space-y-0">
                   <DetailRow label="Datum">
                     {format(parseISO(dienst.datum), "EEEE d MMMM yyyy", { locale: nl })}
@@ -179,7 +204,7 @@ export function DienstDetailSheet({ dienst, open, onClose, onEdit, onCopy, onDel
                   <DetailRow label="Tarief">{formatTarief(dienst.tarief_per_uur)} /uur</DetailRow>
                   <DetailRow label="Gevraagd aantal">{dienst.gevraagd_aantal}</DetailRow>
                   {dienst.gevraagd_aantal > 1 && (
-                    <div className="flex gap-1 mt-1 mb-1">
+                    <div className="flex gap-1 mt-1 mb-1 px-2 -mx-2">
                       {Array.from({ length: dienst.gevraagd_aantal }, (_, i) => i + 1).map((nr) => {
                         const bezet = dienst.toewijzingen.some(
                           (t) => t.positie_nr === nr && ["bevestigd", "positief"].includes(t.status)
@@ -252,8 +277,11 @@ export function DienstDetailSheet({ dienst, open, onClose, onEdit, onCopy, onDel
               </div>
 
               {/* Right: Opdrachtgever info */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-foreground">Opdrachtgever</h3>
+              <div className="rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/20 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] p-4 space-y-3">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                  <Building2 className="h-4 w-4 text-muted-foreground/60" />
+                  Opdrachtgever
+                </h3>
                 <dl className="space-y-0">
                   <DetailRow label="Organisatie">{dienst.sublocation?.location?.organization?.name ?? "—"}</DetailRow>
                   <DetailRow label="Locatie">{dienst.sublocation?.location?.naam ?? "—"}</DetailRow>
