@@ -87,7 +87,7 @@ const App = () => (
           } />
           
           {/* All authenticated routes wrapped in Layout */}
-          <Route element={<Layout />}>
+          <Route element={<ErrorBoundary fallbackTitle="Er is iets misgegaan"><Layout /></ErrorBoundary>}>
             <Route path="/" element={<Navigate to="/dashboard?tab=mijn-werk" replace />} />
             <Route path="/dashboard" element={<UnifiedDashboard />} />
             <Route path="/whatsapp" element={<WhatsApp />} />

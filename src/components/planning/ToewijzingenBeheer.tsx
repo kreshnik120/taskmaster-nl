@@ -4,6 +4,7 @@ import { useBeschikbaarheidIndicator } from "@/hooks/useBeschikbaarheidIndicator
 import { BeschikbaarheidDot } from "@/components/beschikbaarheid/BeschikbaarheidDot";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { berekenBezetting } from "@/utils/bezetting";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -69,18 +70,10 @@ export function ToewijzingenBeheer({ dienst }: ToewijzingenBeheerProps) {
   const gevraagd = dienst.gevraagd_aantal || 1;
   const isMultiPositie = gevraagd > 1;
 
-  const bezet = useMemo(() => {
-    if (!isMultiPositie) {
-      return dienst.toewijzingen.filter((t) => ["bevestigd", "positief"].includes(t.status)).length;
-    }
-    const bezetSet = new Set<number>();
-    dienst.toewijzingen
-      .filter((t) => ["bevestigd", "positief"].includes(t.status))
-      .forEach((t) => bezetSet.add(t.positie_nr));
-    return bezetSet.size;
-  }, [dienst, isMultiPositie]);
-
-  const pct = Math.min(Math.round((bezet / gevraagd) * 100), 100);
+  const { bezet, pct } = useMemo(
+    () => berekenBezetting(dienst.toewijzingen, gevraagd),
+    [dienst, gevraagd]
+  );
 
   const { getStatus: getBeschikbaarheidStatus } = useBeschikbaarheidIndicator(dienst.datum, dienst.dienst_type);
 
@@ -98,7 +91,7 @@ export function ToewijzingenBeheer({ dienst }: ToewijzingenBeheerProps) {
       if (error) throw error;
       return data ?? [];
     },
-    enabled: searchOpen && debouncedSearch.length > 0,
+    enabled: searchOpen && debouncedSearch.length >= 2,
     staleTime: 10000,
   });
 

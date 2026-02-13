@@ -163,9 +163,22 @@ export function useDienstMatching(dienst: DienstData | null) {
         const proToewijzingen = bestaandeToewijzingen.filter(
           (t: any) => t.professional_id === p.id && t.dienst?.id !== dienst.id
         );
+        // Helper: zet "HH:mm" om naar minuten, met correctie voor nachtdiensten
+        const toMin = (t: string) => {
+          const [h, m] = t.split(":").map(Number);
+          return h * 60 + m;
+        };
+        const overlaps = (aStart: string, aEnd: string, bStart: string, bEnd: string): boolean => {
+          let a0 = toMin(aStart), a1 = toMin(aEnd);
+          let b0 = toMin(bStart), b1 = toMin(bEnd);
+          if (a1 <= a0) a1 += 1440;
+          if (b1 <= b0) b1 += 1440;
+          return a0 < b1 && b0 < a1;
+        };
+
         const heeftOverlap = proToewijzingen.some((t: any) => {
           if (!t.dienst) return false;
-          return t.dienst.start_tijd < dienst.eind_tijd && t.dienst.eind_tijd > dienst.start_tijd;
+          return overlaps(t.dienst.start_tijd, t.dienst.eind_tijd, dienst.start_tijd, dienst.eind_tijd);
         });
         if (heeftOverlap) {
           isDisqualified = true;

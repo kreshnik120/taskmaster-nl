@@ -421,7 +421,15 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chatWindowRef = useRef<HTMLDivElement>(null);
   const resizeRef = useRef({ width: dimensions.width, height: dimensions.height });
+  const jobTrackingCleanupRef = useRef<(() => void) | null>(null);
   const { toast } = useToast();
+
+  // Cleanup job tracking on unmount
+  useEffect(() => {
+    return () => {
+      jobTrackingCleanupRef.current?.();
+    };
+  }, []);
 
   // Training mode indicator
   useEffect(() => {
@@ -1217,7 +1225,8 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
       setIsLoading(false);
       
       // 4. Start realtime subscription
-      startJobProgressTracking(jobIds, totalChunks);
+      jobTrackingCleanupRef.current?.();
+      jobTrackingCleanupRef.current = startJobProgressTracking(jobIds, totalChunks);
       
       toast({
         description: `✅ Document in queue (${totalChunks} chunks)`,

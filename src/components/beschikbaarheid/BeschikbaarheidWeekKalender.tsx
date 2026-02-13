@@ -43,6 +43,16 @@ export function BeschikbaarheidWeekKalender({
     });
   }, [weekStart]);
 
+  const availabilityMap = useMemo(() => {
+    const map = new Map<string, AvailabilityEntry>();
+    professionals.forEach((pro) => {
+      pro.availability.forEach((a) => {
+        map.set(`${pro.id}|${a.date}|${a.shift}`, a);
+      });
+    });
+    return map;
+  }, [professionals]);
+
   if (professionals.length === 0) {
     return (
       <div className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm p-12 text-center">
@@ -103,9 +113,7 @@ export function BeschikbaarheidWeekKalender({
                     >
                       <div className="flex items-center justify-center gap-0.5">
                         {SHIFTS.map((shift) => {
-                          const entry = pro.availability.find(
-                            (a) => a.date === day.date && a.shift === shift.key
-                          );
+                          const entry = availabilityMap.get(`${pro.id}|${day.date}|${shift.key}`);
                           return (
                             <BeschikbaarheidCelEditor
                               key={shift.key}

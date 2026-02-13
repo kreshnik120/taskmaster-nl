@@ -203,40 +203,16 @@ export function useDienstenPlanning(filters: DienstFilters) {
 
   // Client-side filters
   const diensten = useMemo(() => {
-    let result = rawDiensten;
-
-    if (filters.status !== "all") {
-      result = result.filter((d) => d.status === filters.status);
-    }
-    if (filters.bureau !== "all") {
-      result = result.filter(
-        (d) => d.sublocation?.location?.organization?.name === filters.bureau
-      );
-    }
-    if (filters.functieNiveau !== "all") {
-      result = result.filter(
-        (d) => d.gevraagd_functie_niveau?.includes(filters.functieNiveau)
-      );
-    }
-    if (filters.locatie !== "all") {
-      result = result.filter(
-        (d) => d.sublocation?.location?.organization?.org_id === filters.locatie
-          || d.sublocation?.id === filters.locatie
-      );
-    }
-    if (filters.werkvorm !== "all") {
-      result = result.filter((d) => d.werkvorm === filters.werkvorm);
-    }
-    if (filters.certificering !== "all") {
-      result = result.filter(
-        (d) => d.vereiste_certificeringen?.includes(filters.certificering)
-      );
-    }
-    if (filters.spoed !== "all") {
-      result = result.filter((d) => d.is_spoed === (filters.spoed === "ja"));
-    }
-
-    return result;
+    return rawDiensten.filter((d) => {
+      if (filters.status !== "all" && d.status !== filters.status) return false;
+      if (filters.bureau !== "all" && d.sublocation?.location?.organization?.name !== filters.bureau) return false;
+      if (filters.functieNiveau !== "all" && !d.gevraagd_functie_niveau?.includes(filters.functieNiveau)) return false;
+      if (filters.locatie !== "all" && d.sublocation?.location?.organization?.org_id !== filters.locatie && d.sublocation?.id !== filters.locatie) return false;
+      if (filters.werkvorm !== "all" && d.werkvorm !== filters.werkvorm) return false;
+      if (filters.certificering !== "all" && !d.vereiste_certificeringen?.includes(filters.certificering)) return false;
+      if (filters.spoed !== "all" && d.is_spoed !== (filters.spoed === "ja")) return false;
+      return true;
+    });
   }, [rawDiensten, filters]);
 
   // Stats
