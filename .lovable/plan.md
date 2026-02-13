@@ -1,75 +1,44 @@
 
-# NAV-1 -- Navigatie Herstructurering + Planning Tabs
+
+# BENDY-1: Bendy API Proxy Edge Function
 
 ## Overzicht
-Enterprise navigatie herstructurering: sidebar hergroeperen in 6 logische blokken, Beschikbaarheid wordt een tab binnen Planning, en de Dashboard Recruitment tab wordt verwijderd. Geen nieuwe features, geen styling -- alleen structuurwijzigingen.
+Maak een nieuwe Supabase Edge Function `bendy-proxy` als veilige proxy tussen abcito.io en de Bendy Planning API. Gebruikt OAuth2 client_credentials flow met token caching, circuit breaker bescherming, en endpoint whitelisting.
 
-## Wijziging 1 -- AppSidebar.tsx: menuGroups herstructureren
+## Voorwaarden (Geverifieerd)
+- `BENDY_CLIENT_ID` secret: aanwezig
+- `BENDY_CLIENT_SECRET` secret: aanwezig
+- `_shared/circuit-breaker.ts`: aanwezig met `canExecute`, `recordSuccess`, `recordFailure` exports
+- `_shared/core.ts`: aanwezig met alle benodigde utilities
 
-**Bestand:** `src/components/AppSidebar.tsx`
+## Wijzigingen
 
-- **Regel 1:** Verwijder `CalendarCheck2` uit de lucide-react import (niet meer nodig als sidebar icon)
-- **Regels 35-133:** Vervang de hele `menuGroups` array door 6 nieuwe groepen:
-  1. **Overzicht** (defaultOpen: true) -- Dashboard
-  2. **Recruitment** (defaultOpen: true) -- Sollicitaties, Professionals, Klanten, Plaatsingen
-  3. **Planning & Rooster** (defaultOpen: true) -- Planning, Tijdregistratie
-  4. **Facturatie** (defaultOpen: false) -- Facturatie
-  5. **Communicatie & Docs** (defaultOpen: false) -- WhatsApp, Bijlagen, Notulen
-  6. **Beheer** (defaultOpen: false) -- AI Training, Gebruikers, Afgerond, Verwijderd, Archief
-- **Regels 222-227:** Update `openGroups` state naar de 6 nieuwe groep labels
+### 1. Nieuw bestand: `supabase/functions/bendy-proxy/index.ts`
+Enterprise edge function met:
+- JWT authenticatie (in-code validatie via `createAnonClient`)
+- OAuth2 client_credentials token ophalen + in-memory cache met expiry margin
+- Endpoint whitelist (9 Bendy API v2 endpoints)
+- Circuit breaker integratie via `_shared/circuit-breaker.ts`
+- Multi-tenant configuratie (citozorg actief, abczorg later)
+- 30s request timeout met AbortController
+- Token cache invalidatie bij 401 responses
 
-Beschikbaarheid verdwijnt als apart sidebar item (wordt tab in Planning).
+### 2. Config update: `supabase/config.toml`
+Toevoegen van `[functions.bendy-proxy]` entry met `verify_jwt = false` (auth in-code)
 
-## Wijziging 2 -- Planning.tsx: Beschikbaarheid als tab
+## Architectuur
 
-**Bestand:** `src/pages/Planning.tsx`
+```
+Browser (abcito.io)
+  -> POST /bendy-proxy { endpoint, method, params, body, tenant }
+  -> JWT validatie (gebruiker ingelogd?)
+  -> Circuit breaker check
+  -> OAuth2 token ophalen (cached of nieuw)
+  -> Fetch naar Bendy API
+  -> Response terug naar browser
+```
 
-- **Imports toevoegen:** `lazy`, `Suspense` uit react; `CalendarCheck2`, `Loader2` uit lucide-react; `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent` uit ui/tabs
-- **Lazy import:** `const BeschikbaarheidContent = lazy(() => import("@/pages/Beschikbaarheid"));`
-- **URL param:** `const activeTab = searchParams.get("tab") || "diensten";` + `handleTabChange` callback
-- **Return structuur:** Wrap alle bestaande content in `<Tabs>` met twee tabs:
-  - **Diensten** tab: bevat alle bestaande Planning content (KPI's, toggles, toolbar, legenda, kalender, sheets, modals)
-  - **Beschikbaarheid** tab: lazy-loaded `<BeschikbaarheidContent />` met Suspense fallback
-- Week URL param wordt automatisch gedeeld tussen beide tabs
-
-## Wijziging 3 -- App.tsx: Beschikbaarheid redirect
-
-**Bestand:** `src/App.tsx`
-
-- Verwijder `import Beschikbaarheid from "./pages/Beschikbaarheid"` (regel 30)
-- Vervang de `/beschikbaarheid` route door een redirect: `<Navigate to="/planning?tab=beschikbaarheid" replace />`
-
-## Wijziging 4 -- ChatWidget.tsx: PAGE_CONTEXTS merge
-
-**Bestand:** `src/components/AIAssistant/ChatWidget.tsx`
-
-- **Verwijder** de hele `/beschikbaarheid` entry uit PAGE_CONTEXTS (regels 173-182)
-- **Update** de `/planning` entry (regels 163-172): voeg beschikbaarheid info toe aan description en voeg een "Beschikbaarheid check" quick action toe met CalendarCheck2 icon
-- **Voeg enrichment toe** (na regel 308): detecteer `tab=beschikbaarheid` URL param en voeg " De gebruiker bekijkt de Beschikbaarheid tab." toe aan de context description
-
-## Wijziging 5 -- UnifiedDashboard.tsx: Recruitment tab verwijderen
-
-**Bestand:** `src/pages/UnifiedDashboard.tsx`
-
-- **Regel 19:** Verwijder `'recruitment': 'rose'` uit TAB_CONTEXT_MAP
-- **Regels 279-296:** Verwijder de hele Recruitment TabsTrigger
-- **Regels 377-385:** Verwijder de hele Recruitment TabsContent
-- **Regel 183:** Wijzig grid van `grid-cols-3 md:grid-cols-6` naar `grid-cols-3 md:grid-cols-5`
-- Behoud RecruitmentKPIs en UrgencyActionPanel imports (hergebruik later)
-
-## Gewijzigde Bestanden
-
-1. `src/components/AppSidebar.tsx` -- sidebar hergroepering (6 blokken)
-2. `src/pages/Planning.tsx` -- Tabs wrapper (Diensten + Beschikbaarheid)
-3. `src/App.tsx` -- /beschikbaarheid redirect, import verwijderd
-4. `src/components/AIAssistant/ChatWidget.tsx` -- PAGE_CONTEXTS merge
-5. `src/pages/UnifiedDashboard.tsx` -- Recruitment tab verwijderd
-
-## Verificatie
-
-- Sidebar toont 6 groepen, geen "Beschikbaarheid" als apart item
-- /planning toont twee tabs: Diensten en Beschikbaarheid
-- /beschikbaarheid redirect naar /planning?tab=beschikbaarheid
-- Dashboard heeft 5 tabs (geen Recruitment)
-- Week navigatie gedeeld tussen Diensten en Beschikbaarheid tabs
-- ChatWidget context op /planning bevat beschikbaarheid info
+## Geen wijzigingen aan
+- Bestaande edge functions
+- `_shared/core.ts` of `_shared/circuit-breaker.ts`
+- Frontend componenten, hooks, of pagina's
