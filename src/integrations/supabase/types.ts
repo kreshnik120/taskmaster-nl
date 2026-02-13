@@ -1635,6 +1635,224 @@ export type Database = {
           },
         ]
       }
+      bendy_id_mapping: {
+        Row: {
+          bendy_id: string
+          bendy_updated_at: string | null
+          conflict_data: Json | null
+          created_at: string
+          entity_type: string
+          id: string
+          last_synced_at: string
+          local_id: string
+          org_id: string
+          sync_status: string
+          tenant: string
+          updated_at: string
+        }
+        Insert: {
+          bendy_id: string
+          bendy_updated_at?: string | null
+          conflict_data?: Json | null
+          created_at?: string
+          entity_type: string
+          id?: string
+          last_synced_at?: string
+          local_id: string
+          org_id: string
+          sync_status?: string
+          tenant: string
+          updated_at?: string
+        }
+        Update: {
+          bendy_id?: string
+          bendy_updated_at?: string | null
+          conflict_data?: Json | null
+          created_at?: string
+          entity_type?: string
+          id?: string
+          last_synced_at?: string
+          local_id?: string
+          org_id?: string
+          sync_status?: string
+          tenant?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bendy_id_mapping_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bendy_raw_cache: {
+        Row: {
+          bendy_id: string
+          entity_type: string
+          fetched_at: string
+          id: string
+          org_id: string
+          raw_data: Json
+          tenant: string
+        }
+        Insert: {
+          bendy_id: string
+          entity_type: string
+          fetched_at?: string
+          id?: string
+          org_id: string
+          raw_data: Json
+          tenant: string
+        }
+        Update: {
+          bendy_id?: string
+          entity_type?: string
+          fetched_at?: string
+          id?: string
+          org_id?: string
+          raw_data?: Json
+          tenant?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bendy_raw_cache_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bendy_sync_config: {
+        Row: {
+          base_url: string
+          created_at: string
+          enabled: boolean
+          entities_config: Json
+          error_count: number
+          error_message: string | null
+          id: string
+          last_full_sync_at: string | null
+          last_incremental_sync_at: string | null
+          org_id: string
+          sync_interval_minutes: number
+          sync_status: string
+          tenant: string
+          updated_at: string
+        }
+        Insert: {
+          base_url: string
+          created_at?: string
+          enabled?: boolean
+          entities_config?: Json
+          error_count?: number
+          error_message?: string | null
+          id?: string
+          last_full_sync_at?: string | null
+          last_incremental_sync_at?: string | null
+          org_id: string
+          sync_interval_minutes?: number
+          sync_status?: string
+          tenant: string
+          updated_at?: string
+        }
+        Update: {
+          base_url?: string
+          created_at?: string
+          enabled?: boolean
+          entities_config?: Json
+          error_count?: number
+          error_message?: string | null
+          id?: string
+          last_full_sync_at?: string | null
+          last_incremental_sync_at?: string | null
+          org_id?: string
+          sync_interval_minutes?: number
+          sync_status?: string
+          tenant?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bendy_sync_config_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bendy_sync_log: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          duration_ms: number | null
+          entity_type: string
+          errors: Json | null
+          id: string
+          metadata: Json | null
+          org_id: string
+          records_created: number
+          records_failed: number
+          records_fetched: number
+          records_skipped: number
+          records_updated: number
+          started_at: string
+          status: string
+          sync_type: string
+          tenant: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          entity_type: string
+          errors?: Json | null
+          id?: string
+          metadata?: Json | null
+          org_id: string
+          records_created?: number
+          records_failed?: number
+          records_fetched?: number
+          records_skipped?: number
+          records_updated?: number
+          started_at?: string
+          status?: string
+          sync_type: string
+          tenant: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          entity_type?: string
+          errors?: Json | null
+          id?: string
+          metadata?: Json | null
+          org_id?: string
+          records_created?: number
+          records_failed?: number
+          records_fetched?: number
+          records_skipped?: number
+          records_updated?: number
+          started_at?: string
+          status?: string
+          sync_type?: string
+          tenant?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bendy_sync_log_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       betaling: {
         Row: {
           bedrag: number
@@ -1987,6 +2205,7 @@ export type Database = {
       }
       client_organizations: {
         Row: {
+          bendy_id: string | null
           btw_nummer: string | null
           centrale_facturatie_email: string | null
           created_at: string
@@ -2000,6 +2219,7 @@ export type Database = {
           website: string | null
         }
         Insert: {
+          bendy_id?: string | null
           btw_nummer?: string | null
           centrale_facturatie_email?: string | null
           created_at?: string
@@ -2013,6 +2233,7 @@ export type Database = {
           website?: string | null
         }
         Update: {
+          bendy_id?: string | null
           btw_nummer?: string | null
           centrale_facturatie_email?: string | null
           created_at?: string
@@ -2572,6 +2793,7 @@ export type Database = {
         Row: {
           aangemaakt_door: string | null
           accepteerbaar: boolean | null
+          bendy_id: string | null
           bron: string | null
           created_at: string | null
           datum: string
@@ -2607,6 +2829,7 @@ export type Database = {
         Insert: {
           aangemaakt_door?: string | null
           accepteerbaar?: boolean | null
+          bendy_id?: string | null
           bron?: string | null
           created_at?: string | null
           datum: string
@@ -2642,6 +2865,7 @@ export type Database = {
         Update: {
           aangemaakt_door?: string | null
           accepteerbaar?: boolean | null
+          bendy_id?: string | null
           bron?: string | null
           created_at?: string | null
           datum?: string
@@ -5089,6 +5313,7 @@ export type Database = {
         Row: {
           adres: string | null
           bedrijfsnaam: string | null
+          bendy_id: string | null
           beroepsaansprakelijkheid_path: string | null
           beschikbaarheid_uren: Json | null
           beschikbaarheidsnotities: string | null
@@ -5152,6 +5377,7 @@ export type Database = {
         Insert: {
           adres?: string | null
           bedrijfsnaam?: string | null
+          bendy_id?: string | null
           beroepsaansprakelijkheid_path?: string | null
           beschikbaarheid_uren?: Json | null
           beschikbaarheidsnotities?: string | null
@@ -5215,6 +5441,7 @@ export type Database = {
         Update: {
           adres?: string | null
           bedrijfsnaam?: string | null
+          bendy_id?: string | null
           beroepsaansprakelijkheid_path?: string | null
           beschikbaarheid_uren?: Json | null
           beschikbaarheidsnotities?: string | null
