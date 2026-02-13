@@ -383,6 +383,201 @@ interface BendySyncRequest {
 }
 
 // ============================================
+// STATUS CHECK (GET endpoint)
+// ============================================
+
+async function handleStatusCheck(): Promise<Response> {
+  try {
+    const adminClient = createAdminClient();
+
+    const { data: configs } = await adminClient
+      .from('bendy_sync_config')
+      .select('id, tenant, enabled, sync_status, sync_interval_minutes, last_full_sync_at, last_incremental_sync_at, error_message, error_count, updated_at');
+
+    const { data: recentLogs } = await adminClient
+      .from('bendy_sync_log')
+      .select('id, tenant, sync_type, entity_type, started_at, completed_at, records_fetched, records_created, records_updated, records_skipped, records_failed, status, duration_ms')
+      .order('started_at', { ascending: false })
+      .limit(20);
+
+    const { count: pendingCount } = await adminClient
+      .from('bendy_id_mapping')
+      .select('id', { count: 'exact', head: true })
+      .eq('sync_status', 'pending');
+
+    const { count: syncedCount } = await adminClient
+      .from('bendy_id_mapping')
+      .select('id', { count: 'exact', head: true })
+      .eq('sync_status', 'synced');
+
+    const { count: cacheCount } = await adminClient
+      .from('bendy_raw_cache')
+      .select('id', { count: 'exact', head: true });
+
+    return jsonResponse({
+      success: true,
+      data: {
+        configs: configs || [],
+        recent_logs: recentLogs || [],
+        statistics: {
+          total_synced: syncedCount || 0,
+          total_pending: pendingCount || 0,
+          total_cached: cacheCount || 0,
+        },
+      },
+      metadata: {
+        version: FUNCTION_VERSION,
+        timestamp: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    logError(FUNCTION_NAME, `Status check gefaald: ${msg}`);
+    return errorResponse(`Status check mislukt: ${msg}`, 500);
+  }
+}
+
+// ============================================
+// CRON SYNC (automatisch alle enabled tenants)
+// ============================================
+
+async function handleCronSync(): Promise<Response> {
+  const startTime = Date.now();
+  logInfo(FUNCTION_NAME, '🔄 Cron sync gestart');
+
+  try {
+    const adminClient = createAdminClient();
+    const results: Record<string, any> = {};
+
+    const { data: configs } = await adminClient
+      .from('bendy_sync_config')
+      .select('id, org_id, tenant, enabled, sync_status')
+      .eq('enabled', true);
+
+    if (!configs || configs.length === 0) {
+      logInfo(FUNCTION_NAME, 'Geen enabled tenants gevonden — cron skip');
+      return jsonResponse({
+        success: true,
+        data: { message: 'Geen enabled tenants', tenants_processed: 0 },
+        metadata: { trigger: 'cron', duration_ms: Date.now() - startTime },
+      });
+    }
+
+    for (const config of configs) {
+      const tenant = config.tenant;
+      const tenantConfig = TENANT_CONFIG[tenant];
+
+      if (!tenantConfig) {
+        logWarning(FUNCTION_NAME, `Tenant ${tenant} niet in TENANT_CONFIG — skip`);
+        results[tenant] = { status: 'skipped', reason: 'tenant_not_configured' };
+        continue;
+      }
+
+      if (config.sync_status === 'running') {
+        logWarning(FUNCTION_NAME, `Tenant ${tenant} al bezig — skip`);
+        results[tenant] = { status: 'skipped', reason: 'already_running' };
+        continue;
+      }
+
+      const circuitCheck = await canExecute(adminClient, tenantConfig.circuitBreakerName);
+      if (!circuitCheck.allowed) {
+        logWarning(FUNCTION_NAME, `Circuit breaker OPEN voor ${tenant} — skip`);
+        results[tenant] = { status: 'skipped', reason: 'circuit_breaker_open' };
+        continue;
+      }
+
+      const lock = await acquireSyncLock(adminClient, tenant, 'sync_clients');
+      if (!lock.locked) {
+        results[tenant] = { status: 'skipped', reason: 'lock_failed' };
+        continue;
+      }
+
+      const { data: syncLog } = await adminClient
+        .from('bendy_sync_log')
+        .insert({
+          org_id: lock.orgId,
+          tenant,
+          sync_type: 'incremental',
+          entity_type: 'clients',
+          status: 'running',
+        })
+        .select('id')
+        .single();
+
+      const logId = syncLog?.id || '';
+
+      try {
+        const syncResult = await syncClients(adminClient, tenant, lock.orgId, 'incremental');
+
+        const duration = Date.now() - startTime;
+        if (logId) {
+          await adminClient
+            .from('bendy_sync_log')
+            .update({
+              completed_at: new Date().toISOString(),
+              records_fetched: syncResult.fetched,
+              records_created: syncResult.created,
+              records_updated: syncResult.updated,
+              records_skipped: syncResult.skipped,
+              records_failed: syncResult.failed,
+              errors: syncResult.errors,
+              status: syncResult.failed > 0 ? 'partial' : 'success',
+              duration_ms: duration,
+            })
+            .eq('id', logId);
+        }
+
+        await releaseSyncLock(adminClient, lock.configId, 'idle');
+        await recordSuccess(adminClient, tenantConfig.circuitBreakerName);
+
+        results[tenant] = {
+          status: 'success',
+          fetched: syncResult.fetched,
+          updated: syncResult.updated,
+          skipped: syncResult.skipped,
+          failed: syncResult.failed,
+        };
+
+        logSuccess(FUNCTION_NAME, `Cron sync ${tenant} voltooid`, results[tenant]);
+      } catch (syncError) {
+        const msg = syncError instanceof Error ? syncError.message : String(syncError);
+        logError(FUNCTION_NAME, `Cron sync ${tenant} gefaald: ${msg}`);
+
+        await releaseSyncLock(adminClient, lock.configId, 'error', msg);
+
+        if (logId) {
+          await adminClient
+            .from('bendy_sync_log')
+            .update({
+              completed_at: new Date().toISOString(),
+              status: 'failed',
+              errors: [msg],
+              duration_ms: Date.now() - startTime,
+            })
+            .eq('id', logId);
+        }
+
+        await recordFailure(adminClient, tenantConfig.circuitBreakerName, msg);
+        results[tenant] = { status: 'failed', error: msg };
+      }
+    }
+
+    const totalDuration = Date.now() - startTime;
+    logSuccess(FUNCTION_NAME, `Cron sync voltooid`, { duration_ms: totalDuration, tenants: Object.keys(results) });
+
+    return jsonResponse({
+      success: true,
+      data: { tenants: results, tenants_processed: Object.keys(results).length },
+      metadata: { trigger: 'cron', duration_ms: totalDuration, version: FUNCTION_VERSION },
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    logError(FUNCTION_NAME, `Cron sync gefaald: ${msg}`, error);
+    return errorResponse(`Cron sync mislukt: ${msg}`, 500);
+  }
+}
+
+// ============================================
 // MAIN HANDLER
 // ============================================
 
@@ -390,13 +585,32 @@ Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
+  // MODE 1: GET = Status check (geen auth nodig)
+  if (req.method === 'GET') {
+    return handleStatusCheck();
+  }
+
+  // Parse body
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    return errorResponse('Ongeldig JSON formaat', 400);
+  }
+
+  // MODE 2: Cron trigger (geen auth header, trigger === 'scheduler')
+  if (body.trigger === 'scheduler') {
+    logInfo(FUNCTION_NAME, 'Cron trigger ontvangen');
+    return handleCronSync();
+  }
+
+  // MODE 3: Manuele trigger (admin auth vereist)
   const startTime = Date.now();
   let configId = '';
   let syncLogId = '';
   let circuitBreakerName = '';
 
   try {
-    // STAP 1: JWT authenticatie
     const authHeader = req.headers.get('authorization');
     if (!authHeader) {
       return errorResponse('Niet geautoriseerd — login vereist', 401);
@@ -409,7 +623,6 @@ Deno.serve(async (req) => {
       return errorResponse('Ongeldige sessie — log opnieuw in', 401);
     }
 
-    // STAP 2: Admin rol check
     const adminClient = createAdminClient();
 
     const { data: userOrg } = await adminClient
@@ -422,14 +635,6 @@ Deno.serve(async (req) => {
 
     if (!userOrg) {
       return errorResponse('Admin toegang vereist', 403);
-    }
-
-    // STAP 3: Parse request
-    let body: BendySyncRequest;
-    try {
-      body = await req.json();
-    } catch {
-      return errorResponse('Ongeldig JSON formaat', 400);
     }
 
     if (body.action !== 'sync_clients') {
@@ -445,9 +650,8 @@ Deno.serve(async (req) => {
 
     circuitBreakerName = TENANT_CONFIG[tenant].circuitBreakerName;
 
-    logInfo(FUNCTION_NAME, `Sync gestart: ${body.action}`, { tenant, syncType, userId: user.id });
+    logInfo(FUNCTION_NAME, `Manuele sync gestart: ${body.action}`, { tenant, syncType, userId: user.id });
 
-    // STAP 4: Circuit breaker check
     const circuitCheck = await canExecute(adminClient, circuitBreakerName);
     if (!circuitCheck.allowed) {
       logWarning(FUNCTION_NAME, `Circuit breaker OPEN voor ${tenant}`);
@@ -458,7 +662,6 @@ Deno.serve(async (req) => {
       }, 503);
     }
 
-    // STAP 5: Sync lock acquire
     const lock = await acquireSyncLock(adminClient, tenant, body.action);
     if (!lock.locked) {
       return errorResponse('Sync niet mogelijk: disabled, al actief, of config ontbreekt', 409);
@@ -466,7 +669,6 @@ Deno.serve(async (req) => {
     configId = lock.configId;
     const orgId = lock.orgId;
 
-    // STAP 6: Sync log aanmaken
     const { data: syncLog } = await adminClient
       .from('bendy_sync_log')
       .insert({
@@ -481,10 +683,8 @@ Deno.serve(async (req) => {
 
     syncLogId = syncLog?.id || '';
 
-    // STAP 7: Sync uitvoeren
     const result = await syncClients(adminClient, tenant, orgId, syncType);
 
-    // STAP 8: Sync log bijwerken
     const duration = Date.now() - startTime;
     if (syncLogId) {
       await adminClient
@@ -503,11 +703,10 @@ Deno.serve(async (req) => {
         .eq('id', syncLogId);
     }
 
-    // STAP 9: Lock release + circuit breaker success
     await releaseSyncLock(adminClient, configId, 'idle');
     await recordSuccess(adminClient, circuitBreakerName);
 
-    logSuccess(FUNCTION_NAME, `Sync voltooid`, {
+    logSuccess(FUNCTION_NAME, `Manuele sync voltooid`, {
       tenant,
       fetched: result.fetched,
       updated: result.updated,
@@ -529,6 +728,7 @@ Deno.serve(async (req) => {
         errors: result.errors,
       },
       metadata: {
+        trigger: 'manual',
         duration_ms: duration,
         sync_log_id: syncLogId,
         sync_type: syncType,
@@ -537,9 +737,8 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    logError(FUNCTION_NAME, `Sync gefaald: ${msg}`, error);
+    logError(FUNCTION_NAME, `Manuele sync gefaald: ${msg}`, error);
 
-    // Cleanup: release lock + update log
     try {
       const adminClient = createAdminClient();
 

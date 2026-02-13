@@ -8,9 +8,10 @@ verify_jwt = false
 
 [functions.bendy-sync]
 verify_jwt = false
+schedule = "*/15 * * * *"
 # Purpose: Bendy data sync engine (clients, later users/requisitions)
-# Auth: JWT + admin role validated in-code
-# Trigger: Manual POST, later cron schedule
+# Auth: JWT + admin role for manual, SERVICE_ROLE_KEY for cron
+# Modes: GET (status), POST + trigger=scheduler (cron), POST + JWT (manual)
 
 [functions.agent-router-proxy]
 verify_jwt = false
