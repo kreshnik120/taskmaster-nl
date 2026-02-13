@@ -6,6 +6,12 @@ verify_jwt = false
 # Auth: JWT validated in-code, circuit breaker protected
 # Tenants: citozorg (active), abczorg (later)
 
+[functions.bendy-sync]
+verify_jwt = false
+# Purpose: Bendy data sync engine (clients, later users/requisitions)
+# Auth: JWT + admin role validated in-code
+# Trigger: Manual POST, later cron schedule
+
 [functions.agent-router-proxy]
 verify_jwt = false
 # Purpose: Secure proxy to VPS Agent Router (srv1304497.hstgr.cloud:3002)
