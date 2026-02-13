@@ -309,6 +309,32 @@ export const ALL_INTENTS: Record<string, IntentDefinition> = {
     agent: "report_agent",
     examples: ["Auto-factureren", "Genereer facturen automatisch", "Diensten factureren"],
   },
+
+  // Professional Agent - Talent Search & Profile Management
+  talent_search: {
+    id: "talent_search",
+    label: "Talent zoeken",
+    description: "Zoek professionals met geavanceerde filters",
+    icon: "🔎",
+    agent: "search_agent",
+    examples: ["Zoek een VP3 in Amsterdam", "Talent zoeken", "Beschikbare professionals"],
+  },
+  profile_completeness: {
+    id: "profile_completeness",
+    label: "Profiel compleetheid",
+    description: "Check en verbeter profiel compleetheid",
+    icon: "📋",
+    agent: "search_agent",
+    examples: ["Welke profielen zijn incompleet?", "Profiel verbeteren", "Ontbrekende gegevens"],
+  },
+  export_professionals: {
+    id: "export_professionals",
+    label: "Professionals exporteren",
+    description: "Exporteer professionals lijst naar CSV",
+    icon: "📤",
+    agent: "report_agent",
+    examples: ["Exporteer professionals", "CSV download", "Lijst exporteren"],
+  },
 };
 
 // Page-specific agent configurations
@@ -346,12 +372,20 @@ export const PAGE_AGENT_CONFIG: Record<string, PageAgentConfig> = {
   "/professionals": {
     primaryAgent: "search_agent",
     intents: [
+      ALL_INTENTS.talent_search,
       ALL_INTENTS.search_skills,
       ALL_INTENTS.check_availability,
       ALL_INTENTS.match_professional,
+      ALL_INTENTS.profile_completeness,
+      ALL_INTENTS.export_professionals,
       ALL_INTENTS.send_email,
     ],
-    contextFields: ["professional_id", "search_query"],
+    contextFields: [
+      "professional_id",
+      "search_query",
+      "status_filter",
+      "functie_niveau_filter",
+    ],
   },
   "/plaatsingen": {
     primaryAgent: "match_agent",
@@ -612,6 +646,11 @@ export function detectIntentFromText(text: string, pageConfig: PageAgentConfig):
     vervallen: "check_openstaand",
     herinnering: "send_herinnering",
     facturatie: "auto_facturatie",
+    professional: "talent_search",
+    talent: "talent_search",
+    profiel: "profile_completeness",
+    incompleet: "profile_completeness",
+    exporteer: "export_professionals",
   };
 
   for (const [keyword, intentId] of Object.entries(keywordMap)) {

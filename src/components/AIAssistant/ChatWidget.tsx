@@ -62,12 +62,12 @@ const PAGE_CONTEXTS: Record<string, PageContext> = {
   },
   '/professionals': {
     label: 'Professionals',
-    description: 'Overzicht van geplaatste zorgprofessionals',
+    description: 'Professionalsbestand met zorgprofessionals. Features: talent search (zoek op functieniveau, regio, werkvorm, specialismen), bulk-acties (status wijzigen, email, CSV export, verwijderen), profiel completeness score, CV upload, beschikbaarheidsintegratie, plaatsingshistorie. Functieniveaus: Helpende 2, VIG, VP3, VP4, HBO-V. Werkvormen: ZZP, Uitzendkracht, Beide. Statussen: actief, inactief, op_pauze. KPIs: totaal professionals, beschikbaar, gekoppeld (plaatsingen), nieuw (7 dagen). Zoek-fallback: als geen professionals gevonden, zoekt automatisch in sollicitaties.',
     icon: Users,
     quickActions: [
-      { icon: Users, label: 'Beschikbaarheid check', prompt: 'Welke professionals zijn beschikbaar voor een nieuwe plaatsing?' },
-      { icon: MapPin, label: 'Regio overzicht', prompt: 'Geef een overzicht van professionals per regio' },
-      { icon: Briefcase, label: 'Functieniveaus', prompt: 'Welke functieniveaus hebben we beschikbaar?' },
+      { icon: Users, label: 'Talent zoeken', prompt: 'Hoe kan ik het beste een professional zoeken? Leg de talent search functie uit en welke filters ik kan gebruiken (functieniveau, regio, werkvorm, specialismen).' },
+      { icon: Sparkles, label: 'Profiel tips', prompt: 'Geef tips voor het opbouwen van een compleet professionalprofiel. Welke velden zijn het belangrijkst voor goede matching met diensten?' },
+      { icon: MapPin, label: 'Beschikbaarheid', prompt: 'Leg uit hoe de beschikbaarheid van professionals werkt. Hoe wordt dit gekoppeld aan de dienstenplanning en AI matching?' },
     ]
   },
   '/klanten': {
@@ -327,6 +327,33 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
         return {
           ...context,
           description: context.description + ` De gebruiker bekijkt facturen met status "${label}".`,
+        };
+      }
+    }
+
+    // Enrich /professionals with current filter from URL params
+    if (currentPath === '/professionals') {
+      const parts: string[] = [];
+      const statusParam = params.get('status');
+      const functieParam = params.get('functie_niveau');
+
+      if (statusParam) {
+        const statusLabels: Record<string, string> = {
+          'actief': 'actief',
+          'inactief': 'inactief',
+          'op_pauze': 'op pauze',
+        };
+        parts.push(`status "${statusLabels[statusParam] || statusParam}"`);
+      }
+
+      if (functieParam) {
+        parts.push(`functieniveau "${functieParam}"`);
+      }
+
+      if (parts.length > 0) {
+        return {
+          ...context,
+          description: context.description + ` De gebruiker filtert op ${parts.join(' en ')}.`,
         };
       }
     }
