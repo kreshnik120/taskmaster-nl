@@ -1,81 +1,87 @@
 
 
-# Enterprise UI Verfijning -- DienstDetailSheet
+# S15 Kwaliteitsaudit -- 13 Bugfixes & Optimalisaties
 
 ## Overzicht
-Subtiele, naadloze verfijningen van het DienstDetailSheet panel om de gebruikservaring, overzichtelijkheid en visuele kwaliteit naar enterprise niveau te tillen. Geen grote redesign, maar doordachte micro-verbeteringen die aansluiten op het bestaande design system.
+13 gerichte fixes uit de kwaliteitsaudit. Alleen bugfixes en optimalisaties, geen nieuwe features of styling.
 
-## Problemen (gebaseerd op screenshot)
+---
 
-1. **Header**: Titel en status badge staan los, geen visuele hiërarchie
-2. **Actieknoppen**: Destructieve en neutrale acties staan op dezelfde rij zonder groepering
-3. **Detail kolommen**: Geen visuele containers -- details "zweven" op de pagina
-4. **Detail rijen**: Labels en waarden hebben dezelfde visuele gewicht
-5. **Lege velden**: Waarden als "---" bieden geen context
-6. **Sectie-overgangen**: Geen subtiele scheiders tussen secties (details -> toewijzingen -> AI)
+## FIX 1 -- Lock Version Increment (CRITICAL)
+**Bestand:** `src/components/planning/NieuweDienstModal.tsx` (regel 431)
+- Wijzig `.update(dienstData)` naar `.update({ ...dienstData, lock_version: (editDienst!.lock_version ?? 0) + 1 })`
+- Maakt optimistic locking functioneel
 
-## Oplossing -- 6 verfijningen
+## FIX 2 -- Nachtdienst Overlap Check (CRITICAL)
+**Bestand:** `src/hooks/useDienstMatching.ts` (regel 166-169)
+- Vervang string-vergelijking door `toMin()` helper en `overlaps()` functie die middernacht-overschrijding correct afhandelt
+- Voeg helpers toe direct boven de `heeftOverlap` variabele
 
-### Verfijning 1: Header met subtiele achtergrond en verbeterde hiërarchie
-- Voeg een zachte gradient achtergrond toe aan de header (status-afhankelijk, lage saturatie)
-- Toon de titel van de dienst (bijv. "Dagdienst 08:00-17:00") als subtitel onder organisatie/sublocation
-- Status badge direct rechts van de titel in plaats van eronder
+## FIX 3 -- Beschikbaarheid Upsert Race Condition (HIGH)
+**Bestand:** `src/hooks/useBeschikbaarheidMutations.ts` (regel 27-53)
+- Vervang select-then-insert patroon door native `.upsert()` met `onConflict: "professional_id,date,shift"`
+- UNIQUE constraint bestaat al in de database (verified)
 
-### Verfijning 2: Actieknoppen gegroepeerd met separator
-- Groepeer primaire acties (Bevestigen, Bewerken, Kopieren) links
-- Plaats destructieve acties (Sluiten, Verwijderen) rechts met een visuele separator ertussen
-- Verwijder de losse "ghost" styling van Verwijderen en geef het een subtiele destructive-outline
+## FIX 4 -- Overbetaling Blokkering (HIGH)
+**Bestand:** `src/components/facturatie/BetalingRegistrerenDialog.tsx` (regel 88)
+- Wijzig `canSubmit` naar: `bedragNum > 0 && !isCreating && !isOverpayment`
+- De waarschuwings-Alert voor overbetaling bestaat al (regel 189-196), submit wordt nu ook geblokkeerd
 
-### Verfijning 3: Detail secties in glass-cards
-- Wrap "Dienst details" en "Opdrachtgever" elk in een subtiele rounded card met `bg-white/40 dark:bg-slate-900/40 border border-white/20`
-- Voeg sectie-iconen toe naast de headers (CalendarDays voor details, Building2 voor opdrachtgever)
-- Dit geeft visuele scheiding en maakt de 2-koloms layout duidelijker
+## FIX 5 -- BTW Afrondingsfout (HIGH)
+**Bestand:** `src/hooks/facturatie/useCreateFactuur.ts` (regel 41-49)
+- Voeg `round2` helper toe en rond elk subtotaal en BTW-bedrag per regel af naar 2 decimalen
 
-### Verfijning 4: DetailRow component verbeteren
-- Voeg een lichte dot-leader toe tussen label en waarde (subtiele dots ipv lege ruimte)
-- Maak labels iets donkerder voor betere leesbaarheid
-- Voeg subtiele hover highlight toe aan rijen
+## FIX 6 -- Beschikbaarheid O(n^2) Performance (MEDIUM)
+**Bestand:** `src/components/beschikbaarheid/BeschikbaarheidWeekKalender.tsx`
+- Voeg `availabilityMap` useMemo toe die een Map bouwt met `pro.id|date|shift` keys
+- Vervang `.find()` in de render loop door `.get()` lookup
 
-### Verfijning 5: Toewijzingen sectie header met bezettingsindicator
-- Voeg een gekleurde cirkel-indicator toe naast "Toewijzingen & Reacties" die de bezettingsgraad visueel toont
-- Toon "Nog geen toewijzingen" met een subtiel lege-state icoon (Users) in plaats van alleen tekst
+## FIX 7 -- ChatWidget Memory Leak (HIGH)
+**Bestand:** `src/components/AIAssistant/ChatWidget.tsx`
+- Voeg `jobTrackingCleanupRef = useRef<(() => void) | null>(null)` toe
+- Vang cleanup op bij aanroep: `jobTrackingCleanupRef.current = startJobProgressTracking(...)`
+- Voeg cleanup useEffect toe voor unmount
 
-### Verfijning 6: Verbeterde scroll en spacing
-- Voeg `scroll-smooth` toe aan het sheet content
-- Vergroot de spacing tussen secties van `space-y-6` naar `space-y-8` voor meer ademruimte
-- Voeg een subtiele fade-out gradient toe aan de onderkant van het scrollbare gebied
+## FIX 8 -- Gecombineerde Filters (MEDIUM)
+**Bestand:** `src/hooks/useDienstenPlanning.ts` (regel 205-239)
+- Combineer 7 opeenvolgende `.filter()` calls tot 1 enkele filter met alle condities
 
-## Technische Details
+## FIX 9 -- Zoek Minimumlengte (LOW)
+**Bestand:** `src/components/planning/ToewijzingenBeheer.tsx` (regel 101)
+- Wijzig `debouncedSearch.length > 0` naar `debouncedSearch.length >= 2`
 
-### Gewijzigd bestand
-`src/components/planning/DienstDetailSheet.tsx`
+## FIX 10 -- Bezetting Utility Extractie (MEDIUM)
+- Maak nieuw bestand `src/utils/bezetting.ts` met `berekenBezetting()` functie
+- Refactor `DienstCard.tsx` (regel 24-35) en `ToewijzingenBeheer.tsx` (regel 72-83) om de utility te gebruiken
 
-### Wijzigingen per sectie
+## FIX 11 -- ErrorBoundary op Routes (MEDIUM)
+**Bestand:** `src/App.tsx`
+- Wrap `<Layout />` in `<ErrorBoundary fallbackTitle="Er is iets misgegaan">` zodat alle authenticated routes beschermd zijn
 
-**DetailRow component (regel 26-33)**:
-- Voeg `hover:bg-white/30 dark:hover:bg-white/5 rounded-md px-2 -mx-2 transition-colors` toe
-- Labels krijgen `text-muted-foreground/80` voor iets meer contrast
+## FIX 12 -- Auto Dienst-Type Verkeerde Flag (LOW)
+**Bestand:** `src/components/planning/NieuweDienstModal.tsx`
+- Voeg `dienstTypeManual` state toe (regel ~80)
+- Vervang `titelManual` guard in useEffect (regel 349) door `dienstTypeManual`
+- Zet `setDienstTypeManual(true)` bij handmatige selectie (regel 861)
+- Reset in resetForm (regel 322)
 
-**Header (regel 107-118)**:
-- Achtergrond: status-afhankelijke zachte tint via conditionale klasse
-- Subtitel toevoegen met diensttype + tijden
-- Status badge inline met titel
+## FIX 13 -- Herhaling Index Bounds Check (LOW)
+**Bestand:** `src/components/planning/NieuweDienstModal.tsx` (regel 478-480)
+- Voeg bounds check toe: `if (parentIdx < 0 || parentIdx >= allDatums.length) continue;`
 
-**Action buttons (regel 122-142)**:
-- Wrap in `flex justify-between` met twee groepen
-- Separator via `border-l border-white/20 mx-1`
+---
 
-**Detail secties (regel 145-266)**:
-- Beide kolommen in glass cards
-- Sectie headers met iconen (CalendarDays, Building2)
+## Gewijzigde Bestanden (8 bestanden, 1 nieuw)
 
-**Toewijzingen leeg state (ToewijzingenBeheer referentie)**:
-- Niet gewijzigd in dit bestand, maar de spacing wordt verbeterd
-
-**Scroll/spacing**:
-- Content div: `space-y-8` ipv `space-y-6`
-- SheetContent: `scroll-smooth`
-
-### Geen nieuwe dependencies
-Alle gebruikte icons (CalendarDays, Building2) zijn al beschikbaar in lucide-react.
-
+1. `src/components/planning/NieuweDienstModal.tsx` -- FIX 1, 12, 13
+2. `src/hooks/useDienstMatching.ts` -- FIX 2
+3. `src/hooks/useBeschikbaarheidMutations.ts` -- FIX 3
+4. `src/components/facturatie/BetalingRegistrerenDialog.tsx` -- FIX 4
+5. `src/hooks/facturatie/useCreateFactuur.ts` -- FIX 5
+6. `src/components/beschikbaarheid/BeschikbaarheidWeekKalender.tsx` -- FIX 6
+7. `src/components/AIAssistant/ChatWidget.tsx` -- FIX 7
+8. `src/hooks/useDienstenPlanning.ts` -- FIX 8
+9. `src/components/planning/ToewijzingenBeheer.tsx` -- FIX 9
+10. `src/utils/bezetting.ts` (NIEUW) -- FIX 10
+11. `src/components/planning/DienstCard.tsx` -- FIX 10
+12. `src/App.tsx` -- FIX 11
