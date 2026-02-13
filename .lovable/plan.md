@@ -1,44 +1,46 @@
 
-
-# BENDY-1: Bendy API Proxy Edge Function
+# BENDY-SYNC-1: Database Migratie voor Bendy Sync Infrastructuur
 
 ## Overzicht
-Maak een nieuwe Supabase Edge Function `bendy-proxy` als veilige proxy tussen abcito.io en de Bendy Planning API. Gebruikt OAuth2 client_credentials flow met token caching, circuit breaker bescherming, en endpoint whitelisting.
+Een enkele SQL migratie die 4 nieuwe tabellen, 3 kolom-toevoegingen, indexes, RLS policies, en seed data aanmaakt. Geen code wijzigingen.
 
-## Voorwaarden (Geverifieerd)
-- `BENDY_CLIENT_ID` secret: aanwezig
-- `BENDY_CLIENT_SECRET` secret: aanwezig
-- `_shared/circuit-breaker.ts`: aanwezig met `canExecute`, `recordSuccess`, `recordFailure` exports
-- `_shared/core.ts`: aanwezig met alle benodigde utilities
+## Verificatie (vooraf)
+- Alle 5 benodigde tabellen bestaan (organizations, client_organizations, professionals, diensten, user_organizations)
+- `bendy_id` kolom bestaat nog NIET op de 3 tabellen
+- Bestaande `update_updated_at_column()` trigger functie kan hergebruikt worden (identieke logica)
+- Organizations tabel bevat 1 record (id: `550e8400-...`)
 
-## Wijzigingen
+## Migratie Inhoud
 
-### 1. Nieuw bestand: `supabase/functions/bendy-proxy/index.ts`
-Enterprise edge function met:
-- JWT authenticatie (in-code validatie via `createAnonClient`)
-- OAuth2 client_credentials token ophalen + in-memory cache met expiry margin
-- Endpoint whitelist (9 Bendy API v2 endpoints)
-- Circuit breaker integratie via `_shared/circuit-breaker.ts`
-- Multi-tenant configuratie (citozorg actief, abczorg later)
-- 30s request timeout met AbortController
-- Token cache invalidatie bij 401 responses
+### Deel 1: 4 Nieuwe Tabellen
+1. **bendy_sync_config** -- tenant configuratie met org_id FK, sync status, interval
+2. **bendy_sync_log** -- audit trail per sync run met counters en error tracking
+3. **bendy_id_mapping** -- Bendy ID naar lokale UUID koppeling met conflict tracking
+4. **bendy_raw_cache** -- ruwe JSON:API responses voor debugging
 
-### 2. Config update: `supabase/config.toml`
-Toevoegen van `[functions.bendy-proxy]` entry met `verify_jwt = false` (auth in-code)
+### Deel 2: Kolom Toevoegingen
+- `bendy_id TEXT` op `client_organizations`, `professionals`, en `diensten`
 
-## Architectuur
+### Deel 3: Indexes (13 stuks)
+- Lookup indexes op alle nieuwe tabellen
+- Partial indexes op bendy_id kolommen (WHERE bendy_id IS NOT NULL)
+- Tijdgebaseerde indexes voor log queries
 
-```
-Browser (abcito.io)
-  -> POST /bendy-proxy { endpoint, method, params, body, tenant }
-  -> JWT validatie (gebruiker ingelogd?)
-  -> Circuit breaker check
-  -> OAuth2 token ophalen (cached of nieuw)
-  -> Fetch naar Bendy API
-  -> Response terug naar browser
-```
+### Deel 4: RLS Policies
+- RLS enabled op alle 4 nieuwe tabellen
+- SELECT-only policies: gebruikers zien alleen data van hun eigen organisatie (via `user_organizations`)
 
-## Geen wijzigingen aan
-- Bestaande edge functions
-- `_shared/core.ts` of `_shared/circuit-breaker.ts`
-- Frontend componenten, hooks, of pagina's
+### Deel 5: Updated_at Triggers
+- Hergebruikt bestaande `update_updated_at_column()` functie (niet de nieuwe `update_bendy_updated_at` uit de prompt)
+- Triggers op `bendy_sync_config` en `bendy_id_mapping`
+
+### Deel 6: Seed Data
+- CitoZorg sync config (disabled, base_url: citozorg.bendy.nl, interval: 15 min)
+
+## Gewijzigde Bestanden
+Geen bestanden -- alleen een database migratie via de migration tool.
+
+## Wat er NIET verandert
+- Geen TypeScript/React code
+- Geen edge functions
+- Geen bestaande tabellen, triggers, of policies (behalve de 3 ALTER TABLE ADD COLUMN)
