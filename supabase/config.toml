@@ -1,5 +1,11 @@
 project_id = "oelmsmcgryeoryhonexw"
 
+[functions.bendy-proxy]
+verify_jwt = false
+# Purpose: Secure proxy to Bendy Planning API (OAuth2 client_credentials)
+# Auth: JWT validated in-code, circuit breaker protected
+# Tenants: citozorg (active), abczorg (later)
+
 [functions.agent-router-proxy]
 verify_jwt = false
 # Purpose: Secure proxy to VPS Agent Router (srv1304497.hstgr.cloud:3002)
