@@ -335,6 +335,32 @@ export const ALL_INTENTS: Record<string, IntentDefinition> = {
     agent: "report_agent",
     examples: ["Exporteer professionals", "CSV download", "Lijst exporteren"],
   },
+
+  // Klanten Agent - Client & Location Management
+  client_overview: {
+    id: "client_overview",
+    label: "Klantoverzicht",
+    description: "Bekijk overzicht van klanten en werklocaties",
+    icon: "🏢",
+    agent: "match_agent",
+    examples: ["Hoeveel klanten hebben we?", "Klantoverzicht", "Toon alle organisaties"],
+  },
+  check_tarieven: {
+    id: "check_tarieven",
+    label: "Tarieven checken",
+    description: "Bekijk tarieven per werklocatie",
+    icon: "💶",
+    agent: "report_agent",
+    examples: ["Wat zijn de tarieven?", "Tarieven per locatie", "Uurloon overzicht"],
+  },
+  vacancy_overview: {
+    id: "vacancy_overview",
+    label: "Vacatures bekijken",
+    description: "Bekijk openstaande vacatures per werklocatie",
+    icon: "📋",
+    agent: "match_agent",
+    examples: ["Openstaande vacatures", "Welke vacatures zijn er?", "Vacature overzicht"],
+  },
 };
 
 // Page-specific agent configurations
@@ -362,12 +388,20 @@ export const PAGE_AGENT_CONFIG: Record<string, PageAgentConfig> = {
   "/klanten": {
     primaryAgent: "match_agent",
     intents: [
+      ALL_INTENTS.client_overview,
       ALL_INTENTS.search_locations,
+      ALL_INTENTS.vacancy_overview,
+      ALL_INTENTS.check_tarieven,
       ALL_INTENTS.match_professional,
       ALL_INTENTS.create_vacancy,
       ALL_INTENTS.send_email,
     ],
-    contextFields: ["organization_id", "sublocation_id"],
+    contextFields: [
+      "organization_id",
+      "sublocation_id",
+      "bureau_filter",
+      "sector_filter",
+    ],
   },
   "/professionals": {
     primaryAgent: "search_agent",
@@ -651,6 +685,10 @@ export function detectIntentFromText(text: string, pageConfig: PageAgentConfig):
     profiel: "profile_completeness",
     incompleet: "profile_completeness",
     exporteer: "export_professionals",
+    klant: "client_overview",
+    organisatie: "client_overview",
+    tarief: "check_tarieven",
+    vacature: "vacancy_overview",
   };
 
   for (const [keyword, intentId] of Object.entries(keywordMap)) {

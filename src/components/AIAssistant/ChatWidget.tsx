@@ -72,12 +72,12 @@ const PAGE_CONTEXTS: Record<string, PageContext> = {
   },
   '/klanten': {
     label: 'Klanten',
-    description: 'Organisaties, locaties en vacatures van onze klanten',
+    description: 'Klantenbeheer met 3-level hiërarchie: organisaties → locaties → werklocaties (sublocaties). Features: kaarten- en hiërarchieweergave, vacaturebeheer per werklocatie, matching criteria (sector, doelgroep, gezochte functies), tarieven per werklocatie, logo fetching, website verrijking via Firecrawl, Excel import. Sectoren: VVT, GGZ, GHZ, Jeugdzorg, Ziekenhuis/Klinisch, Thuiszorg. Doelgroepen: Ouderen, LVB, Psychiatrie, Somatiek, Kinderen/Jeugd, Verslaving. Bureaus: ABCzorg en CitoZorg. KPIs: totale organisaties, per bureau, werklocaties.',
     icon: Building2,
     quickActions: [
-      { icon: Building2, label: 'Klant informatie', prompt: 'Vertel me meer over onze klanten en hun behoeften' },
-      { icon: Users, label: 'Vacature match', prompt: 'Welke kandidaten passen bij de openstaande vacatures?' },
-      { icon: MapPin, label: 'Locatie overzicht', prompt: 'Geef een overzicht van klantlocaties per regio' },
+      { icon: Building2, label: 'Hiërarchie uitleg', prompt: 'Leg de organisatiestructuur uit: hoe werkt de hiërarchie van organisaties, locaties en werklocaties? Waar stel ik sectoren, doelgroepen en tarieven in?' },
+      { icon: Sparkles, label: 'Matching tips', prompt: 'Hoe kan ik de matching criteria van werklocaties optimaliseren? Geef tips voor het instellen van sectoren, doelgroepen en gezochte functies.' },
+      { icon: MapPin, label: 'Vacature beheer', prompt: 'Hoe werkt het vacaturebeheer per werklocatie? Hoe maak ik een vacature aan en hoe worden professionals gematcht?' },
     ]
   },
   '/plaatsingen': {
@@ -348,6 +348,28 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
 
       if (functieParam) {
         parts.push(`functieniveau "${functieParam}"`);
+      }
+
+      if (parts.length > 0) {
+        return {
+          ...context,
+          description: context.description + ` De gebruiker filtert op ${parts.join(' en ')}.`,
+        };
+      }
+    }
+
+    // Enrich /klanten with current filter from URL params
+    if (currentPath === '/klanten') {
+      const parts: string[] = [];
+      const bureauParam = params.get('bureau');
+      const sectorParam = params.get('sector');
+
+      if (bureauParam) {
+        parts.push(`bureau "${bureauParam}"`);
+      }
+
+      if (sectorParam) {
+        parts.push(`sector "${sectorParam}"`);
       }
 
       if (parts.length > 0) {
