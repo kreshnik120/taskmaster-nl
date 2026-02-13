@@ -172,7 +172,7 @@ Deno.serve(async (req) => {
         execution_time_ms: executionTime,
         success: true,
         metadata: { action, period_start, period_end, opdrachtgevers_count: totalen.opdrachtgevers, toewijzingen_count: totalen.toewijzingen },
-      }).catch(() => {});
+    });
 
       return jsonResponse({
         success: true,
@@ -282,7 +282,7 @@ Deno.serve(async (req) => {
         facturen_count: createdFacturen.length,
         regels_count: createdFacturen.reduce((s, f) => s + f.regels_count, 0),
       },
-    }).catch(() => {});
+    });
 
     return jsonResponse({
       success: true,
