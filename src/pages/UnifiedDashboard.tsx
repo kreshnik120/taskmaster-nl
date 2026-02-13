@@ -16,7 +16,7 @@ const TAB_CONTEXT_MAP: Record<string, ContextColor> = {
   'lijst': 'slate',
   'opvolging': 'amber',
   'team': 'violet',
-  'recruitment': 'rose',
+  
 };
 // Tab 1: Mijn Werk - Components
 import { TodayFocusCard } from "@/components/dashboard/TodayFocusCard";
@@ -180,7 +180,7 @@ export default function UnifiedDashboard() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid grid-cols-3 md:grid-cols-6 w-full glass-liquid-premium glass-specular-premium p-1.5 gap-1">
+        <TabsList className="grid grid-cols-3 md:grid-cols-5 w-full glass-liquid-premium glass-specular-premium p-1.5 gap-1">
           {/* Mijn Werk */}
           <TabsTrigger 
             value="mijn-werk" 
@@ -276,24 +276,6 @@ export default function UnifiedDashboard() {
             )}
           </TabsTrigger>
           
-          {/* Recruitment */}
-          <TabsTrigger 
-            value="recruitment" 
-            className={cn(
-              "gap-2 relative transition-all duration-300 ease-out-expo",
-              activeTab === "recruitment" && [
-                "bg-tab-recruitment-100 dark:bg-tab-recruitment-900/50",
-                "text-tab-recruitment-700 dark:text-tab-recruitment-300",
-                "shadow-tab-recruitment"
-              ]
-            )}
-          >
-            <Briefcase className="h-4 w-4" />
-            <span className="hidden sm:inline">Recruitment</span>
-            {activeTab === "recruitment" && (
-              <span className="absolute -bottom-[1px] left-2 right-2 h-[3px] rounded-full bg-tab-recruitment-500 shadow-[0_2px_8px_currentColor]" />
-            )}
-          </TabsTrigger>
         </TabsList>
 
         {/* Tab 1: Mijn Werk - Week Calendar */}
@@ -374,17 +356,7 @@ export default function UnifiedDashboard() {
           </div>
         </TabsContent>
 
-        {/* Tab 3: Recruitment - Transparent container */}
-        <TabsContent value="recruitment" className="mt-6">
-          <div className="space-y-6">
-            <RecruitmentKPIs />
-            {urgencyApplications.length > 0 && (
-              <UrgencyActionPanel applications={urgencyApplications} />
-            )}
-          </div>
-        </TabsContent>
-
-        {/* Tab 4: Lijst - Transparent container */}
+        {/* Tab 3: Lijst - Transparent container */}
         <TabsContent value="lijst" className="mt-6">
           <div className="space-y-6">
             <Suspense fallback={<TabLoadingFallback />}>

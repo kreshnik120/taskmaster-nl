@@ -1,7 +1,7 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, lazy, Suspense } from "react";
 import { cn } from "@/lib/utils";
 import { useSearchParams } from "react-router-dom";
-import { CalendarDays, AlertCircle, TrendingUp, Plus } from "lucide-react";
+import { CalendarDays, AlertCircle, TrendingUp, Plus, CalendarCheck2, Loader2 } from "lucide-react";
 import { startOfWeek, format, addDays, parseISO } from "date-fns";
 import { PageContainer } from "@/components/ui/page-container";
 import { PageHero } from "@/components/ui/page-hero";
@@ -20,7 +20,10 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import type { DienstFilters, DienstData } from "@/hooks/useDienstenPlanning";
+
+const BeschikbaarheidContent = lazy(() => import("@/pages/Beschikbaarheid"));
 
 function getDefaultWeekStart() {
   return format(startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd");
@@ -30,6 +33,7 @@ const Planning = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const weekStart = searchParams.get("week") || getDefaultWeekStart();
   const viewMode = (searchParams.get("view") as "kalender" | "lijst" | "maand") || "kalender";
+  const activeTab = searchParams.get("tab") || "diensten";
 
   const [filters, setFilters] = useState<DienstFilters>({
     status: "all",
@@ -71,6 +75,16 @@ const Planning = () => {
     (mode: "kalender" | "lijst" | "maand") => {
       setSearchParams((p) => {
         p.set("view", mode);
+        return p;
+      });
+    },
+    [setSearchParams]
+  );
+
+  const handleTabChange = useCallback(
+    (value: string) => {
+      setSearchParams((p) => {
+        p.set("tab", value);
         return p;
       });
     },
@@ -151,155 +165,175 @@ const Planning = () => {
         </Button>
       </PageHero>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KPICard
-          icon={CalendarDays}
-          title="Vandaag"
-          value={stats.vandaag}
-          variant="rose"
-          subtitle="diensten vandaag"
-        />
-        <KPICard
-          icon={CalendarDays}
-          title="Deze week"
-          value={stats.dezeWeek}
-          variant="rose"
-          subtitle="totaal deze week"
-        />
-        <KPICard
-          icon={AlertCircle}
-          title="Open diensten"
-          value={stats.openDiensten}
-          variant="amber"
-          subtitle="nog te bezetten"
-        />
-        <KPICard
-          icon={TrendingUp}
-          title="Bezettingsgraad"
-          value={stats.bezettingsgraad}
-          suffix="%"
-          variant="emerald"
-          subtitle={`${stats.totaalUrenWeek.toFixed(0)} uur ingepland`}
-        />
-      </div>
+      {/* Tab navigatie */}
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+        <TabsList>
+          <TabsTrigger value="diensten" className="gap-1.5">
+            <CalendarDays className="h-4 w-4" /> Diensten
+          </TabsTrigger>
+          <TabsTrigger value="beschikbaarheid" className="gap-1.5">
+            <CalendarCheck2 className="h-4 w-4" /> Beschikbaarheid
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Toggle knoppen */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant={showOpen ? "default" : "outline"}
-          size="sm"
-          className="h-7 text-[11px]"
-          onClick={() => setShowOpen(!showOpen)}
-        >
-          Openstaand
-        </Button>
-        <Button
-          variant={showIngepland ? "default" : "outline"}
-          size="sm"
-          className="h-7 text-[11px]"
-          onClick={() => setShowIngepland(!showIngepland)}
-        >
-          Ingepland
-        </Button>
-        <Button
-          variant={compact ? "default" : "outline"}
-          size="sm"
-          className="h-7 text-[11px]"
-          onClick={() => setCompact(!compact)}
-        >
-          Compact
-        </Button>
-      </div>
-
-      {/* Toolbar */}
-      <PlanningToolbar
-        weekStart={weekStart}
-        onWeekChange={handleWeekChange}
-        viewMode={viewMode}
-        onViewModeChange={handleViewChange}
-      />
-
-      {/* Legenda */}
-      <PlanningLegenda />
-
-      {/* Content */}
-      {isLoading ? (
-        <div className={cn(
-          "grid gap-2",
-          viewMode === "maand" ? "grid-cols-7" : "grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7"
-        )}>
-          {Array.from({ length: viewMode === "maand" ? 35 : 7 }).map((_, i) => (
-            <div
-              key={i}
-              className="h-32 rounded-xl bg-white/30 dark:bg-slate-900/30 animate-pulse border border-white/20 dark:border-white/10"
+        <TabsContent value="diensten" className="space-y-6">
+          {/* KPI Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <KPICard
+              icon={CalendarDays}
+              title="Vandaag"
+              value={stats.vandaag}
+              variant="rose"
+              subtitle="diensten vandaag"
             />
-          ))}
-        </div>
-      ) : viewMode === "maand" ? (
-        <PlanningMaandKalender
-          diensten={diensten}
-          weekStart={weekStart}
-          showOpen={showOpen}
-          showIngepland={showIngepland}
-          compact={compact}
-          onDienstClick={handleDienstClick}
-          onEdit={handleEditDienst}
-          onCopy={handleCopyDienst}
-          onDelete={handleDeleteDienst}
-        />
-      ) : viewMode === "kalender" ? (
-        <PlanningWeekKalender
-          diensten={diensten}
-          weekStart={weekStart}
-          showOpen={showOpen}
-          showIngepland={showIngepland}
-          compact={compact}
-          onDienstClick={handleDienstClick}
-          onEdit={handleEditDienst}
-          onCopy={handleCopyDienst}
-          onDelete={handleDeleteDienst}
-        />
-      ) : (
-        <PlanningLijstWeergave
-          diensten={diensten}
-          onDienstClick={handleDienstClick}
-          onEdit={handleEditDienst}
-          onCopy={handleCopyDienst}
-          onDelete={handleDeleteDienst}
-        />
-      )}
+            <KPICard
+              icon={CalendarDays}
+              title="Deze week"
+              value={stats.dezeWeek}
+              variant="rose"
+              subtitle="totaal deze week"
+            />
+            <KPICard
+              icon={AlertCircle}
+              title="Open diensten"
+              value={stats.openDiensten}
+              variant="amber"
+              subtitle="nog te bezetten"
+            />
+            <KPICard
+              icon={TrendingUp}
+              title="Bezettingsgraad"
+              value={stats.bezettingsgraad}
+              suffix="%"
+              variant="emerald"
+              subtitle={`${stats.totaalUrenWeek.toFixed(0)} uur ingepland`}
+            />
+          </div>
 
-      {/* Detail Sheet */}
-      <DienstDetailSheet
-        dienst={selectedDienst}
-        open={!!selectedDienst}
-        onClose={() => setSelectedDienst(null)}
-        onEdit={handleEditDienst}
-        onCopy={handleCopyDienst}
-        onDelete={handleDeleteDienst}
-      />
+          {/* Toggle knoppen */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant={showOpen ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-[11px]"
+              onClick={() => setShowOpen(!showOpen)}
+            >
+              Openstaand
+            </Button>
+            <Button
+              variant={showIngepland ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-[11px]"
+              onClick={() => setShowIngepland(!showIngepland)}
+            >
+              Ingepland
+            </Button>
+            <Button
+              variant={compact ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-[11px]"
+              onClick={() => setCompact(!compact)}
+            >
+              Compact
+            </Button>
+          </div>
 
-      {/* Nieuwe / Edit Dienst Modal */}
-      <NieuweDienstModal
-        open={nieuweDienstOpen || !!editDienst}
-        onClose={() => { setNieuweDienstOpen(false); setEditDienst(null); }}
-        editDienst={editDienst}
-      />
+          {/* Toolbar */}
+          <PlanningToolbar
+            weekStart={weekStart}
+            onWeekChange={handleWeekChange}
+            viewMode={viewMode}
+            onViewModeChange={handleViewChange}
+          />
 
-      {/* Delete confirmation */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Dienst verwijderen?</AlertDialogTitle>
-            <AlertDialogDescription>Deze dienst wordt definitief verwijderd.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Annuleren</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete}>Verwijderen</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+          {/* Legenda */}
+          <PlanningLegenda />
+
+          {/* Content */}
+          {isLoading ? (
+            <div className={cn(
+              "grid gap-2",
+              viewMode === "maand" ? "grid-cols-7" : "grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7"
+            )}>
+              {Array.from({ length: viewMode === "maand" ? 35 : 7 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-32 rounded-xl bg-white/30 dark:bg-slate-900/30 animate-pulse border border-white/20 dark:border-white/10"
+                />
+              ))}
+            </div>
+          ) : viewMode === "maand" ? (
+            <PlanningMaandKalender
+              diensten={diensten}
+              weekStart={weekStart}
+              showOpen={showOpen}
+              showIngepland={showIngepland}
+              compact={compact}
+              onDienstClick={handleDienstClick}
+              onEdit={handleEditDienst}
+              onCopy={handleCopyDienst}
+              onDelete={handleDeleteDienst}
+            />
+          ) : viewMode === "kalender" ? (
+            <PlanningWeekKalender
+              diensten={diensten}
+              weekStart={weekStart}
+              showOpen={showOpen}
+              showIngepland={showIngepland}
+              compact={compact}
+              onDienstClick={handleDienstClick}
+              onEdit={handleEditDienst}
+              onCopy={handleCopyDienst}
+              onDelete={handleDeleteDienst}
+            />
+          ) : (
+            <PlanningLijstWeergave
+              diensten={diensten}
+              onDienstClick={handleDienstClick}
+              onEdit={handleEditDienst}
+              onCopy={handleCopyDienst}
+              onDelete={handleDeleteDienst}
+            />
+          )}
+
+          {/* Detail Sheet */}
+          <DienstDetailSheet
+            dienst={selectedDienst}
+            open={!!selectedDienst}
+            onClose={() => setSelectedDienst(null)}
+            onEdit={handleEditDienst}
+            onCopy={handleCopyDienst}
+            onDelete={handleDeleteDienst}
+          />
+
+          {/* Nieuwe / Edit Dienst Modal */}
+          <NieuweDienstModal
+            open={nieuweDienstOpen || !!editDienst}
+            onClose={() => { setNieuweDienstOpen(false); setEditDienst(null); }}
+            editDienst={editDienst}
+          />
+
+          {/* Delete confirmation */}
+          <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Dienst verwijderen?</AlertDialogTitle>
+                <AlertDialogDescription>Deze dienst wordt definitief verwijderd.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Annuleren</AlertDialogCancel>
+                <AlertDialogAction onClick={confirmDelete}>Verwijderen</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </TabsContent>
+
+        <TabsContent value="beschikbaarheid">
+          <Suspense fallback={<div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+            <BeschikbaarheidContent />
+          </Suspense>
+        </TabsContent>
+      </Tabs>
     </PageContainer>
   );
 };
