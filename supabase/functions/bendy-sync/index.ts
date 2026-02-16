@@ -309,7 +309,7 @@ async function syncClients(
       // 3a. Zoek bestaande organisatie
       let { data: org } = await adminClient
         .from('client_organizations')
-        .select('id, name, bendy_id')
+        .select('id, name, bendy_id, website')
         .eq('kvk_nummer', kvk)
         .eq('org_id', orgId)
         .maybeSingle();
@@ -324,6 +324,15 @@ async function syncClients(
           .eq('client_org_id', org.id)
           .limit(1);
         defaultLocationId = locations?.[0]?.id || null;
+
+        // Update organisatie website vanuit Bendy data (als beschikbaar en nog niet ingevuld)
+        const firstBendyAttrs = clients[0]?.attributes || {};
+        if (firstBendyAttrs.website && !org.website) {
+          await adminClient
+            .from('client_organizations')
+            .update({ website: firstBendyAttrs.website })
+            .eq('id', org.id);
+        }
 
         // Maak default location als er geen is
         if (!defaultLocationId) {
@@ -392,7 +401,7 @@ async function syncClients(
       if (locationIds.length > 0) {
         const { data: subs } = await adminClient
           .from('client_sublocations')
-          .select('id, naam, adres, postcode, plaats, kostenplaats, bendy_id, location_id')
+          .select('id, naam, adres, postcode, plaats, kostenplaats, telefoon, bendy_id, location_id')
           .in('location_id', locationIds);
         existingSubs = subs || [];
       }
@@ -469,6 +478,9 @@ async function syncClients(
             if (attrs.town && attrs.town !== matchedSub.plaats) {
               updateData.plaats = attrs.town;
             }
+            if (attrs.telephone && attrs.telephone !== matchedSub.telefoon) {
+              updateData.telefoon = attrs.telephone;
+            }
 
             await adminClient
               .from('client_sublocations')
@@ -504,6 +516,7 @@ async function syncClients(
                 adres: attrs.address || null,
                 postcode: attrs.zipcode || null,
                 plaats: attrs.town || null,
+                telefoon: attrs.telephone || null,
                 bendy_id: bendyId,
               })
               .select('id, naam, bendy_id')
