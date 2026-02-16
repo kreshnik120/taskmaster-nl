@@ -823,6 +823,7 @@ export function MyTasksFlowSection() {
                                     <TaskCard
                                       task={task}
                                       onClick={handleTaskClick}
+                                      onAccept={handleAcceptTask}
                                     />
                                     
                                     {/* KEYBOARD ACCESSIBILITY: Dropdown menu */}

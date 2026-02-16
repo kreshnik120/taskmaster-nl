@@ -68,6 +68,7 @@ interface TaskCardProps {
   task: Task;
   subtasks?: Subtask[];
   onClick?: (task: Task) => void;
+  onAccept?: (taskId: string) => void;
 }
 
 // Helper functions
@@ -105,7 +106,7 @@ const getHumanizedTime = (days: number) => {
 
 // Removed priority colors and AI badge colors for clean, minimalist design
 
-export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
+export function TaskCard({ task, subtasks = [], onClick, onAccept }: TaskCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
   });
@@ -185,12 +186,26 @@ export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
                     </p>
                   </div>
 
-                  {/* Pending Acceptance Badge */}
+                  {/* Pending Acceptance Badge + Accept Button */}
                   {isPendingAcceptance(task) && (
-                    <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800">
-                      <Clock className="h-3 w-3 mr-1" />
-                      Wacht op acceptatie
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800">
+                        <Clock className="h-3 w-3 mr-1" />
+                        Wacht op acceptatie
+                      </Badge>
+                      {onAccept && (
+                        <Button
+                          size="sm"
+                          className="h-6 px-2 text-[10px] font-medium bg-green-600 hover:bg-green-700 text-white rounded-md"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAccept(task.id);
+                          }}
+                        >
+                          Accepteren
+                        </Button>
+                      )}
+                    </div>
                   )}
 
                   {/* Description */}
