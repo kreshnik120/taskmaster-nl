@@ -1,45 +1,61 @@
 
-# BENDY-DIAG: Diagnostiek & Pending Review
+# BENDY-FIX-1: Database Voorbereiding + KvK Diagnostiek
 
 ## Overzicht
-Voegt diagnostiek queries toe aan het GET status endpoint en toont deze in twee nieuwe secties op de Bendy Sync pagina: een "Data Kwaliteit" analyse card en een "Wacht op Review" tabel met alle pending mappings.
+Fixt twee root causes (verkeerde org_id + ontbrekende bendy_id kolom) via een database migratie, breidt de diagnostiek uit met per-KvK matching analyse, en toont dit in een nieuwe tabel op de Bendy Sync pagina.
 
-## Wijziging 1 -- `supabase/functions/bendy-sync/index.ts`
+## Wijziging 1 -- Database Migratie (nieuw bestand)
 
-### handleStatusCheck() uitbreiden (regels 414-428)
+SQL migratie met 6 stappen:
 
-Na de bestaande cache count query (r416) en voor de return (r418), 4 extra queries toevoegen:
+1. **Fix org_id** -- UPDATE `bendy_sync_config` SET org_id naar CitoZorg UUID (`650e8400-e29b-41d4-a716-446655440001`) voor tenant `citozorg`
+2. **bendy_id kolom** -- ALTER TABLE `client_sublocations` ADD COLUMN `bendy_id TEXT`
+3. **Index** -- CREATE INDEX op `client_sublocations(bendy_id)` met WHERE NOT NULL
+4. **Entity type constraint** -- DROP + ADD CHECK constraint op `bendy_id_mapping.entity_type` met `organization` en `sublocation` erbij
+5. **Wis incorrecte mappings** -- DELETE FROM `bendy_id_mapping` WHERE tenant = 'citozorg'
+6. **Wis oude cache** -- DELETE FROM `bendy_raw_cache` WHERE tenant = 'citozorg'
 
-1. **Config org_id + organisatienaam** -- Join `bendy_sync_config` met `organizations` voor citozorg tenant
-2. **Lokale client counts** -- Tel `client_organizations` voor die org_id, totaal en met kvk_nummer
-3. **Pending mappings** -- Haal max 100 pending client mappings op met conflict_data
-4. **Bendy KvK stats** -- Bereken in code hoeveel pending mappings een KvK-nummer hebben in conflict_data
+## Wijziging 2 -- `supabase/functions/bendy-sync/index.ts`
 
-Het return object krijgt twee nieuwe velden:
-- `diagnostics`: object met config_org_id, config_org_name, local_clients_total, local_clients_with_kvk, bendy_clients_with_kvk, bendy_clients_without_kvk
-- `pending_mappings`: array met id, bendy_id, company_name, kvk, town, created_at
+### handleStatusCheck() uitbreiden (na regel 455, voor return op regel 457)
 
-## Wijziging 2 -- `src/pages/BendySync.tsx`
+Voegt per-KvK breakdown logica toe:
+- Haalt alle records uit `bendy_raw_cache` voor citozorg/clients
+- Groepeert per KvK-nummer (uit `raw_data.attributes.chamber_of_commerce_number`)
+- Per KvK: zoekt matching `client_organizations` en telt bijbehorende sublocaties via `client_locations` -> `client_sublocations`
+- Sorteert op bendy_count (aflopend)
 
-### 2a. StatusData interface uitbreiden (r43-51)
-Voeg optionele `diagnostics` en `pending_mappings` velden toe aan de interface.
+Voegt `kvk_breakdown` array toe aan het `diagnostics` object in de response (regel 467-474).
 
-### 2b. Variabelen toevoegen (na r97)
+## Wijziging 3 -- `src/pages/BendySync.tsx`
+
+### 3a. Interfaces (regels 52-59)
+
+Nieuw `KvkBreakdown` interface + `kvk_breakdown` veld toevoegen aan `Diagnostics`:
+
 ```text
-const diagnostics = statusData?.diagnostics;
-const pendingMappings = statusData?.pending_mappings || [];
+interface KvkBreakdown {
+  kvk_nummer: string;
+  org_name: string | null;
+  org_found: boolean;
+  bendy_count: number;
+  bendy_examples: string[];
+  local_sublocations: number;
+}
 ```
 
-### 2c. "Data Kwaliteit" card (na KPI cards r254, voor Sync Action r256)
-Twee-koloms layout:
-- Links: Config org_id + naam, lokale clients count met KvK percentage
-- Rechts: Bendy clients count met KvK percentage
-- Rode waarschuwingsblokken bij 3 scenario's: geen lokale clients, geen lokale KvK-nummers, geen Bendy KvK-nummers
+### 3b. Nieuwe "KvK Matching Overzicht" card (na regel 336, voor regel 338)
 
-### 2d. "Wacht op Review" tabel (na Sync Logs tabel r338, voor sluitende div r339)
-Tabel met kolommen: Bendy ID, Bedrijfsnaam, KvK-nummer (of "ontbreekt" in italic), Plaats, Ontvangen datum. Maximaal 100 rijen. Alleen zichtbaar als er pending mappings zijn.
+Tabel met kolommen:
+- KvK-nummer (font-mono)
+- Organisatie (abcito) -- "Niet gevonden" in rood als niet gematcht
+- Bendy records (count)
+- Lokale sublocaties (count)
+- Status badge: rood "Org ontbreekt" / amber "Geen sublocaties" of "Bendy heeft meer" / groen "OK"
+
+Onder de tabel: sectie met Bendy voorbeeldnamen per KvK (max 3 namen + "+X meer").
 
 ## Geen andere wijzigingen
-- Geen database migraties
-- Geen routing of sidebar wijzigingen
-- Sync logica blijft identiek
+- Routing en sidebar blijven identiek
+- Sync logica (OAuth2, fetchBendyApi, syncClients) ongewijzigd
+- Alleen handleStatusCheck() en BendySync.tsx UI uitgebreid
