@@ -73,6 +73,11 @@ interface Professional {
   cv_file_path: string | null;
   cv_file_name: string | null;
   cv_uploaded_at: string | null;
+  // Bendy sync fields
+  voorletters: string | null;
+  geboorteplaats: string | null;
+  geslacht: string | null;
+  bendy_external_id: string | null;
   // New fields for complete data sync
   ervaring_sector: string[] | null;
   doelgroep_ervaring: string[] | null;

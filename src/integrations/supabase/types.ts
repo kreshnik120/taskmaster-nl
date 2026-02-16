@@ -5137,6 +5137,52 @@ export type Database = {
           },
         ]
       }
+      professional_bsn: {
+        Row: {
+          created_at: string | null
+          encrypted_bsn: string
+          id: string
+          professional_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          encrypted_bsn: string
+          id?: string
+          professional_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          encrypted_bsn?: string
+          id?: string
+          professional_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "professional_bsn_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: true
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_bsn_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: true
+            referencedRelation: "professionals_admin_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_bsn_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: true
+            referencedRelation: "professionals_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       professional_client_matches: {
         Row: {
           client_id: string
@@ -5352,6 +5398,7 @@ export type Database = {
         Row: {
           adres: string | null
           bedrijfsnaam: string | null
+          bendy_external_id: string | null
           bendy_id: string | null
           beroepsaansprakelijkheid_path: string | null
           beschikbaarheid_uren: Json | null
@@ -5376,6 +5423,8 @@ export type Database = {
           full_name: string
           functie_niveau: string
           geboortedatum: string | null
+          geboorteplaats: string | null
+          geslacht: string | null
           gewenst_uurloon: number | null
           heeft_auto: boolean | null
           heeft_rijbewijs: boolean | null
@@ -5409,6 +5458,7 @@ export type Database = {
           tillift_certificaat_path: string | null
           updated_at: string
           vog_date: string | null
+          voorletters: string | null
           weekenddienst_bereid: boolean | null
           werkvorm: string | null
           woonplaats: string | null
@@ -5416,6 +5466,7 @@ export type Database = {
         Insert: {
           adres?: string | null
           bedrijfsnaam?: string | null
+          bendy_external_id?: string | null
           bendy_id?: string | null
           beroepsaansprakelijkheid_path?: string | null
           beschikbaarheid_uren?: Json | null
@@ -5440,6 +5491,8 @@ export type Database = {
           full_name: string
           functie_niveau: string
           geboortedatum?: string | null
+          geboorteplaats?: string | null
+          geslacht?: string | null
           gewenst_uurloon?: number | null
           heeft_auto?: boolean | null
           heeft_rijbewijs?: boolean | null
@@ -5473,6 +5526,7 @@ export type Database = {
           tillift_certificaat_path?: string | null
           updated_at?: string
           vog_date?: string | null
+          voorletters?: string | null
           weekenddienst_bereid?: boolean | null
           werkvorm?: string | null
           woonplaats?: string | null
@@ -5480,6 +5534,7 @@ export type Database = {
         Update: {
           adres?: string | null
           bedrijfsnaam?: string | null
+          bendy_external_id?: string | null
           bendy_id?: string | null
           beroepsaansprakelijkheid_path?: string | null
           beschikbaarheid_uren?: Json | null
@@ -5504,6 +5559,8 @@ export type Database = {
           full_name?: string
           functie_niveau?: string
           geboortedatum?: string | null
+          geboorteplaats?: string | null
+          geslacht?: string | null
           gewenst_uurloon?: number | null
           heeft_auto?: boolean | null
           heeft_rijbewijs?: boolean | null
@@ -5537,6 +5594,7 @@ export type Database = {
           tillift_certificaat_path?: string | null
           updated_at?: string
           vog_date?: string | null
+          voorletters?: string | null
           weekenddienst_bereid?: boolean | null
           werkvorm?: string | null
           woonplaats?: string | null
@@ -5990,9 +6048,13 @@ export type Database = {
       }
       security_audit_log: {
         Row: {
+          action: string | null
           blocked_reason: string | null
           created_at: string | null
+          details: Json | null
           email: string | null
+          entity_id: string | null
+          entity_type: string | null
           event_type: string
           id: string
           ip_address: string | null
@@ -6002,9 +6064,13 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          action?: string | null
           blocked_reason?: string | null
           created_at?: string | null
+          details?: Json | null
           email?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
           event_type: string
           id?: string
           ip_address?: string | null
@@ -6014,9 +6080,13 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          action?: string | null
           blocked_reason?: string | null
           created_at?: string | null
+          details?: Json | null
           email?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
           event_type?: string
           id?: string
           ip_address?: string | null

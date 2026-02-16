@@ -167,12 +167,13 @@ async function fetchBendyApi(tenant: string, endpoint: string, params?: Record<s
   }
 }
 
-async function fetchAllBendyRecords(tenant: string, endpoint: string): Promise<any[]> {
+async function fetchAllBendyRecords(tenant: string, endpoint: string, extraParams?: Record<string, string>): Promise<any[]> {
   const allRecords: any[] = [];
   let page = 1;
 
   while (page <= MAX_PAGES) {
     const response = await fetchBendyApi(tenant, endpoint, {
+      ...(extraParams || {}),
       'page[number]': String(page),
       'page[size]': String(PAGE_SIZE),
     });
@@ -304,6 +305,15 @@ function deriveFunctieNiveau(groupNames: string[]): string {
     if (/Helpende/i.test(name)) return 'Helpende';
   }
   return 'Helpende';
+}
+
+// Helper: certificaten parsen uit Bendy certificates array
+function parseCertificates(certs: any): string[] | null {
+  if (!certs || !Array.isArray(certs)) return null;
+  const parsed = certs
+    .map((c: any) => (typeof c === 'string' ? c : c?.value || c?.name || ''))
+    .filter((v: string) => v.length > 0);
+  return parsed.length > 0 ? parsed : null;
 }
 
 // Helper: werkvorm mapping Bendy → lokaal
@@ -730,16 +740,16 @@ async function syncUsers(
   const result: SyncResult = { fetched: 0, created: 0, updated: 0, skipped: 0, failed: 0, errors: [] };
   logInfo(FUNCTION_NAME, `Professional sync gestart voor ${tenant}`);
 
-  // 1. Ophalen alle users uit Bendy API
-  const bendyUsers = await fetchAllBendyRecords(tenant, '/api/v2/users');
+  // 1. Ophalen alle users uit Bendy API (include=groups voor functie_niveau)
+  const bendyUsers = await fetchAllBendyRecords(tenant, '/api/v2/users', { include: 'groups' });
   result.fetched = bendyUsers.length;
   logInfo(FUNCTION_NAME, `${bendyUsers.length} Bendy users opgehaald`);
   if (bendyUsers.length === 0) return result;
 
-  // 2. Alle bestaande professionals ophalen (voor matching)
+  // 2. Alle bestaande professionals ophalen (voor matching + conditionele updates)
   const { data: existingProfessionals } = await adminClient
     .from('professionals')
-    .select('id, full_name, email, bendy_id, telefoonnummer, status, org_id')
+    .select('id, full_name, email, bendy_id, telefoonnummer, status, org_id, voorletters, geboorteplaats, geslacht, bendy_external_id, certificaten')
     .eq('org_id', orgId)
     .is('deleted_at', null);
   const professionals = existingProfessionals || [];
@@ -799,10 +809,46 @@ async function syncUsers(
           updateData.email = attrs.email;
         }
 
+        // Nieuwe velden conditioneel updaten (alleen als Bendy waarde heeft EN lokaal null)
+        if (attrs.initials && !matchedPro.voorletters) updateData.voorletters = attrs.initials;
+        if (attrs.birthtown && !matchedPro.geboorteplaats) updateData.geboorteplaats = attrs.birthtown;
+        if (attrs.gender && !matchedPro.geslacht) updateData.geslacht = attrs.gender;
+        if (attrs.external_id && !matchedPro.bendy_external_id) updateData.bendy_external_id = String(attrs.external_id);
+        if (attrs.certificates) {
+          const parsed = parseCertificates(attrs.certificates);
+          if (parsed && parsed.length > 0 && (!matchedPro.certificaten || matchedPro.certificaten.length === 0)) {
+            updateData.certificaten = parsed;
+          }
+        }
+
+        // Functie_niveau updaten op basis van groepen (nu met include=groups)
+        const userGroupIds = (bendyUser.relationships?.groups?.data || [])
+          .map((g: any) => String(g.id));
+        const userGroupNames = userGroupIds
+          .map((id: string) => groupMap.get(id))
+          .filter(Boolean) as string[];
+        if (userGroupNames.length > 0) {
+          const functieNiveau = deriveFunctieNiveau(userGroupNames);
+          if (functieNiveau !== 'Helpende' || matchedPro.functie_niveau === undefined) {
+            updateData.functie_niveau = functieNiveau;
+          }
+        }
+
         await adminClient
           .from('professionals')
           .update(updateData)
           .eq('id', matchedPro.id);
+
+        // BSN opslaan
+        if (attrs.citizen_service_number) {
+          await adminClient
+            .from('professional_bsn')
+            .upsert({
+              professional_id: matchedPro.id,
+              encrypted_bsn: attrs.citizen_service_number,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'professional_id' });
+        }
 
         // Markeer in-memory als gematcht
         matchedPro.bendy_id = bendyId;
@@ -854,6 +900,12 @@ async function syncUsers(
           geboortedatum: attrs.birthdate || null,
           profile_photo_url: attrs.photo_url || null,
           bendy_id: bendyId,
+          // Nieuwe velden
+          voorletters: attrs.initials || null,
+          geboorteplaats: attrs.birthtown || null,
+          geslacht: attrs.gender || null,
+          bendy_external_id: attrs.external_id ? String(attrs.external_id) : null,
+          certificaten: parseCertificates(attrs.certificates),
         };
 
         const { data: newPro, error: proError } = await adminClient
@@ -863,6 +915,17 @@ async function syncUsers(
           .single();
 
         if (newPro) {
+          // BSN opslaan
+          if (attrs.citizen_service_number) {
+            await adminClient
+              .from('professional_bsn')
+              .upsert({
+                professional_id: newPro.id,
+                encrypted_bsn: attrs.citizen_service_number,
+                updated_at: new Date().toISOString(),
+              }, { onConflict: 'professional_id' });
+          }
+
           await adminClient
             .from('bendy_id_mapping')
             .upsert({
