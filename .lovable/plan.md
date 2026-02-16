@@ -1,36 +1,34 @@
 
-# BENDY-FIX-4: KvK Verificatie + Contactgegevens Sync
 
-## Overzicht
-Drie onderdelen: (1) KvK-nummer invullen voor Stichting Siza, (2) twee nieuwe kolommen toevoegen aan client_sublocations, en (3) sync engine uitbreiden met email, contactpersoon en status synchronisatie.
+# Taak Acceptatie Zichtbaar Maken
 
-## Wijziging 1 -- Nieuwe SQL migratie
+## Probleem
+De "Accepteren" actie zit verstopt in een dropdown menu (drie puntjes) dat pas verschijnt als je over een taakkaart hovert. Leonie ziet wel de badge "Wacht op acceptatie" maar kan de actie niet vinden. Op mobiel is hover helemaal niet mogelijk.
 
-Nieuw migratiebestand in `supabase/migrations/` met:
+## Oplossing
+Een duidelijke "Accepteren" knop direct op de TaskCard tonen wanneer een taak wacht op acceptatie, zodat het meteen zichtbaar en klikbaar is -- zonder in een menu te hoeven zoeken.
 
-**Deel A**: DO $$ blok dat Siza zoekt (LOWER(name) LIKE '%siza%', geen KvK) en kvk_nummer '09103844' invult.
+## Technische wijzigingen
 
-**Deel B**: Twee nieuwe kolommen:
-- `ALTER TABLE client_sublocations ADD COLUMN IF NOT EXISTS email TEXT DEFAULT NULL`
-- `ALTER TABLE client_sublocations ADD COLUMN IF NOT EXISTS contactpersoon_naam TEXT DEFAULT NULL`
-- COMMENT ON COLUMN voor beide
+### Bestand: `src/components/TaskCard.tsx`
 
-## Wijziging 2 -- `supabase/functions/bendy-sync/index.ts`
+**Wat**: Een `onAccept` callback prop toevoegen en een prominente "Accepteren" knop direct op de kaart renderen wanneer `isPendingAcceptance(task)` true is.
 
-### 2a. Helper functie `buildContactName` (na regel 274, voor syncClients)
-Combineert `firstname`, `middlename`, `surname` met trim/filter, retourneert null als leeg.
+- Nieuwe prop `onAccept?: (taskId: string) => void` toevoegen aan `TaskCardProps`
+- Direct onder de bestaande "Wacht op acceptatie" badge een compacte groene "Accepteren" knop plaatsen
+- De knop stopt event propagation zodat de kaart niet opent bij klikken
+- Knop alleen tonen als `onAccept` is meegegeven (zodat het kanban-bord van de manager geen accept-knop toont)
 
-### 2b. SELECT sublocations uitbreiden (regel 404)
-Van `'id, naam, adres, postcode, plaats, kostenplaats, telefoon, bendy_id, location_id'`
-naar `'id, naam, adres, postcode, plaats, kostenplaats, telefoon, email, contactpersoon_naam, is_active, bendy_id, location_id'`
+### Bestand: `src/components/dashboard/MyTasksFlowSection.tsx`
 
-### 2c. Email, contactpersoon en status sync bij UPDATE (na regel 483, voor regel 485)
-- email check: `attrs.email !== matchedSub.email`
-- contactpersoon: `buildContactName(attrs) !== matchedSub.contactpersoon_naam`
-- status: `attrs.status.toLowerCase() !== 'inactive'` mapped naar `is_active`
+**Wat**: De `onAccept` prop doorgeven aan TaskCard zodat de knop werkt.
 
-### 2d. Email, contactpersoon sync bij INSERT (regels 511-521)
-Voeg `email: attrs.email || null` en `contactpersoon_naam: newContactName` toe aan insert object. Geen is_active (default true).
+- Bij de `<TaskCard>` render (rond regel 823) de bestaande `handleAcceptTask` functie doorgeven als `onAccept` prop
+- De dropdown "Accepteren" optie blijft bestaan als alternatief
 
-## Geen andere bestanden
-Alleen de migratie en de edge function worden gewijzigd.
+### Resultaat
+- Leonie ziet direct een groene "Accepteren" knop op haar taakkaarten
+- Werkt op zowel desktop als mobiel (geen hover nodig)
+- Bestaande dropdown-optie blijft als fallback
+- Geen database wijzigingen nodig
+
