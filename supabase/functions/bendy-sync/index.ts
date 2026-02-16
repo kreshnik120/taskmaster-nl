@@ -273,6 +273,16 @@ function normalizeForMatch(str: string): string {
   return str.toLowerCase().trim().replace(/\s+/g, ' ');
 }
 
+// Helper: contactpersoon naam samenstellen uit Bendy velden
+function buildContactName(attrs: any): string | null {
+  const parts = [
+    (attrs.firstname || '').trim(),
+    (attrs.middlename || '').trim(),
+    (attrs.surname || '').trim(),
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(' ') : null;
+}
+
 async function syncClients(
   adminClient: any,
   tenant: string,
@@ -401,7 +411,7 @@ async function syncClients(
       if (locationIds.length > 0) {
         const { data: subs } = await adminClient
           .from('client_sublocations')
-          .select('id, naam, adres, postcode, plaats, kostenplaats, telefoon, bendy_id, location_id')
+          .select('id, naam, adres, postcode, plaats, kostenplaats, telefoon, email, contactpersoon_naam, is_active, bendy_id, location_id')
           .in('location_id', locationIds);
         existingSubs = subs || [];
       }
@@ -481,6 +491,19 @@ async function syncClients(
             if (attrs.telephone && attrs.telephone !== matchedSub.telefoon) {
               updateData.telefoon = attrs.telephone;
             }
+            if (attrs.email && attrs.email !== matchedSub.email) {
+              updateData.email = attrs.email;
+            }
+            const contactName = buildContactName(attrs);
+            if (contactName && contactName !== matchedSub.contactpersoon_naam) {
+              updateData.contactpersoon_naam = contactName;
+            }
+            if (attrs.status) {
+              const bendyActive = attrs.status.toLowerCase() !== 'inactive';
+              if (bendyActive !== matchedSub.is_active) {
+                updateData.is_active = bendyActive;
+              }
+            }
 
             await adminClient
               .from('client_sublocations')
@@ -508,6 +531,7 @@ async function syncClients(
             result.updated++;
           } else if (defaultLocationId) {
             // ── GEEN MATCH — nieuwe sublocation aanmaken ──
+            const newContactName = buildContactName(attrs);
             const { data: newSub, error: subError } = await adminClient
               .from('client_sublocations')
               .insert({
@@ -517,6 +541,8 @@ async function syncClients(
                 postcode: attrs.zipcode || null,
                 plaats: attrs.town || null,
                 telefoon: attrs.telephone || null,
+                email: attrs.email || null,
+                contactpersoon_naam: newContactName,
                 bendy_id: bendyId,
               })
               .select('id, naam, bendy_id')

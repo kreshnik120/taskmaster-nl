@@ -2262,9 +2262,11 @@ export type Database = {
           bendy_id: string | null
           capaciteit_max: number | null
           capaciteit_min: number | null
+          contactpersoon_naam: string | null
           created_at: string
           doelgroep: string[] | null
           doelgroep_omschrijving: string | null
+          email: string | null
           factuur_via_hoofdlocatie: boolean
           gekoppelde_bv_org_id: string | null
           gezochte_functies: string[] | null
@@ -2289,9 +2291,11 @@ export type Database = {
           bendy_id?: string | null
           capaciteit_max?: number | null
           capaciteit_min?: number | null
+          contactpersoon_naam?: string | null
           created_at?: string
           doelgroep?: string[] | null
           doelgroep_omschrijving?: string | null
+          email?: string | null
           factuur_via_hoofdlocatie?: boolean
           gekoppelde_bv_org_id?: string | null
           gezochte_functies?: string[] | null
@@ -2316,9 +2320,11 @@ export type Database = {
           bendy_id?: string | null
           capaciteit_max?: number | null
           capaciteit_min?: number | null
+          contactpersoon_naam?: string | null
           created_at?: string
           doelgroep?: string[] | null
           doelgroep_omschrijving?: string | null
+          email?: string | null
           factuur_via_hoofdlocatie?: boolean
           gekoppelde_bv_org_id?: string | null
           gezochte_functies?: string[] | null
