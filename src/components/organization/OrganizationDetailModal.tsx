@@ -55,6 +55,8 @@ interface Organization {
   invoice_adres?: string | null;
   invoice_postcode?: string | null;
   invoice_plaats?: string | null;
+  crm_fase?: string | null;
+  afkorting?: string | null;
   locations: Location[];
 }
 
@@ -655,6 +657,33 @@ export function OrganizationDetailModal({
                           <p className="font-medium">
                             {[organization.invoice_postcode, organization.invoice_plaats].filter(Boolean).join(' ')}
                           </p>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {(organization.crm_fase || organization.afkorting) && (
+                <Card className="border-l-4 border-l-teal-400">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Building className="h-4 w-4 text-teal-600" />
+                      Bendy gegevens
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      {organization.crm_fase && (
+                        <div>
+                          <p className="text-muted-foreground">CRM Fase</p>
+                          <p className="font-medium">{organization.crm_fase}</p>
+                        </div>
+                      )}
+                      {organization.afkorting && (
+                        <div>
+                          <p className="text-muted-foreground">Afkorting</p>
+                          <p className="font-medium">{organization.afkorting}</p>
                         </div>
                       )}
                     </div>

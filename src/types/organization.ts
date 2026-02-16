@@ -23,6 +23,9 @@ export interface Sublocation {
   capaciteit_min?: number | null;
   capaciteit_max?: number | null;
   is_active?: boolean;
+  externe_referentie?: string | null;
+  bendy_parent_id?: string | null;
+  kleur?: string | null;
 }
 
 export interface Location {
@@ -53,6 +56,8 @@ export interface Organization {
   invoice_adres?: string | null;
   invoice_postcode?: string | null;
   invoice_plaats?: string | null;
+  crm_fase?: string | null;
+  afkorting?: string | null;
   locations: Location[];
   bureau?: string;
   totalSublocations?: number;

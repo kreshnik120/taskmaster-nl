@@ -319,7 +319,7 @@ async function syncClients(
       // 3a. Zoek bestaande organisatie
       let { data: org } = await adminClient
         .from('client_organizations')
-        .select('id, name, bendy_id, website, invoice_bedrijfsnaam, invoice_adres, invoice_postcode, invoice_plaats')
+        .select('id, name, bendy_id, website, invoice_bedrijfsnaam, invoice_adres, invoice_postcode, invoice_plaats, crm_fase, afkorting')
         .eq('kvk_nummer', kvk)
         .eq('org_id', orgId)
         .maybeSingle();
@@ -352,6 +352,13 @@ async function syncClients(
         }
         if (firstBendyAttrs.invoice_town && firstBendyAttrs.invoice_town !== org.invoice_plaats) {
           orgUpdateData.invoice_plaats = firstBendyAttrs.invoice_town;
+        }
+        // CRM fase en afkorting — organisatie-niveau velden
+        if (firstBendyAttrs.crm_stage && firstBendyAttrs.crm_stage !== org.crm_fase) {
+          orgUpdateData.crm_fase = firstBendyAttrs.crm_stage;
+        }
+        if (firstBendyAttrs.abbreviation && firstBendyAttrs.abbreviation !== org.afkorting) {
+          orgUpdateData.afkorting = firstBendyAttrs.abbreviation;
         }
         if (Object.keys(orgUpdateData).length > 0) {
           await adminClient
@@ -427,7 +434,7 @@ async function syncClients(
       if (locationIds.length > 0) {
         const { data: subs } = await adminClient
           .from('client_sublocations')
-          .select('id, naam, adres, postcode, plaats, kostenplaats, telefoon, email, contactpersoon_naam, is_active, bendy_id, location_id, publieke_opmerking, interne_opmerking')
+          .select('id, naam, adres, postcode, plaats, kostenplaats, telefoon, email, contactpersoon_naam, is_active, bendy_id, location_id, publieke_opmerking, interne_opmerking, externe_referentie, bendy_parent_id, kleur')
           .in('location_id', locationIds);
         existingSubs = subs || [];
       }
@@ -529,6 +536,16 @@ async function syncClients(
             if (attrs.comment && attrs.comment !== matchedSub.interne_opmerking) {
               updateData.interne_opmerking = attrs.comment;
             }
+            // Nieuwe velden uit BENDY-FIX-8
+            if (attrs.external_id && attrs.external_id !== matchedSub.externe_referentie) {
+              updateData.externe_referentie = String(attrs.external_id);
+            }
+            if (attrs.parent_id && String(attrs.parent_id) !== matchedSub.bendy_parent_id) {
+              updateData.bendy_parent_id = String(attrs.parent_id);
+            }
+            if (attrs.color && attrs.color !== matchedSub.kleur) {
+              updateData.kleur = attrs.color;
+            }
 
             await adminClient
               .from('client_sublocations')
@@ -570,6 +587,9 @@ async function syncClients(
                 contactpersoon_naam: newContactName,
                 publieke_opmerking: attrs.comment_public || null,
                 interne_opmerking: attrs.comment || null,
+                externe_referentie: attrs.external_id ? String(attrs.external_id) : null,
+                bendy_parent_id: attrs.parent_id ? String(attrs.parent_id) : null,
+                kleur: attrs.color || null,
                 bendy_id: bendyId,
               })
               .select('id, naam, bendy_id')

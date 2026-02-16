@@ -29,6 +29,9 @@ interface Sublocation {
   gekoppelde_bv_org_id: string | null;
   publieke_opmerking: string | null;
   interne_opmerking?: string | null;
+  externe_referentie?: string | null;
+  bendy_parent_id?: string | null;
+  kleur?: string | null;
   capaciteit_min: number | null;
   capaciteit_max: number | null;
   leeftijd_van: number | null;
@@ -157,6 +160,21 @@ export function SublocationDetailModal({
                   <p className="text-muted-foreground">Contactpersoon</p>
                   <p className="font-medium">{sublocation.contactpersoon_naam || "Niet opgegeven"}</p>
                 </div>
+                {sublocation.externe_referentie && (
+                  <div>
+                    <p className="text-muted-foreground">Externe referentie</p>
+                    <p className="font-medium">{sublocation.externe_referentie}</p>
+                  </div>
+                )}
+                {sublocation.kleur && (
+                  <div>
+                    <p className="text-muted-foreground">Kleur</p>
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: sublocation.kleur }} />
+                      <span className="font-medium font-mono text-xs">{sublocation.kleur}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </Card>
 
