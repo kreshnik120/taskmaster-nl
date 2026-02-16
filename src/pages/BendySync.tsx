@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { RefreshCw, Power, Play, Database, Clock, AlertTriangle, CheckCircle2, MinusCircle } from "lucide-react";
+import { RefreshCw, Power, Play, Database, Clock, AlertTriangle, CheckCircle2, MinusCircle, Users } from "lucide-react";
 import { PageContainer } from "@/components/ui/page-container";
 import { PageHero } from "@/components/ui/page-hero";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -75,6 +75,18 @@ interface Diagnostics {
     percentage: number;
     examples: string[];
   }>;
+  user_statistics?: {
+    total_synced: number;
+    total_pending: number;
+    total_cached: number;
+  };
+  user_field_fill_rates?: Array<{
+    field: string;
+    filled: number;
+    total: number;
+    percentage: number;
+    examples: string[];
+  }>;
 }
 
 const SYNCED_FIELDS = [
@@ -119,6 +131,8 @@ export default function BendySync() {
   const [syncing, setSyncing] = useState(false);
   const [toggling, setToggling] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
+  const [syncingUsers, setSyncingUsers] = useState(false);
+  const [userSyncResult, setUserSyncResult] = useState<SyncResult | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -182,6 +196,28 @@ export default function BendySync() {
       toast.error(`Sync mislukt: ${err.message || "Onbekende fout"}`);
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleUserSync = async () => {
+    setSyncingUsers(true);
+    setUserSyncResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("bendy-sync", {
+        body: { action: "sync_users", tenant: "citozorg", sync_type: "full" },
+      });
+      if (error) throw error;
+      if (data?.success) {
+        setUserSyncResult(data.data);
+        toast.success(`User sync voltooid: ${data.data.records_fetched} users opgehaald`);
+        fetchStatus();
+      } else {
+        toast.error(data?.error || "User sync mislukt");
+      }
+    } catch (err: any) {
+      toast.error(`Fout: ${err.message}`);
+    } finally {
+      setSyncingUsers(false);
     }
   };
 
@@ -511,6 +547,54 @@ export default function BendySync() {
           </Card>
         )}
 
+        {/* Bendy User Velden Analyse */}
+        {diagnostics?.user_field_fill_rates && diagnostics.user_field_fill_rates.length > 0 && (
+          <Card className="glass-layer-1">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Users className="h-4 w-4 text-muted-foreground" />
+                Bendy User Velden ({diagnostics.user_field_fill_rates.length} velden)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Veld</TableHead>
+                      <TableHead className="text-center">Vulgraad</TableHead>
+                      <TableHead>Voorbeelden</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {diagnostics.user_field_fill_rates.map((fr) => {
+                      const pct = fr.percentage;
+                      const badgeClass = pct >= 80
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                        : pct >= 50
+                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                        : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+                      return (
+                        <TableRow key={fr.field}>
+                          <TableCell className="font-mono text-xs">{fr.field}</TableCell>
+                          <TableCell className="text-center">
+                            <Badge className={badgeClass}>
+                              {fr.filled}/{fr.total} ({pct}%)
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs max-w-[300px] truncate">
+                            {fr.examples.slice(0, 2).join(', ').substring(0, 80) || '—'}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Card className="glass-layer-1">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -531,6 +615,40 @@ export default function BendySync() {
                 <div><span className="text-xs text-muted-foreground">Bijgewerkt</span><p className="font-semibold">{syncResult.records_updated}</p></div>
                 <div><span className="text-xs text-muted-foreground">Overgeslagen</span><p className="font-semibold">{syncResult.records_skipped}</p></div>
                 <div><span className="text-xs text-muted-foreground">Mislukt</span><p className="font-semibold text-destructive">{syncResult.records_failed}</p></div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Professional Sync Card */}
+        <Card className="glass-layer-1">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users className="h-4 w-4 text-muted-foreground" />
+              Professional Sync
+            </CardTitle>
+            {diagnostics?.user_statistics && (
+              <div className="flex gap-2 mt-1">
+                <Badge variant="outline">{diagnostics.user_statistics.total_cached} in cache</Badge>
+                <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">{diagnostics.user_statistics.total_synced} gekoppeld</Badge>
+                {diagnostics.user_statistics.total_pending > 0 && (
+                  <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">{diagnostics.user_statistics.total_pending} pending</Badge>
+                )}
+              </div>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button onClick={handleUserSync} disabled={syncingUsers} variant="outline" className="w-full sm:w-auto">
+              <RefreshCw className={`h-4 w-4 mr-2 ${syncingUsers ? "animate-spin" : ""}`} />
+              {syncingUsers ? "Bezig met user sync..." : "Professional Sync Starten"}
+            </Button>
+            {userSyncResult && (
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-3 rounded-lg bg-muted/50">
+                <div><span className="text-xs text-muted-foreground">Opgehaald</span><p className="font-semibold">{userSyncResult.records_fetched}</p></div>
+                <div><span className="text-xs text-muted-foreground">Aangemaakt</span><p className="font-semibold text-emerald-600 dark:text-emerald-400">{userSyncResult.records_created}</p></div>
+                <div><span className="text-xs text-muted-foreground">Bijgewerkt</span><p className="font-semibold">{userSyncResult.records_updated}</p></div>
+                <div><span className="text-xs text-muted-foreground">Overgeslagen</span><p className="font-semibold">{userSyncResult.records_skipped}</p></div>
+                <div><span className="text-xs text-muted-foreground">Mislukt</span><p className="font-semibold text-destructive">{userSyncResult.records_failed}</p></div>
               </div>
             )}
           </CardContent>
