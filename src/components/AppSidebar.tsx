@@ -80,6 +80,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { title: "AI Training", url: "/ai-training", icon: Brain, badge: 'validationCount' as const, requiresAdmin: true },
       { title: "Gebruikers", url: "/gebruikers", icon: Users, requiresAdmin: true },
+      { title: "Bendy Sync", url: "/bendy-sync", icon: RefreshCw, requiresAdmin: true },
       { title: "Afgerond", url: "/afgerond", icon: CheckCircle2 },
       { title: "Verwijderd", url: "/verwijderd", icon: Trash2 },
       { title: "Archief", url: "/sollicitaties-archief", icon: Archive, requiresEdit: true },
