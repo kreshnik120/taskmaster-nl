@@ -1,40 +1,21 @@
 
-# KL-2: Klanten Pagina Bendy Sync Indicator
+# BENDY-FIX-2: Diagnostiek Tellers Fix + Cosmetische Fix
 
 ## Overzicht
-Maakt Bendy sync status zichtbaar op de Klanten pagina door `bendy_id` toe te voegen aan de TypeScript interfaces en een teal-kleurige badge + HoverCard info te tonen op organisatiekaarten.
+Fixt de "Bendy clients: 0" teller op de Data Kwaliteit card door de telling te baseren op `bendy_raw_cache` (100 records) in plaats van `pendingMappings` (nu leeg na succesvolle sync). Plus een cosmetische fix voor de records_failed render.
 
-## Wijziging 1 -- `src/pages/Klanten.tsx` (interfaces)
+## Wijziging 1 -- `supabase/functions/bendy-sync/index.ts`
 
-### Sublocation interface (regel 32-43)
-Voeg `bendy_id?: string | null` toe aan het einde van de interface.
+### handleStatusCheck() tellers (regels 679-698)
+- Verplaats de `rawCacheRecords` query VOOR de `bendyWithKvk` berekening
+- Bereken `totalBendyRecords` uit rawCacheRecords length
+- Herbereken `bendyWithKvk` uit raw_data attributes (chamber_of_commerce_number) in plaats van pendingMappings conflict_data
+- Verwijder de oude bendyWithKvk berekening op basis van pendingMappings
 
-### Organization interface (regel 54-64)
-Voeg `bendy_id?: string | null` toe aan het einde van de interface.
+### Response (regels 765-766)
+- `bendy_clients_without_kvk` wijzigen van `pendingMappings.length - bendyWithKvk` naar `totalBendyRecords - bendyWithKvk`
 
-Geen query-wijzigingen nodig -- SELECT * haalt bendy_id al op.
+## Wijziging 2 -- `src/pages/BendySync.tsx`
 
-## Wijziging 2 -- `src/components/organization/OrganizationCardSimple.tsx`
-
-### 2a. Interfaces (regels 20-40)
-Voeg `bendy_id?: string | null` toe aan zowel Sublocation (regel 20-28) als Organization (regel 30-40) interfaces.
-
-### 2b. Import (regel 8)
-Voeg `Link2` toe aan de lucide-react import.
-
-### 2c. Bendy telling (na regel 61)
-Voeg twee variabelen toe na de sublocationCount berekening:
-- `bendySyncedCount`: telt sublocaties met een bendy_id via reduce + filter
-- `isBendySynced`: boolean (bendySyncedCount > 0)
-
-### 2d. Badge in card (na regel 228, voor regel 229)
-Voeg een teal-kleurige badge toe met Link2 icoon, alleen zichtbaar als isBendySynced:
-- Border: teal-300 (light) / teal-700 (dark)
-- Text: teal-600 (light) / teal-400 (dark)
-- Tooltip: "Bendy gekoppeld" + "X van Y werklocaties gesynchroniseerd"
-- Positie: tussen sublocation count badge en data completeness indicator
-
-### 2e. HoverCard uitbreiden (na regel 353, voor regel 354)
-Voeg onder de structuur-info een teal-kleurige regel toe:
-- Link2 icoon + "{X}/{Y} via Bendy sync"
-- Alleen zichtbaar als isBendySynced === true
+### records_failed render (regels 494-497)
+- Wrap de `log.records_failed` waarde altijd in een `<span>` element (ook als 0) voor consistente JSX rendering
