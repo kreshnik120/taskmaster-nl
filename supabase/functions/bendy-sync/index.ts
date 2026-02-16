@@ -454,6 +454,72 @@ async function handleStatusCheck(): Promise<Response> {
       (m: any) => m.conflict_data?.kvk && m.conflict_data.kvk.trim() !== ''
     ).length;
 
+    // Diagnostics: Per-KvK breakdown
+    const kvkBreakdown: Array<{
+      kvk_nummer: string;
+      org_name: string | null;
+      org_found: boolean;
+      bendy_count: number;
+      bendy_examples: string[];
+      local_sublocations: number;
+    }> = [];
+
+    const { data: rawCacheRecords } = await adminClient
+      .from('bendy_raw_cache')
+      .select('bendy_id, raw_data')
+      .eq('tenant', 'citozorg')
+      .eq('entity_type', 'clients');
+
+    // Groepeer Bendy records per KvK-nummer
+    const kvkGroups = new Map<string, { count: number; names: string[] }>();
+    for (const record of (rawCacheRecords || [])) {
+      const kvk = (record.raw_data as any)?.attributes?.chamber_of_commerce_number?.trim();
+      if (!kvk) continue;
+      const existing = kvkGroups.get(kvk) || { count: 0, names: [] };
+      existing.count++;
+      const name = (record.raw_data as any)?.attributes?.company_name;
+      if (name && existing.names.length < 3) existing.names.push(name);
+      kvkGroups.set(kvk, existing);
+    }
+
+    // Per KvK: zoek lokale org + tel sublocaties
+    for (const [kvk, group] of kvkGroups) {
+      const { data: matchedOrg } = await adminClient
+        .from('client_organizations')
+        .select('id, name')
+        .eq('kvk_nummer', kvk)
+        .eq('org_id', orgId || '')
+        .maybeSingle();
+
+      let sublocationCount = 0;
+      if (matchedOrg) {
+        const { data: locations } = await adminClient
+          .from('client_locations')
+          .select('id')
+          .eq('client_org_id', matchedOrg.id);
+
+        if (locations && locations.length > 0) {
+          const locationIds = locations.map((l: any) => l.id);
+          const { count } = await adminClient
+            .from('client_sublocations')
+            .select('id', { count: 'exact', head: true })
+            .in('location_id', locationIds);
+          sublocationCount = count || 0;
+        }
+      }
+
+      kvkBreakdown.push({
+        kvk_nummer: kvk,
+        org_name: matchedOrg?.name || null,
+        org_found: !!matchedOrg,
+        bendy_count: group.count,
+        bendy_examples: group.names,
+        local_sublocations: sublocationCount,
+      });
+    }
+
+    kvkBreakdown.sort((a, b) => b.bendy_count - a.bendy_count);
+
     return jsonResponse({
       success: true,
       data: {
@@ -471,6 +537,7 @@ async function handleStatusCheck(): Promise<Response> {
           local_clients_with_kvk: clientsWithKvk || 0,
           bendy_clients_with_kvk: bendyWithKvk,
           bendy_clients_without_kvk: (pendingMappings || []).length - bendyWithKvk,
+          kvk_breakdown: kvkBreakdown,
         },
         pending_mappings: (pendingMappings || []).map((m: any) => ({
           id: m.id,

@@ -2259,6 +2259,7 @@ export type Database = {
       client_sublocations: {
         Row: {
           adres: string | null
+          bendy_id: string | null
           capaciteit_max: number | null
           capaciteit_min: number | null
           created_at: string
@@ -2285,6 +2286,7 @@ export type Database = {
         }
         Insert: {
           adres?: string | null
+          bendy_id?: string | null
           capaciteit_max?: number | null
           capaciteit_min?: number | null
           created_at?: string
@@ -2311,6 +2313,7 @@ export type Database = {
         }
         Update: {
           adres?: string | null
+          bendy_id?: string | null
           capaciteit_max?: number | null
           capaciteit_min?: number | null
           created_at?: string

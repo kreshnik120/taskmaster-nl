@@ -49,6 +49,15 @@ interface PendingMapping {
   created_at: string;
 }
 
+interface KvkBreakdown {
+  kvk_nummer: string;
+  org_name: string | null;
+  org_found: boolean;
+  bendy_count: number;
+  bendy_examples: string[];
+  local_sublocations: number;
+}
+
 interface Diagnostics {
   config_org_id: string | null;
   config_org_name: string | null;
@@ -56,6 +65,7 @@ interface Diagnostics {
   local_clients_with_kvk: number;
   bendy_clients_with_kvk: number;
   bendy_clients_without_kvk: number;
+  kvk_breakdown?: KvkBreakdown[];
 }
 
 interface StatusData {
@@ -330,6 +340,81 @@ export default function BendySync() {
                     </div>
                   )}
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* KvK Matching Overzicht */}
+        {diagnostics?.kvk_breakdown && diagnostics.kvk_breakdown.length > 0 && (
+          <Card className="glass-layer-1">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Database className="h-4 w-4 text-muted-foreground" />
+                KvK Matching Overzicht ({diagnostics.kvk_breakdown.length} organisaties)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>KvK-nummer</TableHead>
+                      <TableHead>Organisatie (abcito)</TableHead>
+                      <TableHead className="text-right">Bendy records</TableHead>
+                      <TableHead className="text-right">Lokale sublocaties</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {diagnostics.kvk_breakdown.map((item) => (
+                      <TableRow key={item.kvk_nummer}>
+                        <TableCell className="font-mono text-sm">{item.kvk_nummer}</TableCell>
+                        <TableCell>
+                          {item.org_found ? (
+                            <span className="font-medium">{item.org_name}</span>
+                          ) : (
+                            <span className="text-destructive italic">Niet gevonden</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold">{item.bendy_count}</TableCell>
+                        <TableCell className="text-right font-semibold">{item.local_sublocations}</TableCell>
+                        <TableCell>
+                          {!item.org_found ? (
+                            <Badge className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                              Org ontbreekt
+                            </Badge>
+                          ) : item.local_sublocations === 0 ? (
+                            <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                              Geen sublocaties
+                            </Badge>
+                          ) : item.bendy_count > item.local_sublocations ? (
+                            <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                              Bendy heeft meer
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                              OK
+                            </Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              {/* Bendy voorbeeldnamen */}
+              <div className="p-4 space-y-2 border-t">
+                <p className="text-xs text-muted-foreground font-medium">Bendy record voorbeelden per organisatie:</p>
+                {diagnostics.kvk_breakdown.map((item) => (
+                  <div key={item.kvk_nummer} className="text-xs">
+                    <span className="font-mono text-muted-foreground">{item.kvk_nummer}</span>:{' '}
+                    <span className="text-foreground">
+                      {item.bendy_examples.join(', ')}
+                      {item.bendy_count > 3 ? ` (+${item.bendy_count - 3} meer)` : ''}
+                    </span>
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
