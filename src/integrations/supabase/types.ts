@@ -2205,10 +2205,12 @@ export type Database = {
       }
       client_organizations: {
         Row: {
+          afkorting: string | null
           bendy_id: string | null
           btw_nummer: string | null
           centrale_facturatie_email: string | null
           created_at: string
+          crm_fase: string | null
           id: string
           invoice_adres: string | null
           invoice_bedrijfsnaam: string | null
@@ -2223,10 +2225,12 @@ export type Database = {
           website: string | null
         }
         Insert: {
+          afkorting?: string | null
           bendy_id?: string | null
           btw_nummer?: string | null
           centrale_facturatie_email?: string | null
           created_at?: string
+          crm_fase?: string | null
           id?: string
           invoice_adres?: string | null
           invoice_bedrijfsnaam?: string | null
@@ -2241,10 +2245,12 @@ export type Database = {
           website?: string | null
         }
         Update: {
+          afkorting?: string | null
           bendy_id?: string | null
           btw_nummer?: string | null
           centrale_facturatie_email?: string | null
           created_at?: string
+          crm_fase?: string | null
           id?: string
           invoice_adres?: string | null
           invoice_bedrijfsnaam?: string | null
@@ -2272,6 +2278,7 @@ export type Database = {
         Row: {
           adres: string | null
           bendy_id: string | null
+          bendy_parent_id: string | null
           capaciteit_max: number | null
           capaciteit_min: number | null
           contactpersoon_naam: string | null
@@ -2279,12 +2286,14 @@ export type Database = {
           doelgroep: string[] | null
           doelgroep_omschrijving: string | null
           email: string | null
+          externe_referentie: string | null
           factuur_via_hoofdlocatie: boolean
           gekoppelde_bv_org_id: string | null
           gezochte_functies: string[] | null
           id: string
           interne_opmerking: string | null
           is_active: boolean
+          kleur: string | null
           kostenplaats: string | null
           leeftijd_tot: number | null
           leeftijd_van: number | null
@@ -2302,6 +2311,7 @@ export type Database = {
         Insert: {
           adres?: string | null
           bendy_id?: string | null
+          bendy_parent_id?: string | null
           capaciteit_max?: number | null
           capaciteit_min?: number | null
           contactpersoon_naam?: string | null
@@ -2309,12 +2319,14 @@ export type Database = {
           doelgroep?: string[] | null
           doelgroep_omschrijving?: string | null
           email?: string | null
+          externe_referentie?: string | null
           factuur_via_hoofdlocatie?: boolean
           gekoppelde_bv_org_id?: string | null
           gezochte_functies?: string[] | null
           id?: string
           interne_opmerking?: string | null
           is_active?: boolean
+          kleur?: string | null
           kostenplaats?: string | null
           leeftijd_tot?: number | null
           leeftijd_van?: number | null
@@ -2332,6 +2344,7 @@ export type Database = {
         Update: {
           adres?: string | null
           bendy_id?: string | null
+          bendy_parent_id?: string | null
           capaciteit_max?: number | null
           capaciteit_min?: number | null
           contactpersoon_naam?: string | null
@@ -2339,12 +2352,14 @@ export type Database = {
           doelgroep?: string[] | null
           doelgroep_omschrijving?: string | null
           email?: string | null
+          externe_referentie?: string | null
           factuur_via_hoofdlocatie?: boolean
           gekoppelde_bv_org_id?: string | null
           gezochte_functies?: string[] | null
           id?: string
           interne_opmerking?: string | null
           is_active?: boolean
+          kleur?: string | null
           kostenplaats?: string | null
           leeftijd_tot?: number | null
           leeftijd_van?: number | null

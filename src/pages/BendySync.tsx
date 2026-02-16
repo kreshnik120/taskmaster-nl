@@ -83,6 +83,7 @@ const SYNCED_FIELDS = [
   'firstname', 'middlename', 'surname', 'status',
   'comment_public', 'comment', 'website',
   'invoice_company_name', 'invoice_address', 'invoice_zipcode', 'invoice_town',
+  'crm_stage', 'abbreviation', 'external_id', 'parent_id', 'color',
 ];
 
 interface StatusData {
