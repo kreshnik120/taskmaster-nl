@@ -251,6 +251,28 @@ interface SyncResult {
   errors: string[];
 }
 
+// Helper: organisatienaam afleiden uit Bendy records
+function deriveOrgName(clients: any[]): string {
+  const names = clients
+    .map((c: any) => (c.attributes?.company_name || '').trim())
+    .filter(Boolean);
+  if (names.length === 0) return 'Onbekend';
+  const first = names[0];
+  let prefixLen = first.length;
+  for (const name of names.slice(1)) {
+    let i = 0;
+    while (i < prefixLen && i < name.length && first[i] === name[i]) i++;
+    prefixLen = i;
+  }
+  const prefix = first.substring(0, prefixLen).trim();
+  return prefix.length >= 3 ? prefix : names[0];
+}
+
+// Helper: string normaliseren voor matching
+function normalizeForMatch(str: string): string {
+  return str.toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
 async function syncClients(
   adminClient: any,
   tenant: string,
@@ -259,47 +281,289 @@ async function syncClients(
 ): Promise<SyncResult> {
   const result: SyncResult = { fetched: 0, created: 0, updated: 0, skipped: 0, failed: 0, errors: [] };
 
-  // 1. Alle Bendy clients ophalen
+  // ── STAP 1: Alle Bendy clients ophalen ──
   logInfo(FUNCTION_NAME, `Ophalen Bendy clients voor ${tenant}...`);
   const bendyClients = await fetchAllBendyRecords(tenant, '/api/v2/clients');
   result.fetched = bendyClients.length;
   logInfo(FUNCTION_NAME, `${bendyClients.length} Bendy clients opgehaald`);
 
-  // 2. Bestaande client_organizations ophalen
-  const { data: existingClients } = await adminClient
-    .from('client_organizations')
-    .select('id, name, kvk_nummer, bendy_id, org_id')
-    .eq('org_id', orgId);
+  // ── STAP 2: Groeperen per KvK-nummer ──
+  const kvkGroups = new Map<string, any[]>();
+  const noKvkRecords: any[] = [];
 
-  // 3. Bestaande bendy_id_mappings ophalen
-  const { data: existingMappings } = await adminClient
-    .from('bendy_id_mapping')
-    .select('id, bendy_id, local_id')
-    .eq('tenant', tenant)
-    .eq('entity_type', 'client');
-
-  // Lookup maps bouwen
-  const kvkMap = new Map<string, any>();
-  const bendyIdMap = new Map<string, any>();
-  const mappingMap = new Map<string, any>();
-
-  for (const client of (existingClients || [])) {
-    if (client.kvk_nummer) kvkMap.set(client.kvk_nummer, client);
-    if (client.bendy_id) bendyIdMap.set(client.bendy_id, client);
+  for (const client of bendyClients) {
+    const kvk = (client.attributes?.chamber_of_commerce_number || '').trim();
+    if (kvk) {
+      if (!kvkGroups.has(kvk)) kvkGroups.set(kvk, []);
+      kvkGroups.get(kvk)!.push(client);
+    } else {
+      noKvkRecords.push(client);
+    }
   }
 
-  for (const mapping of (existingMappings || [])) {
-    mappingMap.set(mapping.bendy_id, mapping);
+  logInfo(FUNCTION_NAME, `${kvkGroups.size} unieke KvK-nummers, ${noKvkRecords.length} zonder KvK`);
+
+  // ── STAP 3: Per KvK-groep verwerken ──
+  for (const [kvk, clients] of kvkGroups) {
+    try {
+      // 3a. Zoek bestaande organisatie
+      let { data: org } = await adminClient
+        .from('client_organizations')
+        .select('id, name, bendy_id')
+        .eq('kvk_nummer', kvk)
+        .eq('org_id', orgId)
+        .maybeSingle();
+
+      let defaultLocationId: string | null = null;
+
+      if (org) {
+        // Org gevonden — haal eerste location op
+        const { data: locations } = await adminClient
+          .from('client_locations')
+          .select('id')
+          .eq('client_org_id', org.id)
+          .limit(1);
+        defaultLocationId = locations?.[0]?.id || null;
+
+        // Maak default location als er geen is
+        if (!defaultLocationId) {
+          const { data: newLoc } = await adminClient
+            .from('client_locations')
+            .insert({ client_org_id: org.id, naam: 'Hoofdlocatie' })
+            .select('id')
+            .single();
+          defaultLocationId = newLoc?.id || null;
+        }
+      } else {
+        // 3b. Auto-aanmaken organisatie + location
+        const orgName = deriveOrgName(clients);
+        logInfo(FUNCTION_NAME, `Auto-aanmaken organisatie: "${orgName}" (KvK: ${kvk})`);
+
+        const { data: newOrg, error: orgError } = await adminClient
+          .from('client_organizations')
+          .insert({ org_id: orgId, name: orgName, kvk_nummer: kvk })
+          .select('id, name, bendy_id')
+          .single();
+
+        if (orgError || !newOrg) {
+          result.failed += clients.length;
+          result.errors.push(`KvK ${kvk}: Org aanmaken mislukt: ${orgError?.message}`);
+          continue;
+        }
+        org = newOrg;
+
+        // Default location aanmaken
+        const firstAttrs = clients[0]?.attributes || {};
+        const { data: newLoc } = await adminClient
+          .from('client_locations')
+          .insert({
+            client_org_id: org.id,
+            naam: 'Hoofdlocatie',
+            adres: firstAttrs.address || null,
+            postcode: firstAttrs.zipcode || null,
+            plaats: firstAttrs.town || null,
+          })
+          .select('id')
+          .single();
+        defaultLocationId = newLoc?.id || null;
+      }
+
+      // 3c. Organisatie-mapping registreren
+      await adminClient
+        .from('bendy_id_mapping')
+        .upsert({
+          org_id: orgId,
+          tenant,
+          entity_type: 'organization',
+          bendy_id: `kvk-${kvk}`,
+          local_id: org.id,
+          last_synced_at: new Date().toISOString(),
+          sync_status: 'synced',
+        }, { onConflict: 'tenant,entity_type,bendy_id' });
+
+      // 3d. Alle bestaande sublocaties ophalen voor deze org
+      const { data: allLocations } = await adminClient
+        .from('client_locations')
+        .select('id')
+        .eq('client_org_id', org.id);
+
+      const locationIds = (allLocations || []).map((l: any) => l.id);
+      let existingSubs: any[] = [];
+      if (locationIds.length > 0) {
+        const { data: subs } = await adminClient
+          .from('client_sublocations')
+          .select('id, naam, adres, postcode, plaats, kostenplaats, bendy_id, location_id')
+          .in('location_id', locationIds);
+        existingSubs = subs || [];
+      }
+
+      // 3e. Per Bendy record: match of maak sublocation
+      for (const bendyClient of clients) {
+        try {
+          const bendyId = String(bendyClient.id);
+          const attrs = bendyClient.attributes || {};
+
+          // Cache raw data (altijd)
+          await adminClient
+            .from('bendy_raw_cache')
+            .upsert({
+              org_id: orgId,
+              tenant,
+              entity_type: 'clients',
+              bendy_id: bendyId,
+              raw_data: bendyClient,
+              fetched_at: new Date().toISOString(),
+            }, { onConflict: 'tenant,entity_type,bendy_id' });
+
+          // ── MATCHING: 4 niveaus ──
+          let matchedSub: any = null;
+
+          // Match 1: bestaande bendy_id (al eerder gekoppeld)
+          matchedSub = existingSubs.find((s: any) => s.bendy_id === bendyId);
+
+          // Match 2: exacte naam (genormaliseerd)
+          if (!matchedSub && attrs.company_name) {
+            const bendyNorm = normalizeForMatch(attrs.company_name);
+            matchedSub = existingSubs.find((s: any) =>
+              !s.bendy_id && normalizeForMatch(s.naam || '') === bendyNorm
+            );
+          }
+
+          // Match 3: postcode + adres (exact)
+          if (!matchedSub && attrs.zipcode && attrs.address) {
+            const bendyPostcode = attrs.zipcode.replace(/\s/g, '').toUpperCase();
+            const bendyAdres = normalizeForMatch(attrs.address);
+            matchedSub = existingSubs.find((s: any) =>
+              !s.bendy_id
+              && s.postcode
+              && s.postcode.replace(/\s/g, '').toUpperCase() === bendyPostcode
+              && s.adres
+              && normalizeForMatch(s.adres) === bendyAdres
+            );
+          }
+
+          // Match 4: naam bevat (minstens 8 tekens)
+          if (!matchedSub && attrs.company_name) {
+            const bendyNorm = normalizeForMatch(attrs.company_name);
+            matchedSub = existingSubs.find((s: any) => {
+              if (s.bendy_id) return false;
+              const localNorm = normalizeForMatch(s.naam || '');
+              if (localNorm.length < 8 && bendyNorm.length < 8) return false;
+              return bendyNorm.includes(localNorm) || localNorm.includes(bendyNorm);
+            });
+          }
+
+          if (matchedSub) {
+            // ── MATCH GEVONDEN — update sublocation ──
+            const updateData: Record<string, any> = { bendy_id: bendyId };
+
+            if (attrs.company_name && attrs.company_name !== matchedSub.naam) {
+              updateData.naam = attrs.company_name;
+            }
+            if (attrs.address && attrs.address !== matchedSub.adres) {
+              updateData.adres = attrs.address;
+            }
+            if (attrs.zipcode && attrs.zipcode !== matchedSub.postcode) {
+              updateData.postcode = attrs.zipcode;
+            }
+            if (attrs.town && attrs.town !== matchedSub.plaats) {
+              updateData.plaats = attrs.town;
+            }
+
+            await adminClient
+              .from('client_sublocations')
+              .update(updateData)
+              .eq('id', matchedSub.id);
+
+            // Markeer in-memory als gematcht
+            matchedSub.bendy_id = bendyId;
+
+            // Mapping registreren
+            await adminClient
+              .from('bendy_id_mapping')
+              .upsert({
+                org_id: orgId,
+                tenant,
+                entity_type: 'sublocation',
+                bendy_id: bendyId,
+                local_id: matchedSub.id,
+                bendy_updated_at: attrs.updated_at || null,
+                last_synced_at: new Date().toISOString(),
+                sync_status: 'synced',
+                conflict_data: null,
+              }, { onConflict: 'tenant,entity_type,bendy_id' });
+
+            result.updated++;
+          } else if (defaultLocationId) {
+            // ── GEEN MATCH — nieuwe sublocation aanmaken ──
+            const { data: newSub, error: subError } = await adminClient
+              .from('client_sublocations')
+              .insert({
+                location_id: defaultLocationId,
+                naam: attrs.company_name || `Bendy ${bendyId}`,
+                adres: attrs.address || null,
+                postcode: attrs.zipcode || null,
+                plaats: attrs.town || null,
+                bendy_id: bendyId,
+              })
+              .select('id, naam, bendy_id')
+              .single();
+
+            if (newSub) {
+              existingSubs.push(newSub);
+              await adminClient
+                .from('bendy_id_mapping')
+                .upsert({
+                  org_id: orgId,
+                  tenant,
+                  entity_type: 'sublocation',
+                  bendy_id: bendyId,
+                  local_id: newSub.id,
+                  bendy_updated_at: attrs.updated_at || null,
+                  last_synced_at: new Date().toISOString(),
+                  sync_status: 'synced',
+                }, { onConflict: 'tenant,entity_type,bendy_id' });
+              result.created++;
+            } else {
+              result.failed++;
+              result.errors.push(`Sublocation ${bendyId}: ${subError?.message || 'Aanmaken mislukt'}`);
+            }
+          } else {
+            // Geen location beschikbaar — pending
+            await adminClient
+              .from('bendy_id_mapping')
+              .upsert({
+                org_id: orgId,
+                tenant,
+                entity_type: 'sublocation',
+                bendy_id: bendyId,
+                local_id: '00000000-0000-0000-0000-000000000000',
+                last_synced_at: new Date().toISOString(),
+                sync_status: 'pending',
+                conflict_data: { company_name: attrs.company_name, kvk: kvk, town: attrs.town },
+              }, { onConflict: 'tenant,entity_type,bendy_id' });
+            result.skipped++;
+          }
+        } catch (error) {
+          result.failed++;
+          const msg = error instanceof Error ? error.message : String(error);
+          result.errors.push(`Client ${bendyClient.id}: ${msg.substring(0, 200)}`);
+          if (result.errors.length > 20) break;
+        }
+      }
+    } catch (error) {
+      result.failed += clients.length;
+      const msg = error instanceof Error ? error.message : String(error);
+      result.errors.push(`KvK ${kvk}: ${msg.substring(0, 200)}`);
+    }
   }
 
-  // 4. Per Bendy client verwerken
-  for (const bendyClient of bendyClients) {
+  // ── STAP 4: Records zonder KvK-nummer → pending ──
+  for (const bendyClient of noKvkRecords) {
     try {
       const bendyId = String(bendyClient.id);
       const attrs = bendyClient.attributes || {};
-      const kvkNummer = attrs.chamber_of_commerce_number?.trim() || null;
 
-      // 4a. Opslaan in bendy_raw_cache (altijd)
       await adminClient
         .from('bendy_raw_cache')
         .upsert({
@@ -311,61 +575,24 @@ async function syncClients(
           fetched_at: new Date().toISOString(),
         }, { onConflict: 'tenant,entity_type,bendy_id' });
 
-      // 4b. Matching: eerst op bendy_id, dan op KvK-nummer
-      let matchedClient = bendyIdMap.get(bendyId) || null;
-      if (!matchedClient && kvkNummer) {
-        matchedClient = kvkMap.get(kvkNummer) || null;
-      }
+      await adminClient
+        .from('bendy_id_mapping')
+        .upsert({
+          org_id: orgId,
+          tenant,
+          entity_type: 'sublocation',
+          bendy_id: bendyId,
+          local_id: '00000000-0000-0000-0000-000000000000',
+          last_synced_at: new Date().toISOString(),
+          sync_status: 'pending',
+          conflict_data: { company_name: attrs.company_name, kvk: null, town: attrs.town },
+        }, { onConflict: 'tenant,entity_type,bendy_id' });
 
-      if (matchedClient) {
-        // MATCH — update bendy_id als die nog niet gezet is
-        if (!matchedClient.bendy_id) {
-          await adminClient
-            .from('client_organizations')
-            .update({ bendy_id: bendyId })
-            .eq('id', matchedClient.id);
-        }
-
-        // Upsert bendy_id_mapping
-        await adminClient
-          .from('bendy_id_mapping')
-          .upsert({
-            org_id: orgId,
-            tenant,
-            entity_type: 'client',
-            bendy_id: bendyId,
-            local_id: matchedClient.id,
-            bendy_updated_at: attrs.updated_at || null,
-            last_synced_at: new Date().toISOString(),
-            sync_status: 'synced',
-          }, { onConflict: 'tenant,entity_type,bendy_id' });
-
-        result.updated++;
-      } else {
-        // GEEN MATCH — pending mapping (handmatige review)
-        if (!mappingMap.has(bendyId)) {
-          await adminClient
-            .from('bendy_id_mapping')
-            .upsert({
-              org_id: orgId,
-              tenant,
-              entity_type: 'client',
-              bendy_id: bendyId,
-              local_id: '00000000-0000-0000-0000-000000000000',
-              bendy_updated_at: attrs.updated_at || null,
-              last_synced_at: new Date().toISOString(),
-              sync_status: 'pending',
-              conflict_data: { company_name: attrs.company_name, kvk: kvkNummer, town: attrs.town },
-            }, { onConflict: 'tenant,entity_type,bendy_id' });
-        }
-
-        result.skipped++;
-      }
+      result.skipped++;
     } catch (error) {
       result.failed++;
       const msg = error instanceof Error ? error.message : String(error);
-      result.errors.push(`Client ${bendyClient.id}: ${msg.substring(0, 200)}`);
-      if (result.errors.length > 20) break;
+      result.errors.push(`Client (no KvK) ${bendyClient.id}: ${msg.substring(0, 200)}`);
     }
   }
 
@@ -445,7 +672,7 @@ async function handleStatusCheck(): Promise<Response> {
       .from('bendy_id_mapping')
       .select('id, bendy_id, conflict_data, sync_status, created_at')
       .eq('sync_status', 'pending')
-      .eq('entity_type', 'client')
+      .eq('entity_type', 'sublocation')
       .order('created_at', { ascending: false })
       .limit(100);
 

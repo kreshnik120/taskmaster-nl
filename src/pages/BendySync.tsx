@@ -435,8 +435,9 @@ export default function BendySync() {
             </Button>
 
             {syncResult && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 rounded-lg bg-muted/50">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-3 rounded-lg bg-muted/50">
                 <div><span className="text-xs text-muted-foreground">Opgehaald</span><p className="font-semibold">{syncResult.records_fetched}</p></div>
+                <div><span className="text-xs text-muted-foreground">Aangemaakt</span><p className="font-semibold text-emerald-600 dark:text-emerald-400">{syncResult.records_created}</p></div>
                 <div><span className="text-xs text-muted-foreground">Bijgewerkt</span><p className="font-semibold">{syncResult.records_updated}</p></div>
                 <div><span className="text-xs text-muted-foreground">Overgeslagen</span><p className="font-semibold">{syncResult.records_skipped}</p></div>
                 <div><span className="text-xs text-muted-foreground">Mislukt</span><p className="font-semibold text-destructive">{syncResult.records_failed}</p></div>
