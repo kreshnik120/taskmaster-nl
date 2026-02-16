@@ -626,15 +626,12 @@ Deno.serve(async (req) => {
 
     const adminClient = createAdminClient();
 
-    const { data: userOrg } = await adminClient
-      .from('user_organizations')
-      .select('role')
-      .eq('user_id', user.id)
-      .in('role', ['admin', 'eigenaar'])
-      .limit(1)
-      .single();
+    const { data: isAdmin } = await adminClient.rpc('has_role', {
+      _user_id: user.id,
+      _role: 'admin'
+    });
 
-    if (!userOrg) {
+    if (!isAdmin) {
       return errorResponse('Admin toegang vereist', 403);
     }
 
