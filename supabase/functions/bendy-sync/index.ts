@@ -666,6 +666,61 @@ async function syncClients(
 }
 
 // ============================================
+// FIELD FILL RATE ANALYSIS
+// ============================================
+
+interface FieldFillRate {
+  field: string;
+  filled: number;
+  total: number;
+  percentage: number;
+  examples: string[];
+}
+
+function analyzeFieldFillRates(rawCacheRecords: any[] | null): FieldFillRate[] {
+  if (!rawCacheRecords || rawCacheRecords.length === 0) return [];
+
+  const allKeys = new Set<string>();
+  for (const record of rawCacheRecords) {
+    const attrs = record.raw_data?.attributes;
+    if (attrs && typeof attrs === 'object') {
+      Object.keys(attrs).forEach(key => allKeys.add(key));
+    }
+  }
+
+  const results: FieldFillRate[] = [];
+  for (const key of allKeys) {
+    let filled = 0;
+    const examples: string[] = [];
+
+    for (const record of rawCacheRecords) {
+      const value = record.raw_data?.attributes?.[key];
+      let isEmpty = value === null || value === undefined || value === '';
+      if (!isEmpty && typeof value === 'object') {
+        isEmpty = Array.isArray(value) ? value.length === 0 : Object.keys(value).length === 0;
+      }
+      if (!isEmpty) {
+        filled++;
+        if (examples.length < 3) {
+          const str = typeof value === 'string' ? value : JSON.stringify(value);
+          examples.push(str.substring(0, 80));
+        }
+      }
+    }
+
+    results.push({
+      field: key,
+      filled,
+      total: rawCacheRecords.length,
+      percentage: Math.round((filled / rawCacheRecords.length) * 100),
+      examples,
+    });
+  }
+
+  return results.sort((a, b) => b.percentage - a.percentage);
+}
+
+// ============================================
 // REQUEST TYPES
 // ============================================
 
@@ -817,6 +872,9 @@ async function handleStatusCheck(): Promise<Response> {
 
     kvkBreakdown.sort((a, b) => b.bendy_count - a.bendy_count);
 
+    // Diagnostics: field fill rates analyse over alle records
+    const fieldFillRates = analyzeFieldFillRates(rawCacheRecords);
+
     // Sample: pak 1 voorbeeld record uit raw_cache om alle beschikbare velden te tonen
     const sampleRecord = (rawCacheRecords && rawCacheRecords.length > 0)
       ? rawCacheRecords[0].raw_data
@@ -845,6 +903,7 @@ async function handleStatusCheck(): Promise<Response> {
           kvk_breakdown: kvkBreakdown,
           sample_attributes: sampleAttributes,
           sample_record: sampleRecord,
+          field_fill_rates: fieldFillRates,
         },
         pending_mappings: (pendingMappings || []).map((m: any) => ({
           id: m.id,
