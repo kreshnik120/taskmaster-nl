@@ -1,49 +1,78 @@
 
 
-# BENDY-FIX-8: Ontbrekende Velden Syncen (5 nieuwe velden)
+# BENDY-FIX-8b: Professional Sync + User Fill Rate Analyse
 
 ## Overzicht
-5 Bendy-velden met significante fill rates toevoegen aan de sync engine en zichtbaar maken in de UI. 6 bestanden worden gewijzigd.
+Professional sync toevoegen aan de bendy-sync edge function, inclusief fill rate analyse voor users. 2 bestanden worden gewijzigd.
 
-## Wijziging 1 -- SQL Migratie (nieuw bestand)
-5 nieuwe kolommen:
-- `client_organizations.crm_fase` (TEXT)
-- `client_organizations.afkorting` (TEXT)
-- `client_sublocations.externe_referentie` (TEXT)
-- `client_sublocations.bendy_parent_id` (TEXT)
-- `client_sublocations.kleur` (TEXT)
+## Wijziging 1 -- `supabase/functions/bendy-sync/index.ts`
 
-Alle met `ADD COLUMN IF NOT EXISTS`, idempotent.
+**1a** Commentaar bovenaan (regel 8): "Fase 1: Alleen clients" wordt "Fase 1: Clients + Fase 2: Professionals".
 
-## Wijziging 2 -- `supabase/functions/bendy-sync/index.ts`
+**1b** Nieuwe `buildFullName` helper na `buildContactName` (regel 284): Zelfde patroon maar met `firstname`, `middlename`, `lastname`.
 
-**2a** SELECT org (regel 322): `crm_fase, afkorting` toevoegen.
+**1c** Nieuwe `syncUsers` functie na `syncClients` (regel 686, voor FIELD FILL RATE ANALYSIS): Volgt hetzelfde patroon als syncClients maar eenvoudiger:
+- Haalt `/api/v2/users` op via `fetchAllBendyRecords`
+- Cachet in `bendy_raw_cache` met `entity_type: 'users'`
+- Matcht op 2 niveaus: bendy_id (match 1), email case-insensitive (match 2)
+- Bij match: update `professionals` tabel (full_name, telefoonnummer), registreer mapping met `entity_type: 'professional'`
+- Geen match: registreer als pending in `bendy_id_mapping`
 
-**2b** Org update blok (regel 355, na invoice_town): `crm_stage` en `abbreviation` condities toevoegen.
+**1d** `BendySyncRequest` interface (regel 748): `'sync_users'` toevoegen aan action union type.
 
-**2c** SELECT subs (regel 430): `externe_referentie, bendy_parent_id, kleur` toevoegen.
+**1e** Actie routing (regel 1175-1177): `sync_users` accepteren naast `sync_clients`.
 
-**2d** UPDATE sub (regel 531, na comment): 3 condities voor `external_id`, `parent_id`, `color` toevoegen (met `String()` conversie voor ID-velden).
+**1f** Sync uitvoering (regel 1213-1221): Dynamisch entity_type en sync functie kiezen op basis van `body.action`.
 
-**2e** INSERT sub (regel 572, na interne_opmerking): `externe_referentie`, `bendy_parent_id`, `kleur` meegeven.
+**1g** `handleStatusCheck` uitbreiden (na regel 896): User raw cache ophalen, `userFieldFillRates` berekenen, user statistieken tellen (synced/pending/cached).
 
-Edge function wordt herdeployed.
+**1h** Diagnostics response (na regel 926): `user_statistics` en `user_field_fill_rates` toevoegen.
 
-## Wijziging 3 -- `src/pages/BendySync.tsx`
-SYNCED_FIELDS array (regel 80-86): 5 items toevoegen (`crm_stage`, `abbreviation`, `external_id`, `parent_id`, `color`). Totaal wordt 25.
+## Wijziging 2 -- `src/pages/BendySync.tsx`
 
-## Wijziging 4 -- `src/types/organization.ts`
-- Sublocation interface (na regel 25): `externe_referentie`, `bendy_parent_id`, `kleur` toevoegen.
-- Organization interface (na regel 55): `crm_fase`, `afkorting` toevoegen.
+**2a** `Users` icoon importeren uit lucide-react (regel 2).
 
-## Wijziging 5 -- `src/components/organization/OrganizationDetailModal.tsx`
-- Organization interface (regel 46-58): `crm_fase`, `afkorting` toevoegen.
-- Na Factuurgegevens card (regel 663): Nieuwe "Bendy gegevens" card met teal rand, toont CRM Fase en Afkorting conditioneel.
+**2b** Diagnostics interface (na regel 77): `user_statistics` en `user_field_fill_rates` properties toevoegen.
 
-## Wijziging 6 -- `src/components/organization/SublocationDetailModal.tsx`
-- Sublocation interface (regel 15-35): `externe_referentie`, `bendy_parent_id`, `kleur` toevoegen.
-- Locatie informatie grid (na regel 159): Externe referentie en Kleur (met kleur-bolletje) conditioneel tonen.
+**2c** Nieuwe state variabelen (na regel 121): `syncingUsers` en `userSyncResult`.
+
+**2d** Nieuwe `handleUserSync` handler (na regel 186): Roept `bendy-sync` aan met `action: 'sync_users'`.
+
+**2e** Na de "Sync Nu Starten" card (na regel 537): Nieuwe "Professional Sync" card met:
+- User statistieken badges (cached, gekoppeld, pending)
+- "Professional Sync Starten" knop
+- Resultaat tellers (5 KPIs)
+
+**2f** Na de Bendy Velden Analyse card (na regel 511): User velden tabel met fill rate badges (3 kolommen: Veld, Vulgraad, Voorbeelden).
 
 ## Geen andere bestanden
-6 bestanden totaal: 1 SQL migratie, bendy-sync/index.ts, BendySync.tsx, organization.ts, OrganizationDetailModal.tsx, SublocationDetailModal.tsx.
+Alleen `bendy-sync/index.ts` en `BendySync.tsx`. Edge function wordt herdeployed.
+
+## Technische details
+
+### syncUsers matching logica
+```text
+Match 1: bendy_id (eerder gekoppeld)
+Match 2: email case-insensitive (alleen als professional nog geen bendy_id heeft)
+```
+
+### User statistieken in diagnostics
+```text
+user_statistics: { total_synced, total_pending, total_cached }
+user_field_fill_rates: FieldFillRate[] (hergebruikt analyzeFieldFillRates)
+```
+
+### Verificatie (12 checks)
+1. buildFullName helper bestaat
+2. syncUsers functie met SyncResult return type
+3. syncUsers haalt /api/v2/users op
+4. syncUsers matcht op bendy_id en email
+5. syncUsers schrijft naar bendy_raw_cache met entity_type 'users'
+6. syncUsers schrijft naar bendy_id_mapping met entity_type 'professional'
+7. BendySyncRequest accepteert 'sync_users'
+8. Actie routing stuurt sync_users door
+9. Diagnostics bevat user_statistics en user_field_fill_rates
+10. UI heeft "Professional Sync Starten" knop
+11. UI toont user sync resultaten
+12. UI toont user velden tabel met fill rate badges
 
