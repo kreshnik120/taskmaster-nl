@@ -2210,6 +2210,10 @@ export type Database = {
           centrale_facturatie_email: string | null
           created_at: string
           id: string
+          invoice_adres: string | null
+          invoice_bedrijfsnaam: string | null
+          invoice_plaats: string | null
+          invoice_postcode: string | null
           kvk_nummer: string | null
           logo_url: string | null
           name: string
@@ -2224,6 +2228,10 @@ export type Database = {
           centrale_facturatie_email?: string | null
           created_at?: string
           id?: string
+          invoice_adres?: string | null
+          invoice_bedrijfsnaam?: string | null
+          invoice_plaats?: string | null
+          invoice_postcode?: string | null
           kvk_nummer?: string | null
           logo_url?: string | null
           name: string
@@ -2238,6 +2246,10 @@ export type Database = {
           centrale_facturatie_email?: string | null
           created_at?: string
           id?: string
+          invoice_adres?: string | null
+          invoice_bedrijfsnaam?: string | null
+          invoice_plaats?: string | null
+          invoice_postcode?: string | null
           kvk_nummer?: string | null
           logo_url?: string | null
           name?: string
@@ -2271,6 +2283,7 @@ export type Database = {
           gekoppelde_bv_org_id: string | null
           gezochte_functies: string[] | null
           id: string
+          interne_opmerking: string | null
           is_active: boolean
           kostenplaats: string | null
           leeftijd_tot: number | null
@@ -2300,6 +2313,7 @@ export type Database = {
           gekoppelde_bv_org_id?: string | null
           gezochte_functies?: string[] | null
           id?: string
+          interne_opmerking?: string | null
           is_active?: boolean
           kostenplaats?: string | null
           leeftijd_tot?: number | null
@@ -2329,6 +2343,7 @@ export type Database = {
           gekoppelde_bv_org_id?: string | null
           gezochte_functies?: string[] | null
           id?: string
+          interne_opmerking?: string | null
           is_active?: boolean
           kostenplaats?: string | null
           leeftijd_tot?: number | null
