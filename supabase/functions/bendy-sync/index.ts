@@ -1044,7 +1044,7 @@ async function handleStatusCheck(): Promise<Response> {
     const { data: userCacheRecords } = await adminClient
       .from('bendy_raw_cache')
       .select('raw_data')
-      .eq('tenant', tenant)
+      .eq('tenant', 'citozorg')
       .eq('entity_type', 'users');
 
     const userFieldFillRates = analyzeFieldFillRates(userCacheRecords);
