@@ -5,7 +5,7 @@
  * Auth: JWT + admin/eigenaar role in-code gevalideerd
  * External: OAuth2 client_credentials naar Bendy (direct, niet via proxy)
  * Protection: Sync lock, circuit breaker, max errors
- * Fase 1: Alleen clients
+ * Fase 1: Clients + Fase 2: Professionals
  */
 
 import {
@@ -281,6 +281,16 @@ function buildContactName(attrs: any): string | null {
     (attrs.surname || '').trim(),
   ].filter(Boolean);
   return parts.length > 0 ? parts.join(' ') : null;
+}
+
+// Helper: volledige naam samenstellen uit Bendy user velden
+function buildFullName(attrs: any): string {
+  const parts = [
+    (attrs.firstname || '').trim(),
+    (attrs.middlename || '').trim(),
+    (attrs.lastname || '').trim(),
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(' ') : 'Onbekend';
 }
 
 async function syncClients(
@@ -686,6 +696,133 @@ async function syncClients(
 }
 
 // ============================================
+// USER/PROFESSIONAL SYNC LOGICA
+// ============================================
+
+async function syncUsers(
+  adminClient: any,
+  tenant: string,
+  orgId: string,
+  _syncType: string,
+): Promise<SyncResult> {
+  const result: SyncResult = { fetched: 0, created: 0, updated: 0, skipped: 0, failed: 0, errors: [] };
+  logInfo(FUNCTION_NAME, `Professional sync gestart voor ${tenant}`);
+
+  // 1. Ophalen alle users uit Bendy API
+  const bendyUsers = await fetchAllBendyRecords(tenant, '/api/v2/users');
+  result.fetched = bendyUsers.length;
+  logInfo(FUNCTION_NAME, `${bendyUsers.length} Bendy users opgehaald`);
+  if (bendyUsers.length === 0) return result;
+
+  // 2. Alle bestaande professionals ophalen (voor matching)
+  const { data: existingProfessionals } = await adminClient
+    .from('professionals')
+    .select('id, full_name, email, bendy_id, telefoonnummer, status, org_id')
+    .eq('org_id', orgId)
+    .is('deleted_at', null);
+  const professionals = existingProfessionals || [];
+
+  // 3. Per Bendy user: cache + match + update
+  for (const bendyUser of bendyUsers) {
+    try {
+      const bendyId = String(bendyUser.id);
+      const attrs = bendyUser.attributes || {};
+
+      // Cache raw data (altijd)
+      await adminClient
+        .from('bendy_raw_cache')
+        .upsert({
+          org_id: orgId,
+          tenant,
+          entity_type: 'users',
+          bendy_id: bendyId,
+          raw_data: bendyUser,
+          fetched_at: new Date().toISOString(),
+        }, { onConflict: 'tenant,entity_type,bendy_id' });
+
+      // ── MATCHING: 2 niveaus ──
+      let matchedPro: any = null;
+
+      // Match 1: bestaande bendy_id
+      matchedPro = professionals.find((p: any) => p.bendy_id === bendyId);
+
+      // Match 2: email (case-insensitive)
+      if (!matchedPro && attrs.email) {
+        const bendyEmail = attrs.email.trim().toLowerCase();
+        matchedPro = professionals.find((p: any) =>
+          !p.bendy_id && p.email && p.email.trim().toLowerCase() === bendyEmail
+        );
+      }
+
+      if (matchedPro) {
+        // ── MATCH GEVONDEN — update professional ──
+        const updateData: Record<string, any> = { bendy_id: bendyId };
+        const fullName = buildFullName(attrs);
+        if (fullName !== 'Onbekend' && fullName !== matchedPro.full_name) {
+          updateData.full_name = fullName;
+        }
+        const effectivePhone = attrs.telephone || null;
+        if (effectivePhone && effectivePhone !== matchedPro.telefoonnummer) {
+          updateData.telefoonnummer = effectivePhone;
+        }
+
+        await adminClient
+          .from('professionals')
+          .update(updateData)
+          .eq('id', matchedPro.id);
+
+        // Markeer in-memory als gematcht
+        matchedPro.bendy_id = bendyId;
+
+        // Mapping registreren
+        await adminClient
+          .from('bendy_id_mapping')
+          .upsert({
+            org_id: orgId,
+            tenant,
+            entity_type: 'professional',
+            bendy_id: bendyId,
+            local_id: matchedPro.id,
+            bendy_updated_at: attrs.updated_at || null,
+            last_synced_at: new Date().toISOString(),
+            sync_status: 'synced',
+            conflict_data: null,
+          }, { onConflict: 'tenant,entity_type,bendy_id' });
+
+        result.updated++;
+      } else {
+        // ── GEEN MATCH — registreer als pending ──
+        const fullName = buildFullName(attrs);
+        await adminClient
+          .from('bendy_id_mapping')
+          .upsert({
+            org_id: orgId,
+            tenant,
+            entity_type: 'professional',
+            bendy_id: bendyId,
+            local_id: '00000000-0000-0000-0000-000000000000',
+            sync_status: 'pending',
+            conflict_data: {
+              full_name: fullName,
+              email: attrs.email || null,
+              telephone: attrs.telephone || null,
+              state: attrs.state || null,
+            },
+          }, { onConflict: 'tenant,entity_type,bendy_id' });
+
+        result.skipped++;
+      }
+    } catch (error) {
+      result.failed++;
+      const msg = error instanceof Error ? error.message : String(error);
+      result.errors.push(`User ${bendyUser.id}: ${msg.substring(0, 200)}`);
+    }
+  }
+
+  return result;
+}
+
+// ============================================
 // FIELD FILL RATE ANALYSIS
 // ============================================
 
@@ -745,7 +882,7 @@ function analyzeFieldFillRates(rawCacheRecords: any[] | null): FieldFillRate[] {
 // ============================================
 
 interface BendySyncRequest {
-  action: 'sync_clients' | 'update_config';
+  action: 'sync_clients' | 'sync_users' | 'update_config';
   tenant?: string;
   sync_type?: 'full' | 'incremental';
   enabled?: boolean;
@@ -924,6 +1061,12 @@ async function handleStatusCheck(): Promise<Response> {
           sample_attributes: sampleAttributes,
           sample_record: sampleRecord,
           field_fill_rates: fieldFillRates,
+          user_statistics: {
+            total_synced: userSyncedCount || 0,
+            total_pending: userPendingCount || 0,
+            total_cached: userCacheCount || 0,
+          },
+          user_field_fill_rates: userFieldFillRates,
         },
         pending_mappings: (pendingMappings || []).map((m: any) => ({
           id: m.id,
@@ -1172,8 +1315,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (body.action !== 'sync_clients') {
-      return errorResponse(`Onbekende actie: ${body.action}. Beschikbaar: sync_clients, update_config`, 400);
+    if (body.action !== 'sync_clients' && body.action !== 'sync_users') {
+      return errorResponse(`Onbekende actie: ${body.action}. Beschikbaar: sync_clients, sync_users, update_config`, 400);
     }
 
     const tenant = body.tenant || 'citozorg';
@@ -1210,7 +1353,7 @@ Deno.serve(async (req) => {
         org_id: orgId,
         tenant,
         sync_type: syncType,
-        entity_type: 'clients',
+        entity_type: body.action === 'sync_users' ? 'users' : 'clients',
         status: 'running',
       })
       .select('id')
@@ -1218,7 +1361,9 @@ Deno.serve(async (req) => {
 
     syncLogId = syncLog?.id || '';
 
-    const result = await syncClients(adminClient, tenant, orgId, syncType);
+    const result = body.action === 'sync_users'
+      ? await syncUsers(adminClient, tenant, orgId, syncType)
+      : await syncClients(adminClient, tenant, orgId, syncType);
 
     const duration = Date.now() - startTime;
     if (syncLogId) {
