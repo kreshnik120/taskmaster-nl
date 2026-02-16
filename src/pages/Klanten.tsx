@@ -40,6 +40,7 @@ interface Sublocation {
   hourly_rates_count?: number;
   tarieven_min?: number;
   tarieven_max?: number;
+  bendy_id?: string | null;
 }
 
 interface Location {
@@ -61,6 +62,7 @@ interface Organization {
   centrale_facturatie_email?: string | null;
   locations?: Location[];
   bureau?: string; // ABCzorg or CitoZorg (derived from org_id)
+  bendy_id?: string | null;
 }
 
 // Bureau mapping
