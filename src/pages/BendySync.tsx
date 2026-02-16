@@ -71,9 +71,11 @@ interface Diagnostics {
 }
 
 const SYNCED_FIELDS = [
-  'company_name', 'address', 'zipcode', 'town', 'telephone',
+  'company_name', 'address', 'zipcode', 'town', 'telephone', 'mobile',
   'email', 'chamber_of_commerce_number', 'updated_at',
   'firstname', 'middlename', 'surname', 'status',
+  'comment_public', 'comment', 'website',
+  'invoice_company_name', 'invoice_address', 'invoice_zipcode', 'invoice_town',
 ];
 
 interface StatusData {

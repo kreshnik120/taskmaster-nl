@@ -8,10 +8,13 @@ export interface Sublocation {
   postcode?: string | null;
   plaats?: string | null;
   telefoon?: string | null;
+  email?: string | null;
+  contactpersoon_naam?: string | null;
   sector?: string[] | null;
   doelgroep?: string[] | null;
   gezochte_functies?: string[] | null;
   publieke_opmerking?: string | null;
+  interne_opmerking?: string | null;
   doelgroep_omschrijving?: string | null;
   provincie?: string | null;
   leeftijd_van?: number | null;
@@ -46,6 +49,10 @@ export interface Organization {
   logo_url?: string | null;
   notes?: string | null;
   centrale_facturatie_email?: string | null;
+  invoice_bedrijfsnaam?: string | null;
+  invoice_adres?: string | null;
+  invoice_postcode?: string | null;
+  invoice_plaats?: string | null;
   locations: Location[];
   bureau?: string;
   totalSublocations?: number;

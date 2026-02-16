@@ -51,6 +51,10 @@ interface Organization {
   logo_url: string | null;
   website: string | null;
   centrale_facturatie_email: string | null;
+  invoice_bedrijfsnaam?: string | null;
+  invoice_adres?: string | null;
+  invoice_postcode?: string | null;
+  invoice_plaats?: string | null;
   locations: Location[];
 }
 
@@ -620,6 +624,40 @@ export function OrganizationDetailModal({
                   <CardContent className="py-8 text-center text-muted-foreground">
                     <Building className="h-12 w-12 mx-auto mb-2 opacity-50" />
                     <p>Nog geen werklocaties geconfigureerd</p>
+                  </CardContent>
+                </Card>
+              )}
+              {(organization.invoice_bedrijfsnaam || organization.invoice_adres) && (
+                <Card className="border-l-4 border-l-amber-400">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-amber-600" />
+                      Factuurgegevens (via Bendy)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      {organization.invoice_bedrijfsnaam && (
+                        <div>
+                          <p className="text-muted-foreground">Bedrijfsnaam</p>
+                          <p className="font-medium">{organization.invoice_bedrijfsnaam}</p>
+                        </div>
+                      )}
+                      {organization.invoice_adres && (
+                        <div>
+                          <p className="text-muted-foreground">Adres</p>
+                          <p className="font-medium">{organization.invoice_adres}</p>
+                        </div>
+                      )}
+                      {(organization.invoice_postcode || organization.invoice_plaats) && (
+                        <div>
+                          <p className="text-muted-foreground">Postcode & Plaats</p>
+                          <p className="font-medium">
+                            {[organization.invoice_postcode, organization.invoice_plaats].filter(Boolean).join(' ')}
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               )}
