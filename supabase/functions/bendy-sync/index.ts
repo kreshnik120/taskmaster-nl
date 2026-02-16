@@ -377,9 +377,10 @@ async function syncClients(
 // ============================================
 
 interface BendySyncRequest {
-  action: 'sync_clients';
+  action: 'sync_clients' | 'update_config';
   tenant?: string;
   sync_type?: 'full' | 'incremental';
+  enabled?: boolean;
 }
 
 // ============================================
@@ -637,8 +638,37 @@ Deno.serve(async (req) => {
       return errorResponse('Admin toegang vereist', 403);
     }
 
+    // ACTIE: update_config — toggle enabled/disabled
+    if (body.action === 'update_config') {
+      const toggleTenant = body.tenant || 'citozorg';
+      const { data: config, error: configError } = await adminClient
+        .from('bendy_sync_config')
+        .select('id, enabled, tenant')
+        .eq('tenant', toggleTenant)
+        .single();
+
+      if (configError || !config) {
+        return errorResponse(`Config voor tenant "${toggleTenant}" niet gevonden`, 404);
+      }
+
+      const newEnabled = body.enabled !== undefined ? Boolean(body.enabled) : !config.enabled;
+
+      await adminClient
+        .from('bendy_sync_config')
+        .update({ enabled: newEnabled })
+        .eq('id', config.id);
+
+      logInfo(FUNCTION_NAME, `Config ${toggleTenant} bijgewerkt: enabled=${newEnabled}`, { userId: user.id });
+
+      return jsonResponse({
+        success: true,
+        data: { tenant: toggleTenant, enabled: newEnabled },
+        metadata: { action: 'update_config', version: FUNCTION_VERSION },
+      });
+    }
+
     if (body.action !== 'sync_clients') {
-      return errorResponse(`Onbekende actie: ${body.action}. Beschikbaar: sync_clients`, 400);
+      return errorResponse(`Onbekende actie: ${body.action}. Beschikbaar: sync_clients, update_config`, 400);
     }
 
     const tenant = body.tenant || 'citozorg';

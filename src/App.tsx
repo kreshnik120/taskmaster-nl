@@ -27,6 +27,7 @@ import SollicitatiesArchief from "./pages/SollicitatiesArchief";
 import Klanten from "./pages/Klanten";
 import Plaatsingen from "./pages/Plaatsingen";
 import Planning from "./pages/Planning";
+import BendySync from "./pages/BendySync";
 
 import Gebruikers from "./pages/Gebruikers";
 import NotFound from "./pages/NotFound";
@@ -114,6 +115,7 @@ const App = () => (
             <Route path="/facturatie/nieuw" element={<FactuurAanmaken />} />
             <Route path="/facturatie/instellingen" element={<FacturatieInstellingen />} />
             <Route path="/facturatie/:id" element={<FactuurDetail />} />
+            <Route path="/bendy-sync" element={<BendySync />} />
           </Route>
           
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
