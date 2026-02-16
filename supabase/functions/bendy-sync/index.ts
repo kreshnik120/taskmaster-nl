@@ -319,7 +319,7 @@ async function syncClients(
       // 3a. Zoek bestaande organisatie
       let { data: org } = await adminClient
         .from('client_organizations')
-        .select('id, name, bendy_id, website')
+        .select('id, name, bendy_id, website, invoice_bedrijfsnaam, invoice_adres, invoice_postcode, invoice_plaats')
         .eq('kvk_nummer', kvk)
         .eq('org_id', orgId)
         .maybeSingle();
@@ -335,12 +335,28 @@ async function syncClients(
           .limit(1);
         defaultLocationId = locations?.[0]?.id || null;
 
-        // Update organisatie website vanuit Bendy data (als beschikbaar en nog niet ingevuld)
+        // Update organisatie velden vanuit Bendy data
         const firstBendyAttrs = clients[0]?.attributes || {};
+        const orgUpdateData: Record<string, any> = {};
         if (firstBendyAttrs.website && !org.website) {
+          orgUpdateData.website = firstBendyAttrs.website;
+        }
+        if (firstBendyAttrs.invoice_company_name && firstBendyAttrs.invoice_company_name !== org.invoice_bedrijfsnaam) {
+          orgUpdateData.invoice_bedrijfsnaam = firstBendyAttrs.invoice_company_name;
+        }
+        if (firstBendyAttrs.invoice_address && firstBendyAttrs.invoice_address !== org.invoice_adres) {
+          orgUpdateData.invoice_adres = firstBendyAttrs.invoice_address;
+        }
+        if (firstBendyAttrs.invoice_zipcode && firstBendyAttrs.invoice_zipcode !== org.invoice_postcode) {
+          orgUpdateData.invoice_postcode = firstBendyAttrs.invoice_zipcode;
+        }
+        if (firstBendyAttrs.invoice_town && firstBendyAttrs.invoice_town !== org.invoice_plaats) {
+          orgUpdateData.invoice_plaats = firstBendyAttrs.invoice_town;
+        }
+        if (Object.keys(orgUpdateData).length > 0) {
           await adminClient
             .from('client_organizations')
-            .update({ website: firstBendyAttrs.website })
+            .update(orgUpdateData)
             .eq('id', org.id);
         }
 
@@ -411,7 +427,7 @@ async function syncClients(
       if (locationIds.length > 0) {
         const { data: subs } = await adminClient
           .from('client_sublocations')
-          .select('id, naam, adres, postcode, plaats, kostenplaats, telefoon, email, contactpersoon_naam, is_active, bendy_id, location_id')
+          .select('id, naam, adres, postcode, plaats, kostenplaats, telefoon, email, contactpersoon_naam, is_active, bendy_id, location_id, publieke_opmerking, interne_opmerking')
           .in('location_id', locationIds);
         existingSubs = subs || [];
       }
@@ -488,8 +504,10 @@ async function syncClients(
             if (attrs.town && attrs.town !== matchedSub.plaats) {
               updateData.plaats = attrs.town;
             }
-            if (attrs.telephone && attrs.telephone !== matchedSub.telefoon) {
-              updateData.telefoon = attrs.telephone;
+            // Telefoon: mobile als fallback voor leeg telephone
+            const effectivePhone = attrs.telephone || attrs.mobile || null;
+            if (effectivePhone && effectivePhone !== matchedSub.telefoon) {
+              updateData.telefoon = effectivePhone;
             }
             if (attrs.email && attrs.email !== matchedSub.email) {
               updateData.email = attrs.email;
@@ -503,6 +521,13 @@ async function syncClients(
               if (bendyActive !== matchedSub.is_active) {
                 updateData.is_active = bendyActive;
               }
+            }
+            // Opmerkingen
+            if (attrs.comment_public && attrs.comment_public !== matchedSub.publieke_opmerking) {
+              updateData.publieke_opmerking = attrs.comment_public;
+            }
+            if (attrs.comment && attrs.comment !== matchedSub.interne_opmerking) {
+              updateData.interne_opmerking = attrs.comment;
             }
 
             await adminClient
@@ -540,9 +565,11 @@ async function syncClients(
                 adres: attrs.address || null,
                 postcode: attrs.zipcode || null,
                 plaats: attrs.town || null,
-                telefoon: attrs.telephone || null,
+                telefoon: attrs.telephone || attrs.mobile || null,
                 email: attrs.email || null,
                 contactpersoon_naam: newContactName,
+                publieke_opmerking: attrs.comment_public || null,
+                interne_opmerking: attrs.comment || null,
                 bendy_id: bendyId,
               })
               .select('id, naam, bendy_id')
