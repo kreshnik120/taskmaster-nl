@@ -1,21 +1,33 @@
 
-# BENDY-FIX-2: Diagnostiek Tellers Fix + Cosmetische Fix
+# BENDY-FIX-3: Data Fix Prisma Duplicaat + Sync Engine Verrijking
 
 ## Overzicht
-Fixt de "Bendy clients: 0" teller op de Data Kwaliteit card door de telling te baseren op `bendy_raw_cache` (100 records) in plaats van `pendingMappings` (nu leeg na succesvolle sync). Plus een cosmetische fix voor de records_failed render.
+Twee onderdelen: (1) SQL migratie om de duplicaat "Dr. Kuyperstraat" organisatie samen te voegen met de bestaande "Stichting Prisma", en (2) telefoon + website synchronisatie toevoegen aan de sync engine.
 
-## Wijziging 1 -- `supabase/functions/bendy-sync/index.ts`
+## Wijziging 1 -- Nieuwe SQL migratie
 
-### handleStatusCheck() tellers (regels 679-698)
-- Verplaats de `rawCacheRecords` query VOOR de `bendyWithKvk` berekening
-- Bereken `totalBendyRecords` uit rawCacheRecords length
-- Herbereken `bendyWithKvk` uit raw_data attributes (chamber_of_commerce_number) in plaats van pendingMappings conflict_data
-- Verwijder de oude bendyWithKvk berekening op basis van pendingMappings
+DO $$ blok dat:
+- Stichting Prisma zoekt (LOWER(name) LIKE '%prisma%', geen KvK)
+- Dr. Kuyperstraat zoekt (kvk_nummer = '41100695')
+- IF-guard: alleen als beide gevonden en niet dezelfde
+- KvK invullen op Prisma, sublocaties verplaatsen, bendy_id_mapping updaten, Dr. Kuyperstraat verwijderen (locaties + org)
 
-### Response (regels 765-766)
-- `bendy_clients_without_kvk` wijzigen van `pendingMappings.length - bendyWithKvk` naar `totalBendyRecords - bendyWithKvk`
+## Wijziging 2 -- `supabase/functions/bendy-sync/index.ts`
 
-## Wijziging 2 -- `src/pages/BendySync.tsx`
+### 2a. SELECT org: website toevoegen (regel 312)
+Van `'id, name, bendy_id'` naar `'id, name, bendy_id, website'`
 
-### records_failed render (regels 494-497)
-- Wrap de `log.records_failed` waarde altijd in een `<span>` element (ook als 0) voor consistente JSX rendering
+### 2b. Website update op bestaande org (na regel 326)
+Nieuw blok: als Bendy data een website heeft en org.website leeg is, update de organisatie.
+
+### 2c. SELECT sublocations: telefoon toevoegen (regel 395)
+Voeg `telefoon` toe aan de select string.
+
+### 2d. Telefoon sync bij UPDATE (na regel 471)
+Nieuw check-blok: `attrs.telephone !== matchedSub.telefoon` dan `updateData.telefoon`.
+
+### 2e. Telefoon sync bij INSERT (regel 506)
+Voeg `telefoon: attrs.telephone || null` toe aan het insert object.
+
+## Geen andere bestanden
+Alleen de migratie en de edge function worden gewijzigd.
