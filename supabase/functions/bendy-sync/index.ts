@@ -790,6 +790,14 @@ async function handleStatusCheck(): Promise<Response> {
 
     kvkBreakdown.sort((a, b) => b.bendy_count - a.bendy_count);
 
+    // Sample: pak 1 voorbeeld record uit raw_cache om alle beschikbare velden te tonen
+    const sampleRecord = (rawCacheRecords && rawCacheRecords.length > 0)
+      ? rawCacheRecords[0].raw_data
+      : null;
+    const sampleAttributes = sampleRecord?.attributes
+      ? Object.keys(sampleRecord.attributes)
+      : [];
+
     return jsonResponse({
       success: true,
       data: {
@@ -808,6 +816,8 @@ async function handleStatusCheck(): Promise<Response> {
           bendy_clients_with_kvk: bendyWithKvk,
           bendy_clients_without_kvk: totalBendyRecords - bendyWithKvk,
           kvk_breakdown: kvkBreakdown,
+          sample_attributes: sampleAttributes,
+          sample_record: sampleRecord,
         },
         pending_mappings: (pendingMappings || []).map((m: any) => ({
           id: m.id,

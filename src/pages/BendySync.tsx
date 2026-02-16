@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { RefreshCw, Power, Play, Database, Clock, AlertTriangle } from "lucide-react";
+import { RefreshCw, Power, Play, Database, Clock, AlertTriangle, CheckCircle2, MinusCircle } from "lucide-react";
 import { PageContainer } from "@/components/ui/page-container";
 import { PageHero } from "@/components/ui/page-hero";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -66,7 +66,15 @@ interface Diagnostics {
   bendy_clients_with_kvk: number;
   bendy_clients_without_kvk: number;
   kvk_breakdown?: KvkBreakdown[];
+  sample_attributes?: string[];
+  sample_record?: any;
 }
+
+const SYNCED_FIELDS = [
+  'company_name', 'address', 'zipcode', 'town', 'telephone',
+  'email', 'chamber_of_commerce_number', 'updated_at',
+  'firstname', 'middlename', 'surname', 'status',
+];
 
 interface StatusData {
   configs: SyncConfig[];
@@ -420,7 +428,63 @@ export default function BendySync() {
           </Card>
         )}
 
-        {/* Sync Action Card */}
+        {/* Bendy Velden Analyse */}
+        {diagnostics?.sample_attributes && diagnostics.sample_attributes.length > 0 && (
+          <Card className="glass-layer-1">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Database className="h-4 w-4 text-muted-foreground" />
+                Bendy Velden Analyse
+              </CardTitle>
+              {(() => {
+                const attrs = diagnostics.sample_attributes!;
+                const syncedCount = attrs.filter(a => SYNCED_FIELDS.includes(a)).length;
+                return (
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-sm text-muted-foreground">{syncedCount} van {attrs.length} velden gesynchroniseerd</span>
+                    <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">{syncedCount} actief</Badge>
+                    <Badge className="bg-muted text-muted-foreground">{attrs.length - syncedCount} niet gesynchroniseerd</Badge>
+                  </div>
+                );
+              })()}
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Veld</TableHead>
+                      <TableHead>Waarde (voorbeeld)</TableHead>
+                      <TableHead className="text-center">Gesynchroniseerd?</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {diagnostics.sample_attributes!.map((attr) => {
+                      const isSynced = SYNCED_FIELDS.includes(attr);
+                      const rawVal = diagnostics.sample_record?.attributes?.[attr];
+                      const displayVal = rawVal != null ? String(rawVal) : '—';
+                      const truncated = displayVal.length > 80 ? displayVal.slice(0, 80) + '…' : displayVal;
+                      return (
+                        <TableRow key={attr} className={isSynced ? 'bg-teal-50/50 dark:bg-teal-900/10' : ''}>
+                          <TableCell className="font-mono text-xs">{attr}</TableCell>
+                          <TableCell className="text-xs max-w-[300px] truncate">{truncated}</TableCell>
+                          <TableCell className="text-center">
+                            {isSynced ? (
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 inline" />
+                            ) : (
+                              <MinusCircle className="h-4 w-4 text-muted-foreground inline" />
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Card className="glass-layer-1">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
