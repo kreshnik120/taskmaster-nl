@@ -296,12 +296,14 @@ function buildFullName(attrs: any): string {
 // Helper: functie_niveau afleiden uit Bendy group namen
 function deriveFunctieNiveau(groupNames: string[]): string {
   for (const name of groupNames) {
-    if (/Begeleider|BGL/i.test(name)) return 'Begeleider';
-  }
-  for (const name of groupNames) {
+    if (/Persoonlijk\s*begeleider/i.test(name)) return 'Persoonlijk begeleider';
+    if (/Begeleider|BGL|PB/i.test(name)) return 'Begeleider';
+    if (/Verpleegkundige|VP|HBO-V/i.test(name)) return 'Verpleegkundige (MBO)';
+    if (/VIG/i.test(name)) return 'VIG';
+    if (/GGZ/i.test(name)) return 'GGZ-agoog';
     if (/Helpende/i.test(name)) return 'Helpende';
   }
-  return 'Onbekend';
+  return 'Helpende';
 }
 
 // Helper: werkvorm mapping Bendy → lokaal
