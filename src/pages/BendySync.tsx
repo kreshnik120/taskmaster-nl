@@ -68,6 +68,13 @@ interface Diagnostics {
   kvk_breakdown?: KvkBreakdown[];
   sample_attributes?: string[];
   sample_record?: any;
+  field_fill_rates?: Array<{
+    field: string;
+    filled: number;
+    total: number;
+    percentage: number;
+    examples: string[];
+  }>;
 }
 
 const SYNCED_FIELDS = [
@@ -458,6 +465,7 @@ export default function BendySync() {
                       <TableHead>Veld</TableHead>
                       <TableHead>Waarde (voorbeeld)</TableHead>
                       <TableHead className="text-center">Gesynchroniseerd?</TableHead>
+                      <TableHead className="text-center">Vulgraad</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -466,6 +474,12 @@ export default function BendySync() {
                       const rawVal = diagnostics.sample_record?.attributes?.[attr];
                       const displayVal = rawVal != null ? String(rawVal) : '—';
                       const truncated = displayVal.length > 80 ? displayVal.slice(0, 80) + '…' : displayVal;
+                      const fillInfo = diagnostics.field_fill_rates?.find(fr => fr.field === attr);
+                      const pct = fillInfo?.percentage ?? null;
+                      const badgeClass = pct === null ? ''
+                        : pct >= 80 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                        : pct >= 50 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                        : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
                       return (
                         <TableRow key={attr} className={isSynced ? 'bg-teal-50/50 dark:bg-teal-900/10' : ''}>
                           <TableCell className="font-mono text-xs">{attr}</TableCell>
@@ -475,6 +489,15 @@ export default function BendySync() {
                               <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 inline" />
                             ) : (
                               <MinusCircle className="h-4 w-4 text-muted-foreground inline" />
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {fillInfo ? (
+                              <Badge className={badgeClass}>
+                                {fillInfo.filled}/{fillInfo.total} ({pct}%)
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
                             )}
                           </TableCell>
                         </TableRow>
