@@ -18,13 +18,17 @@ interface Sublocation {
   plaats: string | null;
   provincie: string | null;
   adres: string | null;
+  postcode?: string | null;
   telefoon: string | null;
+  email?: string | null;
+  contactpersoon_naam?: string | null;
   doelgroep: string[] | null;
   doelgroep_omschrijving: string | null;
   sector: string[] | null;
   gezochte_functies: string[] | null;
   gekoppelde_bv_org_id: string | null;
   publieke_opmerking: string | null;
+  interne_opmerking?: string | null;
   capaciteit_min: number | null;
   capaciteit_max: number | null;
   leeftijd_van: number | null;
@@ -132,8 +136,10 @@ export function SublocationDetailModal({
                   <p className="font-medium">{sublocation.adres || "Niet opgegeven"}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Plaats</p>
-                  <p className="font-medium">{sublocation.plaats || "Niet opgegeven"}</p>
+                  <p className="text-muted-foreground">Postcode & Plaats</p>
+                  <p className="font-medium">
+                    {[sublocation.postcode, sublocation.plaats].filter(Boolean).join(' ') || "Niet opgegeven"}
+                  </p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Provincie</p>
@@ -142,6 +148,14 @@ export function SublocationDetailModal({
                 <div>
                   <p className="text-muted-foreground">Telefoon</p>
                   <p className="font-medium">{sublocation.telefoon || "Niet opgegeven"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">E-mail</p>
+                  <p className="font-medium">{sublocation.email || "Niet opgegeven"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Contactpersoon</p>
+                  <p className="font-medium">{sublocation.contactpersoon_naam || "Niet opgegeven"}</p>
                 </div>
               </div>
             </Card>
@@ -231,7 +245,15 @@ export function SublocationDetailModal({
                     <p className="whitespace-pre-wrap">{sublocation.publieke_opmerking}</p>
                   </div>
                 )}
-                {!sublocation.doelgroep_omschrijving && !sublocation.publieke_opmerking && (
+                {sublocation.interne_opmerking && (
+                  <div>
+                    <p className="text-muted-foreground mb-1">Interne opmerking</p>
+                    <p className="whitespace-pre-wrap bg-amber-50 dark:bg-amber-950/30 p-3 rounded-lg border border-amber-200 dark:border-amber-800">
+                      {sublocation.interne_opmerking}
+                    </p>
+                  </div>
+                )}
+                {!sublocation.doelgroep_omschrijving && !sublocation.publieke_opmerking && !sublocation.interne_opmerking && (
                   <p className="text-muted-foreground text-center py-4">
                     Geen werkbeschrijving beschikbaar
                   </p>
