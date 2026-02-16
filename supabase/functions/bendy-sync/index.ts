@@ -1040,6 +1040,33 @@ async function handleStatusCheck(): Promise<Response> {
       ? Object.keys(sampleRecord.attributes)
       : [];
 
+    // Users raw cache ophalen voor fill rate analyse
+    const { data: userCacheRecords } = await adminClient
+      .from('bendy_raw_cache')
+      .select('raw_data')
+      .eq('tenant', tenant)
+      .eq('entity_type', 'users');
+
+    const userFieldFillRates = analyzeFieldFillRates(userCacheRecords);
+
+    // Users statistieken
+    const { count: userSyncedCount } = await adminClient
+      .from('bendy_id_mapping')
+      .select('id', { count: 'exact', head: true })
+      .eq('entity_type', 'professional')
+      .eq('sync_status', 'synced');
+
+    const { count: userPendingCount } = await adminClient
+      .from('bendy_id_mapping')
+      .select('id', { count: 'exact', head: true })
+      .eq('entity_type', 'professional')
+      .eq('sync_status', 'pending');
+
+    const { count: userCacheCount } = await adminClient
+      .from('bendy_raw_cache')
+      .select('id', { count: 'exact', head: true })
+      .eq('entity_type', 'users');
+
     return jsonResponse({
       success: true,
       data: {
