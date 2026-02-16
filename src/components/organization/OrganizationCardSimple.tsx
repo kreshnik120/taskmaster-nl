@@ -5,7 +5,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Phone, Mail, Globe, Building2, AlertCircle } from "lucide-react";
+import { Phone, Mail, Globe, Building2, AlertCircle, Link2 } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface Location {
@@ -25,6 +25,7 @@ interface Sublocation {
   gezochte_functies?: string[] | null;
   plaats?: string | null;
   publieke_opmerking?: string | null;
+  bendy_id?: string | null;
 }
 
 interface Organization {
@@ -37,6 +38,7 @@ interface Organization {
   centrale_facturatie_email?: string | null;
   locations?: Location[];
   bureau?: string; // ABCzorg or CitoZorg
+  bendy_id?: string | null;
 }
 
 interface OrganizationCardSimpleProps {
@@ -56,9 +58,15 @@ export function OrganizationCardSimple({
 }: OrganizationCardSimpleProps) {
   // Count locations and sublocations
   const locationCount = organization.locations?.length || 0;
-  const sublocationCount = organization.locations?.reduce(
-    (acc, loc) => acc + (loc.sublocations?.length || 0), 0
-  ) || 0;
+    const sublocationCount = organization.locations?.reduce(
+      (acc, loc) => acc + (loc.sublocations?.length || 0), 0
+    ) || 0;
+
+    // Bendy sync status
+    const bendySyncedCount = organization.locations?.reduce(
+      (acc, loc) => acc + (loc.sublocations?.filter(sub => sub.bendy_id)?.length || 0), 0
+    ) || 0;
+    const isBendySynced = bendySyncedCount > 0;
 
   // Get aggregated sectors from sublocations
   const allSectors = new Set<string>();
@@ -226,6 +234,24 @@ export function OrganizationCardSimple({
                           </Tooltip>
                         </TooltipProvider>
                       )}
+                      {/* Bendy sync indicator */}
+                      {isBendySynced && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge variant="outline" className="text-xs gap-1 border-teal-300 text-teal-600 dark:border-teal-700 dark:text-teal-400">
+                                <Link2 className="h-3 w-3" />
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="font-medium">Bendy gekoppeld</p>
+                              <p className="text-xs text-muted-foreground">
+                                {bendySyncedCount} van {sublocationCount} werklocaties gesynchroniseerd
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
                       {/* Data completeness indicator */}
                       {isIncomplete && (
                         <TooltipProvider>
@@ -351,6 +377,12 @@ export function OrganizationCardSimple({
               <span>{locationCount} locatie{locationCount !== 1 ? 's' : ''}</span>
               <span>{sublocationCount} werklocatie{sublocationCount !== 1 ? 's' : ''}</span>
             </div>
+            {isBendySynced && (
+              <div className="flex items-center gap-1.5 text-xs text-teal-600 dark:text-teal-400 mt-1">
+                <Link2 className="h-3 w-3" />
+                <span>{bendySyncedCount}/{sublocationCount} via Bendy sync</span>
+              </div>
+            )}
           </div>
           
           {/* Sectors */}
