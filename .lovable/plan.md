@@ -1,36 +1,38 @@
 
-# BENDY-FIX-7: Sync Velden UI + Diagnostiek Fix
+# BENDY-INSPECT-2: Field Fill Rate Analyse
 
 ## Overzicht
-4 bestanden aanpassen om de 6 nieuw gesynchroniseerde velden zichtbaar te maken in de UI en de diagnostiek pagina bij te werken.
+Fill rate analyse toevoegen over alle raw_cache records, zodat per Bendy-veld zichtbaar is hoeveel records dat veld gevuld hebben. Drie onderdelen: helper functie, status response uitbreiden, frontend tabel uitbreiden.
 
-## Wijziging 1 -- `src/pages/BendySync.tsx` (regel 73-77)
-SYNCED_FIELDS array uitbreiden van 12 naar 20 items. Toevoegen: `mobile`, `comment_public`, `comment`, `website`, `invoice_company_name`, `invoice_address`, `invoice_zipcode`, `invoice_town`.
+## Wijziging 1 -- `supabase/functions/bendy-sync/index.ts`
 
-## Wijziging 2 -- `src/components/organization/SublocationDetailModal.tsx`
-4 aanpassingen:
+**1a** Nieuwe `analyzeFieldFillRates` helper functie toevoegen op regel 667 (na de `syncClientsToDatabase` functie, voor het `REQUEST TYPES` commentaar). Bevat:
+- `FieldFillRate` interface (field, filled, total, percentage, examples)
+- Iteratie over alle rawCacheRecords, verzamelt alle unieke attribute keys
+- Per key telt het gevulde records (niet null/undefined/leeg/leeg object/leeg array)
+- Verzamelt tot 3 voorbeeldwaarden (afgekapt op 80 tekens)
+- Sorteert resultaat op percentage (hoog naar laag)
 
-**2a** Interface (regel 15-32): `postcode`, `email`, `contactpersoon_naam`, `interne_opmerking` toevoegen.
+**1b** Op regel 818 (na `kvkBreakdown.sort()`): `fieldFillRates` berekenen via de helper.
 
-**2b** Locatie informatie card (regel 129-147): Postcode+Plaats gecombineerd, e-mail en contactpersoon velden toevoegen.
+**1c** Op regel 847 (na `sample_record`): `field_fill_rates: fieldFillRates` toevoegen aan het diagnostics object.
 
-**2c** Werkbeschrijving tab (regel 228-233): Interne opmerking tonen in amber kader, na publieke opmerking.
+## Wijziging 2 -- `src/pages/BendySync.tsx`
 
-**2d** Lege-check (regel 234): `!sublocation.interne_opmerking` toevoegen aan conditie.
+**2a** Diagnostics interface (regel 70, na `sample_record`): `field_fill_rates` property toevoegen met het juiste type.
 
-## Wijziging 3 -- `src/components/organization/OrganizationDetailModal.tsx`
-2 aanpassingen:
+**2b** Tabel header (regel 458-461): Vierde kolom "Vulgraad" toevoegen.
 
-**3a** Organization interface (regel 46-55): 4 invoice velden toevoegen (`invoice_bedrijfsnaam`, `invoice_adres`, `invoice_postcode`, `invoice_plaats`).
-
-**3b** Factuurgegevens card (voor regel 626): Nieuwe Card met amber rand en `FileText` icoon, toont bedrijfsnaam, adres, postcode+plaats conditioneel. Alleen zichtbaar als er factuurdata is.
-
-Data query hoeft niet aangepast: `Klanten.tsx` gebruikt al `select("*")`.
-
-## Wijziging 4 -- `src/types/organization.ts`
-**4a** Sublocation interface (regel 4-23): `email`, `contactpersoon_naam`, `interne_opmerking` toevoegen.
-
-**4b** Organization interface (regel 39-53): `invoice_bedrijfsnaam`, `invoice_adres`, `invoice_postcode`, `invoice_plaats` toevoegen.
+**2c** Tabel body (regel 463-482): Vervangen door uitgebreide map die per veld de fill rate opzoekt en een kleur-badge toont:
+- Groen badge (emerald): vulgraad >= 80%
+- Amber badge: vulgraad 50-79%
+- Rood badge: vulgraad < 50%
+- Badge toont "X/Y (Z%)" formaat
 
 ## Geen andere bestanden
-Alleen deze 4 bestanden worden gewijzigd.
+Alleen `bendy-sync/index.ts` en `BendySync.tsx` worden gewijzigd. Edge function wordt herdeployed.
+
+## Verificatie
+- Helper functie analyseert alle records, niet slechts 1 sample
+- Response bevat `field_fill_rates` array gesorteerd op percentage
+- UI toont 4-koloms tabel met kleurgecodeerde vulgraad badges
