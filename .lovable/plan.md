@@ -1,27 +1,25 @@
 
+# BENDY-INSPECT: Raw Data Velden Inzichtelijk Maken
 
-# BENDY-FIX-5: Migratie Forceren + Data Verificatie
+## Overzicht
+Twee wijzigingen: (1) sample record data meesturen in de status response, en (2) een nieuwe "Bendy Velden Analyse" card in de UI.
 
-## Probleem
-De DO $$ blokken uit BENDY-FIX-3 en BENDY-FIX-4 zijn niet uitgevoerd op de live database. Dr. Kuyperstraat bestaat nog als aparte organisatie en Siza mist mogelijk haar KvK-nummer.
+## Wijziging 1 -- `supabase/functions/bendy-sync/index.ts`
 
-## Oplossing
-Een nieuwe idempotente SQL migratie die alle data fixes opnieuw uitvoert.
+Na de `kvkBreakdown.sort()` op regel 791, voor het `return jsonResponse()` op regel 793:
 
-## Wijziging -- Nieuw SQL migratiebestand in `supabase/migrations/`
+- Sample record en attributes array berekenen uit `rawCacheRecords[0].raw_data`
+- `sample_attributes` en `sample_record` toevoegen aan het `diagnostics` object in de response
 
-**Deel A**: Dr. Kuyperstraat samenvoegen met Stichting Prisma
-- Zoek Dr. Kuyperstraat op `kvk_nummer = '41100695' AND LOWER(name) LIKE '%kuyper%'`
-- Zoek Prisma op `LOWER(name) LIKE '%prisma%' AND id != dr_kuyper_id`
-- IF-guard: alleen als beide gevonden
-- KvK overschrijven op Prisma, sublocaties verplaatsen, bendy_id_mapping updaten, Dr. Kuyperstraat verwijderen
+## Wijziging 2 -- `src/pages/BendySync.tsx`
 
-**Deel B**: KvK-nummer voor Stichting Siza
-- Zoek Siza zonder KvK, vul `09103844` in
+Nieuwe Card "Bendy Velden Analyse" toevoegen na de KvK Matching Overzicht card (na regel 421):
 
-**Deel C**: Kolommen idempotent toevoegen
-- `ALTER TABLE IF NOT EXISTS` voor email en contactpersoon_naam (vangnet)
+- Import `CheckCircle2` en `MinusCircle` uit lucide-react
+- Constante `SYNCED_FIELDS` met de lijst van gesynchroniseerde veldnamen
+- Samenvatting bovenaan: "X van Y velden gesynchroniseerd" met groene/grijze badges
+- Tabel met 3 kolommen: Veld, Waarde (voorbeeld, afgekapt op 80 tekens), Gesynchroniseerd (groen vinkje of grijs minteken)
+- Teal achtergrond accent op gesynchroniseerde rijen
 
 ## Geen andere bestanden
-Alleen het nieuwe migratiebestand wordt aangemaakt.
-
+Alleen deze 2 bestanden worden gewijzigd.
