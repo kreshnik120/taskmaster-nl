@@ -1,34 +1,27 @@
 
 
-# Taak Acceptatie Zichtbaar Maken
+# BENDY-FIX-5: Migratie Forceren + Data Verificatie
 
 ## Probleem
-De "Accepteren" actie zit verstopt in een dropdown menu (drie puntjes) dat pas verschijnt als je over een taakkaart hovert. Leonie ziet wel de badge "Wacht op acceptatie" maar kan de actie niet vinden. Op mobiel is hover helemaal niet mogelijk.
+De DO $$ blokken uit BENDY-FIX-3 en BENDY-FIX-4 zijn niet uitgevoerd op de live database. Dr. Kuyperstraat bestaat nog als aparte organisatie en Siza mist mogelijk haar KvK-nummer.
 
 ## Oplossing
-Een duidelijke "Accepteren" knop direct op de TaskCard tonen wanneer een taak wacht op acceptatie, zodat het meteen zichtbaar en klikbaar is -- zonder in een menu te hoeven zoeken.
+Een nieuwe idempotente SQL migratie die alle data fixes opnieuw uitvoert.
 
-## Technische wijzigingen
+## Wijziging -- Nieuw SQL migratiebestand in `supabase/migrations/`
 
-### Bestand: `src/components/TaskCard.tsx`
+**Deel A**: Dr. Kuyperstraat samenvoegen met Stichting Prisma
+- Zoek Dr. Kuyperstraat op `kvk_nummer = '41100695' AND LOWER(name) LIKE '%kuyper%'`
+- Zoek Prisma op `LOWER(name) LIKE '%prisma%' AND id != dr_kuyper_id`
+- IF-guard: alleen als beide gevonden
+- KvK overschrijven op Prisma, sublocaties verplaatsen, bendy_id_mapping updaten, Dr. Kuyperstraat verwijderen
 
-**Wat**: Een `onAccept` callback prop toevoegen en een prominente "Accepteren" knop direct op de kaart renderen wanneer `isPendingAcceptance(task)` true is.
+**Deel B**: KvK-nummer voor Stichting Siza
+- Zoek Siza zonder KvK, vul `09103844` in
 
-- Nieuwe prop `onAccept?: (taskId: string) => void` toevoegen aan `TaskCardProps`
-- Direct onder de bestaande "Wacht op acceptatie" badge een compacte groene "Accepteren" knop plaatsen
-- De knop stopt event propagation zodat de kaart niet opent bij klikken
-- Knop alleen tonen als `onAccept` is meegegeven (zodat het kanban-bord van de manager geen accept-knop toont)
+**Deel C**: Kolommen idempotent toevoegen
+- `ALTER TABLE IF NOT EXISTS` voor email en contactpersoon_naam (vangnet)
 
-### Bestand: `src/components/dashboard/MyTasksFlowSection.tsx`
-
-**Wat**: De `onAccept` prop doorgeven aan TaskCard zodat de knop werkt.
-
-- Bij de `<TaskCard>` render (rond regel 823) de bestaande `handleAcceptTask` functie doorgeven als `onAccept` prop
-- De dropdown "Accepteren" optie blijft bestaan als alternatief
-
-### Resultaat
-- Leonie ziet direct een groene "Accepteren" knop op haar taakkaarten
-- Werkt op zowel desktop als mobiel (geen hover nodig)
-- Bestaande dropdown-optie blijft als fallback
-- Geen database wijzigingen nodig
+## Geen andere bestanden
+Alleen het nieuwe migratiebestand wordt aangemaakt.
 
