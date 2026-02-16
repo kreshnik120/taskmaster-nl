@@ -491,10 +491,12 @@ export default function BendySync() {
                         <TableCell className="text-right">{log.records_fetched}</TableCell>
                         <TableCell className="text-right">{log.records_updated}</TableCell>
                         <TableCell className="text-right">{log.records_skipped}</TableCell>
-                        <TableCell className="text-right">{log.records_failed > 0
-                          ? <span className="text-destructive font-medium">{log.records_failed}</span>
-                          : log.records_failed
-                        }</TableCell>
+                        <TableCell className="text-right">
+                          {log.records_failed > 0
+                            ? <span className="text-destructive font-medium">{log.records_failed}</span>
+                            : <span>{log.records_failed}</span>
+                          }
+                        </TableCell>
                         <TableCell className="text-right whitespace-nowrap">{formatDuration(log.duration_ms)}</TableCell>
                       </TableRow>
                     ))

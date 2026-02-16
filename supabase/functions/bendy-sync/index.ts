@@ -676,9 +676,19 @@ async function handleStatusCheck(): Promise<Response> {
       .order('created_at', { ascending: false })
       .limit(100);
 
-    // Diagnostics: Bendy KvK stats
-    const bendyWithKvk = (pendingMappings || []).filter(
-      (m: any) => m.conflict_data?.kvk && m.conflict_data.kvk.trim() !== ''
+    // Diagnostics: Bendy clients uit raw_cache (niet pendingMappings)
+    const { data: rawCacheRecords } = await adminClient
+      .from('bendy_raw_cache')
+      .select('bendy_id, raw_data')
+      .eq('tenant', 'citozorg')
+      .eq('entity_type', 'clients');
+
+    const totalBendyRecords = (rawCacheRecords || []).length;
+    const bendyWithKvk = (rawCacheRecords || []).filter(
+      (r: any) => {
+        const kvk = r.raw_data?.attributes?.chamber_of_commerce_number?.trim();
+        return kvk && kvk !== '';
+      }
     ).length;
 
     // Diagnostics: Per-KvK breakdown
@@ -690,12 +700,6 @@ async function handleStatusCheck(): Promise<Response> {
       bendy_examples: string[];
       local_sublocations: number;
     }> = [];
-
-    const { data: rawCacheRecords } = await adminClient
-      .from('bendy_raw_cache')
-      .select('bendy_id, raw_data')
-      .eq('tenant', 'citozorg')
-      .eq('entity_type', 'clients');
 
     // Groepeer Bendy records per KvK-nummer
     const kvkGroups = new Map<string, { count: number; names: string[] }>();
@@ -763,7 +767,7 @@ async function handleStatusCheck(): Promise<Response> {
           local_clients_total: totalClients || 0,
           local_clients_with_kvk: clientsWithKvk || 0,
           bendy_clients_with_kvk: bendyWithKvk,
-          bendy_clients_without_kvk: (pendingMappings || []).length - bendyWithKvk,
+          bendy_clients_without_kvk: totalBendyRecords - bendyWithKvk,
           kvk_breakdown: kvkBreakdown,
         },
         pending_mappings: (pendingMappings || []).map((m: any) => ({
