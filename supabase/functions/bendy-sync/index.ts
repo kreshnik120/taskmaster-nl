@@ -293,6 +293,26 @@ function buildFullName(attrs: any): string {
   return parts.length > 0 ? parts.join(' ') : 'Onbekend';
 }
 
+// Helper: functie_niveau afleiden uit Bendy group namen
+function deriveFunctieNiveau(groupNames: string[]): string {
+  for (const name of groupNames) {
+    if (/Begeleider|BGL/i.test(name)) return 'Begeleider';
+  }
+  for (const name of groupNames) {
+    if (/Helpende/i.test(name)) return 'Helpende';
+  }
+  return 'Onbekend';
+}
+
+// Helper: werkvorm mapping Bendy → lokaal
+function mapWerkvorm(professionalType: string | null): string | null {
+  if (!professionalType) return null;
+  const lower = professionalType.toLowerCase();
+  if (lower === 'zzp') return 'ZZP';
+  if (lower === 'loondienst') return 'Uitzendkracht';
+  return null;
+}
+
 async function syncClients(
   adminClient: any,
   tenant: string,
@@ -722,6 +742,14 @@ async function syncUsers(
     .is('deleted_at', null);
   const professionals = existingProfessionals || [];
 
+  // 2b. Bendy groepen ophalen voor functie_niveau mapping
+  const bendyGroups = await fetchAllBendyRecords(tenant, '/api/v2/groups');
+  const groupMap = new Map<string, string>();
+  for (const group of bendyGroups) {
+    groupMap.set(String(group.id), (group.attributes?.name || '').trim());
+  }
+  logInfo(FUNCTION_NAME, `${groupMap.size} Bendy groepen opgehaald voor functie mapping`);
+
   // 3. Per Bendy user: cache + match + update
   for (const bendyUser of bendyUsers) {
     try {
@@ -765,6 +793,9 @@ async function syncUsers(
         if (effectivePhone && effectivePhone !== matchedPro.telefoonnummer) {
           updateData.telefoonnummer = effectivePhone;
         }
+        if (attrs.email && attrs.email !== matchedPro.email) {
+          updateData.email = attrs.email;
+        }
 
         await adminClient
           .from('professionals')
@@ -791,26 +822,64 @@ async function syncUsers(
 
         result.updated++;
       } else {
-        // ── GEEN MATCH — registreer als pending ──
+        // ── GEEN MATCH — professional AANMAKEN ──
         const fullName = buildFullName(attrs);
-        await adminClient
-          .from('bendy_id_mapping')
-          .upsert({
-            org_id: orgId,
-            tenant,
-            entity_type: 'professional',
-            bendy_id: bendyId,
-            local_id: '00000000-0000-0000-0000-000000000000',
-            sync_status: 'pending',
-            conflict_data: {
-              full_name: fullName,
-              email: attrs.email || null,
-              telephone: attrs.telephone || null,
-              state: attrs.state || null,
-            },
-          }, { onConflict: 'tenant,entity_type,bendy_id' });
 
-        result.skipped++;
+        // Functie_niveau uit groepen
+        const userGroupIds = (bendyUser.relationships?.groups?.data || [])
+          .map((g: any) => String(g.id));
+        const userGroupNames = userGroupIds
+          .map((id: string) => groupMap.get(id))
+          .filter(Boolean) as string[];
+        const functieNiveau = deriveFunctieNiveau(userGroupNames);
+
+        // Werkvorm uit professional_type
+        const werkvorm = mapWerkvorm(attrs.professional_type || null);
+
+        // Status uit state
+        const isActive = attrs.state
+          ? attrs.state.toLowerCase() !== 'inactief'
+          : true;
+
+        const insertData: Record<string, any> = {
+          org_id: orgId,
+          full_name: fullName,
+          functie_niveau: functieNiveau,
+          email: attrs.email || null,
+          telefoonnummer: attrs.telephone || null,
+          werkvorm: werkvorm,
+          status: isActive ? 'actief' : 'inactief',
+          geboortedatum: attrs.birthdate || null,
+          profile_photo_url: attrs.photo_url || null,
+          bendy_id: bendyId,
+        };
+
+        const { data: newPro, error: proError } = await adminClient
+          .from('professionals')
+          .insert(insertData)
+          .select('id')
+          .single();
+
+        if (newPro) {
+          await adminClient
+            .from('bendy_id_mapping')
+            .upsert({
+              org_id: orgId,
+              tenant,
+              entity_type: 'professional',
+              bendy_id: bendyId,
+              local_id: newPro.id,
+              bendy_updated_at: attrs.updated_at || null,
+              last_synced_at: new Date().toISOString(),
+              sync_status: 'synced',
+              conflict_data: null,
+            }, { onConflict: 'tenant,entity_type,bendy_id' });
+
+          result.created++;
+        } else {
+          result.failed++;
+          result.errors.push(`User ${bendyId}: ${proError?.message || 'Aanmaken mislukt'}`);
+        }
       }
     } catch (error) {
       result.failed++;
