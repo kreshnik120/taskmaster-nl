@@ -40,6 +40,24 @@ interface SyncLog {
   duration_ms: number | null;
 }
 
+interface PendingMapping {
+  id: string;
+  bendy_id: string;
+  company_name: string;
+  kvk: string | null;
+  town: string;
+  created_at: string;
+}
+
+interface Diagnostics {
+  config_org_id: string | null;
+  config_org_name: string | null;
+  local_clients_total: number;
+  local_clients_with_kvk: number;
+  bendy_clients_with_kvk: number;
+  bendy_clients_without_kvk: number;
+}
+
 interface StatusData {
   configs: SyncConfig[];
   recent_logs: SyncLog[];
@@ -48,6 +66,8 @@ interface StatusData {
     total_pending: number;
     total_cached: number;
   };
+  diagnostics?: Diagnostics;
+  pending_mappings?: PendingMapping[];
 }
 
 interface SyncResult {
@@ -95,6 +115,8 @@ export default function BendySync() {
 
   const config = statusData?.configs?.[0] || null;
   const stats = statusData?.statistics;
+  const diagnostics = statusData?.diagnostics;
+  const pendingMappings = statusData?.pending_mappings || [];
 
   const handleToggle = async () => {
     if (!config) return;
@@ -253,6 +275,66 @@ export default function BendySync() {
           </div>
         )}
 
+        {/* Data Kwaliteit Card */}
+        {diagnostics && (
+          <Card className="glass-layer-1 border-amber-200 dark:border-amber-800">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                Data Kwaliteit — Matching Analyse
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Sync configuratie org_id</p>
+                    <p className="text-sm font-mono">{diagnostics.config_org_id || '—'}</p>
+                    <p className="text-sm font-medium">{diagnostics.config_org_name || 'Onbekend'}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/50">
+                    <p className="text-xs text-muted-foreground mb-1">Lokale clients (abcito.io)</p>
+                    <p className="text-lg font-bold">{diagnostics.local_clients_total}</p>
+                    <p className="text-xs">
+                      Waarvan <span className="font-semibold text-emerald-600 dark:text-emerald-400">{diagnostics.local_clients_with_kvk}</span> met KvK-nummer
+                      {diagnostics.local_clients_total > 0 && (
+                        <span className="text-muted-foreground"> ({Math.round((diagnostics.local_clients_with_kvk / diagnostics.local_clients_total) * 100)}%)</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="p-3 rounded-lg bg-muted/50">
+                    <p className="text-xs text-muted-foreground mb-1">Bendy clients (opgehaald)</p>
+                    <p className="text-lg font-bold">{diagnostics.bendy_clients_with_kvk + diagnostics.bendy_clients_without_kvk}</p>
+                    <p className="text-xs">
+                      Waarvan <span className="font-semibold text-emerald-600 dark:text-emerald-400">{diagnostics.bendy_clients_with_kvk}</span> met KvK-nummer
+                      {(diagnostics.bendy_clients_with_kvk + diagnostics.bendy_clients_without_kvk) > 0 && (
+                        <span className="text-muted-foreground"> ({Math.round((diagnostics.bendy_clients_with_kvk / (diagnostics.bendy_clients_with_kvk + diagnostics.bendy_clients_without_kvk)) * 100)}%)</span>
+                      )}
+                    </p>
+                  </div>
+                  {diagnostics.local_clients_total === 0 && (
+                    <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm">
+                      <strong>Probleem gevonden:</strong> Geen lokale clients voor deze org_id. Controleer of de sync config naar de juiste organisatie wijst.
+                    </div>
+                  )}
+                  {diagnostics.local_clients_total > 0 && diagnostics.local_clients_with_kvk === 0 && (
+                    <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm">
+                      <strong>Probleem gevonden:</strong> Lokale clients bestaan maar geen enkele heeft een KvK-nummer. Vul KvK-nummers aan voor automatische matching.
+                    </div>
+                  )}
+                  {diagnostics.bendy_clients_with_kvk === 0 && (
+                    <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm">
+                      <strong>Probleem gevonden:</strong> Geen enkele Bendy client heeft een KvK-nummer (chamber_of_commerce_number). Alternatieve matching nodig.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Sync Action Card */}
         <Card className="glass-layer-1">
           <CardHeader className="pb-3">
@@ -336,6 +418,50 @@ export default function BendySync() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Pending Review Tabel */}
+        {pendingMappings.length > 0 && (
+          <Card className="glass-layer-1">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Clock className="h-4 w-4 text-amber-500" />
+                Wacht op Review ({pendingMappings.length} clients)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Bendy ID</TableHead>
+                      <TableHead>Bedrijfsnaam</TableHead>
+                      <TableHead>KvK-nummer</TableHead>
+                      <TableHead>Plaats</TableHead>
+                      <TableHead>Ontvangen</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pendingMappings.map((mapping) => (
+                      <TableRow key={mapping.id}>
+                        <TableCell className="font-mono text-xs">{mapping.bendy_id}</TableCell>
+                        <TableCell className="font-medium">{mapping.company_name}</TableCell>
+                        <TableCell>
+                          {mapping.kvk ? (
+                            <span className="font-mono text-sm">{mapping.kvk}</span>
+                          ) : (
+                            <span className="text-muted-foreground italic text-xs">ontbreekt</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm">{mapping.town}</TableCell>
+                        <TableCell className="text-sm whitespace-nowrap">{formatDate(mapping.created_at)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </PageContainer>
   );

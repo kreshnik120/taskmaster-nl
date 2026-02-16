@@ -415,6 +415,45 @@ async function handleStatusCheck(): Promise<Response> {
       .from('bendy_raw_cache')
       .select('id', { count: 'exact', head: true });
 
+    // Diagnostics: config org_id + organisatienaam
+    const configOrgData = configs?.[0]?.id
+      ? (await adminClient
+          .from('bendy_sync_config')
+          .select('org_id, organizations!inner(name)')
+          .eq('tenant', 'citozorg')
+          .single()
+        ).data
+      : null;
+
+    const orgId = (configOrgData as any)?.org_id;
+
+    // Diagnostics: lokale client counts
+    const { count: totalClients } = await adminClient
+      .from('client_organizations')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId || '');
+
+    const { count: clientsWithKvk } = await adminClient
+      .from('client_organizations')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId || '')
+      .not('kvk_nummer', 'is', null)
+      .neq('kvk_nummer', '');
+
+    // Diagnostics: pending mappings met conflict_data
+    const { data: pendingMappings } = await adminClient
+      .from('bendy_id_mapping')
+      .select('id, bendy_id, conflict_data, sync_status, created_at')
+      .eq('sync_status', 'pending')
+      .eq('entity_type', 'client')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    // Diagnostics: Bendy KvK stats
+    const bendyWithKvk = (pendingMappings || []).filter(
+      (m: any) => m.conflict_data?.kvk && m.conflict_data.kvk.trim() !== ''
+    ).length;
+
     return jsonResponse({
       success: true,
       data: {
@@ -425,6 +464,22 @@ async function handleStatusCheck(): Promise<Response> {
           total_pending: pendingCount || 0,
           total_cached: cacheCount || 0,
         },
+        diagnostics: {
+          config_org_id: orgId || null,
+          config_org_name: (configOrgData as any)?.organizations?.name || null,
+          local_clients_total: totalClients || 0,
+          local_clients_with_kvk: clientsWithKvk || 0,
+          bendy_clients_with_kvk: bendyWithKvk,
+          bendy_clients_without_kvk: (pendingMappings || []).length - bendyWithKvk,
+        },
+        pending_mappings: (pendingMappings || []).map((m: any) => ({
+          id: m.id,
+          bendy_id: m.bendy_id,
+          company_name: m.conflict_data?.company_name || '—',
+          kvk: m.conflict_data?.kvk || null,
+          town: m.conflict_data?.town || '—',
+          created_at: m.created_at,
+        })),
       },
       metadata: {
         version: FUNCTION_VERSION,
