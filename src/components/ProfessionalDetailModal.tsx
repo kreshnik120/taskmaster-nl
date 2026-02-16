@@ -12,7 +12,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { useUserRole } from "@/hooks/useUserRole";
+import { Shield, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { 
   Phone, Mail, MapPin, Briefcase, Car, Calendar, User, Users,
@@ -57,6 +59,11 @@ interface Professional {
   cv_file_path: string | null;
   cv_file_name: string | null;
   cv_uploaded_at: string | null;
+  // Bendy sync fields
+  voorletters: string | null;
+  geboorteplaats: string | null;
+  geslacht: string | null;
+  bendy_external_id: string | null;
   // New fields for complete data sync
   ervaring_sector: string[] | null;
   doelgroep_ervaring: string[] | null;
@@ -154,6 +161,40 @@ export function ProfessionalDetailModal({
   const [contactOpen, setContactOpen] = useState(true);
   const [financialOpen, setFinancialOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("profiel");
+  const [bsnData, setBsnData] = useState<{ bsn: string | null; revealed: boolean; loading: boolean }>({ bsn: null, revealed: false, loading: false });
+  const { isAdmin } = useUserRole();
+
+  const fetchAndRevealBsn = useCallback(async () => {
+    if (!professional) return;
+    setBsnData(prev => ({ ...prev, loading: true }));
+    try {
+      const { data } = await supabase
+        .from('professional_bsn')
+        .select('encrypted_bsn')
+        .eq('professional_id', professional.id)
+        .maybeSingle();
+      
+      if (data?.encrypted_bsn) {
+        // Log audit entry
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase.from('security_audit_log').insert({
+            user_id: user.id,
+            event_type: 'bsn_access',
+            action: 'bsn_revealed',
+            entity_type: 'professional',
+            entity_id: professional.id,
+            details: { professional_name: professional.full_name },
+          } as any);
+        }
+        setBsnData({ bsn: data.encrypted_bsn, revealed: true, loading: false });
+      } else {
+        setBsnData({ bsn: null, revealed: false, loading: false });
+      }
+    } catch {
+      setBsnData(prev => ({ ...prev, loading: false }));
+    }
+  }, [professional]);
   
   const [editData, setEditData] = useState({
     full_name: "",
@@ -503,6 +544,53 @@ export function ProfessionalDetailModal({
                     <Label className="text-xs text-muted-foreground">Regio</Label>
                     <p className="text-sm mt-0.5">{professional.regio || "-"}</p>
                   </div>
+                  {professional.voorletters && (
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Voorletters</Label>
+                      <p className="text-sm mt-0.5">{professional.voorletters}</p>
+                    </div>
+                  )}
+                  {professional.geboorteplaats && (
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Geboorteplaats</Label>
+                      <p className="text-sm mt-0.5">{professional.geboorteplaats}</p>
+                    </div>
+                  )}
+                  {professional.geslacht && (
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Geslacht</Label>
+                      <p className="text-sm mt-0.5">{professional.geslacht}</p>
+                    </div>
+                  )}
+                  {isAdmin() && (
+                    <div>
+                      <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Shield className="h-3 w-3" />
+                        BSN
+                      </Label>
+                      {bsnData.revealed && bsnData.bsn ? (
+                        <p className="text-sm mt-0.5 font-mono">{bsnData.bsn}</p>
+                      ) : (
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <p className="text-sm font-mono text-muted-foreground">***-***-***</p>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 px-2 text-xs"
+                            onClick={fetchAndRevealBsn}
+                            disabled={bsnData.loading}
+                          >
+                            {bsnData.loading ? "..." : (
+                              <>
+                                <EyeOff className="h-3 w-3 mr-1" />
+                                Toon
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </CollapsibleContent>
             </Collapsible>
