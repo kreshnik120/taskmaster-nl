@@ -167,8 +167,14 @@ async function fetchBendyApi(tenant: string, endpoint: string, params?: Record<s
   }
 }
 
-async function fetchAllBendyRecords(tenant: string, endpoint: string, extraParams?: Record<string, string>): Promise<any[]> {
+interface FetchResult {
+  records: any[];
+  included: any[];
+}
+
+async function fetchAllBendyRecords(tenant: string, endpoint: string, extraParams?: Record<string, string>): Promise<FetchResult> {
   const allRecords: any[] = [];
+  const allIncluded: any[] = [];
   let page = 1;
 
   while (page <= MAX_PAGES) {
@@ -181,13 +187,16 @@ async function fetchAllBendyRecords(tenant: string, endpoint: string, extraParam
     const records = response?.data || [];
     allRecords.push(...records);
 
+    const included = response?.included || [];
+    allIncluded.push(...included);
+
     if (records.length < PAGE_SIZE) break;
     if (!response?.links?.next) break;
 
     page++;
   }
 
-  return allRecords;
+  return { records: allRecords, included: allIncluded };
 }
 
 // ============================================
@@ -335,7 +344,7 @@ async function syncClients(
 
   // ── STAP 1: Alle Bendy clients ophalen ──
   logInfo(FUNCTION_NAME, `Ophalen Bendy clients voor ${tenant}...`);
-  const bendyClients = await fetchAllBendyRecords(tenant, '/api/v2/clients');
+  const { records: bendyClients } = await fetchAllBendyRecords(tenant, '/api/v2/clients');
   result.fetched = bendyClients.length;
   logInfo(FUNCTION_NAME, `${bendyClients.length} Bendy clients opgehaald`);
 
@@ -740,8 +749,8 @@ async function syncUsers(
   const result: SyncResult = { fetched: 0, created: 0, updated: 0, skipped: 0, failed: 0, errors: [] };
   logInfo(FUNCTION_NAME, `Professional sync gestart voor ${tenant}`);
 
-  // 1. Ophalen alle users uit Bendy API (include=groups voor functie_niveau)
-  const bendyUsers = await fetchAllBendyRecords(tenant, '/api/v2/users', { include: 'groups' });
+  // 1. Ophalen alle users uit Bendy API (include=groups,company voor functie_niveau + bedrijfsgegevens)
+  const { records: bendyUsers, included: bendyIncluded } = await fetchAllBendyRecords(tenant, '/api/v2/users', { include: 'groups,company' });
   result.fetched = bendyUsers.length;
   logInfo(FUNCTION_NAME, `${bendyUsers.length} Bendy users opgehaald`);
   if (bendyUsers.length === 0) return result;
@@ -749,18 +758,27 @@ async function syncUsers(
   // 2. Alle bestaande professionals ophalen (voor matching + conditionele updates)
   const { data: existingProfessionals } = await adminClient
     .from('professionals')
-    .select('id, full_name, email, bendy_id, telefoonnummer, status, org_id, voorletters, geboorteplaats, geslacht, bendy_external_id, certificaten')
+    .select('id, full_name, email, bendy_id, telefoonnummer, status, org_id, voorletters, geboorteplaats, geslacht, bendy_external_id, certificaten, bedrijfsnaam, kvk_nummer, btw_nummer, iban, big_nummer, agb_code, skj_registratie, iban_tenaamstelling, boekhouding_email, bedrijfstelefoon, bendy_username, bendy_mediator_id, bendy_function_type, bendy_created_at')
     .eq('org_id', orgId)
     .is('deleted_at', null);
   const professionals = existingProfessionals || [];
 
   // 2b. Bendy groepen ophalen voor functie_niveau mapping
-  const bendyGroups = await fetchAllBendyRecords(tenant, '/api/v2/groups');
+  const { records: bendyGroups } = await fetchAllBendyRecords(tenant, '/api/v2/groups');
   const groupMap = new Map<string, string>();
   for (const group of bendyGroups) {
     groupMap.set(String(group.id), (group.attributes?.name || '').trim());
   }
   logInfo(FUNCTION_NAME, `${groupMap.size} Bendy groepen opgehaald voor functie mapping`);
+
+  // 2c. Company map bouwen uit included data
+  const companyMap = new Map<string, any>();
+  for (const item of bendyIncluded) {
+    if (item.type === 'companies') {
+      companyMap.set(String(item.id), item.attributes || {});
+    }
+  }
+  logInfo(FUNCTION_NAME, `${companyMap.size} company records uit included data`);
 
   // 3. Per Bendy user: cache + match + update
   for (const bendyUser of bendyUsers) {
@@ -820,6 +838,30 @@ async function syncUsers(
             updateData.certificaten = parsed;
           }
         }
+
+        // Company data ophalen uit included
+        const companyRelation = bendyUser.relationships?.company?.data;
+        if (companyRelation) {
+          const companyAttrs = companyMap.get(String(companyRelation.id));
+          if (companyAttrs) {
+            if (companyAttrs.name && !matchedPro.bedrijfsnaam) updateData.bedrijfsnaam = companyAttrs.name;
+            if (companyAttrs.chamber_of_commerce_number && !matchedPro.kvk_nummer) updateData.kvk_nummer = companyAttrs.chamber_of_commerce_number;
+            if (companyAttrs.vat_id && !matchedPro.btw_nummer) updateData.btw_nummer = companyAttrs.vat_id;
+            if (companyAttrs.iban && !matchedPro.iban) updateData.iban = companyAttrs.iban;
+            if (companyAttrs.big_number && !matchedPro.big_nummer) updateData.big_nummer = companyAttrs.big_number;
+            if (companyAttrs.agb_code && !matchedPro.agb_code) updateData.agb_code = companyAttrs.agb_code;
+            if (companyAttrs.skj_registration_number && !matchedPro.skj_registratie) updateData.skj_registratie = companyAttrs.skj_registration_number;
+            if (companyAttrs.iban_name_of && !matchedPro.iban_tenaamstelling) updateData.iban_tenaamstelling = companyAttrs.iban_name_of;
+            if (companyAttrs.bookkeeping_email && !matchedPro.boekhouding_email) updateData.boekhouding_email = companyAttrs.bookkeeping_email;
+            if (companyAttrs.telephone && !matchedPro.bedrijfstelefoon) updateData.bedrijfstelefoon = companyAttrs.telephone;
+          }
+        }
+
+        // Extra user attributen
+        if (attrs.username && !matchedPro.bendy_username) updateData.bendy_username = attrs.username;
+        if (attrs.mediator_id && !matchedPro.bendy_mediator_id) updateData.bendy_mediator_id = String(attrs.mediator_id);
+        if (attrs.function_type && !matchedPro.bendy_function_type) updateData.bendy_function_type = attrs.function_type;
+        if (attrs.created_at && !matchedPro.bendy_created_at) updateData.bendy_created_at = attrs.created_at;
 
         // Functie_niveau updaten op basis van groepen (nu met include=groups)
         const userGroupIds = (bendyUser.relationships?.groups?.data || [])
@@ -906,7 +948,30 @@ async function syncUsers(
           geslacht: attrs.gender || null,
           bendy_external_id: attrs.external_id ? String(attrs.external_id) : null,
           certificaten: parseCertificates(attrs.certificates),
+          // Extra user attributen
+          bendy_username: attrs.username || null,
+          bendy_mediator_id: attrs.mediator_id ? String(attrs.mediator_id) : null,
+          bendy_function_type: attrs.function_type || null,
+          bendy_created_at: attrs.created_at || null,
         };
+
+        // Company data toevoegen via companyMap lookup
+        const companyRelation = bendyUser.relationships?.company?.data;
+        if (companyRelation) {
+          const companyAttrs = companyMap.get(String(companyRelation.id));
+          if (companyAttrs) {
+            if (companyAttrs.name) insertData.bedrijfsnaam = companyAttrs.name;
+            if (companyAttrs.chamber_of_commerce_number) insertData.kvk_nummer = companyAttrs.chamber_of_commerce_number;
+            if (companyAttrs.vat_id) insertData.btw_nummer = companyAttrs.vat_id;
+            if (companyAttrs.iban) insertData.iban = companyAttrs.iban;
+            if (companyAttrs.big_number) insertData.big_nummer = companyAttrs.big_number;
+            if (companyAttrs.agb_code) insertData.agb_code = companyAttrs.agb_code;
+            if (companyAttrs.skj_registration_number) insertData.skj_registratie = companyAttrs.skj_registration_number;
+            if (companyAttrs.iban_name_of) insertData.iban_tenaamstelling = companyAttrs.iban_name_of;
+            if (companyAttrs.bookkeeping_email) insertData.boekhouding_email = companyAttrs.bookkeeping_email;
+            if (companyAttrs.telephone) insertData.bedrijfstelefoon = companyAttrs.telephone;
+          }
+        }
 
         const { data: newPro, error: proError } = await adminClient
           .from('professionals')

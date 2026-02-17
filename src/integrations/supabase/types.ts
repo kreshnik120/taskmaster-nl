@@ -5397,14 +5397,21 @@ export type Database = {
       professionals: {
         Row: {
           adres: string | null
+          agb_code: string | null
           bedrijfsnaam: string | null
+          bedrijfstelefoon: string | null
+          bendy_created_at: string | null
           bendy_external_id: string | null
+          bendy_function_type: string | null
           bendy_id: string | null
+          bendy_mediator_id: string | null
+          bendy_username: string | null
           beroepsaansprakelijkheid_path: string | null
           beschikbaarheid_uren: Json | null
           beschikbaarheidsnotities: string | null
           bhv_certificaat_path: string | null
           big_nummer: string | null
+          boekhouding_email: string | null
           btw_nummer: string | null
           cao_akkoord: boolean | null
           certificaten: string[] | null
@@ -5429,6 +5436,7 @@ export type Database = {
           heeft_auto: boolean | null
           heeft_rijbewijs: boolean | null
           iban: string | null
+          iban_tenaamstelling: string | null
           id: string
           identiteitsbewijs_path: string | null
           is_test_data: boolean | null
@@ -5449,6 +5457,7 @@ export type Database = {
           regio: string | null
           regio_voorkeur: string[] | null
           skills: string[] | null
+          skj_registratie: string | null
           specialisaties: string[] | null
           specifieke_doelgroepen: string[] | null
           status: string
@@ -5465,14 +5474,21 @@ export type Database = {
         }
         Insert: {
           adres?: string | null
+          agb_code?: string | null
           bedrijfsnaam?: string | null
+          bedrijfstelefoon?: string | null
+          bendy_created_at?: string | null
           bendy_external_id?: string | null
+          bendy_function_type?: string | null
           bendy_id?: string | null
+          bendy_mediator_id?: string | null
+          bendy_username?: string | null
           beroepsaansprakelijkheid_path?: string | null
           beschikbaarheid_uren?: Json | null
           beschikbaarheidsnotities?: string | null
           bhv_certificaat_path?: string | null
           big_nummer?: string | null
+          boekhouding_email?: string | null
           btw_nummer?: string | null
           cao_akkoord?: boolean | null
           certificaten?: string[] | null
@@ -5497,6 +5513,7 @@ export type Database = {
           heeft_auto?: boolean | null
           heeft_rijbewijs?: boolean | null
           iban?: string | null
+          iban_tenaamstelling?: string | null
           id?: string
           identiteitsbewijs_path?: string | null
           is_test_data?: boolean | null
@@ -5517,6 +5534,7 @@ export type Database = {
           regio?: string | null
           regio_voorkeur?: string[] | null
           skills?: string[] | null
+          skj_registratie?: string | null
           specialisaties?: string[] | null
           specifieke_doelgroepen?: string[] | null
           status?: string
@@ -5533,14 +5551,21 @@ export type Database = {
         }
         Update: {
           adres?: string | null
+          agb_code?: string | null
           bedrijfsnaam?: string | null
+          bedrijfstelefoon?: string | null
+          bendy_created_at?: string | null
           bendy_external_id?: string | null
+          bendy_function_type?: string | null
           bendy_id?: string | null
+          bendy_mediator_id?: string | null
+          bendy_username?: string | null
           beroepsaansprakelijkheid_path?: string | null
           beschikbaarheid_uren?: Json | null
           beschikbaarheidsnotities?: string | null
           bhv_certificaat_path?: string | null
           big_nummer?: string | null
+          boekhouding_email?: string | null
           btw_nummer?: string | null
           cao_akkoord?: boolean | null
           certificaten?: string[] | null
@@ -5565,6 +5590,7 @@ export type Database = {
           heeft_auto?: boolean | null
           heeft_rijbewijs?: boolean | null
           iban?: string | null
+          iban_tenaamstelling?: string | null
           id?: string
           identiteitsbewijs_path?: string | null
           is_test_data?: boolean | null
@@ -5585,6 +5611,7 @@ export type Database = {
           regio?: string | null
           regio_voorkeur?: string[] | null
           skills?: string[] | null
+          skj_registratie?: string | null
           specialisaties?: string[] | null
           specifieke_doelgroepen?: string[] | null
           status?: string

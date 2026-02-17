@@ -78,6 +78,19 @@ interface Professional {
   geboorteplaats: string | null;
   geslacht: string | null;
   bendy_external_id: string | null;
+  // Company/Bendy fields
+  iban: string | null;
+  big_nummer: string | null;
+  agb_code: string | null;
+  skj_registratie: string | null;
+  iban_tenaamstelling: string | null;
+  boekhouding_email: string | null;
+  bedrijfstelefoon: string | null;
+  bendy_username: string | null;
+  bendy_mediator_id: string | null;
+  bendy_function_type: string | null;
+  bendy_created_at: string | null;
+  bedrijfsnaam: string | null;
   // New fields for complete data sync
   ervaring_sector: string[] | null;
   doelgroep_ervaring: string[] | null;
