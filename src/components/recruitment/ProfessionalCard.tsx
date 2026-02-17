@@ -25,6 +25,8 @@ interface Professional {
   email?: string | null;
   skills?: string[];
   org_id?: string | null;
+  documents_count?: number | null;
+  documents_expiring_count?: number | null;
 }
 
 interface ProfessionalCardProps {
@@ -199,6 +201,21 @@ export function ProfessionalCard({
                       </Badge>
                     )}
                   </div>
+                )}
+
+                {/* Document compliance badge */}
+                {professional.documents_expiring_count && professional.documents_expiring_count > 0 ? (
+                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                    ⚠ {professional.documents_expiring_count} doc{professional.documents_expiring_count !== 1 ? 's' : ''} verlopen
+                  </Badge>
+                ) : professional.documents_count && professional.documents_count > 0 ? (
+                  <Badge variant="success" className="text-[10px] px-1.5 py-0">
+                    ✓ Docs OK
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                    Geen docs
+                  </Badge>
                 )}
 
                 {/* Time in Status */}
