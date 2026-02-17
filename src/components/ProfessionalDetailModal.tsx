@@ -64,6 +64,19 @@ interface Professional {
   geboorteplaats: string | null;
   geslacht: string | null;
   bendy_external_id: string | null;
+  // Company/Bendy fields
+  iban: string | null;
+  big_nummer: string | null;
+  agb_code: string | null;
+  skj_registratie: string | null;
+  iban_tenaamstelling: string | null;
+  boekhouding_email: string | null;
+  bedrijfstelefoon: string | null;
+  bendy_username: string | null;
+  bendy_mediator_id: string | null;
+  bendy_function_type: string | null;
+  bendy_created_at: string | null;
+  bedrijfsnaam: string | null;
   // New fields for complete data sync
   ervaring_sector: string[] | null;
   doelgroep_ervaring: string[] | null;
@@ -904,6 +917,80 @@ export function ProfessionalDetailModal({
                         ) : (
                           <p className="text-sm mt-1 p-2 bg-muted/30 rounded-md">{professional.btw_nummer || "-"}</p>
                         )}
+                      </div>
+                    )}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+
+            {/* Bedrijfsgegevens (Bendy) */}
+            {(professional.bedrijfsnaam || professional.kvk_nummer || professional.big_nummer || professional.agb_code || professional.skj_registratie || professional.btw_nummer || professional.iban || professional.boekhouding_email || professional.bedrijfstelefoon) && (
+              <Collapsible open={false}>
+                <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border border-teal-200/50 bg-teal-500/5 px-4 py-3 text-sm font-medium transition-colors hover:bg-teal-500/10">
+                  <span className="flex items-center gap-2">
+                    <Link2 className="h-4 w-4 text-teal-600" />
+                    Bedrijfsgegevens (Bendy)
+                  </span>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    {professional.bedrijfsnaam && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Bedrijfsnaam</Label>
+                        <p className="text-sm mt-1 p-2 bg-muted/30 rounded-md">{professional.bedrijfsnaam}</p>
+                      </div>
+                    )}
+                    {professional.kvk_nummer && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">KvK</Label>
+                        <p className="text-sm mt-1 p-2 bg-muted/30 rounded-md font-mono">{professional.kvk_nummer}</p>
+                      </div>
+                    )}
+                    {professional.big_nummer && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">BIG-nummer</Label>
+                        <p className="text-sm mt-1 p-2 bg-muted/30 rounded-md font-mono">{professional.big_nummer}</p>
+                      </div>
+                    )}
+                    {professional.agb_code && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">AGB-code</Label>
+                        <p className="text-sm mt-1 p-2 bg-muted/30 rounded-md font-mono">{professional.agb_code}</p>
+                      </div>
+                    )}
+                    {professional.skj_registratie && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">SKJ-registratie</Label>
+                        <p className="text-sm mt-1 p-2 bg-muted/30 rounded-md font-mono">{professional.skj_registratie}</p>
+                      </div>
+                    )}
+                    {professional.btw_nummer && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">BTW-nummer</Label>
+                        <p className="text-sm mt-1 p-2 bg-muted/30 rounded-md font-mono">{professional.btw_nummer}</p>
+                      </div>
+                    )}
+                    {professional.iban && (
+                      <div className="col-span-2">
+                        <Label className="text-xs text-muted-foreground">IBAN</Label>
+                        <p className="text-sm mt-1 p-2 bg-muted/30 rounded-md font-mono">{professional.iban}</p>
+                        {professional.iban_tenaamstelling && (
+                          <p className="text-xs text-muted-foreground mt-1">t.n.v. {professional.iban_tenaamstelling}</p>
+                        )}
+                      </div>
+                    )}
+                    {professional.boekhouding_email && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Boekhouding e-mail</Label>
+                        <p className="text-sm mt-1 p-2 bg-muted/30 rounded-md">{professional.boekhouding_email}</p>
+                      </div>
+                    )}
+                    {professional.bedrijfstelefoon && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Bedrijfstelefoon</Label>
+                        <p className="text-sm mt-1 p-2 bg-muted/30 rounded-md">{professional.bedrijfstelefoon}</p>
                       </div>
                     )}
                   </div>
