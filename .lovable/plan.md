@@ -1,45 +1,106 @@
 
-
-# Documenten Tab -- Enterprise Document Management
+# UX Verbeterslag Professionals Module
 
 ## Overzicht
-Verplaats documenten van een simpele Collapsible in het Profiel tab naar een eigen volwaardige "Documenten" tab met KPI dashboard, compliance alerts, en een interactieve tabel met uitklapbare details.
+Zes gerichte verbeteringen aan de Professionals module: tab-herschikking, veldduplicatie opruimen, document compliance op kaarten en KPI's, performance fix met useMemo, loading/error handling, en een document compliance filter.
 
-## Wijzigingen (alleen `src/components/ProfessionalDetailModal.tsx`)
+---
 
-### 1. TabsList uitbreiden
-- Regel 535: `grid-cols-5` wordt `grid-cols-6`
-- Nieuwe TabsTrigger "Documenten" toevoegen na "Beschikbaarheid" (regel 540), met oranje count badge en rode pulse dot bij verlopen documenten
+## 1. Tab-volgorde herschikken
+**Bestand:** `src/components/ProfessionalDetailModal.tsx` (regels 535-551)
 
-### 2. Documenten Collapsible verwijderen uit Profiel tab
-- Regels 1018-1088 volledig verwijderen (het hele `{/* Documenten (Bendy) */}` blok)
+Huidige volgorde: Profiel, Ervaring, Historiek, Plaatsing, Beschikbaarheid, Documenten
 
-### 3. Nieuwe TabsContent "documenten" toevoegen
-Na de Profiel TabsContent (regel 1089), een volledige documenten tab met:
+Nieuwe volgorde: **Profiel, Documenten, Beschikbaarheid, Ervaring, Plaatsing, Historiek**
 
-**Compliance KPI's (4 cards)**
-- Totaal (neutraal), Geldig (groen), Binnenkort verlopend (oranje), Verlopen (rood)
-- Sync timestamp rechtsonder
+Alleen de TabsTrigger elementen herschikken; TabsContent blokken blijven op hun plek (Tabs matcht op `value`).
 
-**Verlopen documenten alert**
-- Rood blok met XCircle icoon en lijst van verlopen documenten met datums
+---
 
-**Bijna-verlopen waarschuwing**
-- Oranje blok met Clock icoon, "Nog X dagen" countdown per document
+## 2. Veldduplicatie opruimen
+**Bestand:** `src/components/ProfessionalDetailModal.tsx`
 
-**Documenten tabel**
-- Header: Document, Type, Verloopdatum, Status
-- Per rij: FileText icoon (kleur per status), naam, type, datum, status badge
-- Badges: "Verlopen" (rood), "Xd" (oranje countdown), "Geldig" (groen), "permanentsymbool" (grijs)
-- Elke rij is een Collapsible die uitklapt met details: documentnummer, uitgever, geldig vanaf/tot, bron, gepubliceerd, Bendy update timestamp
-- Detail panel heeft gekleurde border-left (rood/oranje/neutraal)
+**A. Geboortedatum uit header verwijderen** (regels 473-478)
+De geboortedatum met Cake icoon staat al in Persoonsgegevens (r577-582). Verwijder het uit de header.
 
-**Empty state**
-- FileText icoon + "Geen documenten gesynchroniseerd" tekst
+**B. KvK en BTW uit Financieel sectie verwijderen** (regels 921-949)
+KvK en BTW staan al in "Bedrijfsgegevens (Bendy)" (r973-1001). Verwijder beide velden uit de Financieel collapsible. De sectie behoudt alleen: gewenst uurloon + CAO akkoord.
 
-### Technische details
+---
 
-Alle benodigde imports zijn al aanwezig: `FileText`, `ChevronDown`, `Clock`, `XCircle`, `Badge`, `Collapsible`, `CollapsibleContent`, `CollapsibleTrigger`, `format`, `nl`, `cn`.
+## 3. Document compliance op Professional kaarten en KPI's
+**Bestanden:** `src/pages/Professionals.tsx` + `src/components/recruitment/ProfessionalCard.tsx`
 
-Geen andere bestanden worden gewijzigd.
+### 3a. 5e KPI card "Doc. verlopen"
+- Import `FileWarning` uit lucide-react
+- Grid van `grid-cols-2 md:grid-cols-4` naar `grid-cols-2 md:grid-cols-5`
+- Nieuwe KPICard met rood thema (variant="rose" of custom)
+- Berekening: `professionals.filter(p => p.documents_expiring_count && p.documents_expiring_count > 0).length`
+- Klik-actie: stel document filter in op "verlopen"
 
+### 3b. Document status badge op ProfessionalCard
+- Voeg `documents_count` en `documents_expiring_count` toe aan ProfessionalCard's Professional interface
+- Na de skills badges, voeg document compliance badge toe:
+  - `documents_expiring_count > 0`: rode badge met waarschuwing
+  - `documents_count > 0 && documents_expiring_count === 0`: groene badge "Docs OK"
+  - `documents_count === 0 || null`: grijze badge "Geen docs"
+
+---
+
+## 4. Performance fix: useMemo voor documentStats
+**Bestand:** `src/components/ProfessionalDetailModal.tsx`
+
+Vervang de IIFE in de documenten TabsContent (regels 1033-1046) door een `useMemo` hook boven de return statement. Importeer `useMemo` (voeg toe aan de bestaande React import op regel 15). Gebruik `documentStats.expired`, `.expiringSoon`, `.valid`, `.now`, `.ninetyDays` in de template.
+
+---
+
+## 5. Loading state + error handling voor documents fetch
+**Bestand:** `src/components/ProfessionalDetailModal.tsx`
+
+- Nieuwe state: `const [documentsLoading, setDocumentsLoading] = useState(false)`
+- Wrap de bestaande useEffect (regels 184-195) in try/catch met `setDocumentsLoading(true/false)` en `console.error` bij fout
+- In de documenten tab: toon skeleton/spinner wanneer `documentsLoading` true is, in plaats van KPI's en tabel
+
+---
+
+## 6. Document compliance filter
+**Bestand:** `src/pages/Professionals.tsx`
+
+- Nieuwe state: `const [filterDocuments, setFilterDocuments] = useState<string>("all")`
+- Nieuwe Select dropdown in het filter panel (na de regio input) met opties:
+  - "Alle documenten"
+  - "Verlopen docs"
+  - "Docs OK"
+  - "Geen docs"
+- Filter logica toevoegen aan `filteredProfessionals`:
+  - "verlopen": `p.documents_expiring_count && p.documents_expiring_count > 0`
+  - "ok": `p.documents_count && p.documents_count > 0 && (!p.documents_expiring_count || p.documents_expiring_count === 0)`
+  - "geen": `!p.documents_count || p.documents_count === 0`
+- `hasActiveFilters` en `resetFilters` bijwerken om `filterDocuments` mee te nemen
+- KPI "Doc. verlopen" klik-actie stelt `filterDocuments` in op "verlopen"
+
+---
+
+## Bestanden die wijzigen
+
+1. `src/components/ProfessionalDetailModal.tsx` -- tab-volgorde, veldduplicatie, useMemo, loading state
+2. `src/pages/Professionals.tsx` -- 5e KPI, document filter, filter logica
+3. `src/components/recruitment/ProfessionalCard.tsx` -- interface + document badge
+
+## Technische details
+
+```text
+Imports toe te voegen:
+- ProfessionalDetailModal.tsx: useMemo (aan bestaande React import)
+- Professionals.tsx: FileWarning uit lucide-react
+- ProfessionalCard.tsx: geen nieuwe imports nodig (Badge is al geimporteerd)
+
+ProfessionalCard interface uitbreiding:
+  documents_count?: number | null;
+  documents_expiring_count?: number | null;
+
+KPI grid layout: grid-cols-2 md:grid-cols-5
+
+Filter state flow:
+  filterDocuments state -> filteredProfessionals filter -> hasActiveFilters check -> resetFilters
+```
