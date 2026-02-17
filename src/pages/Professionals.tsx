@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, ChevronDown, X, Users, CheckCircle, UserPlus, TrendingUp } from "lucide-react";
+import { Plus, Search, ChevronDown, X, Users, CheckCircle, UserPlus, TrendingUp, FileWarning } from "lucide-react";
 import { ProfessionalBulkActionBar } from "@/components/recruitment/ProfessionalBulkActionBar";
 import { ProfessionalCard } from "@/components/recruitment/ProfessionalCard";
 import { ProfessionalDetailModal } from "@/components/ProfessionalDetailModal";
@@ -114,6 +114,7 @@ const Professionals = () => {
   const [filterWerkvorm, setFilterWerkvorm] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterRegio, setFilterRegio] = useState("");
+  const [filterDocuments, setFilterDocuments] = useState<string>("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedProfessional, setSelectedProfessional] = useState<Professional | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -269,7 +270,11 @@ const Professionals = () => {
     const matchesWerkvorm = filterWerkvorm === "all" || p.werkvorm === filterWerkvorm;
     const matchesStatus = filterStatus === "all" || p.status === filterStatus;
     const matchesRegio = !filterRegio || (p.regio?.toLowerCase().includes(filterRegio.toLowerCase()) ?? false);
-    return matchesSearch && matchesFunctie && matchesWerkvorm && matchesStatus && matchesRegio;
+    const matchesDocs = filterDocuments === "all" ||
+      (filterDocuments === "verlopen" && p.documents_expiring_count && p.documents_expiring_count > 0) ||
+      (filterDocuments === "ok" && p.documents_count && p.documents_count > 0 && (!p.documents_expiring_count || p.documents_expiring_count === 0)) ||
+      (filterDocuments === "geen" && (!p.documents_count || p.documents_count === 0));
+    return matchesSearch && matchesFunctie && matchesWerkvorm && matchesStatus && matchesRegio && matchesDocs;
   });
 
   // Bulk action handlers
@@ -402,13 +407,16 @@ const Professionals = () => {
     return daysSinceCreated <= 7;
   }).length;
 
-  const hasActiveFilters = filterFunctie !== "all" || filterWerkvorm !== "all" || filterStatus !== "all" || filterRegio !== "";
+  const docsExpiredCount = professionals.filter(p => p.documents_expiring_count && p.documents_expiring_count > 0).length;
+
+  const hasActiveFilters = filterFunctie !== "all" || filterWerkvorm !== "all" || filterStatus !== "all" || filterRegio !== "" || filterDocuments !== "all";
 
   const resetFilters = () => {
     setFilterFunctie("all");
     setFilterWerkvorm("all");
     setFilterStatus("all");
     setFilterRegio("");
+    setFilterDocuments("all");
   };
 
   const handleKpiClick = (filterType: string) => {
@@ -429,6 +437,13 @@ const Professionals = () => {
       }
     } else if (filterType === "gekoppeld") {
       navigate("/plaatsingen");
+    } else if (filterType === "docs_verlopen") {
+      setActiveKpi(activeKpi === "docs_verlopen" ? null : "docs_verlopen");
+      if (activeKpi === "docs_verlopen") {
+        resetFilters();
+      } else {
+        setFilterDocuments("verlopen");
+      }
     }
   };
 
@@ -556,7 +571,7 @@ const Professionals = () => {
       </PageHero>
 
       {/* KPI Cards met Icons */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <KPICard
           icon={Users}
           title="Totaal"
@@ -587,6 +602,14 @@ const Professionals = () => {
           variant="violet"
           isActive={activeKpi === "nieuw"}
           onClick={() => handleKpiClick("nieuw")}
+        />
+        <KPICard
+          icon={FileWarning}
+          title="Doc. verlopen"
+          value={docsExpiredCount}
+          variant="rose"
+          isActive={activeKpi === "docs_verlopen"}
+          onClick={() => handleKpiClick("docs_verlopen")}
         />
       </div>
 
@@ -659,6 +682,18 @@ const Professionals = () => {
                   value={filterRegio}
                   onChange={(e) => setFilterRegio(e.target.value)}
                 />
+
+                <Select value={filterDocuments} onValueChange={setFilterDocuments}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Documenten" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alle documenten</SelectItem>
+                    <SelectItem value="verlopen">Verlopen docs</SelectItem>
+                    <SelectItem value="ok">Docs OK</SelectItem>
+                    <SelectItem value="geen">Geen docs</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </Card>
           </CollapsibleContent>

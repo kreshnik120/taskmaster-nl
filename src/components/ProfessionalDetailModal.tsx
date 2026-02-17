@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Shield, EyeOff } from "lucide-react";
 import { toast } from "sonner";
@@ -181,16 +181,28 @@ export function ProfessionalDetailModal({
   const [documents, setDocuments] = useState<any[]>([]);
   const { isAdmin } = useUserRole();
 
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+
   useEffect(() => {
     if (open && professional) {
+      setDocumentsLoading(true);
       supabase
         .from('professional_documents')
         .select('*')
         .eq('professional_id', professional.id)
         .order('expires_at', { ascending: true, nullsFirst: false })
-        .then(({ data }) => setDocuments(data || []));
+        .then(({ data, error }) => {
+          if (error) {
+            console.error('Documents fetch error:', error);
+            setDocuments([]);
+          } else {
+            setDocuments(data || []);
+          }
+          setDocumentsLoading(false);
+        });
     } else {
       setDocuments([]);
+      setDocumentsLoading(false);
     }
   }, [open, professional]);
 
@@ -337,6 +349,22 @@ export function ProfessionalDetailModal({
     }));
   };
 
+  const documentStats = useMemo(() => {
+    const now = new Date();
+    const ninetyDays = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+    const expired = documents.filter(d => d.expires_at && new Date(d.expires_at) < now);
+    const expiringSoon = documents.filter(d => {
+      if (!d.expires_at) return false;
+      const exp = new Date(d.expires_at);
+      return exp >= now && exp <= ninetyDays;
+    });
+    const valid = documents.filter(d => {
+      if (!d.expires_at) return true;
+      return new Date(d.expires_at) > ninetyDays;
+    });
+    return { now, ninetyDays, expired, expiringSoon, valid };
+  }, [documents]);
+
   // Calculate completeness score
   const calculateCompleteness = () => {
     if (!professional) return 0;
@@ -470,12 +498,6 @@ export function ProfessionalDetailModal({
                     {professional.telefoonnummer}
                   </a>
                 )}
-                {professional.geboortedatum && (
-                  <span className="flex items-center gap-1">
-                    <Cake className="h-3.5 w-3.5" />
-                    {format(new Date(professional.geboortedatum), "d MMMM yyyy", { locale: nl })}
-                  </span>
-                )}
               </div>
             </div>
 
@@ -534,10 +556,6 @@ export function ProfessionalDetailModal({
           {/* Apple style tabs - text only, no icons */}
           <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="profiel">Profiel</TabsTrigger>
-            <TabsTrigger value="ervaring">Ervaring</TabsTrigger>
-            <TabsTrigger value="historiek">Historiek</TabsTrigger>
-            <TabsTrigger value="plaatsing">Plaatsing</TabsTrigger>
-            <TabsTrigger value="beschikbaarheid">Beschikbaarheid</TabsTrigger>
             <TabsTrigger value="documenten" className="relative">
               Documenten
               {documents.length > 0 && (
@@ -549,6 +567,10 @@ export function ProfessionalDetailModal({
                 <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-red-500 animate-pulse" />
               )}
             </TabsTrigger>
+            <TabsTrigger value="beschikbaarheid">Beschikbaarheid</TabsTrigger>
+            <TabsTrigger value="ervaring">Ervaring</TabsTrigger>
+            <TabsTrigger value="plaatsing">Plaatsing</TabsTrigger>
+            <TabsTrigger value="historiek">Historiek</TabsTrigger>
           </TabsList>
 
           <TabsContent value="profiel" className="space-y-4 mt-6">
@@ -918,35 +940,6 @@ export function ProfessionalDetailModal({
                       </div>
                     )}
 
-                    {(professional.kvk_nummer || isEditing) && (
-                      <div>
-                        <Label>KvK nummer</Label>
-                        {isEditing ? (
-                          <Input
-                            value={editData.kvk_nummer}
-                            onChange={(e) => setEditData({ ...editData, kvk_nummer: e.target.value })}
-                            className="focus:ring-2 focus:ring-primary transition-all"
-                          />
-                        ) : (
-                          <p className="text-sm mt-1 p-2 bg-muted/30 rounded-md">{professional.kvk_nummer || "-"}</p>
-                        )}
-                      </div>
-                    )}
-
-                    {(professional.btw_nummer || isEditing) && (
-                      <div>
-                        <Label>BTW nummer</Label>
-                        {isEditing ? (
-                          <Input
-                            value={editData.btw_nummer}
-                            onChange={(e) => setEditData({ ...editData, btw_nummer: e.target.value })}
-                            className="focus:ring-2 focus:ring-primary transition-all"
-                          />
-                        ) : (
-                          <p className="text-sm mt-1 p-2 bg-muted/30 rounded-md">{professional.btw_nummer || "-"}</p>
-                        )}
-                      </div>
-                    )}
                   </div>
                 </CollapsibleContent>
               </Collapsible>
@@ -1030,21 +1023,11 @@ export function ProfessionalDetailModal({
 
           {/* ===== DOCUMENTEN TAB ===== */}
           <TabsContent value="documenten" className="space-y-4 mt-6">
-            {(() => {
-              const now = new Date();
-              const ninetyDays = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
-              const expired = documents.filter(d => d.expires_at && new Date(d.expires_at) < now);
-              const expiringSoon = documents.filter(d => {
-                if (!d.expires_at) return false;
-                const exp = new Date(d.expires_at);
-                return exp >= now && exp <= ninetyDays;
-              });
-              const valid = documents.filter(d => {
-                if (!d.expires_at) return true;
-                return new Date(d.expires_at) > ninetyDays;
-              });
-
-              return (
+            {documentsLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+              </div>
+            ) : (
                 <>
                   {/* KPI Grid */}
                   <div className="grid grid-cols-4 gap-3">
@@ -1053,15 +1036,15 @@ export function ProfessionalDetailModal({
                       <p className="text-[11px] text-muted-foreground mt-0.5">Totaal</p>
                     </div>
                     <div className="rounded-xl border border-green-200/50 bg-green-500/5 p-3 text-center">
-                      <p className="text-2xl font-bold text-green-700 dark:text-green-400">{valid.length}</p>
+                      <p className="text-2xl font-bold text-green-700 dark:text-green-400">{documentStats.valid.length}</p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">Geldig</p>
                     </div>
                     <div className="rounded-xl border border-orange-200/50 bg-orange-500/5 p-3 text-center">
-                      <p className="text-2xl font-bold text-orange-700 dark:text-orange-400">{expiringSoon.length}</p>
+                      <p className="text-2xl font-bold text-orange-700 dark:text-orange-400">{documentStats.expiringSoon.length}</p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">Binnenkort</p>
                     </div>
                     <div className="rounded-xl border border-red-200/50 bg-red-500/5 p-3 text-center">
-                      <p className="text-2xl font-bold text-red-700 dark:text-red-400">{expired.length}</p>
+                      <p className="text-2xl font-bold text-red-700 dark:text-red-400">{documentStats.expired.length}</p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">Verlopen</p>
                     </div>
                   </div>
@@ -1074,16 +1057,16 @@ export function ProfessionalDetailModal({
                   )}
 
                   {/* Verlopen documenten alert */}
-                  {expired.length > 0 && (
+                  {documentStats.expired.length > 0 && (
                     <div className="rounded-lg border border-red-300 bg-red-50 dark:bg-red-950/20 p-3">
                       <div className="flex items-center gap-2 mb-2">
                         <XCircle className="h-4 w-4 text-red-600" />
                         <span className="text-sm font-semibold text-red-700 dark:text-red-400">
-                          {expired.length} verlopen document{expired.length !== 1 ? 'en' : ''}
+                          {documentStats.expired.length} verlopen document{documentStats.expired.length !== 1 ? 'en' : ''}
                         </span>
                       </div>
                       <div className="space-y-1">
-                        {expired.map(doc => (
+                        {documentStats.expired.map(doc => (
                           <div key={doc.id} className="flex items-center justify-between text-sm">
                             <span className="text-red-800 dark:text-red-300 font-medium">{doc.document_name}</span>
                             <span className="text-red-600 dark:text-red-400 text-xs tabular-nums">
@@ -1096,17 +1079,17 @@ export function ProfessionalDetailModal({
                   )}
 
                   {/* Bijna verlopen waarschuwing */}
-                  {expiringSoon.length > 0 && (
+                  {documentStats.expiringSoon.length > 0 && (
                     <div className="rounded-lg border border-orange-300 bg-orange-50 dark:bg-orange-950/20 p-3">
                       <div className="flex items-center gap-2 mb-2">
                         <Clock className="h-4 w-4 text-orange-600" />
                         <span className="text-sm font-semibold text-orange-700 dark:text-orange-400">
-                          {expiringSoon.length} document{expiringSoon.length !== 1 ? 'en' : ''} verlo{expiringSoon.length !== 1 ? 'pen' : 'opt'} binnenkort
+                          {documentStats.expiringSoon.length} document{documentStats.expiringSoon.length !== 1 ? 'en' : ''} verlo{documentStats.expiringSoon.length !== 1 ? 'pen' : 'opt'} binnenkort
                         </span>
                       </div>
                       <div className="space-y-1">
-                        {expiringSoon.map(doc => {
-                          const daysLeft = Math.ceil((new Date(doc.expires_at).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                        {documentStats.expiringSoon.map(doc => {
+                          const daysLeft = Math.ceil((new Date(doc.expires_at).getTime() - documentStats.now.getTime()) / (1000 * 60 * 60 * 24));
                           return (
                             <div key={doc.id} className="flex items-center justify-between text-sm">
                               <span className="text-orange-800 dark:text-orange-300 font-medium">{doc.document_name}</span>
@@ -1133,9 +1116,9 @@ export function ProfessionalDetailModal({
                       {/* Tabel rows */}
                       <div className="divide-y">
                         {documents.map((doc) => {
-                          const isExpired = doc.expires_at && new Date(doc.expires_at) < now;
-                          const isExpiringSoon = doc.expires_at && !isExpired && new Date(doc.expires_at) <= ninetyDays;
-                          const daysLeft = doc.expires_at ? Math.ceil((new Date(doc.expires_at).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : null;
+                          const isExpired = doc.expires_at && new Date(doc.expires_at) < documentStats.now;
+                          const isExpiringSoon = doc.expires_at && !isExpired && new Date(doc.expires_at) <= documentStats.ninetyDays;
+                          const daysLeft = doc.expires_at ? Math.ceil((new Date(doc.expires_at).getTime() - documentStats.now.getTime()) / (1000 * 60 * 60 * 24)) : null;
                           return (
                             <Collapsible key={doc.id}>
                               <CollapsibleTrigger className="grid grid-cols-[1fr_140px_100px_90px] gap-2 w-full px-4 py-2.5 text-sm hover:bg-muted/30 transition-colors text-left items-center group">
@@ -1244,8 +1227,7 @@ export function ProfessionalDetailModal({
                     </div>
                   )}
                 </>
-              );
-            })()}
+            )}
           </TabsContent>
 
           <TabsContent value="ervaring" className="space-y-6 mt-6">
