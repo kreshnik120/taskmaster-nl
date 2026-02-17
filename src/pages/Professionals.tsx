@@ -101,6 +101,9 @@ interface Professional {
   regio_voorkeur: string[] | null;
   specifieke_doelgroepen: string[] | null;
   max_reisafstand_km: number | null;
+  documents_count: number | null;
+  documents_expiring_count: number | null;
+  documents_synced_at: string | null;
 }
 
 const Professionals = () => {

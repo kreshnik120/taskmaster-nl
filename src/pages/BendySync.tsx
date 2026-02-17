@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { RefreshCw, Power, Play, Database, Clock, AlertTriangle, CheckCircle2, MinusCircle, Users } from "lucide-react";
+import { RefreshCw, Power, Play, Database, Clock, AlertTriangle, CheckCircle2, MinusCircle, Users, FileText } from "lucide-react";
 import { PageContainer } from "@/components/ui/page-container";
 import { PageHero } from "@/components/ui/page-hero";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -133,6 +133,8 @@ export default function BendySync() {
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [syncingUsers, setSyncingUsers] = useState(false);
   const [userSyncResult, setUserSyncResult] = useState<SyncResult | null>(null);
+  const [syncingDocs, setSyncingDocs] = useState(false);
+  const [docSyncResult, setDocSyncResult] = useState<SyncResult | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -649,6 +651,56 @@ export default function BendySync() {
                 <div><span className="text-xs text-muted-foreground">Bijgewerkt</span><p className="font-semibold">{userSyncResult.records_updated}</p></div>
                 <div><span className="text-xs text-muted-foreground">Overgeslagen</span><p className="font-semibold">{userSyncResult.records_skipped}</p></div>
                 <div><span className="text-xs text-muted-foreground">Mislukt</span><p className="font-semibold text-destructive">{userSyncResult.records_failed}</p></div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Document Sync Card */}
+        <Card className="glass-layer-1">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              Document Sync
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button
+              onClick={async () => {
+                setSyncingDocs(true);
+                setDocSyncResult(null);
+                try {
+                  const { data, error } = await supabase.functions.invoke("bendy-sync", {
+                    body: { action: "sync_documents", tenant: "citozorg", sync_type: "full" },
+                  });
+                  if (error) throw error;
+                  if (data?.success) {
+                    setDocSyncResult(data.data);
+                    toast.success(`Document sync voltooid: ${data.data.records_fetched} documenten opgehaald`);
+                    fetchStatus();
+                  } else {
+                    toast.error(data?.error || "Document sync mislukt");
+                  }
+                } catch (err: any) {
+                  toast.error(`Fout: ${err.message}`);
+                } finally {
+                  setSyncingDocs(false);
+                }
+              }}
+              disabled={syncingDocs}
+              variant="outline"
+              className="w-full sm:w-auto"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${syncingDocs ? "animate-spin" : ""}`} />
+              {syncingDocs ? "Bezig met document sync..." : "Document Sync Starten"}
+            </Button>
+            {docSyncResult && (
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-3 rounded-lg bg-muted/50">
+                <div><span className="text-xs text-muted-foreground">Opgehaald</span><p className="font-semibold">{docSyncResult.records_fetched}</p></div>
+                <div><span className="text-xs text-muted-foreground">Aangemaakt</span><p className="font-semibold text-emerald-600 dark:text-emerald-400">{docSyncResult.records_created}</p></div>
+                <div><span className="text-xs text-muted-foreground">Bijgewerkt</span><p className="font-semibold">{docSyncResult.records_updated}</p></div>
+                <div><span className="text-xs text-muted-foreground">Overgeslagen</span><p className="font-semibold">{docSyncResult.records_skipped}</p></div>
+                <div><span className="text-xs text-muted-foreground">Mislukt</span><p className="font-semibold text-destructive">{docSyncResult.records_failed}</p></div>
               </div>
             )}
           </CardContent>
