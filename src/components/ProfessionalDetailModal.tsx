@@ -532,12 +532,23 @@ export function ProfessionalDetailModal({
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full mt-4">
           {/* Apple style tabs - text only, no icons */}
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="profiel">Profiel</TabsTrigger>
             <TabsTrigger value="ervaring">Ervaring</TabsTrigger>
             <TabsTrigger value="historiek">Historiek</TabsTrigger>
             <TabsTrigger value="plaatsing">Plaatsing</TabsTrigger>
             <TabsTrigger value="beschikbaarheid">Beschikbaarheid</TabsTrigger>
+            <TabsTrigger value="documenten" className="relative">
+              Documenten
+              {documents.length > 0 && (
+                <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-orange-100 text-orange-700 text-[10px] font-semibold min-w-[18px] h-[18px] px-1">
+                  {documents.length}
+                </span>
+              )}
+              {documents.some(d => d.expires_at && new Date(d.expires_at) < new Date()) && (
+                <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+              )}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="profiel" className="space-y-4 mt-6">
@@ -1015,77 +1026,226 @@ export function ProfessionalDetailModal({
               </Collapsible>
             )}
 
-            {/* Documenten (Bendy) */}
-            {documents.length > 0 && (
-              <Collapsible defaultOpen={false}>
-                <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border border-orange-200/50 bg-orange-500/5 px-4 py-3 text-sm font-medium transition-colors hover:bg-orange-500/10">
-                  <span className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-orange-600" />
-                    Documenten ({documents.length})
-                  </span>
-                  <div className="flex items-center gap-2">
-                    {documents.some(d => d.expires_at && new Date(d.expires_at) < new Date()) && (
-                      <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Verlopen</Badge>
-                    )}
-                    {documents.some(d => {
-                      if (!d.expires_at) return false;
-                      const exp = new Date(d.expires_at);
-                      const now = new Date();
-                      const ninety = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
-                      return exp > now && exp <= ninety;
-                    }) && (
-                      <Badge variant="warning" className="text-[10px] px-1.5 py-0">Verloopt binnenkort</Badge>
-                    )}
-                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform" />
+          </TabsContent>
+
+          {/* ===== DOCUMENTEN TAB ===== */}
+          <TabsContent value="documenten" className="space-y-4 mt-6">
+            {(() => {
+              const now = new Date();
+              const ninetyDays = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+              const expired = documents.filter(d => d.expires_at && new Date(d.expires_at) < now);
+              const expiringSoon = documents.filter(d => {
+                if (!d.expires_at) return false;
+                const exp = new Date(d.expires_at);
+                return exp >= now && exp <= ninetyDays;
+              });
+              const valid = documents.filter(d => {
+                if (!d.expires_at) return true;
+                return new Date(d.expires_at) > ninetyDays;
+              });
+
+              return (
+                <>
+                  {/* KPI Grid */}
+                  <div className="grid grid-cols-4 gap-3">
+                    <div className="rounded-xl border bg-card/50 backdrop-blur-sm p-3 text-center">
+                      <p className="text-2xl font-bold">{documents.length}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Totaal</p>
+                    </div>
+                    <div className="rounded-xl border border-green-200/50 bg-green-500/5 p-3 text-center">
+                      <p className="text-2xl font-bold text-green-700 dark:text-green-400">{valid.length}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Geldig</p>
+                    </div>
+                    <div className="rounded-xl border border-orange-200/50 bg-orange-500/5 p-3 text-center">
+                      <p className="text-2xl font-bold text-orange-700 dark:text-orange-400">{expiringSoon.length}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Binnenkort</p>
+                    </div>
+                    <div className="rounded-xl border border-red-200/50 bg-red-500/5 p-3 text-center">
+                      <p className="text-2xl font-bold text-red-700 dark:text-red-400">{expired.length}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Verlopen</p>
+                    </div>
                   </div>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="pt-4">
-                  <div className="space-y-2">
-                    {documents.map((doc) => {
-                      const isExpired = doc.expires_at && new Date(doc.expires_at) < new Date();
-                      const isExpiringSoon = doc.expires_at && !isExpired && (() => {
-                        const exp = new Date(doc.expires_at);
-                        const ninety = new Date(new Date().getTime() + 90 * 24 * 60 * 60 * 1000);
-                        return exp <= ninety;
-                      })();
-                      return (
-                        <div
-                          key={doc.id}
-                          className={cn(
-                            "flex items-center justify-between rounded-md px-3 py-2 text-sm",
-                            isExpired ? "bg-red-500/10 border border-red-200/50" :
-                            isExpiringSoon ? "bg-orange-500/10 border border-orange-200/50" :
-                            "bg-muted/30"
-                          )}
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            {isExpired && <span className="text-red-500 flex-shrink-0">⚠</span>}
-                            <span className="truncate font-medium">{doc.document_name}</span>
-                            {doc.document_type && (
-                              <span className="text-xs text-muted-foreground flex-shrink-0">({doc.document_type})</span>
-                            )}
+
+                  {/* Sync info */}
+                  {professional.documents_synced_at && (
+                    <p className="text-[11px] text-muted-foreground text-right">
+                      Laatst gesynchroniseerd: {format(new Date(professional.documents_synced_at), "d MMM yyyy, HH:mm", { locale: nl })}
+                    </p>
+                  )}
+
+                  {/* Verlopen documenten alert */}
+                  {expired.length > 0 && (
+                    <div className="rounded-lg border border-red-300 bg-red-50 dark:bg-red-950/20 p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <XCircle className="h-4 w-4 text-red-600" />
+                        <span className="text-sm font-semibold text-red-700 dark:text-red-400">
+                          {expired.length} verlopen document{expired.length !== 1 ? 'en' : ''}
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        {expired.map(doc => (
+                          <div key={doc.id} className="flex items-center justify-between text-sm">
+                            <span className="text-red-800 dark:text-red-300 font-medium">{doc.document_name}</span>
+                            <span className="text-red-600 dark:text-red-400 text-xs tabular-nums">
+                              Verlopen {format(new Date(doc.expires_at), "d MMM yyyy", { locale: nl })}
+                            </span>
                           </div>
-                          <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                            {doc.expires_at && (
-                              <span className={cn(
-                                "text-xs tabular-nums",
-                                isExpired ? "text-red-600 font-medium" :
-                                isExpiringSoon ? "text-orange-600 font-medium" :
-                                "text-muted-foreground"
-                              )}>
-                                {format(new Date(doc.expires_at), "d MMM yyyy", { locale: nl })}
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Bijna verlopen waarschuwing */}
+                  {expiringSoon.length > 0 && (
+                    <div className="rounded-lg border border-orange-300 bg-orange-50 dark:bg-orange-950/20 p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Clock className="h-4 w-4 text-orange-600" />
+                        <span className="text-sm font-semibold text-orange-700 dark:text-orange-400">
+                          {expiringSoon.length} document{expiringSoon.length !== 1 ? 'en' : ''} verlo{expiringSoon.length !== 1 ? 'pen' : 'opt'} binnenkort
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        {expiringSoon.map(doc => {
+                          const daysLeft = Math.ceil((new Date(doc.expires_at).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                          return (
+                            <div key={doc.id} className="flex items-center justify-between text-sm">
+                              <span className="text-orange-800 dark:text-orange-300 font-medium">{doc.document_name}</span>
+                              <span className="text-orange-600 dark:text-orange-400 text-xs tabular-nums">
+                                Nog {daysLeft} dag{daysLeft !== 1 ? 'en' : ''} — {format(new Date(doc.expires_at), "d MMM yyyy", { locale: nl })}
                               </span>
-                            )}
-                            {isExpired && <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Verlopen</Badge>}
-                            {isExpiringSoon && <Badge variant="warning" className="text-[10px] px-1.5 py-0">Binnenkort</Badge>}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-            )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Documenten tabel */}
+                  {documents.length > 0 ? (
+                    <div className="rounded-lg border overflow-hidden">
+                      {/* Tabel header */}
+                      <div className="grid grid-cols-[1fr_140px_100px_90px] gap-2 px-4 py-2.5 bg-muted/40 border-b text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        <span>Document</span>
+                        <span>Type</span>
+                        <span>Verloopdatum</span>
+                        <span className="text-right">Status</span>
+                      </div>
+                      {/* Tabel rows */}
+                      <div className="divide-y">
+                        {documents.map((doc) => {
+                          const isExpired = doc.expires_at && new Date(doc.expires_at) < now;
+                          const isExpiringSoon = doc.expires_at && !isExpired && new Date(doc.expires_at) <= ninetyDays;
+                          const daysLeft = doc.expires_at ? Math.ceil((new Date(doc.expires_at).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : null;
+                          return (
+                            <Collapsible key={doc.id}>
+                              <CollapsibleTrigger className="grid grid-cols-[1fr_140px_100px_90px] gap-2 w-full px-4 py-2.5 text-sm hover:bg-muted/30 transition-colors text-left items-center group">
+                                {/* Kolom 1: Document naam + icoon */}
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <FileText className={cn(
+                                    "h-4 w-4 flex-shrink-0",
+                                    isExpired ? "text-red-500" :
+                                    isExpiringSoon ? "text-orange-500" :
+                                    "text-muted-foreground"
+                                  )} />
+                                  <span className="truncate font-medium">{doc.document_name}</span>
+                                  <ChevronDown className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                                </div>
+                                {/* Kolom 2: Type */}
+                                <span className="text-xs text-muted-foreground truncate">
+                                  {doc.document_type || "—"}
+                                </span>
+                                {/* Kolom 3: Verloopdatum */}
+                                <span className={cn(
+                                  "text-xs tabular-nums",
+                                  isExpired ? "text-red-600 font-semibold" :
+                                  isExpiringSoon ? "text-orange-600 font-medium" :
+                                  doc.expires_at ? "text-muted-foreground" : "text-muted-foreground/50"
+                                )}>
+                                  {doc.expires_at
+                                    ? format(new Date(doc.expires_at), "d MMM yyyy", { locale: nl })
+                                    : "Permanent"}
+                                </span>
+                                {/* Kolom 4: Status badge */}
+                                <div className="flex justify-end">
+                                  {isExpired ? (
+                                    <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Verlopen</Badge>
+                                  ) : isExpiringSoon ? (
+                                    <Badge variant="warning" className="text-[10px] px-1.5 py-0">{daysLeft}d</Badge>
+                                  ) : doc.expires_at ? (
+                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-green-300 text-green-700 bg-green-500/5">Geldig</Badge>
+                                  ) : (
+                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">∞</Badge>
+                                  )}
+                                </div>
+                              </CollapsibleTrigger>
+                              {/* Detail panel */}
+                              <CollapsibleContent>
+                                <div className={cn(
+                                  "mx-4 mb-2 rounded-md px-4 py-3 text-sm border-l-2",
+                                  isExpired ? "bg-red-50 dark:bg-red-950/10 border-l-red-400" :
+                                  isExpiringSoon ? "bg-orange-50 dark:bg-orange-950/10 border-l-orange-400" :
+                                  "bg-muted/20 border-l-muted-foreground/20"
+                                )}>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    {doc.document_number && (
+                                      <div>
+                                        <p className="text-[11px] text-muted-foreground">Documentnummer</p>
+                                        <p className="font-mono text-xs mt-0.5">{doc.document_number}</p>
+                                      </div>
+                                    )}
+                                    {doc.issuer && (
+                                      <div>
+                                        <p className="text-[11px] text-muted-foreground">Uitgever</p>
+                                        <p className="text-xs mt-0.5">{doc.issuer}</p>
+                                      </div>
+                                    )}
+                                    {doc.start_date && (
+                                      <div>
+                                        <p className="text-[11px] text-muted-foreground">Geldig vanaf</p>
+                                        <p className="text-xs mt-0.5 tabular-nums">{format(new Date(doc.start_date), "d MMM yyyy", { locale: nl })}</p>
+                                      </div>
+                                    )}
+                                    {doc.expires_at && (
+                                      <div>
+                                        <p className="text-[11px] text-muted-foreground">Geldig tot</p>
+                                        <p className={cn("text-xs mt-0.5 tabular-nums", isExpired && "text-red-600 font-semibold")}>
+                                          {format(new Date(doc.expires_at), "d MMM yyyy", { locale: nl })}
+                                        </p>
+                                      </div>
+                                    )}
+                                    {doc.source && (
+                                      <div>
+                                        <p className="text-[11px] text-muted-foreground">Bron</p>
+                                        <p className="text-xs mt-0.5">{doc.source}</p>
+                                      </div>
+                                    )}
+                                    <div>
+                                      <p className="text-[11px] text-muted-foreground">Gepubliceerd</p>
+                                      <p className="text-xs mt-0.5">{doc.published ? "Ja" : "Nee"}</p>
+                                    </div>
+                                  </div>
+                                  {doc.bendy_updated_at && (
+                                    <p className="text-[10px] text-muted-foreground mt-2 pt-2 border-t border-muted/30">
+                                      Laatst bijgewerkt in Bendy: {format(new Date(doc.bendy_updated_at), "d MMM yyyy, HH:mm", { locale: nl })}
+                                    </p>
+                                  )}
+                                </div>
+                              </CollapsibleContent>
+                            </Collapsible>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <FileText className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                      <p className="text-sm">Geen documenten gesynchroniseerd</p>
+                      <p className="text-xs mt-1">Synchroniseer documenten via de Bendy Sync pagina</p>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </TabsContent>
 
           <TabsContent value="ervaring" className="space-y-6 mt-6">
