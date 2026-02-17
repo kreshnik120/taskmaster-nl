@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Shield, EyeOff } from "lucide-react";
 import { toast } from "sonner";
@@ -87,6 +87,9 @@ interface Professional {
   regio_voorkeur: string[] | null;
   specifieke_doelgroepen: string[] | null;
   max_reisafstand_km: number | null;
+  documents_count: number | null;
+  documents_expiring_count: number | null;
+  documents_synced_at: string | null;
 }
 
 interface ProfessionalDetailModalProps {
@@ -175,7 +178,21 @@ export function ProfessionalDetailModal({
   const [financialOpen, setFinancialOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("profiel");
   const [bsnData, setBsnData] = useState<{ bsn: string | null; revealed: boolean; loading: boolean }>({ bsn: null, revealed: false, loading: false });
+  const [documents, setDocuments] = useState<any[]>([]);
   const { isAdmin } = useUserRole();
+
+  useEffect(() => {
+    if (open && professional) {
+      supabase
+        .from('professional_documents')
+        .select('*')
+        .eq('professional_id', professional.id)
+        .order('expires_at', { ascending: true, nullsFirst: false })
+        .then(({ data }) => setDocuments(data || []));
+    } else {
+      setDocuments([]);
+    }
+  }, [open, professional]);
 
   const fetchAndRevealBsn = useCallback(async () => {
     if (!professional) return;
@@ -926,7 +943,7 @@ export function ProfessionalDetailModal({
 
             {/* Bedrijfsgegevens (Bendy) */}
             {(professional.bedrijfsnaam || professional.kvk_nummer || professional.big_nummer || professional.agb_code || professional.skj_registratie || professional.btw_nummer || professional.iban || professional.boekhouding_email || professional.bedrijfstelefoon) && (
-              <Collapsible open={false}>
+              <Collapsible defaultOpen={false}>
                 <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border border-teal-200/50 bg-teal-500/5 px-4 py-3 text-sm font-medium transition-colors hover:bg-teal-500/10">
                   <span className="flex items-center gap-2">
                     <Link2 className="h-4 w-4 text-teal-600" />
@@ -993,6 +1010,78 @@ export function ProfessionalDetailModal({
                         <p className="text-sm mt-1 p-2 bg-muted/30 rounded-md">{professional.bedrijfstelefoon}</p>
                       </div>
                     )}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+
+            {/* Documenten (Bendy) */}
+            {documents.length > 0 && (
+              <Collapsible defaultOpen={false}>
+                <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border border-orange-200/50 bg-orange-500/5 px-4 py-3 text-sm font-medium transition-colors hover:bg-orange-500/10">
+                  <span className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-orange-600" />
+                    Documenten ({documents.length})
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {documents.some(d => d.expires_at && new Date(d.expires_at) < new Date()) && (
+                      <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Verlopen</Badge>
+                    )}
+                    {documents.some(d => {
+                      if (!d.expires_at) return false;
+                      const exp = new Date(d.expires_at);
+                      const now = new Date();
+                      const ninety = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+                      return exp > now && exp <= ninety;
+                    }) && (
+                      <Badge variant="warning" className="text-[10px] px-1.5 py-0">Verloopt binnenkort</Badge>
+                    )}
+                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform" />
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-4">
+                  <div className="space-y-2">
+                    {documents.map((doc) => {
+                      const isExpired = doc.expires_at && new Date(doc.expires_at) < new Date();
+                      const isExpiringSoon = doc.expires_at && !isExpired && (() => {
+                        const exp = new Date(doc.expires_at);
+                        const ninety = new Date(new Date().getTime() + 90 * 24 * 60 * 60 * 1000);
+                        return exp <= ninety;
+                      })();
+                      return (
+                        <div
+                          key={doc.id}
+                          className={cn(
+                            "flex items-center justify-between rounded-md px-3 py-2 text-sm",
+                            isExpired ? "bg-red-500/10 border border-red-200/50" :
+                            isExpiringSoon ? "bg-orange-500/10 border border-orange-200/50" :
+                            "bg-muted/30"
+                          )}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            {isExpired && <span className="text-red-500 flex-shrink-0">⚠</span>}
+                            <span className="truncate font-medium">{doc.document_name}</span>
+                            {doc.document_type && (
+                              <span className="text-xs text-muted-foreground flex-shrink-0">({doc.document_type})</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                            {doc.expires_at && (
+                              <span className={cn(
+                                "text-xs tabular-nums",
+                                isExpired ? "text-red-600 font-medium" :
+                                isExpiringSoon ? "text-orange-600 font-medium" :
+                                "text-muted-foreground"
+                              )}>
+                                {format(new Date(doc.expires_at), "d MMM yyyy", { locale: nl })}
+                              </span>
+                            )}
+                            {isExpired && <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Verlopen</Badge>}
+                            {isExpiringSoon && <Badge variant="warning" className="text-[10px] px-1.5 py-0">Binnenkort</Badge>}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </CollapsibleContent>
               </Collapsible>

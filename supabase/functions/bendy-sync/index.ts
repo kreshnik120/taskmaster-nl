@@ -1022,6 +1022,141 @@ async function syncUsers(
 }
 
 // ============================================
+// FASE 3: DOCUMENT SYNC
+// ============================================
+
+async function syncDocuments(
+  adminClient: any,
+  tenant: string,
+  orgId: string,
+  _syncType: string,
+): Promise<SyncResult> {
+  const result: SyncResult = { fetched: 0, created: 0, updated: 0, skipped: 0, failed: 0, errors: [] };
+  logInfo(FUNCTION_NAME, `Document sync gestart voor ${tenant}`);
+
+  const { data: professionals } = await adminClient
+    .from('professionals')
+    .select('id, bendy_id, full_name')
+    .eq('org_id', orgId)
+    .is('deleted_at', null)
+    .not('bendy_id', 'is', null);
+
+  if (!professionals || professionals.length === 0) {
+    logInfo(FUNCTION_NAME, 'Geen professionals met bendy_id gevonden');
+    return result;
+  }
+
+  logInfo(FUNCTION_NAME, `${professionals.length} professionals met bendy_id gevonden`);
+
+  for (const pro of professionals) {
+    try {
+      const endpoint = `/api/v2/users/${pro.bendy_id}/documents`;
+      const response = await fetchBendyApi(tenant, endpoint);
+      const documents = response?.data || [];
+      if (documents.length === 0) continue;
+
+      result.fetched += documents.length;
+
+      const { data: existingDocs } = await adminClient
+        .from('professional_documents')
+        .select('id, bendy_document_id')
+        .eq('professional_id', pro.id);
+
+      const existingMap = new Map<string, any>();
+      for (const doc of (existingDocs || [])) {
+        existingMap.set(doc.bendy_document_id, doc);
+      }
+
+      let docCount = 0;
+      let expiringCount = 0;
+
+      for (const bendyDoc of documents) {
+        try {
+          const docId = String(bendyDoc.id);
+          const attrs = bendyDoc.attributes || {};
+
+          await adminClient
+            .from('bendy_raw_cache')
+            .upsert({
+              org_id: orgId,
+              tenant,
+              entity_type: 'documents',
+              bendy_id: docId,
+              raw_data: bendyDoc,
+              fetched_at: new Date().toISOString(),
+            }, { onConflict: 'tenant,entity_type,bendy_id' });
+
+          const docData = {
+            professional_id: pro.id,
+            org_id: orgId,
+            bendy_document_id: docId,
+            document_name: attrs.name || 'Onbekend document',
+            document_type: attrs.document_type || null,
+            document_number: attrs.document_number || null,
+            issuer: attrs.issuer || null,
+            source: attrs.source || null,
+            start_date: attrs.start_date || null,
+            expires_at: attrs.expires_at || null,
+            status: attrs.status || 'active',
+            published: attrs.published || false,
+            bendy_created_at: attrs.created_at || null,
+            bendy_updated_at: attrs.updated_at || null,
+            last_synced_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+
+          const existing = existingMap.get(docId);
+          if (existing) {
+            await adminClient
+              .from('professional_documents')
+              .update(docData)
+              .eq('id', existing.id);
+            result.updated++;
+          } else {
+            await adminClient
+              .from('professional_documents')
+              .insert(docData);
+            result.created++;
+          }
+
+          docCount++;
+
+          if (attrs.expires_at) {
+            const expiryDate = new Date(attrs.expires_at);
+            const now = new Date();
+            const ninetyDaysFromNow = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+            if (expiryDate <= ninetyDaysFromNow) {
+              expiringCount++;
+            }
+          }
+        } catch (docError) {
+          result.failed++;
+          const msg = docError instanceof Error ? docError.message : String(docError);
+          result.errors.push(`Doc ${bendyDoc.id} voor ${pro.full_name}: ${msg.substring(0, 200)}`);
+        }
+      }
+
+      await adminClient
+        .from('professionals')
+        .update({
+          documents_synced_at: new Date().toISOString(),
+          documents_count: docCount,
+          documents_expiring_count: expiringCount,
+        })
+        .eq('id', pro.id);
+
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      result.errors.push(`Docs voor ${pro.full_name} (${pro.bendy_id}): ${msg.substring(0, 200)}`);
+      logWarning(FUNCTION_NAME, `Document sync gefaald voor ${pro.full_name}: ${msg.substring(0, 100)}`);
+    }
+  }
+
+  logInfo(FUNCTION_NAME, `Document sync voltooid: ${result.fetched} opgehaald, ${result.created} nieuw, ${result.updated} bijgewerkt, ${result.failed} gefaald`);
+  return result;
+}
+
+// ============================================
 // FIELD FILL RATE ANALYSIS
 // ============================================
 
@@ -1541,8 +1676,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (body.action !== 'sync_clients' && body.action !== 'sync_users') {
-      return errorResponse(`Onbekende actie: ${body.action}. Beschikbaar: sync_clients, sync_users, update_config`, 400);
+    if (body.action !== 'sync_clients' && body.action !== 'sync_users' && body.action !== 'sync_documents') {
+      return errorResponse(`Onbekende actie: ${body.action}. Beschikbaar: sync_clients, sync_users, sync_documents, update_config`, 400);
     }
 
     const tenant = body.tenant || 'citozorg';
@@ -1579,7 +1714,7 @@ Deno.serve(async (req) => {
         org_id: orgId,
         tenant,
         sync_type: syncType,
-        entity_type: body.action === 'sync_users' ? 'users' : 'clients',
+        entity_type: body.action === 'sync_users' ? 'users' : body.action === 'sync_documents' ? 'documents' : 'clients',
         status: 'running',
       })
       .select('id')
@@ -1587,9 +1722,14 @@ Deno.serve(async (req) => {
 
     syncLogId = syncLog?.id || '';
 
-    const result = body.action === 'sync_users'
-      ? await syncUsers(adminClient, tenant, orgId, syncType)
-      : await syncClients(adminClient, tenant, orgId, syncType);
+    let result: SyncResult;
+    if (body.action === 'sync_users') {
+      result = await syncUsers(adminClient, tenant, orgId, syncType);
+    } else if (body.action === 'sync_documents') {
+      result = await syncDocuments(adminClient, tenant, orgId, syncType);
+    } else {
+      result = await syncClients(adminClient, tenant, orgId, syncType);
+    }
 
     const duration = Date.now() - startTime;
     if (syncLogId) {

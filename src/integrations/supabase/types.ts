@@ -5309,6 +5309,91 @@ export type Database = {
           },
         ]
       }
+      professional_documents: {
+        Row: {
+          bendy_created_at: string | null
+          bendy_document_id: string
+          bendy_updated_at: string | null
+          created_at: string | null
+          document_name: string
+          document_number: string | null
+          document_type: string | null
+          expires_at: string | null
+          id: string
+          issuer: string | null
+          last_synced_at: string | null
+          org_id: string
+          professional_id: string
+          published: boolean | null
+          source: string | null
+          start_date: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          bendy_created_at?: string | null
+          bendy_document_id: string
+          bendy_updated_at?: string | null
+          created_at?: string | null
+          document_name: string
+          document_number?: string | null
+          document_type?: string | null
+          expires_at?: string | null
+          id?: string
+          issuer?: string | null
+          last_synced_at?: string | null
+          org_id: string
+          professional_id: string
+          published?: boolean | null
+          source?: string | null
+          start_date?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          bendy_created_at?: string | null
+          bendy_document_id?: string
+          bendy_updated_at?: string | null
+          created_at?: string | null
+          document_name?: string
+          document_number?: string | null
+          document_type?: string | null
+          expires_at?: string | null
+          id?: string
+          issuer?: string | null
+          last_synced_at?: string | null
+          org_id?: string
+          professional_id?: string
+          published?: boolean | null
+          source?: string | null
+          start_date?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "professional_documents_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_documents_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_admin_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_documents_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       professional_interviews: {
         Row: {
           ai_assessment: Json | null
@@ -5424,6 +5509,9 @@ export type Database = {
           diploma_verification_details: Json | null
           diploma_verified: boolean | null
           diploma_verified_at: string | null
+          documents_count: number | null
+          documents_expiring_count: number | null
+          documents_synced_at: string | null
           doelgroep_ervaring: string[] | null
           email: string | null
           ervaring_sector: string[] | null
@@ -5501,6 +5589,9 @@ export type Database = {
           diploma_verification_details?: Json | null
           diploma_verified?: boolean | null
           diploma_verified_at?: string | null
+          documents_count?: number | null
+          documents_expiring_count?: number | null
+          documents_synced_at?: string | null
           doelgroep_ervaring?: string[] | null
           email?: string | null
           ervaring_sector?: string[] | null
@@ -5578,6 +5669,9 @@ export type Database = {
           diploma_verification_details?: Json | null
           diploma_verified?: boolean | null
           diploma_verified_at?: string | null
+          documents_count?: number | null
+          documents_expiring_count?: number | null
+          documents_synced_at?: string | null
           doelgroep_ervaring?: string[] | null
           email?: string | null
           ervaring_sector?: string[] | null
