@@ -1,66 +1,106 @@
 
-# BENDY-SYNC-4D: Company Data + Ontbrekende User Velden
+
+# BENDY-SYNC-4E: Document Sync + Collapsible Bugfix
 
 ## Overzicht
-Drie typen wijzigingen: (1) SQL migratie voor 9 nieuwe kolommen, (2) edge function aanpassen voor company data via `included` array, en (3) UI uitbreiden met "Bedrijfsgegevens (Bendy)" collapsible.
+Twee wijzigingen: (1) bugfix voor het Bedrijfsgegevens collapsible blok, en (2) volledige document sync functionaliteit met nieuw database schema, edge function uitbreiding, en UI.
 
 ---
 
-## Deel 1: SQL Migratie -- 9 nieuwe kolommen
+## Stap 0: Collapsible Bugfix
 
-Toevoegen aan `professionals` tabel:
-- `agb_code TEXT`
-- `skj_registratie TEXT`
-- `iban_tenaamstelling TEXT`
-- `boekhouding_email TEXT`
-- `bedrijfstelefoon TEXT`
-- `bendy_username TEXT`
-- `bendy_mediator_id TEXT`
-- `bendy_function_type TEXT`
-- `bendy_created_at TIMESTAMPTZ`
-
-Bestaande kolommen (`bedrijfsnaam`, `kvk_nummer`, `btw_nummer`, `iban`, `big_nummer`) worden NIET aangeraakt.
+In `src/components/ProfessionalDetailModal.tsx` regel 929: wijzig `<Collapsible open={false}>` naar `<Collapsible defaultOpen={false}>`. Dit voorkomt dat het blok geforceerd dicht blijft en stelt gebruikers in staat het te openen.
 
 ---
 
-## Deel 2: Edge Function (`supabase/functions/bendy-sync/index.ts`)
+## Stap 1: SQL Migratie
 
-### 2a: `fetchAllBendyRecords` return type wijzigen
-Huidige functie retourneert `Promise<any[]>`. Wijzigen naar `Promise<{ records: any[]; included: any[] }>` zodat de `included` array (met company objecten) wordt meegegeven.
+Nieuwe tabel `professional_documents` met kolommen:
+- `id`, `professional_id` (FK naar professionals), `org_id`, `bendy_document_id`, `document_name`, `document_type`, `document_number`, `issuer`, `source`, `start_date`, `expires_at`, `status`, `published`, `bendy_created_at`, `bendy_updated_at`, `created_at`, `updated_at`, `last_synced_at`
+- UNIQUE constraint op `(professional_id, bendy_document_id)`
 
-### 2b: Alle 3 aanroepen updaten
-1. `syncClients` (regel 338): `const { records: bendyClients } = await fetchAllBendyRecords(...)`
-2. `syncUsers` users (regel 744): `const { records: bendyUsers, included: bendyIncluded } = await fetchAllBendyRecords(tenant, '/api/v2/users', { include: 'groups,company' })`
-3. `syncUsers` groups (regel 758): `const { records: bendyGroups } = await fetchAllBendyRecords(...)`
+RLS policies:
+- SELECT voor authenticated users via `user_organizations` org_id check
+- ALL voor service_role
 
-### 2c: Company map bouwen (na groupMap, rond regel 763)
-Bouw een `Map<string, any>` van company ID naar attributes uit de `bendyIncluded` array, gefilterd op `type === 'companies'`.
+Indexes op: `professional_id`, `org_id`, `expires_at` (partial), `bendy_document_id`, `status`
 
-### 2d: SELECT uitbreiden (regel 752)
-De select query voor professionals uitbreiden met: `bedrijfsnaam, kvk_nummer, btw_nummer, iban, big_nummer, agb_code, skj_registratie, iban_tenaamstelling, boekhouding_email, bedrijfstelefoon, bendy_username, bendy_mediator_id, bendy_function_type, bendy_created_at`
-
-### 2e: UPDATE pad uitbreiden (na regel 822, na certificaten blok)
-Company data conditioneel syncen (10 velden: bedrijfsnaam, kvk_nummer, btw_nummer, iban, big_nummer, agb_code, skj_registratie, iban_tenaamstelling, boekhouding_email, bedrijfstelefoon) via `bendyUser.relationships.company.data.id` -> `companyMap` lookup.
-Extra user attrs (4 velden: bendy_username, bendy_mediator_id, bendy_function_type, bendy_created_at).
-
-### 2f: INSERT pad uitbreiden (na regel 908)
-Dezelfde 4 extra user attrs toevoegen aan insertData. Company data toevoegen via companyMap lookup voor het insertData object.
+3 nieuwe kolommen op `professionals`:
+- `documents_synced_at TIMESTAMPTZ`
+- `documents_count INTEGER DEFAULT 0`
+- `documents_expiring_count INTEGER DEFAULT 0`
 
 ---
 
-## Deel 3: UI Wijzigingen
+## Stap 2: Edge Function (`supabase/functions/bendy-sync/index.ts`)
 
-### 3a: Interfaces uitbreiden
-Beide interfaces (in `ProfessionalDetailModal.tsx` en `Professionals.tsx`) uitbreiden met 11 nieuwe velden:
-`iban, big_nummer, agb_code, skj_registratie, iban_tenaamstelling, boekhouding_email, bedrijfstelefoon, bendy_username, bendy_mediator_id, bendy_function_type, bendy_created_at`
+### 2a: Nieuwe `syncDocuments()` functie
+Invoegen na `syncUsers()` (regel 1022) en voor `analyzeFieldFillRates()` (regel 1024).
 
-### 3b: Nieuw "Bedrijfsgegevens (Bendy)" Collapsible blok
-Na de bestaande "Financieel" sectie (regel 912), een nieuw collapsible blok toevoegen met `collapsible-glass-teal` styling en `Link2` icoon. Toont: bedrijfsnaam, KvK, BIG, AGB, SKJ, BTW (allen font-mono), IBAN (col-span-2, font-mono) met tenaamstelling, boekhouding_email, bedrijfstelefoon. Alleen zichtbaar als minstens 1 veld gevuld is.
+Logica:
+1. Alle professionals met `bendy_id` ophalen
+2. Per professional: `GET /api/v2/users/{bendy_id}/documents` via `fetchBendyApi`
+3. Per document: cache in `bendy_raw_cache` (entity_type='documents') + upsert in `professional_documents`
+4. Expiring count berekenen (binnen 90 dagen)
+5. Professional bijwerken met `documents_synced_at`, `documents_count`, `documents_expiring_count`
+
+### 2b: Actie handler uitbreiden (regel 1544, 1582, 1590-1592)
+- Voeg `sync_documents` toe aan de actie validatie
+- Entity type mapping: `sync_documents` -> `'documents'`
+- Dispatch: `sync_documents` -> `syncDocuments()`
+
+---
+
+## Stap 3: UI -- Document Sync knop (`src/pages/BendySync.tsx`)
+
+Na het Professional Sync Card blok (na regel 655), een nieuw Card toevoegen:
+- "Document Sync" titel met FileText icoon
+- Knop "Document Sync Starten" die `sync_documents` actie aanroept
+- Resultaat grid (opgehaald/aangemaakt/bijgewerkt/overgeslagen/mislukt)
+- Eigen state variabelen: `syncingDocs`, `docSyncResult`
+
+---
+
+## Stap 4: UI -- Documenten sectie in ProfessionalDetailModal
+
+### 4a: Interface uitbreiden
+Toevoegen aan Professional interface (beide bestanden):
+- `documents_count: number | null`
+- `documents_expiring_count: number | null`
+- `documents_synced_at: string | null`
+
+### 4b: State + data fetching
+Nieuwe state `documents` en useEffect die `professional_documents` ophaalt bij openen modal, gesorteerd op `expires_at ASC`.
+
+### 4c: Nieuw Collapsible blok
+Na het "Bedrijfsgegevens (Bendy)" blok, een oranje-gestyled collapsible:
+- FileText icoon, oranje border/background
+- Header toont totaal aantal documenten + badges voor verlopen/bijna-verlopen
+- Per document: naam, type, verloopdatum
+- Rode achtergrond + waarschuwingssymbool als verlopen
+- Oranje achtergrond als binnen 90 dagen verloopt
+- Badge "Verlopen" (destructive) en "Verloopt binnenkort" (warning)
 
 ---
 
 ## Bestanden die wijzigen
-1. SQL migratie (nieuw bestand)
-2. `supabase/functions/bendy-sync/index.ts` -- fetchAllBendyRecords refactor + company sync
-3. `src/components/ProfessionalDetailModal.tsx` -- interface + nieuw collapsible blok
-4. `src/pages/Professionals.tsx` -- interface uitbreiden
+
+1. `src/components/ProfessionalDetailModal.tsx` -- collapsible bugfix + interface + documenten blok
+2. `src/pages/Professionals.tsx` -- interface uitbreiden
+3. `src/pages/BendySync.tsx` -- Document Sync knop
+4. `supabase/functions/bendy-sync/index.ts` -- syncDocuments() + handler
+5. SQL migratie (nieuw bestand)
+
+## Technische details
+
+```text
+Document sync flow:
+  1. GET professionals WHERE bendy_id IS NOT NULL
+  2. Per professional: fetchBendyApi(tenant, '/api/v2/users/{bendy_id}/documents')
+  3. Per document: upsert professional_documents ON (professional_id, bendy_document_id)
+  4. Cache raw data in bendy_raw_cache (entity_type='documents')
+  5. Update professionals SET documents_count, documents_expiring_count, documents_synced_at
+
+RLS policy pattern (consistent met bestaand):
+  org_id IN (SELECT uo.org_id FROM user_organizations uo WHERE uo.user_id = auth.uid())
+```
