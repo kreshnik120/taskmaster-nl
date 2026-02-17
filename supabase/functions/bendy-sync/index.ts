@@ -863,12 +863,11 @@ async function syncUsers(
         if (attrs.function_type && !matchedPro.bendy_function_type) updateData.bendy_function_type = attrs.function_type;
         if (attrs.created_at && !matchedPro.bendy_created_at) updateData.bendy_created_at = attrs.created_at;
 
-        // Status updaten op basis van Bendy state
+        // Status updaten op basis van Bendy state — Bendy is leidend
         const bendyState = attrs.state?.toLowerCase();
-        if (bendyState && ['geblokkeerd', 'verwijderd', 'blocked', 'deleted'].includes(bendyState)) {
+        if (bendyState && ['inactief', 'geblokkeerd', 'verwijderd', 'blocked', 'deleted'].includes(bendyState)) {
           updateData.status = 'inactief';
-        } else if (matchedPro.status === 'inactief' && matchedPro.bendy_id) {
-          // Herstel naar actief als Bendy ze niet als geblokkeerd markeert
+        } else if (bendyState) {
           updateData.status = 'actief';
         }
 
@@ -935,11 +934,9 @@ async function syncUsers(
         // Werkvorm uit professional_type
         const werkvorm = mapWerkvorm(attrs.professional_type || null);
 
-        // Status uit state
-        // Bendy 'inactief' betekent "niet op opdracht" — in abcito.io zijn ze nog steeds actief in de pool
-        // Alleen 'geblokkeerd' of 'verwijderd' uit Bendy maakt ze inactief
+        // Status uit Bendy state — Bendy is leidend
         const isActive = attrs.state
-          ? !['geblokkeerd', 'verwijderd', 'blocked', 'deleted'].includes(attrs.state.toLowerCase())
+          ? !['inactief', 'geblokkeerd', 'verwijderd', 'blocked', 'deleted'].includes(attrs.state.toLowerCase())
           : true;
 
         const insertData: Record<string, any> = {
