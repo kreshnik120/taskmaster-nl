@@ -27,6 +27,7 @@ interface Professional {
   org_id?: string | null;
   documents_count?: number | null;
   documents_expiring_count?: number | null;
+  documents_synced_at?: string | null;
 }
 
 interface ProfessionalCardProps {
@@ -71,6 +72,11 @@ const getStatusColor = (status: string): string => {
       return 'bg-amber-500';
     case 'geplaatst':
       return 'bg-primary';
+    case 'inactief':
+      return 'bg-red-400';
+    case 'pauze':
+    case 'op_pauze':
+      return 'bg-orange-400';
     default:
       return 'bg-muted-foreground/40';
   }
@@ -82,10 +88,9 @@ export function ProfessionalCard({
   onSelect, 
   onClick 
 }: ProfessionalCardProps) {
-  const timeInStatus = formatDistanceToNow(new Date(professional.created_at), { 
-    addSuffix: false, 
-    locale: nl 
-  });
+  const timeLabel = professional.documents_synced_at
+    ? `Docs gesyncet ${formatDistanceToNow(new Date(professional.documents_synced_at), { addSuffix: true, locale: nl })}`
+    : `Geregistreerd ${formatDistanceToNow(new Date(professional.created_at), { addSuffix: true, locale: nl })}`;
 
   const handlePhoneClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -218,9 +223,9 @@ export function ProfessionalCard({
                   </Badge>
                 )}
 
-                {/* Time in Status */}
+                {/* Timestamp */}
                 <p className="text-xs text-muted-foreground/50">
-                  {timeInStatus}
+                  {timeLabel}
                 </p>
               </div>
             </div>

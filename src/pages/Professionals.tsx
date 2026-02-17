@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, ChevronDown, X, Users, CheckCircle, UserPlus, TrendingUp, FileWarning } from "lucide-react";
+import { Plus, Search, ChevronDown, ChevronLeft, ChevronRight, X, Users, CheckCircle, UserPlus, TrendingUp, FileWarning } from "lucide-react";
 import { ProfessionalBulkActionBar } from "@/components/recruitment/ProfessionalBulkActionBar";
 import { ProfessionalCard } from "@/components/recruitment/ProfessionalCard";
 import { ProfessionalDetailModal } from "@/components/ProfessionalDetailModal";
@@ -121,6 +121,8 @@ const Professionals = () => {
   const [selectedProfessionalIds, setSelectedProfessionalIds] = useState<Set<string>>(new Set());
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [activeKpi, setActiveKpi] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [sortOption, setSortOption] = useState<string>("naam_az");
   const [linkedProfessionalIds, setLinkedProfessionalIds] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const { canEdit } = useUserRole();
@@ -264,8 +266,31 @@ const Professionals = () => {
     }
   };
 
-  const filteredProfessionals = professionals.filter((p) => {
-    const matchesSearch = p.full_name.toLowerCase().includes(searchTerm.toLowerCase());
+  const sortProfessionals = (list: typeof professionals) => {
+    return [...list].sort((a, b) => {
+      switch (sortOption) {
+        case 'naam_za':
+          return (b.full_name || '').localeCompare(a.full_name || '');
+        case 'nieuwste':
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        case 'oudste':
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        case 'status':
+          return (a.status || '').localeCompare(b.status || '');
+        case 'naam_az':
+        default:
+          return (a.full_name || '').localeCompare(b.full_name || '');
+      }
+    });
+  };
+
+  const filteredProfessionals = sortProfessionals(professionals.filter((p) => {
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = !term ||
+      p.full_name.toLowerCase().includes(term) ||
+      (p.email?.toLowerCase().includes(term) ?? false) ||
+      (p.telefoonnummer?.includes(term) ?? false) ||
+      (p.regio?.toLowerCase().includes(term) ?? false);
     const matchesFunctie = filterFunctie === "all" || p.functie_niveau === filterFunctie;
     const matchesWerkvorm = filterWerkvorm === "all" || p.werkvorm === filterWerkvorm;
     const matchesStatus = filterStatus === "all" || p.status === filterStatus;
@@ -275,7 +300,20 @@ const Professionals = () => {
       (filterDocuments === "ok" && p.documents_count && p.documents_count > 0 && (!p.documents_expiring_count || p.documents_expiring_count === 0)) ||
       (filterDocuments === "geen" && (!p.documents_count || p.documents_count === 0));
     return matchesSearch && matchesFunctie && matchesWerkvorm && matchesStatus && matchesRegio && matchesDocs;
-  });
+  }));
+
+  // Reset pagina naar 1 bij elke filter/zoek wijziging
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterFunctie, filterWerkvorm, filterStatus, filterRegio, filterDocuments, activeKpi, sortOption]);
+
+  // Paginering berekenen
+  const PAGE_SIZE = 24;
+  const totalPages = Math.ceil(filteredProfessionals.length / PAGE_SIZE);
+  const paginatedProfessionals = filteredProfessionals.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
 
   // Bulk action handlers
   const handleSelectProfessional = (id: string, checked: boolean) => {
@@ -409,7 +447,7 @@ const Professionals = () => {
 
   const docsExpiredCount = professionals.filter(p => p.documents_expiring_count && p.documents_expiring_count > 0).length;
 
-  const hasActiveFilters = filterFunctie !== "all" || filterWerkvorm !== "all" || filterStatus !== "all" || filterRegio !== "" || filterDocuments !== "all";
+  const hasActiveFilters = filterFunctie !== "all" || filterWerkvorm !== "all" || filterStatus !== "all" || filterRegio !== "" || filterDocuments !== "all" || sortOption !== "naam_az";
 
   const resetFilters = () => {
     setFilterFunctie("all");
@@ -417,6 +455,8 @@ const Professionals = () => {
     setFilterStatus("all");
     setFilterRegio("");
     setFilterDocuments("all");
+    setSortOption("naam_az");
+    setCurrentPage(1);
   };
 
   const handleKpiClick = (filterType: string) => {
@@ -619,12 +659,25 @@ const Professionals = () => {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             type="text"
-            placeholder="Zoek op naam..."
+            placeholder="Zoek op naam, email, telefoon of regio..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10 h-9 border-border"
           />
         </div>
+
+        <Select value={sortOption} onValueChange={setSortOption}>
+          <SelectTrigger className="w-[180px] h-9">
+            <SelectValue placeholder="Sorteer op..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="naam_az">Naam (A → Z)</SelectItem>
+            <SelectItem value="naam_za">Naam (Z → A)</SelectItem>
+            <SelectItem value="nieuwste">Nieuwste eerst</SelectItem>
+            <SelectItem value="oudste">Oudste eerst</SelectItem>
+            <SelectItem value="status">Status</SelectItem>
+          </SelectContent>
+        </Select>
 
         <Collapsible>
           <CollapsibleTrigger asChild>
@@ -712,16 +765,17 @@ const Professionals = () => {
         )}
       </div>
 
-      {/* Active Filter Indicator */}
-      {hasActiveFilters && (
-        <div className="text-sm text-muted-foreground">
-          {filteredProfessionals.length} van {professionals.length} professionals
-        </div>
-      )}
+      {/* Resultaten Teller */}
+      <div className="text-sm text-muted-foreground">
+        {filteredProfessionals.length === professionals.length
+          ? `${professionals.length} professionals`
+          : `${filteredProfessionals.length} van ${professionals.length} professionals`
+        }
+      </div>
 
       {/* Professionals Grid - Minimal Cards */}
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {filteredProfessionals.map((professional) => (
+        {paginatedProfessionals.map((professional) => (
           <motion.div
             key={professional.id}
             initial={{ opacity: 0, y: 10 }}
@@ -740,6 +794,58 @@ const Professionals = () => {
           </motion.div>
         ))}
       </div>
+
+      {/* Paginering */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-1 py-3">
+          <p className="text-sm text-muted-foreground">
+            Pagina {currentPage} van {totalPages} — {filteredProfessionals.length} professionals
+          </p>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Vorige
+            </Button>
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let pageNum: number;
+              if (totalPages <= 5) {
+                pageNum = i + 1;
+              } else if (currentPage <= 3) {
+                pageNum = i + 1;
+              } else if (currentPage >= totalPages - 2) {
+                pageNum = totalPages - 4 + i;
+              } else {
+                pageNum = currentPage - 2 + i;
+              }
+              return (
+                <Button
+                  key={pageNum}
+                  variant={currentPage === pageNum ? "default" : "outline"}
+                  size="sm"
+                  className="min-w-[36px]"
+                  onClick={() => setCurrentPage(pageNum)}
+                >
+                  {pageNum}
+                </Button>
+              );
+            })}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+            >
+              Volgende
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Empty State */}
       {filteredProfessionals.length === 0 && (
