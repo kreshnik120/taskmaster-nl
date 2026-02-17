@@ -190,12 +190,22 @@ async function fetchAllBendyRecords(tenant: string, endpoint: string, extraParam
     const included = response?.included || [];
     allIncluded.push(...included);
 
-    if (records.length < PAGE_SIZE) break;
-    if (!response?.links?.next) break;
+    // Log paginatie info voor debugging
+    const totalFromMeta = response?.meta?.record_count || response?.meta?.total || null;
+    if (page === 1 && totalFromMeta) {
+      logInfo(FUNCTION_NAME, `API meldt ${totalFromMeta} totaal records voor ${endpoint}`);
+    }
+    logInfo(FUNCTION_NAME, `Pagina ${page}: ${records.length} records opgehaald (totaal: ${allRecords.length})${totalFromMeta ? ` van ${totalFromMeta}` : ''}`);
 
+    // Stop als deze pagina minder records heeft dan PAGE_SIZE (= laatste pagina)
+    if (records.length < PAGE_SIZE) break;
+
+    // Niet afhankelijk van links.next — sommige API's sturen dit niet mee
+    // MAX_PAGES limiet (50) voorkomt oneindige loops
     page++;
   }
 
+  logInfo(FUNCTION_NAME, `fetchAllBendyRecords ${endpoint}: ${allRecords.length} totaal na ${page} pagina('s)`);
   return { records: allRecords, included: allIncluded };
 }
 
