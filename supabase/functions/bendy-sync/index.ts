@@ -213,6 +213,8 @@ async function fetchAllBendyRecords(tenant: string, endpoint: string, extraParam
 // SYNC LOCK MECHANISME
 // ============================================
 
+const STALE_LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minuten
+
 async function acquireSyncLock(
   adminClient: any,
   tenant: string,
@@ -220,17 +222,28 @@ async function acquireSyncLock(
 ): Promise<{ locked: boolean; configId: string; orgId: string }> {
   const { data: config } = await adminClient
     .from('bendy_sync_config')
-    .select('id, org_id, sync_status, enabled')
+    .select('id, org_id, sync_status, enabled, updated_at')
     .eq('tenant', tenant)
     .single();
 
   if (!config) return { locked: false, configId: '', orgId: '' };
   if (!config.enabled) return { locked: false, configId: '', orgId: '' };
-  if (config.sync_status === 'running') return { locked: false, configId: '', orgId: '' };
+
+  // Stale lock detectie: als sync_status 'running' is maar updated_at > 5 min geleden → auto-reset
+  if (config.sync_status === 'running') {
+    const updatedAt = new Date(config.updated_at).getTime();
+    const staleDuration = Date.now() - updatedAt;
+    if (staleDuration < STALE_LOCK_TIMEOUT_MS) {
+      // Lock is nog vers → echt actief, weigeren
+      return { locked: false, configId: '', orgId: '' };
+    }
+    // Lock is stale → auto-reset
+    logWarning(FUNCTION_NAME, `Stale lock gedetecteerd voor ${tenant} (${Math.round(staleDuration / 1000)}s oud) — automatisch gereset`);
+  }
 
   await adminClient
     .from('bendy_sync_config')
-    .update({ sync_status: 'running', error_message: null })
+    .update({ sync_status: 'running', error_message: null, updated_at: new Date().toISOString() })
     .eq('id', config.id);
 
   return { locked: true, configId: config.id, orgId: config.org_id };
@@ -1694,8 +1707,36 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (body.action === 'reset_lock') {
+      const resetTenant = body.tenant || 'citozorg';
+      const { data: config } = await adminClient
+        .from('bendy_sync_config')
+        .select('id, sync_status')
+        .eq('tenant', resetTenant)
+        .single();
+
+      if (!config) {
+        return errorResponse(`Config voor tenant "${resetTenant}" niet gevonden`, 404);
+      }
+
+      const previousStatus = config.sync_status;
+
+      await adminClient
+        .from('bendy_sync_config')
+        .update({ sync_status: 'idle', error_message: null, updated_at: new Date().toISOString() })
+        .eq('id', config.id);
+
+      logInfo(FUNCTION_NAME, `Lock gereset voor ${resetTenant}: ${previousStatus} → idle`, { userId: user.id });
+
+      return jsonResponse({
+        success: true,
+        data: { tenant: resetTenant, previous_status: previousStatus, new_status: 'idle' },
+        metadata: { action: 'reset_lock', version: FUNCTION_VERSION },
+      });
+    }
+
     if (body.action !== 'sync_clients' && body.action !== 'sync_users' && body.action !== 'sync_documents') {
-      return errorResponse(`Onbekende actie: ${body.action}. Beschikbaar: sync_clients, sync_users, sync_documents, update_config`, 400);
+      return errorResponse(`Onbekende actie: ${body.action}. Beschikbaar: sync_clients, sync_users, sync_documents, update_config, reset_lock`, 400);
     }
 
     const tenant = body.tenant || 'citozorg';
