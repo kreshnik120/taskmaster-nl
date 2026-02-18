@@ -1563,6 +1563,66 @@ async function handleStatusCheck(): Promise<Response> {
       .select('id', { count: 'exact', head: true })
       .eq('entity_type', 'users');
 
+    // ── DUPLICAAT CHECKS ──
+    // Check 1: Professionals met duplicate bendy_id
+    const { data: allProsWithBendyId } = await adminClient
+      .from('professionals')
+      .select('id, bendy_id, full_name, email')
+      .eq('org_id', orgId || '')
+      .is('deleted_at', null)
+      .not('bendy_id', 'is', null);
+
+    const bendyIdCounts = new Map<string, any[]>();
+    for (const pro of (allProsWithBendyId || [])) {
+      const existing = bendyIdCounts.get(pro.bendy_id) || [];
+      existing.push({ id: pro.id, full_name: pro.full_name, email: pro.email });
+      bendyIdCounts.set(pro.bendy_id, existing);
+    }
+    const duplicateBendyIds = Array.from(bendyIdCounts.entries())
+      .filter(([_, pros]) => pros.length > 1)
+      .map(([bendyId, pros]) => ({ bendy_id: bendyId, count: pros.length, professionals: pros }));
+
+    // Check 2: Professionals met duplicate email
+    const { data: allProsWithEmail } = await adminClient
+      .from('professionals')
+      .select('id, bendy_id, full_name, email')
+      .eq('org_id', orgId || '')
+      .is('deleted_at', null)
+      .not('email', 'is', null);
+
+    const emailCounts = new Map<string, any[]>();
+    for (const pro of (allProsWithEmail || [])) {
+      const normalizedEmail = (pro.email || '').trim().toLowerCase();
+      if (!normalizedEmail) continue;
+      const existing = emailCounts.get(normalizedEmail) || [];
+      existing.push({ id: pro.id, full_name: pro.full_name, bendy_id: pro.bendy_id });
+      emailCounts.set(normalizedEmail, existing);
+    }
+    const duplicateEmails = Array.from(emailCounts.entries())
+      .filter(([_, pros]) => pros.length > 1)
+      .map(([email, pros]) => ({ email, count: pros.length, professionals: pros }));
+
+    // Check 3: Totaal professionals tellen
+    const { count: totalProfessionals } = await adminClient
+      .from('professionals')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId || '')
+      .is('deleted_at', null);
+
+    const { count: prosWithBendyId } = await adminClient
+      .from('professionals')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId || '')
+      .is('deleted_at', null)
+      .not('bendy_id', 'is', null);
+
+    const { count: prosWithoutBendyId } = await adminClient
+      .from('professionals')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId || '')
+      .is('deleted_at', null)
+      .is('bendy_id', null);
+
     return jsonResponse({
       success: true,
       data: {
@@ -1590,6 +1650,14 @@ async function handleStatusCheck(): Promise<Response> {
             total_cached: userCacheCount || 0,
           },
           user_field_fill_rates: userFieldFillRates,
+          data_quality: {
+            total_professionals: totalProfessionals || 0,
+            with_bendy_id: prosWithBendyId || 0,
+            without_bendy_id: prosWithoutBendyId || 0,
+            duplicate_bendy_ids: duplicateBendyIds,
+            duplicate_emails: duplicateEmails,
+            has_duplicates: duplicateBendyIds.length > 0 || duplicateEmails.length > 0,
+          },
         },
         pending_mappings: (pendingMappings || []).map((m: any) => ({
           id: m.id,
