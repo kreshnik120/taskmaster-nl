@@ -135,6 +135,7 @@ export default function BendySync() {
   const [userSyncResult, setUserSyncResult] = useState<SyncResult | null>(null);
   const [syncingDocs, setSyncingDocs] = useState(false);
   const [docSyncResult, setDocSyncResult] = useState<SyncResult | null>(null);
+  const [resettingLock, setResettingLock] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -161,6 +162,26 @@ export default function BendySync() {
   const stats = statusData?.statistics;
   const diagnostics = statusData?.diagnostics;
   const pendingMappings = statusData?.pending_mappings || [];
+
+  const handleResetLock = async () => {
+    setResettingLock(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("bendy-sync", {
+        body: { action: "reset_lock", tenant: "citozorg" },
+      });
+      if (error) throw error;
+      if (data?.success) {
+        toast.success(`Lock gereset: ${data.data.previous_status} → idle`);
+        fetchStatus();
+      } else {
+        toast.error(data?.error || "Lock reset mislukt");
+      }
+    } catch (err: any) {
+      toast.error(`Fout: ${err.message}`);
+    } finally {
+      setResettingLock(false);
+    }
+  };
 
   const handleToggle = async () => {
     if (!config) return;
@@ -287,7 +308,20 @@ export default function BendySync() {
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground">Sync status</span>
-                  <p className="font-medium capitalize">{config.sync_status}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium capitalize">{config.sync_status}</p>
+                    {config.sync_status === 'running' && (
+                      <Button
+                        onClick={handleResetLock}
+                        disabled={resettingLock}
+                        variant="destructive"
+                        size="sm"
+                        className="h-6 text-xs px-2"
+                      >
+                        {resettingLock ? "Resetten..." : "Reset Lock"}
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground">Laatste sync</span>
