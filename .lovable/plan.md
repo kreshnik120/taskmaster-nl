@@ -1,104 +1,67 @@
 
-# STATUS-CORRECTIE — Bendy is LEIDEND
+# STALE LOCK FIX — Auto-reset + Reset Lock knop
 
-## Probleem
-De vorige STATUS-FIX was FOUT. Bendy data is de bron van waarheid. Als iemand in Bendy "inactief" staat, moet die OOK "inactief" zijn in abcito.io. De vorige fix verwijderde "inactief" uit de blocked list en zette alle inactieve professionals naar actief.
-
----
-
-## Onderdeel 1: SQL Migratie — Data Herstellen vanuit bendy_raw_cache
-
-Nieuwe migratie die de correcte status herstelt op basis van de originele Bendy state uit de raw cache:
-
-```sql
-UPDATE public.professionals p
-SET
-  status = CASE
-    WHEN LOWER(COALESCE(brc.raw_data -> 'attributes' ->> 'state', '')) IN ('inactief', 'geblokkeerd', 'verwijderd', 'blocked', 'deleted')
-      THEN 'inactief'
-    ELSE 'actief'
-  END,
-  updated_at = now()
-FROM public.bendy_raw_cache brc
-WHERE brc.bendy_id = p.bendy_id
-  AND brc.entity_type = 'users'
-  AND p.deleted_at IS NULL
-  AND p.bendy_id IS NOT NULL;
-```
+## Overzicht
+Twee wijzigingen om te voorkomen dat een vastgelopen sync (door timeout/crash) alle volgende syncs blokkeert.
 
 ---
 
-## Onderdeel 2: Insert Path Fix (r938-941)
+## Wijziging 1: Edge Function — Stale lock auto-reset + reset_lock actie
 
-Huidige code (FOUT — mist 'inactief'):
-```typescript
-        // Status uit state
-        // Bendy 'inactief' betekent "niet op opdracht" — ...
-        // Alleen 'geblokkeerd' of 'verwijderd' uit Bendy maakt ze inactief
-        const isActive = attrs.state
-          ? !['geblokkeerd', 'verwijderd', 'blocked', 'deleted'].includes(attrs.state.toLowerCase())
-          : true;
-```
+**Bestand:** `supabase/functions/bendy-sync/index.ts`
 
-Nieuwe code ('inactief' TOEGEVOEGD):
-```typescript
-        // Status uit Bendy state — Bendy is leidend
-        const isActive = attrs.state
-          ? !['inactief', 'geblokkeerd', 'verwijderd', 'blocked', 'deleted'].includes(attrs.state.toLowerCase())
-          : true;
-```
+### 1A. Stale lock detectie in acquireSyncLock() (r216-237)
 
-r952 (`status: isActive ? 'actief' : 'inactief'`) blijft ongewijzigd.
+- Constante `STALE_LOCK_TIMEOUT_MS = 5 * 60 * 1000` toevoegen voor de functie
+- `updated_at` toevoegen aan de `.select()` (r223)
+- De huidige `if (config.sync_status === 'running') return false` (r229) vervangen door stale-check logica:
+  - Lock jonger dan 5 min: return `{ locked: false }` (echt actief)
+  - Lock ouder dan 5 min: logWarning + doorlaten (overschrijven)
+- `updated_at: new Date().toISOString()` toevoegen aan de `.update()` (r233)
+
+### 1B. Nieuwe actie `reset_lock` in main handler (na r1695, voor r1697)
+
+- Nieuw blok dat `body.action === 'reset_lock'` afvangt
+- Haalt config op, zet `sync_status` naar `'idle'`, logt vorige status
+- Retourneert success met `previous_status` en `new_status: 'idle'`
+- Foutmelding string (r1698) bijwerken met `reset_lock` in de lijst
 
 ---
 
-## Onderdeel 3: Update Path Fix (r866-873)
+## Wijziging 2: Frontend — Reset Lock knop
 
-Huidige code (FOUT — herstelt onterecht naar actief):
-```typescript
-        // Status updaten op basis van Bendy state
-        const bendyState = attrs.state?.toLowerCase();
-        if (bendyState && ['geblokkeerd', 'verwijderd', 'blocked', 'deleted'].includes(bendyState)) {
-          updateData.status = 'inactief';
-        } else if (matchedPro.status === 'inactief' && matchedPro.bendy_id) {
-          // Herstel naar actief als Bendy ze niet als geblokkeerd markeert
-          updateData.status = 'actief';
-        }
-```
+**Bestand:** `src/pages/BendySync.tsx`
 
-Nieuwe code (Bendy is LEIDEND):
-```typescript
-        // Status updaten op basis van Bendy state — Bendy is leidend
-        const bendyState = attrs.state?.toLowerCase();
-        if (bendyState && ['inactief', 'geblokkeerd', 'verwijderd', 'blocked', 'deleted'].includes(bendyState)) {
-          updateData.status = 'inactief';
-        } else if (bendyState) {
-          updateData.status = 'actief';
-        }
-```
+### 2A. State + handler (na r137)
+
+- `resettingLock` state toevoegen
+- `handleResetLock` handler die `action: 'reset_lock'` aanroept
+
+### 2B. Reset knop bij sync_status (r288-291)
+
+- Rode "Reset Lock" knop tonen naast de status tekst, alleen als `config.sync_status === 'running'`
 
 ---
 
 ## Bestanden die wijzigen
 
-1. **Nieuwe SQL migratie** -- herstelt correcte status vanuit bendy_raw_cache
-2. **supabase/functions/bendy-sync/index.ts** -- twee locaties: insert path (r938-941) en update path (r866-873)
+1. `supabase/functions/bendy-sync/index.ts` -- acquireSyncLock() + reset_lock actie
+2. `src/pages/BendySync.tsx` -- state, handler, knop
 
 ## Technische details
 
 ```text
-Insert path (r938-941):
-  'inactief' TOEGEVOEGD aan de includes array
-  Comment aangepast naar "Bendy is leidend"
-  r952 (status: isActive ? 'actief' : 'inactief') ONGEWIJZIGD
+Edge function:
+  STALE_LOCK_TIMEOUT_MS = 300000 (5 min)
+  acquireSyncLock() selecteert updated_at, checkt staleness bij running status
+  .update() schrijft updated_at mee
+  reset_lock actie: na update_config, voor actie-validatie
+  
+Frontend:
+  resettingLock state (useState(false))
+  handleResetLock() -> supabase.functions.invoke("bendy-sync", { body: { action: "reset_lock" } })
+  Button variant="destructive" size="sm" alleen bij sync_status === 'running'
 
-Update path (r866-873):
-  'inactief' TOEGEVOEGD aan de includes array
-  else-if checkt nu alleen bendyState (niet meer matchedPro.status === 'inactief')
-  Geen "herstel naar actief" logica meer die handmatige keuzes overschrijft
-
-SQL migratie:
-  JOIN op bendy_raw_cache via bendy_id + entity_type = 'users'
-  CASE op raw_data -> 'attributes' ->> 'state'
-  Herstelt correcte status voor ALLE Bendy-gesyncte professionals
+Geen database migraties nodig.
+Geen andere bestanden worden gewijzigd.
 ```
