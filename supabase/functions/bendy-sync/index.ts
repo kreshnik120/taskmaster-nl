@@ -210,6 +210,68 @@ async function fetchAllBendyRecords(tenant: string, endpoint: string, extraParam
 }
 
 // ============================================
+// BATCH HELPERS
+// ============================================
+
+const BATCH_CHUNK_SIZE = 200;
+const PARALLEL_CHUNK_SIZE = 50;
+
+async function batchUpsert(
+  adminClient: any,
+  table: string,
+  records: any[],
+  onConflict: string,
+): Promise<void> {
+  if (records.length === 0) return;
+  for (let i = 0; i < records.length; i += BATCH_CHUNK_SIZE) {
+    const chunk = records.slice(i, i + BATCH_CHUNK_SIZE);
+    const { error } = await adminClient
+      .from(table)
+      .upsert(chunk, { onConflict });
+    if (error) {
+      logWarning(FUNCTION_NAME, `Batch upsert ${table} chunk ${i}/${records.length} fout: ${error.message}`);
+    }
+  }
+}
+
+async function batchInsert(
+  adminClient: any,
+  table: string,
+  records: any[],
+): Promise<any[]> {
+  if (records.length === 0) return [];
+  const allInserted: any[] = [];
+  for (let i = 0; i < records.length; i += BATCH_CHUNK_SIZE) {
+    const chunk = records.slice(i, i + BATCH_CHUNK_SIZE);
+    const { data, error } = await adminClient
+      .from(table)
+      .insert(chunk)
+      .select('id');
+    if (error) {
+      logWarning(FUNCTION_NAME, `Batch insert ${table} chunk ${i}/${records.length} fout: ${error.message}`);
+    }
+    if (data) allInserted.push(...data);
+  }
+  return allInserted;
+}
+
+async function parallelUpdates(
+  adminClient: any,
+  table: string,
+  updates: Array<{ id: string; data: Record<string, any> }>,
+): Promise<void> {
+  if (updates.length === 0) return;
+  for (let i = 0; i < updates.length; i += PARALLEL_CHUNK_SIZE) {
+    const chunk = updates.slice(i, i + PARALLEL_CHUNK_SIZE);
+    await Promise.all(
+      chunk.map(u =>
+        adminClient.from(table).update(u.data).eq('id', u.id)
+      )
+    );
+  }
+}
+
+// ============================================
 // SYNC LOCK MECHANISME
 // ============================================
 
@@ -803,23 +865,30 @@ async function syncUsers(
   }
   logInfo(FUNCTION_NAME, `${companyMap.size} company records uit included data`);
 
-  // 3. Per Bendy user: cache + match + update
+  // ══════════════════════════════════════════════
+  // FASE 1: Verzamel alle data in-memory (GEEN DB writes)
+  // ══════════════════════════════════════════════
+
+  const cacheWrites: any[] = [];
+  const proUpdates: Array<{ id: string; data: Record<string, any> }> = [];
+  const proInserts: Array<{ insertData: Record<string, any>; bendyId: string; bsn: string | null }> = [];
+  const bsnWrites: any[] = [];
+  const mappingWrites: any[] = [];
+
   for (const bendyUser of bendyUsers) {
     try {
       const bendyId = String(bendyUser.id);
       const attrs = bendyUser.attributes || {};
 
-      // Cache raw data (altijd)
-      await adminClient
-        .from('bendy_raw_cache')
-        .upsert({
-          org_id: orgId,
-          tenant,
-          entity_type: 'users',
-          bendy_id: bendyId,
-          raw_data: bendyUser,
-          fetched_at: new Date().toISOString(),
-        }, { onConflict: 'tenant,entity_type,bendy_id' });
+      // Cache data verzamelen
+      cacheWrites.push({
+        org_id: orgId,
+        tenant,
+        entity_type: 'users',
+        bendy_id: bendyId,
+        raw_data: bendyUser,
+        fetched_at: new Date().toISOString(),
+      });
 
       // ── MATCHING: 2 niveaus ──
       let matchedPro: any = null;
@@ -836,7 +905,7 @@ async function syncUsers(
       }
 
       if (matchedPro) {
-        // ── MATCH GEVONDEN — update professional ──
+        // ── MATCH GEVONDEN — verzamel update data ──
         const updateData: Record<string, any> = { bendy_id: bendyId };
         const fullName = buildFullName(attrs);
         if (fullName !== 'Onbekend' && fullName !== matchedPro.full_name) {
@@ -907,43 +976,37 @@ async function syncUsers(
           }
         }
 
-        await adminClient
-          .from('professionals')
-          .update(updateData)
-          .eq('id', matchedPro.id);
+        // Verzamel voor batch
+        proUpdates.push({ id: matchedPro.id, data: updateData });
 
-        // BSN opslaan
+        // BSN verzamelen
         if (attrs.citizen_service_number) {
-          await adminClient
-            .from('professional_bsn')
-            .upsert({
-              professional_id: matchedPro.id,
-              encrypted_bsn: attrs.citizen_service_number,
-              updated_at: new Date().toISOString(),
-            }, { onConflict: 'professional_id' });
+          bsnWrites.push({
+            professional_id: matchedPro.id,
+            encrypted_bsn: attrs.citizen_service_number,
+            updated_at: new Date().toISOString(),
+          });
         }
 
         // Markeer in-memory als gematcht
         matchedPro.bendy_id = bendyId;
 
-        // Mapping registreren
-        await adminClient
-          .from('bendy_id_mapping')
-          .upsert({
-            org_id: orgId,
-            tenant,
-            entity_type: 'professional',
-            bendy_id: bendyId,
-            local_id: matchedPro.id,
-            bendy_updated_at: attrs.updated_at || null,
-            last_synced_at: new Date().toISOString(),
-            sync_status: 'synced',
-            conflict_data: null,
-          }, { onConflict: 'tenant,entity_type,bendy_id' });
+        // Mapping verzamelen
+        mappingWrites.push({
+          org_id: orgId,
+          tenant,
+          entity_type: 'professional',
+          bendy_id: bendyId,
+          local_id: matchedPro.id,
+          bendy_updated_at: attrs.updated_at || null,
+          last_synced_at: new Date().toISOString(),
+          sync_status: 'synced',
+          conflict_data: null,
+        });
 
         result.updated++;
       } else {
-        // ── GEEN MATCH — professional AANMAKEN ──
+        // ── GEEN MATCH — verzamel insert data ──
         const fullName = buildFullName(attrs);
 
         // Functie_niveau uit groepen
@@ -973,13 +1036,11 @@ async function syncUsers(
           geboortedatum: attrs.birthdate || null,
           profile_photo_url: attrs.photo_url || null,
           bendy_id: bendyId,
-          // Nieuwe velden
           voorletters: attrs.initials || null,
           geboorteplaats: attrs.birthtown || null,
           geslacht: attrs.gender || null,
           bendy_external_id: attrs.external_id ? String(attrs.external_id) : null,
           certificaten: parseCertificates(attrs.certificates),
-          // Extra user attributen
           bendy_username: attrs.username || null,
           bendy_mediator_id: attrs.mediator_id ? String(attrs.mediator_id) : null,
           bendy_function_type: attrs.function_type || null,
@@ -1004,43 +1065,11 @@ async function syncUsers(
           }
         }
 
-        const { data: newPro, error: proError } = await adminClient
-          .from('professionals')
-          .insert(insertData)
-          .select('id')
-          .single();
-
-        if (newPro) {
-          // BSN opslaan
-          if (attrs.citizen_service_number) {
-            await adminClient
-              .from('professional_bsn')
-              .upsert({
-                professional_id: newPro.id,
-                encrypted_bsn: attrs.citizen_service_number,
-                updated_at: new Date().toISOString(),
-              }, { onConflict: 'professional_id' });
-          }
-
-          await adminClient
-            .from('bendy_id_mapping')
-            .upsert({
-              org_id: orgId,
-              tenant,
-              entity_type: 'professional',
-              bendy_id: bendyId,
-              local_id: newPro.id,
-              bendy_updated_at: attrs.updated_at || null,
-              last_synced_at: new Date().toISOString(),
-              sync_status: 'synced',
-              conflict_data: null,
-            }, { onConflict: 'tenant,entity_type,bendy_id' });
-
-          result.created++;
-        } else {
-          result.failed++;
-          result.errors.push(`User ${bendyId}: ${proError?.message || 'Aanmaken mislukt'}`);
-        }
+        proInserts.push({
+          insertData,
+          bendyId,
+          bsn: attrs.citizen_service_number || null,
+        });
       }
     } catch (error) {
       result.failed++;
@@ -1049,6 +1078,66 @@ async function syncUsers(
     }
   }
 
+  // ══════════════════════════════════════════════
+  // FASE 2: Batch DB writes (DRASTISCH minder queries)
+  // ══════════════════════════════════════════════
+
+  logInfo(FUNCTION_NAME, `Batch writes: ${cacheWrites.length} cache, ${proUpdates.length} updates, ${proInserts.length} inserts`);
+
+  // 2a. Batch cache writes
+  await batchUpsert(adminClient, 'bendy_raw_cache', cacheWrites, 'tenant,entity_type,bendy_id');
+
+  // 2b. Professional updates parallel in chunks van 50
+  await parallelUpdates(adminClient, 'professionals', proUpdates);
+
+  // 2c. Professional inserts in batch + koppel IDs terug voor BSN + mapping
+  if (proInserts.length > 0) {
+    const insertDataArray = proInserts.map(p => p.insertData);
+    const newPros = await batchInsert(adminClient, 'professionals', insertDataArray);
+
+    for (let idx = 0; idx < newPros.length; idx++) {
+      const newPro = newPros[idx];
+      const original = proInserts[idx];
+
+      if (newPro && newPro.id) {
+        if (original.bsn) {
+          bsnWrites.push({
+            professional_id: newPro.id,
+            encrypted_bsn: original.bsn,
+            updated_at: new Date().toISOString(),
+          });
+        }
+
+        mappingWrites.push({
+          org_id: orgId,
+          tenant,
+          entity_type: 'professional',
+          bendy_id: original.bendyId,
+          local_id: newPro.id,
+          last_synced_at: new Date().toISOString(),
+          sync_status: 'synced',
+          conflict_data: null,
+        });
+
+        result.created++;
+      } else {
+        result.failed++;
+        result.errors.push(`User ${original.bendyId}: Aanmaken mislukt (geen ID terug)`);
+      }
+    }
+  }
+
+  // 2d. Batch BSN upserts
+  if (bsnWrites.length > 0) {
+    await batchUpsert(adminClient, 'professional_bsn', bsnWrites, 'professional_id');
+  }
+
+  // 2e. Batch mapping upserts
+  if (mappingWrites.length > 0) {
+    await batchUpsert(adminClient, 'bendy_id_mapping', mappingWrites, 'tenant,entity_type,bendy_id');
+  }
+
+  logInfo(FUNCTION_NAME, `Professional sync voltooid: ${result.fetched} opgehaald, ${result.created} aangemaakt, ${result.updated} bijgewerkt, ${result.failed} gefaald`);
   return result;
 }
 
@@ -1079,24 +1168,64 @@ async function syncDocuments(
 
   logInfo(FUNCTION_NAME, `${professionals.length} professionals met bendy_id gevonden`);
 
-  for (const pro of professionals) {
-    try {
-      const endpoint = `/api/v2/users/${pro.bendy_id}/documents`;
-      const response = await fetchBendyApi(tenant, endpoint);
-      const documents = response?.data || [];
+  // Verwerk professionals in chunks van 10 (parallel API calls)
+  const DOC_PARALLEL_SIZE = 10;
+
+  for (let i = 0; i < professionals.length; i += DOC_PARALLEL_SIZE) {
+    const chunk = professionals.slice(i, i + DOC_PARALLEL_SIZE);
+
+    // Parallel: haal documenten op voor alle pros in deze chunk
+    const fetchResults = await Promise.allSettled(
+      chunk.map(async (pro: any) => {
+        const endpoint = `/api/v2/users/${pro.bendy_id}/documents`;
+        const response = await fetchBendyApi(tenant, endpoint);
+        return { pro, documents: response?.data || [] };
+      })
+    );
+
+    // Parallel: haal bestaande docs op voor alle pros in deze chunk
+    const existingDocsResults = await Promise.allSettled(
+      chunk.map(async (pro: any) => {
+        const { data } = await adminClient
+          .from('professional_documents')
+          .select('id, bendy_document_id')
+          .eq('professional_id', pro.id);
+        return { proId: pro.id, docs: data || [] };
+      })
+    );
+
+    // Bouw lookup map voor bestaande docs
+    const existingDocsMap = new Map<string, Map<string, any>>();
+    for (const settledResult of existingDocsResults) {
+      if (settledResult.status === 'fulfilled') {
+        const { proId, docs } = settledResult.value;
+        const docMap = new Map<string, any>();
+        for (const doc of docs) {
+          docMap.set(doc.bendy_document_id, doc);
+        }
+        existingDocsMap.set(proId, docMap);
+      }
+    }
+
+    // Verzamel alle writes voor deze chunk
+    const cacheWrites: any[] = [];
+    const docInserts: any[] = [];
+    const docUpdates: Array<{ id: string; data: Record<string, any> }> = [];
+    const proMetaUpdates: Array<{ id: string; data: Record<string, any> }> = [];
+
+    for (const settledResult of fetchResults) {
+      if (settledResult.status === 'rejected') {
+        result.failed++;
+        result.errors.push(`Doc fetch gefaald: ${String(settledResult.reason).substring(0, 200)}`);
+        continue;
+      }
+
+      const { pro, documents } = settledResult.value;
       if (documents.length === 0) continue;
 
       result.fetched += documents.length;
 
-      const { data: existingDocs } = await adminClient
-        .from('professional_documents')
-        .select('id, bendy_document_id')
-        .eq('professional_id', pro.id);
-
-      const existingMap = new Map<string, any>();
-      for (const doc of (existingDocs || [])) {
-        existingMap.set(doc.bendy_document_id, doc);
-      }
+      const existingMap = existingDocsMap.get(pro.id) || new Map();
 
       let docCount = 0;
       let expiringCount = 0;
@@ -1106,16 +1235,14 @@ async function syncDocuments(
           const docId = String(bendyDoc.id);
           const attrs = bendyDoc.attributes || {};
 
-          await adminClient
-            .from('bendy_raw_cache')
-            .upsert({
-              org_id: orgId,
-              tenant,
-              entity_type: 'documents',
-              bendy_id: docId,
-              raw_data: bendyDoc,
-              fetched_at: new Date().toISOString(),
-            }, { onConflict: 'tenant,entity_type,bendy_id' });
+          cacheWrites.push({
+            org_id: orgId,
+            tenant,
+            entity_type: 'documents',
+            bendy_id: docId,
+            raw_data: bendyDoc,
+            fetched_at: new Date().toISOString(),
+          });
 
           const docData = {
             professional_id: pro.id,
@@ -1138,15 +1265,10 @@ async function syncDocuments(
 
           const existing = existingMap.get(docId);
           if (existing) {
-            await adminClient
-              .from('professional_documents')
-              .update(docData)
-              .eq('id', existing.id);
+            docUpdates.push({ id: existing.id, data: docData });
             result.updated++;
           } else {
-            await adminClient
-              .from('professional_documents')
-              .insert(docData);
+            docInserts.push(docData);
             result.created++;
           }
 
@@ -1167,19 +1289,28 @@ async function syncDocuments(
         }
       }
 
-      await adminClient
-        .from('professionals')
-        .update({
+      proMetaUpdates.push({
+        id: pro.id,
+        data: {
           documents_synced_at: new Date().toISOString(),
           documents_count: docCount,
           documents_expiring_count: expiringCount,
-        })
-        .eq('id', pro.id);
+        },
+      });
+    }
 
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      result.errors.push(`Docs voor ${pro.full_name} (${pro.bendy_id}): ${msg.substring(0, 200)}`);
-      logWarning(FUNCTION_NAME, `Document sync gefaald voor ${pro.full_name}: ${msg.substring(0, 100)}`);
+    // Batch writes voor deze chunk
+    if (cacheWrites.length > 0) {
+      await batchUpsert(adminClient, 'bendy_raw_cache', cacheWrites, 'tenant,entity_type,bendy_id');
+    }
+    if (docInserts.length > 0) {
+      await batchInsert(adminClient, 'professional_documents', docInserts);
+    }
+    if (docUpdates.length > 0) {
+      await parallelUpdates(adminClient, 'professional_documents', docUpdates);
+    }
+    if (proMetaUpdates.length > 0) {
+      await parallelUpdates(adminClient, 'professionals', proMetaUpdates);
     }
   }
 
