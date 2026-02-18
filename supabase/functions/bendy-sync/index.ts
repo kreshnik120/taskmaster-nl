@@ -178,10 +178,11 @@ async function fetchAllBendyRecords(tenant: string, endpoint: string, extraParam
   let page = 1;
 
   while (page <= MAX_PAGES) {
+    const offset = (page - 1) * PAGE_SIZE;
     const response = await fetchBendyApi(tenant, endpoint, {
       ...(extraParams || {}),
-      'page[number]': String(page),
-      'page[size]': String(PAGE_SIZE),
+      'limit': String(PAGE_SIZE),
+      'offset': String(offset),
     });
 
     const records = response?.data || [];
@@ -195,13 +196,12 @@ async function fetchAllBendyRecords(tenant: string, endpoint: string, extraParam
     if (page === 1 && totalFromMeta) {
       logInfo(FUNCTION_NAME, `API meldt ${totalFromMeta} totaal records voor ${endpoint}`);
     }
-    logInfo(FUNCTION_NAME, `Pagina ${page}: ${records.length} records opgehaald (totaal: ${allRecords.length})${totalFromMeta ? ` van ${totalFromMeta}` : ''}`);
+    logInfo(FUNCTION_NAME, `Pagina ${page} (offset ${offset}): ${records.length} records opgehaald (totaal: ${allRecords.length})${totalFromMeta ? ` van ${totalFromMeta}` : ''}`);
 
     // Stop als deze pagina minder records heeft dan PAGE_SIZE (= laatste pagina)
     if (records.length < PAGE_SIZE) break;
 
-    // Niet afhankelijk van links.next — sommige API's sturen dit niet mee
-    // MAX_PAGES limiet (50) voorkomt oneindige loops
+    // MAX_PAGES limiet (50) voorkomt oneindige loops (max 50 × 100 = 5.000 records)
     page++;
   }
 
