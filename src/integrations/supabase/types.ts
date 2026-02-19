@@ -5139,23 +5139,29 @@ export type Database = {
       }
       professional_bsn: {
         Row: {
+          bsn_encrypted: string | null
           created_at: string | null
           encrypted_bsn: string
           id: string
+          is_encrypted: boolean | null
           professional_id: string
           updated_at: string | null
         }
         Insert: {
+          bsn_encrypted?: string | null
           created_at?: string | null
           encrypted_bsn: string
           id?: string
+          is_encrypted?: boolean | null
           professional_id: string
           updated_at?: string | null
         }
         Update: {
+          bsn_encrypted?: string | null
           created_at?: string | null
           encrypted_bsn?: string
           id?: string
+          is_encrypted?: boolean | null
           professional_id?: string
           updated_at?: string | null
         }
@@ -8610,6 +8616,14 @@ export type Database = {
             }
             Returns: string
           }
+      decrypt_bsn: {
+        Args: { p_encrypted: string; p_key: string }
+        Returns: string
+      }
+      encrypt_bsn: {
+        Args: { p_key: string; p_plaintext: string }
+        Returns: string
+      }
       get_ai_health_summary: { Args: never; Returns: Json }
       get_knowledge_without_embeddings: {
         Args: { batch_limit?: number }

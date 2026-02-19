@@ -210,26 +210,20 @@ export function ProfessionalDetailModal({
     if (!professional) return;
     setBsnData(prev => ({ ...prev, loading: true }));
     try {
-      const { data } = await supabase
-        .from('professional_bsn')
-        .select('encrypted_bsn')
-        .eq('professional_id', professional.id)
-        .maybeSingle();
-      
-      if (data?.encrypted_bsn) {
-        // Log audit entry
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await supabase.from('security_audit_log').insert({
-            user_id: user.id,
-            event_type: 'bsn_access',
-            action: 'bsn_revealed',
-            entity_type: 'professional',
-            entity_id: professional.id,
-            details: { professional_name: professional.full_name },
-          } as any);
-        }
-        setBsnData({ bsn: data.encrypted_bsn, revealed: true, loading: false });
+      // BSN ophalen via beveiligde edge function (decryptie server-side)
+      const { data, error } = await supabase.functions.invoke('bsn-vault', {
+        body: { action: 'decrypt', professional_id: professional.id },
+      });
+
+      if (error) {
+        console.error('BSN vault error:', error);
+        setBsnData({ bsn: null, revealed: false, loading: false });
+        return;
+      }
+
+      // Audit logging wordt gedaan door de edge function
+      if (data?.bsn) {
+        setBsnData({ bsn: data.bsn, revealed: true, loading: false });
       } else {
         setBsnData({ bsn: null, revealed: false, loading: false });
       }

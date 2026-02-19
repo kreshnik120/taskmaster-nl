@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { RefreshCw, Power, Play, Database, Clock, AlertTriangle, CheckCircle2, MinusCircle, Users, FileText } from "lucide-react";
+import { RefreshCw, Power, Play, Database, Clock, AlertTriangle, CheckCircle2, MinusCircle, Users, FileText, Shield } from "lucide-react";
 import { PageContainer } from "@/components/ui/page-container";
 import { PageHero } from "@/components/ui/page-hero";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -136,6 +136,10 @@ export default function BendySync() {
   const [syncingDocs, setSyncingDocs] = useState(false);
   const [docSyncResult, setDocSyncResult] = useState<SyncResult | null>(null);
   const [resettingLock, setResettingLock] = useState(false);
+  const [bsnStatus, setBsnStatus] = useState<{
+    total: number; encrypted: number; plaintext: number; fully_encrypted: boolean; loading: boolean;
+  }>({ total: 0, encrypted: 0, plaintext: 0, fully_encrypted: false, loading: false });
+  const [migrating, setMigrating] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -736,6 +740,98 @@ export default function BendySync() {
                 <div><span className="text-xs text-muted-foreground">Overgeslagen</span><p className="font-semibold">{docSyncResult.records_skipped}</p></div>
                 <div><span className="text-xs text-muted-foreground">Mislukt</span><p className="font-semibold text-destructive">{docSyncResult.records_failed}</p></div>
               </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* BSN Encryptie Status */}
+        <Card className="glass-layer-1">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Shield className="h-4 w-4 text-red-500" />
+              BSN Encryptie (AVG)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button
+              variant="outline"
+              onClick={async () => {
+                setBsnStatus(prev => ({ ...prev, loading: true }));
+                try {
+                  const { data, error } = await supabase.functions.invoke('bsn-vault', {
+                    body: { action: 'status' },
+                  });
+                  if (!error && data) {
+                    setBsnStatus({ ...data, loading: false });
+                  } else {
+                    setBsnStatus(prev => ({ ...prev, loading: false }));
+                  }
+                } catch {
+                  setBsnStatus(prev => ({ ...prev, loading: false }));
+                }
+              }}
+              disabled={bsnStatus.loading}
+              className="w-full sm:w-auto"
+            >
+              <Database className={`h-4 w-4 mr-2 ${bsnStatus.loading ? "animate-spin" : ""}`} />
+              {bsnStatus.loading ? 'Controleren...' : 'Controleer Encryptie Status'}
+            </Button>
+
+            {bsnStatus.total > 0 && (
+              <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-muted/50">
+                <div>
+                  <span className="text-xs text-muted-foreground">Totaal</span>
+                  <p className="font-semibold">{bsnStatus.total}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-muted-foreground">Versleuteld</span>
+                  <p className="font-semibold text-emerald-600 dark:text-emerald-400">{bsnStatus.encrypted}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-muted-foreground">Plaintext</span>
+                  <p className={`font-semibold ${bsnStatus.plaintext > 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}`}>{bsnStatus.plaintext}</p>
+                </div>
+              </div>
+            )}
+
+            {bsnStatus.fully_encrypted && (
+              <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                <span className="text-sm text-emerald-700 dark:text-emerald-400 font-medium">Alle BSN's zijn versleuteld</span>
+              </div>
+            )}
+
+            {bsnStatus.plaintext > 0 && (
+              <Button
+                variant="destructive"
+                onClick={async () => {
+                  if (!confirm(`Weet je zeker dat je ${bsnStatus.plaintext} BSN's wilt versleutelen? Dit kan niet ongedaan worden.`)) return;
+                  setMigrating(true);
+                  try {
+                    const { data, error } = await supabase.functions.invoke('bsn-vault', {
+                      body: { action: 'migrate' },
+                    });
+                    if (!error && data) {
+                      toast.success(`${data.migrated} BSN's versleuteld${data.failed > 0 ? `, ${data.failed} mislukt` : ''}`);
+                      setBsnStatus(prev => ({ ...prev, loading: true }));
+                      const { data: status } = await supabase.functions.invoke('bsn-vault', {
+                        body: { action: 'status' },
+                      });
+                      if (status) setBsnStatus({ ...status, loading: false });
+                    } else {
+                      toast.error('Migratie mislukt');
+                    }
+                  } catch {
+                    toast.error('Migratie mislukt');
+                  }
+                  setMigrating(false);
+                }}
+                disabled={migrating}
+                className="w-full sm:w-auto"
+              >
+                <AlertTriangle className={`h-4 w-4 mr-2 ${migrating ? "animate-spin" : ""}`} />
+                {migrating ? 'Bezig met versleutelen...' : `${bsnStatus.plaintext} BSN's Nu Versleutelen`}
+              </Button>
             )}
           </CardContent>
         </Card>
