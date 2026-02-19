@@ -880,13 +880,17 @@ async function syncUsers(
       const bendyId = String(bendyUser.id);
       const attrs = bendyUser.attributes || {};
 
-      // Cache data verzamelen
+      // Cache data verzamelen — BSN strippen voor veilige opslag
+      const sanitizedUser = JSON.parse(JSON.stringify(bendyUser));
+      if (sanitizedUser.attributes?.citizen_service_number) {
+        sanitizedUser.attributes.citizen_service_number = '[REDACTED]';
+      }
       cacheWrites.push({
         org_id: orgId,
         tenant,
         entity_type: 'users',
         bendy_id: bendyId,
-        raw_data: bendyUser,
+        raw_data: sanitizedUser,
         fetched_at: new Date().toISOString(),
       });
 
@@ -979,11 +983,11 @@ async function syncUsers(
         // Verzamel voor batch
         proUpdates.push({ id: matchedPro.id, data: updateData });
 
-        // BSN verzamelen
+        // BSN verzamelen (plaintext tijdelijk — wordt versleuteld in fase 2d)
         if (attrs.citizen_service_number) {
           bsnWrites.push({
             professional_id: matchedPro.id,
-            encrypted_bsn: attrs.citizen_service_number,
+            bsn_plaintext: attrs.citizen_service_number,
             updated_at: new Date().toISOString(),
           });
         }
@@ -1103,7 +1107,7 @@ async function syncUsers(
         if (original.bsn) {
           bsnWrites.push({
             professional_id: newPro.id,
-            encrypted_bsn: original.bsn,
+            bsn_plaintext: original.bsn,
             updated_at: new Date().toISOString(),
           });
         }
@@ -1127,9 +1131,42 @@ async function syncUsers(
     }
   }
 
-  // 2d. Batch BSN upserts
+  // 2d. Batch BSN upserts — versleuteld via pgcrypto
   if (bsnWrites.length > 0) {
-    await batchUpsert(adminClient, 'professional_bsn', bsnWrites, 'professional_id');
+    const encryptionKey = Deno.env.get('BSN_ENCRYPTION_KEY');
+    if (!encryptionKey || encryptionKey.length < 32) {
+      logWarning(FUNCTION_NAME, 'BSN_ENCRYPTION_KEY niet geconfigureerd — BSN opslag overgeslagen');
+    } else {
+      const encryptedBsnWrites: any[] = [];
+      for (const bsnWrite of bsnWrites) {
+        try {
+          const { data: encrypted, error } = await adminClient.rpc('encrypt_bsn', {
+            p_plaintext: bsnWrite.bsn_plaintext,
+            p_key: encryptionKey,
+          });
+
+          if (error) {
+            logWarning(FUNCTION_NAME, `BSN encryptie mislukt voor ${bsnWrite.professional_id}: ${error.message}`);
+            continue;
+          }
+
+          encryptedBsnWrites.push({
+            professional_id: bsnWrite.professional_id,
+            bsn_encrypted: encrypted,
+            encrypted_bsn: '[ENCRYPTED]',
+            is_encrypted: true,
+            updated_at: bsnWrite.updated_at,
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logWarning(FUNCTION_NAME, `BSN encryptie error: ${msg}`);
+        }
+      }
+      if (encryptedBsnWrites.length > 0) {
+        await batchUpsert(adminClient, 'professional_bsn', encryptedBsnWrites, 'professional_id');
+        logInfo(FUNCTION_NAME, `${encryptedBsnWrites.length} BSN's versleuteld opgeslagen`);
+      }
+    }
   }
 
   // 2e. Batch mapping upserts

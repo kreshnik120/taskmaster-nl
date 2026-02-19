@@ -574,3 +574,7 @@ verify_jwt = false
  [functions.agent-auto-facturatie]
  verify_jwt = false
  # Purpose: Auto-generate concept invoices from completed shifts
+
+[functions.bsn-vault]
+verify_jwt = false
+# Purpose: BSN encryption vault - decrypt, migrate, status (admin-only, JWT validated in-code)
