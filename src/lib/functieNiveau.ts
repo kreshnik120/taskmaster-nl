@@ -17,7 +17,8 @@ export function getNiveauNummer(functieNiveau: string): number | null {
   return FUNCTIE_NIVEAU_MAP[functieNiveau] ?? null;
 }
 
-export function formatFunctieNiveau(functieNiveau: string): string {
+export function formatFunctieNiveau(functieNiveau: string | null | undefined): string {
+  if (!functieNiveau) return 'Niveau onbekend';
   const nummer = getNiveauNummer(functieNiveau);
   if (nummer) return `${functieNiveau} (nv${nummer})`;
   return functieNiveau;

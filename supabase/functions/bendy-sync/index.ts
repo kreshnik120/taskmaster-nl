@@ -389,7 +389,7 @@ function buildFullName(attrs: any): string {
 }
 
 // Helper: functie_niveau afleiden uit Bendy group namen + function_type/level fallback
-function deriveFunctieNiveau(groupNames: string[], functionType?: string | null, level?: string | null, diplomaNiveau?: string | null): string {
+function deriveFunctieNiveau(groupNames: string[], functionType?: string | null, level?: string | null, diplomaNiveau?: string | null): string | null {
   // Stap 1: Probeer uit groepnamen (al menselijk leesbaar)
   for (const name of groupNames) {
     if (/Persoonlijk\s*begeleider/i.test(name)) return 'Persoonlijk begeleider';
@@ -421,7 +421,7 @@ function deriveFunctieNiveau(groupNames: string[], functionType?: string | null,
   }
   // Stap 4: Fallback naar diploma-afgeleid niveau
   if (diplomaNiveau) return diplomaNiveau;
-  return 'Helpende';
+  return null;
 }
 
 // Helper: functie_niveau afleiden uit diploma documenten (hoogste niveau wint)

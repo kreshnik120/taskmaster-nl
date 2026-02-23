@@ -1,0 +1,1 @@
+ALTER TABLE professionals ALTER COLUMN functie_niveau DROP NOT NULL;
