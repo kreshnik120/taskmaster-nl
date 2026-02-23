@@ -1,55 +1,52 @@
 
-# BSN Encryptie (AVG-compliance)
+# Fix: encrypt_bsn en decrypt_bsn RPC functies aanmaken
 
 ## Probleem
-BSN-nummers staan als plaintext in de database (`professional_bsn.encrypted_bsn`) en in de Bendy cache (`bendy_raw_cache.raw_data`). Dit is een AVG-schending.
+De oorspronkelijke migratie bevatte de CREATE FUNCTION statements voor `encrypt_bsn` en `decrypt_bsn`, maar deze zijn niet in de database terechtgekomen. Waarschijnlijk is de migratie gedeeltelijk gefaald bij de functies vanwege een `search_path` probleem met pgcrypto (die in het `extensions` schema zit).
 
-## Oplossing: 6 wijzigingen
+## Huidige status
+- pgcrypto: actief
+- Kolommen: aanwezig
+- Cache redactie: compleet (937 records)
+- bsn-vault edge function: deployed en werkend (status actie OK)
+- **encrypt_bsn / decrypt_bsn functies: ONTBREKEN**
+- 472 BSN's staan nog als plaintext
 
-### A. Database migratie
-- Activeer `pgcrypto` extensie
-- Voeg `bsn_encrypted` (BYTEA) en `is_encrypted` (BOOLEAN) kolommen toe aan `professional_bsn`
-- Maak `encrypt_bsn` en `decrypt_bsn` RPC functies (SECURITY DEFINER, alleen service_role)
-- Redacteer bestaande BSN's in `bendy_raw_cache` naar `[REDACTED]`
-- Index op `is_encrypted = false` voor snelle migratie-queries
+## Oplossing
+Een nieuwe database migratie die de twee RPC functies aanmaakt met het juiste search_path (`public, extensions`) zodat pgcrypto gevonden wordt:
 
-### B. Nieuwe edge function: `bsn-vault`
-3 acties (alle admin-only):
-- `decrypt`: BSN ophalen + decrypteren via pgcrypto, audit log schrijven
-- `migrate`: Alle plaintext BSN's in bulk versleutelen
-- `status`: Tellen hoeveel versleuteld vs plaintext
+```sql
+-- Herstel encrypt_bsn functie
+CREATE OR REPLACE FUNCTION public.encrypt_bsn(p_plaintext TEXT, p_key TEXT)
+RETURNS BYTEA
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+  SELECT pgp_sym_encrypt(p_plaintext, p_key);
+$$;
 
-### C. bendy-sync: BSN strippen uit cache
-Bij het opbouwen van `cacheWrites` wordt `citizen_service_number` vervangen door `[REDACTED]` voordat het in `bendy_raw_cache` wordt opgeslagen.
+-- Herstel decrypt_bsn functie
+CREATE OR REPLACE FUNCTION public.decrypt_bsn(p_encrypted BYTEA, p_key TEXT)
+RETURNS TEXT
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+  SELECT pgp_sym_decrypt(p_encrypted, p_key);
+$$;
 
-### D. bendy-sync: BSN versleuteld opslaan
-- BSN writes verzamelen met `bsn_plaintext` veld (in-memory)
-- In fase 2d: elk BSN versleutelen via `encrypt_bsn` RPC
-- Opslaan als `bsn_encrypted` (BYTEA) + `encrypted_bsn = '[ENCRYPTED]'` + `is_encrypted = true`
-- Als `BSN_ENCRYPTION_KEY` ontbreekt: BSN opslag overslaan (geen crash, geen plaintext)
+-- Permissies: alleen service_role
+REVOKE ALL ON FUNCTION public.encrypt_bsn(TEXT, TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.decrypt_bsn(BYTEA, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.encrypt_bsn(TEXT, TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION public.decrypt_bsn(BYTEA, TEXT) TO service_role;
+```
 
-### E. Frontend: BSN ophalen via edge function
-`fetchAndRevealBsn` in `ProfessionalDetailModal.tsx` roept `bsn-vault` edge function aan i.p.v. directe database query. Audit logging gebeurt server-side.
+## Na de migratie
+Daarna kan via de BendySync pagina "BSN's Nu Versleutelen" worden gedrukt om alle 472 plaintext BSN's te encrypteren.
 
-### F. BendySync pagina: BSN Encryptie Status card
-Nieuwe card met:
-- "Controleer Encryptie Status" knop (toont totaal/versleuteld/plaintext)
-- "X BSN's Nu Versleutelen" knop (alleen zichtbaar als er plaintext BSN's zijn)
-
-## Na deployment (handmatig)
-1. Secret `BSN_ENCRYPTION_KEY` instellen (min 32 tekens)
-2. Via BendySync pagina: "Controleer Encryptie Status" en dan "BSN's Nu Versleutelen"
-3. Verifieer dat BSN-onthulling nog werkt bij een professional
-
-## Bestanden die wijzigen
-- `supabase/migrations/new.sql` (migratie)
-- `supabase/functions/bsn-vault/index.ts` (nieuw)
-- `supabase/functions/bendy-sync/index.ts` (4 kleine edits)
-- `src/components/ProfessionalDetailModal.tsx` (1 edit)
-- `src/pages/BendySync.tsx` (3 edits)
-
-## Wat NIET verandert
-- Sync logica (matching, veld-mapping, status)
-- Lock/circuit breaker
-- Overige RLS policies
-- Database schema (geen kolom verwijderingen)
+## Technisch detail
+- 1 nieuw bestand: SQL migratie
+- Geen code-wijzigingen nodig
+- Geen frontend-wijzigingen nodig
