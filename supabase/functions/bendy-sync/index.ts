@@ -437,7 +437,7 @@ function deriveFunctieNiveauFromDiplomas(documents: Array<{ document_name: strin
            name.includes('begeleider') || name.includes('helpende') ||
            name.includes('vig') || name.includes('hbo-v') || name.includes('hbo v') ||
            name.includes('ggz') || name.includes('nursing') ||
-           name.includes('sociaal werker') || name.includes('spw') ||
+           name.includes('sociaal werker') || name.includes('social') || name.includes('spw') ||
            name.includes('maatschappelijke zorg') || name.includes('pedagogisch') ||
            name.includes('persoonlijk begeleider') ||
            name.includes('sociaal-maatschappelijk') || name.includes('sociaal-cultureel') ||
@@ -462,8 +462,8 @@ function deriveFunctieNiveauFromDiplomas(documents: Array<{ document_name: strin
     else if (/ggz/i.test(name)) { rank = 5; niveau = 'GGZ-agoog'; }
     else if (/persoonlijk\s*begeleider|evc.*begeleider/i.test(name)) { rank = 4; niveau = 'Persoonlijk begeleider'; }
     else if (/verzorgend.*ig|vig/i.test(name)) { rank = 3; niveau = 'VIG'; }
-    else if (/sociaal.*werker\s*4|spw\s*4|pedagogisch.*4|dienstverlener.*4|scw\s*4|mbo\s*4\s|niveau\s*4/i.test(name)) { rank = 4; niveau = 'Persoonlijk begeleider'; }
-    else if (/begeleider|sociaal.*werker|spw|maatschappelijke.*zorg|pedagogisch|sociaal.maatschappelijk|sociaal.cultureel/i.test(name)) { rank = 2; niveau = 'Begeleider'; }
+    else if (/socia(al|l)?.*werker\s*4|spw\s*4|pedagogisch.*4|dienstverlener.*4|scw\)?\s*4|mbo\s*4\s|niveau\s*4/i.test(name)) { rank = 4; niveau = 'Persoonlijk begeleider'; }
+    else if (/begeleider|socia(al|l)?.*werker|spw|maatschappelijke.*zorg|pedagogisch|socia(al|l)?.maatschappelijk|socia(al|l)?.cultureel/i.test(name)) { rank = 2; niveau = 'Begeleider'; }
     else if (/helpende/i.test(name)) { rank = 1; niveau = 'Helpende'; }
 
     if (rank > highestRank) {
