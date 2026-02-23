@@ -1134,7 +1134,18 @@ async function syncUsers(
         const decodedLevel = rawLevel
           ? (selectionListMap.get(rawLevel.replace(/^,/, '')) || rawLevel)
           : null;
-        const functieNiveau = deriveFunctieNiveau(userGroupNames, decodedFunctionType, decodedLevel);
+        // Diploma's ophalen van Bendy API voor nieuwe professional
+        let diplomaNiveau: string | null = null;
+        try {
+          const docsEndpoint = `/api/v2/users/${bendyId}/documents`;
+          const docsResponse = await fetchBendyApi(tenant, docsEndpoint);
+          const bendyDocs = (docsResponse?.data || []).map((d: any) => ({
+            document_name: d.attributes?.name || '',
+            document_type: d.attributes?.document_type || '',
+          }));
+          diplomaNiveau = deriveFunctieNiveauFromDiplomas(bendyDocs);
+        } catch { /* documents ophalen faalde — ga door zonder */ }
+        const functieNiveau = deriveFunctieNiveau(userGroupNames, decodedFunctionType, decodedLevel, diplomaNiveau);
 
         // Werkvorm uit professional_type
         const werkvorm = mapWerkvorm(attrs.professional_type || null);
@@ -1441,13 +1452,25 @@ async function syncDocuments(
         }
       }
 
+      // Herbereken functie_niveau op basis van gesyncte documenten
+      const { data: proDocs } = await adminClient
+        .from('professional_documents')
+        .select('document_name, document_type')
+        .eq('professional_id', pro.id);
+      const diplomaNiveau = deriveFunctieNiveauFromDiplomas(proDocs || []);
+
+      const metaData: Record<string, any> = {
+        documents_synced_at: new Date().toISOString(),
+        documents_count: docCount,
+        documents_expiring_count: expiringCount,
+      };
+      if (diplomaNiveau) {
+        metaData.functie_niveau = diplomaNiveau;
+      }
+
       proMetaUpdates.push({
         id: pro.id,
-        data: {
-          documents_synced_at: new Date().toISOString(),
-          documents_count: docCount,
-          documents_expiring_count: expiringCount,
-        },
+        data: metaData,
       });
     }
 
