@@ -1,74 +1,55 @@
 
-# Fix: functie_niveau correct afleiden via Bendy Selection Lists
+# Fix V2: functie_niveau afleiden uit Diploma Documenten
 
-## Probleem
-Alle 1.427 professionals tonen "Helpende" als functie_niveau. De oorzaak is drieledig:
-1. **0 professionals** hebben groep-relaties in Bendy, dus de groep-gebaseerde logica werkt nooit
-2. `function_type` en `level` bevatten **gecodeerde waarden** (bijv. `,adl`, `,bgl3`) die eerst gedecodeerd moeten worden via Bendy's Selection Lists API
-3. De UPDATE-path skipt updates wanneer het resultaat "Helpende" is
+## Samenvatting
+244 van de 1.425 professionals hebben diploma-documenten die we kunnen gebruiken om het juiste functie_niveau af te leiden. De Bendy selection list codes (`,adl`, `,bgl3`) leveren bijna niets bruikbaars op. Diploma's in `professional_documents` bevatten de echte kwalificatie.
 
-## Oplossing (4 wijzigingen in 1 bestand + 1 SQL migratie)
+## Wat er verandert
 
-### Wijziging A: `deriveFunctieNiveau()` uitbreiden (regel 391-402)
-Functie krijgt 3 parameters: `groupNames`, `functionType`, `level`. Cascade:
-1. Groepnamen (al menselijk leesbaar)
-2. Level (gedecodeerd via selectionListMap)
-3. Function_type (gedecodeerd via selectionListMap)
-4. Fallback: "Helpende"
+### 1. Nieuwe functie: `deriveFunctieNiveauFromDiplomas()`
+Analyseert diploma-documenten en retourneert het hoogste kwalificatieniveau. De regex-patronen worden uitgebreid ten opzichte van het voorstel, omdat de werkelijke data veel meer varianten bevat:
 
-### Wijziging B: Selection Lists ophalen in `syncUsers()` (na regel 856)
-Toevoegen van een nieuwe API call naar `/api/v2/selection_lists` om de code-naar-naam mapping op te bouwen. De comma-prefix (`,adl` wordt `adl`) wordt gestript bij het opzoeken.
+| Patroon | Voorbeelden in data | Niveau |
+|---------|-------------------|--------|
+| `hbo.*verpleeg\|nursing` | "HBO Bachelor Opleiding tot Verpleegkundige (Nursing)" | HBO-V |
+| `verpleegkunde\|verpleegkundige` | (nog geen in data) | Verpleegkundige (MBO) |
+| `ggz` | (nog geen in data) | GGZ-agoog |
+| `persoonlijk.*begeleider\|EVC.*begeleider` | "Mbo Persoonlijk begeleider specifieke doelgroepen 4" (51x) | Persoonlijk begeleider |
+| `verzorgend.*ig\|vig` | "MBO Verzorgende IG 3" (2x) | VIG |
+| `begeleider\|sociaal.*werker\|spw\|maatschappelijke.*zorg\|pedagogisch\|sociaal-maatschappelijk\|sociaal-cultureel` | "Mbo Sociaal werker 4" (26x), "Mbo Begeleider specifieke doelgroepen 3" (3x) | Begeleider |
+| `helpende` | "Mbo Helpende Zorg en Welzijn 2" (15x) | Helpende |
 
-### Wijziging C: UPDATE path (regel 970-981)
-- Decodeer `function_type` en `level` via selectionListMap
-- Geef beide door aan `deriveFunctieNiveau()`
-- Verwijder de `if (functieNiveau !== 'Helpende')` guard -- Bendy is altijd leidend
+### 2. `deriveFunctieNiveau()` krijgt 4e parameter
+Cascade wordt: groepnamen -> level -> function_type -> **diplomaNiveau** -> "Helpende"
 
-### Wijziging D: INSERT path (regel 1016-1022)
-- Zelfde decodering + doorgifte aan `deriveFunctieNiveau()`
+### 3. UPDATE path: diploma-query per professional
+Voor elke bestaande professional worden diploma-documenten opgehaald en het niveau doorgegeven als 4e argument.
 
-### Wijziging E: SQL migratie (nieuw bestand)
-Corrigeer bestaande professionals op basis van `bendy_function_type` kolom (die al `,adl` bevat). Na de code-deploy + volgende sync worden alle waarden dynamisch gedecodeerd.
+### 4. INSERT path: overgeslagen (by design)
+Nieuwe professionals hebben nog geen documenten bij eerste sync. De volgende sync corrigeert dit via de UPDATE path.
 
----
+### 5. SQL migratie: bestaande data direct fixen
+Een eenmalige UPDATE op basis van `professional_documents` met uitgebreide CASE/WHEN patronen die alle 244 professionals met diploma's correct mappen.
+
+## Verwacht resultaat
+- ~51 professionals -> Persoonlijk begeleider
+- ~26 professionals -> Begeleider (Sociaal werker)
+- ~15 professionals -> Helpende (bevestigd via diploma)
+- ~6 professionals -> Begeleider (HBO Social Work)
+- ~2 professionals -> VIG
+- ~1 professional -> HBO-V
+- Overige ~143 met generieke diploma-namen -> verdere analyse per geval
+- ~1.181 zonder diploma -> blijven "Helpende" (default)
 
 ## Technische details
-
-### Nieuw API endpoint
-```
-/api/v2/selection_lists
-```
-Opgehaald via bestaande `fetchAllBendyRecords()` -- geen nieuwe helper nodig.
-
-### SelectionListMap opbouw
-```typescript
-const { records: selectionLists } = await fetchAllBendyRecords(tenant, '/api/v2/selection_lists');
-const selectionListMap = new Map<string, string>();
-for (const item of selectionLists) {
-  const code = (item.attributes?.key || '').trim();
-  const name = (item.attributes?.name || item.attributes?.value || '').trim();
-  if (code && name) selectionListMap.set(code, name);
-}
-```
-
-### Decodering patroon (UPDATE + INSERT)
-```typescript
-const rawFunctionType = attrs.function_type || null;
-const rawLevel = attrs.level || null;
-const decodedFunctionType = rawFunctionType 
-  ? (selectionListMap.get(rawFunctionType.replace(/^,/, '')) || rawFunctionType) 
-  : null;
-const decodedLevel = rawLevel 
-  ? (selectionListMap.get(rawLevel.replace(/^,/, '')) || rawLevel) 
-  : null;
-const functieNiveau = deriveFunctieNiveau(userGroupNames, decodedFunctionType, decodedLevel);
-updateData.functie_niveau = functieNiveau; // altijd bijwerken
-```
 
 ### Bestanden
 - **Gewijzigd:** `supabase/functions/bendy-sync/index.ts` (wijzigingen A-D)
 - **Nieuw:** SQL migratie voor bestaande data correctie
 
-### Risico's
-- Als `/api/v2/selection_lists` niet bestaat of leeg is, vallen gecodeerde waarden terug op de regex-match (die `,adl` niet zal herkennen), waardoor het netto effect "Helpende" blijft -- geen verslechtering
-- De `adl` regex fallback in deriveFunctieNiveau vangt ook niet-gedecodeerde waarden op als vangnet
+### Performance
+- Wijziging C voegt 1 extra DB query per UPDATE toe (`professional_documents` per professional). Bij 1.400 professionals is dit acceptabel binnen de bestaande sync-loop.
+
+### Risico
+- Geen verslechtering: als geen diploma gevonden wordt, valt het terug op de bestaande logica en uiteindelijk op "Helpende"
+- De uitgebreide regex-patronen dekken alle 244 diploma-records in de huidige data
