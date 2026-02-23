@@ -388,8 +388,9 @@ function buildFullName(attrs: any): string {
   return parts.length > 0 ? parts.join(' ') : 'Onbekend';
 }
 
-// Helper: functie_niveau afleiden uit Bendy group namen
-function deriveFunctieNiveau(groupNames: string[]): string {
+// Helper: functie_niveau afleiden uit Bendy group namen + function_type/level fallback
+function deriveFunctieNiveau(groupNames: string[], functionType?: string | null, level?: string | null): string {
+  // Stap 1: Probeer uit groepnamen (al menselijk leesbaar)
   for (const name of groupNames) {
     if (/Persoonlijk\s*begeleider/i.test(name)) return 'Persoonlijk begeleider';
     if (/Begeleider|BGL|PB/i.test(name)) return 'Begeleider';
@@ -397,6 +398,26 @@ function deriveFunctieNiveau(groupNames: string[]): string {
     if (/VIG/i.test(name)) return 'VIG';
     if (/GGZ/i.test(name)) return 'GGZ-agoog';
     if (/Helpende/i.test(name)) return 'Helpende';
+  }
+  // Stap 2: Fallback naar level (gedecodeerd via selectionListMap)
+  if (level) {
+    const lv = level.trim().toLowerCase();
+    if (/persoonlijk\s*begeleider/.test(lv)) return 'Persoonlijk begeleider';
+    if (/begeleider|bgl/.test(lv)) return 'Begeleider';
+    if (/verpleegkundige|vp|hbo.?v/.test(lv)) return 'Verpleegkundige (MBO)';
+    if (/vig|verzorgend/.test(lv)) return 'VIG';
+    if (/ggz/.test(lv)) return 'GGZ-agoog';
+    if (/helpende/.test(lv)) return 'Helpende';
+  }
+  // Stap 3: Fallback naar function_type (gedecodeerd via selectionListMap)
+  if (functionType) {
+    const ft = functionType.trim().toLowerCase();
+    if (/persoonlijk\s*begeleider/.test(ft)) return 'Persoonlijk begeleider';
+    if (/begeleider|bgl/.test(ft)) return 'Begeleider';
+    if (/verpleegkundige|vp|hbo.?v/.test(ft)) return 'Verpleegkundige (MBO)';
+    if (/vig|verzorgend/.test(ft)) return 'VIG';
+    if (/ggz/.test(ft)) return 'GGZ-agoog';
+    if (/helpende|adl/.test(ft)) return 'Helpende';
   }
   return 'Helpende';
 }
@@ -856,6 +877,16 @@ async function syncUsers(
   }
   logInfo(FUNCTION_NAME, `${groupMap.size} Bendy groepen opgehaald voor functie mapping`);
 
+  // 2b2. Bendy selection lists ophalen voor function_type/level decodering
+  const { records: selectionLists } = await fetchAllBendyRecords(tenant, '/api/v2/selection_lists');
+  const selectionListMap = new Map<string, string>();
+  for (const item of selectionLists) {
+    const code = (item.attributes?.key || '').trim();
+    const name = (item.attributes?.name || item.attributes?.value || '').trim();
+    if (code && name) selectionListMap.set(code, name);
+  }
+  logInfo(FUNCTION_NAME, `${selectionListMap.size} selection list items opgehaald voor code-decodering`);
+
   // 2c. Company map bouwen uit included data
   const companyMap = new Map<string, any>();
   for (const item of bendyIncluded) {
@@ -967,18 +998,23 @@ async function syncUsers(
           updateData.status = 'actief';
         }
 
-        // Functie_niveau updaten op basis van groepen (nu met include=groups)
+        // Functie_niveau updaten op basis van groepen + function_type/level fallback
         const userGroupIds = (bendyUser.relationships?.groups?.data || [])
           .map((g: any) => String(g.id));
         const userGroupNames = userGroupIds
           .map((id: string) => groupMap.get(id))
           .filter(Boolean) as string[];
-        if (userGroupNames.length > 0) {
-          const functieNiveau = deriveFunctieNiveau(userGroupNames);
-          if (functieNiveau !== 'Helpende' || matchedPro.functie_niveau === undefined) {
-            updateData.functie_niveau = functieNiveau;
-          }
-        }
+        const rawFunctionType = attrs.function_type || null;
+        const rawLevel = attrs.level || null;
+        const decodedFunctionType = rawFunctionType
+          ? (selectionListMap.get(rawFunctionType.replace(/^,/, '')) || rawFunctionType)
+          : null;
+        const decodedLevel = rawLevel
+          ? (selectionListMap.get(rawLevel.replace(/^,/, '')) || rawLevel)
+          : null;
+        const functieNiveau = deriveFunctieNiveau(userGroupNames, decodedFunctionType, decodedLevel);
+        // Altijd bijwerken — Bendy is leidend
+        updateData.functie_niveau = functieNiveau;
 
         // Verzamel voor batch
         proUpdates.push({ id: matchedPro.id, data: updateData });
@@ -1013,13 +1049,21 @@ async function syncUsers(
         // ── GEEN MATCH — verzamel insert data ──
         const fullName = buildFullName(attrs);
 
-        // Functie_niveau uit groepen
+        // Functie_niveau uit groepen + function_type/level fallback
         const userGroupIds = (bendyUser.relationships?.groups?.data || [])
           .map((g: any) => String(g.id));
         const userGroupNames = userGroupIds
           .map((id: string) => groupMap.get(id))
           .filter(Boolean) as string[];
-        const functieNiveau = deriveFunctieNiveau(userGroupNames);
+        const rawFunctionType = attrs.function_type || null;
+        const rawLevel = attrs.level || null;
+        const decodedFunctionType = rawFunctionType
+          ? (selectionListMap.get(rawFunctionType.replace(/^,/, '')) || rawFunctionType)
+          : null;
+        const decodedLevel = rawLevel
+          ? (selectionListMap.get(rawLevel.replace(/^,/, '')) || rawLevel)
+          : null;
+        const functieNiveau = deriveFunctieNiveau(userGroupNames, decodedFunctionType, decodedLevel);
 
         // Werkvorm uit professional_type
         const werkvorm = mapWerkvorm(attrs.professional_type || null);
