@@ -29,6 +29,7 @@ interface Professional {
   documents_count?: number | null;
   documents_expiring_count?: number | null;
   documents_synced_at?: string | null;
+  bendy_groepen?: string[] | null;
 }
 
 interface ProfessionalCardProps {
@@ -204,6 +205,26 @@ export function ProfessionalCard({
                     {professional.skills.length > 2 && (
                       <Badge variant="ghost" className="text-xs font-normal">
                         +{professional.skills.length - 2}
+                      </Badge>
+                    )}
+                  </div>
+                )}
+
+                {/* Bendy groepen */}
+                {professional.bendy_groepen && professional.bendy_groepen.length > 0 && (
+                  <div className="flex gap-1.5 flex-wrap mb-2">
+                    {professional.bendy_groepen.slice(0, 2).map((groep, idx) => (
+                      <Badge
+                        key={idx}
+                        variant="outline"
+                        className="text-xs font-normal bg-teal-500/10 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800"
+                      >
+                        {groep}
+                      </Badge>
+                    ))}
+                    {professional.bendy_groepen.length > 2 && (
+                      <Badge variant="ghost" className="text-xs font-normal">
+                        +{professional.bendy_groepen.length - 2}
                       </Badge>
                     )}
                   </div>

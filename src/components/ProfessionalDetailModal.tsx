@@ -91,6 +91,7 @@ interface Professional {
   documents_count: number | null;
   documents_expiring_count: number | null;
   documents_synced_at: string | null;
+  bendy_groepen?: string[] | null;
 }
 
 interface ProfessionalDetailModalProps {
@@ -781,6 +782,31 @@ export function ProfessionalDetailModal({
                 </div>
               </CollapsibleContent>
             </Collapsible>
+
+            {/* Bendy Groepen */}
+            {professional.bendy_groepen && professional.bendy_groepen.length > 0 && (
+              <>
+                <Separator />
+                <Collapsible defaultOpen>
+                  <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg collapsible-glass collapsible-glass-rose">
+                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                      <Users className="h-4 w-4" />
+                      Bendy Groepen
+                    </h3>
+                    <ChevronDown className="h-4 w-4" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-3">
+                    <div className="flex flex-wrap gap-2 p-3">
+                      {professional.bendy_groepen.map((groep: string) => (
+                        <Badge key={groep} variant="outline" className="bg-teal-500/10 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800">
+                          {groep}
+                        </Badge>
+                      ))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              </>
+            )}
 
             <Separator />
 

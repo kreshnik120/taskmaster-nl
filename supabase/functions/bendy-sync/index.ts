@@ -933,7 +933,7 @@ async function syncUsers(
   // 2. Alle bestaande professionals ophalen (voor matching + conditionele updates)
   const { data: existingProfessionals } = await adminClient
     .from('professionals')
-    .select('id, full_name, email, bendy_id, telefoonnummer, status, org_id, voorletters, geboorteplaats, geslacht, bendy_external_id, certificaten, bedrijfsnaam, kvk_nummer, btw_nummer, iban, big_nummer, agb_code, skj_registratie, iban_tenaamstelling, boekhouding_email, bedrijfstelefoon, bendy_username, bendy_mediator_id, bendy_function_type, bendy_created_at')
+    .select('id, full_name, email, bendy_id, telefoonnummer, status, org_id, voorletters, geboorteplaats, geslacht, bendy_external_id, certificaten, bedrijfsnaam, kvk_nummer, btw_nummer, iban, big_nummer, agb_code, skj_registratie, iban_tenaamstelling, boekhouding_email, bedrijfstelefoon, bendy_username, bendy_mediator_id, bendy_function_type, bendy_created_at, werkvorm, bendy_groepen')
     .eq('org_id', orgId)
     .is('deleted_at', null);
   const professionals = existingProfessionals || [];
@@ -1030,9 +1030,15 @@ async function syncUsers(
         if (attrs.external_id && !matchedPro.bendy_external_id) updateData.bendy_external_id = String(attrs.external_id);
         if (attrs.certificates) {
           const parsed = parseCertificates(attrs.certificates);
-          if (parsed && parsed.length > 0 && (!matchedPro.certificaten || matchedPro.certificaten.length === 0)) {
+          if (parsed && parsed.length > 0) {
             updateData.certificaten = parsed;
           }
+        }
+
+        // Werkvorm bijwerken vanuit Bendy professional_type — Bendy is leidend
+        const mappedWerkvorm = mapWerkvorm(attrs.professional_type || null);
+        if (mappedWerkvorm && mappedWerkvorm !== matchedPro.werkvorm) {
+          updateData.werkvorm = mappedWerkvorm;
         }
 
         // Company data ophalen uit included
@@ -1040,16 +1046,16 @@ async function syncUsers(
         if (companyRelation) {
           const companyAttrs = companyMap.get(String(companyRelation.id));
           if (companyAttrs) {
-            if (companyAttrs.name && !matchedPro.bedrijfsnaam) updateData.bedrijfsnaam = companyAttrs.name;
-            if (companyAttrs.chamber_of_commerce_number && !matchedPro.kvk_nummer) updateData.kvk_nummer = companyAttrs.chamber_of_commerce_number;
-            if (companyAttrs.vat_id && !matchedPro.btw_nummer) updateData.btw_nummer = companyAttrs.vat_id;
-            if (companyAttrs.iban && !matchedPro.iban) updateData.iban = companyAttrs.iban;
-            if (companyAttrs.big_number && !matchedPro.big_nummer) updateData.big_nummer = companyAttrs.big_number;
-            if (companyAttrs.agb_code && !matchedPro.agb_code) updateData.agb_code = companyAttrs.agb_code;
-            if (companyAttrs.skj_registration_number && !matchedPro.skj_registratie) updateData.skj_registratie = companyAttrs.skj_registration_number;
-            if (companyAttrs.iban_name_of && !matchedPro.iban_tenaamstelling) updateData.iban_tenaamstelling = companyAttrs.iban_name_of;
-            if (companyAttrs.bookkeeping_email && !matchedPro.boekhouding_email) updateData.boekhouding_email = companyAttrs.bookkeeping_email;
-            if (companyAttrs.telephone && !matchedPro.bedrijfstelefoon) updateData.bedrijfstelefoon = companyAttrs.telephone;
+            if (companyAttrs.name) updateData.bedrijfsnaam = companyAttrs.name;
+            if (companyAttrs.chamber_of_commerce_number) updateData.kvk_nummer = companyAttrs.chamber_of_commerce_number;
+            if (companyAttrs.vat_id) updateData.btw_nummer = companyAttrs.vat_id;
+            if (companyAttrs.iban) updateData.iban = companyAttrs.iban;
+            if (companyAttrs.big_number) updateData.big_nummer = companyAttrs.big_number;
+            if (companyAttrs.agb_code) updateData.agb_code = companyAttrs.agb_code;
+            if (companyAttrs.skj_registration_number) updateData.skj_registratie = companyAttrs.skj_registration_number;
+            if (companyAttrs.iban_name_of) updateData.iban_tenaamstelling = companyAttrs.iban_name_of;
+            if (companyAttrs.bookkeeping_email) updateData.boekhouding_email = companyAttrs.bookkeeping_email;
+            if (companyAttrs.telephone) updateData.bedrijfstelefoon = companyAttrs.telephone;
           }
         }
 
@@ -1073,6 +1079,10 @@ async function syncUsers(
         const userGroupNames = userGroupIds
           .map((id: string) => groupMap.get(id))
           .filter(Boolean) as string[];
+
+        // Bendy groepen opslaan — altijd bijwerken
+        updateData.bendy_groepen = userGroupNames.length > 0 ? userGroupNames : [];
+
         const rawFunctionType = attrs.function_type || null;
         const rawLevel = attrs.level || null;
         const decodedFunctionType = rawFunctionType
@@ -1179,6 +1189,7 @@ async function syncUsers(
           bendy_mediator_id: attrs.mediator_id ? String(attrs.mediator_id) : null,
           bendy_function_type: attrs.function_type || null,
           bendy_created_at: attrs.created_at || null,
+          bendy_groepen: userGroupNames.length > 0 ? userGroupNames : [],
         };
 
         // Company data toevoegen via companyMap lookup
