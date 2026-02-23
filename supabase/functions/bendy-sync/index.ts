@@ -458,6 +458,7 @@ function deriveFunctieNiveauFromDiplomas(documents: Array<{ document_name: strin
     else if (/ggz/i.test(name)) { rank = 5; niveau = 'GGZ-agoog'; }
     else if (/persoonlijk\s*begeleider|evc.*begeleider/i.test(name)) { rank = 4; niveau = 'Persoonlijk begeleider'; }
     else if (/verzorgend.*ig|vig/i.test(name)) { rank = 3; niveau = 'VIG'; }
+    else if (/sociaal.*werker\s*4|spw\s*4|pedagogisch.*4/i.test(name)) { rank = 4; niveau = 'Persoonlijk begeleider'; }
     else if (/begeleider|sociaal.*werker|spw|maatschappelijke.*zorg|pedagogisch|sociaal.maatschappelijk|sociaal.cultureel/i.test(name)) { rank = 2; niveau = 'Begeleider'; }
     else if (/helpende/i.test(name)) { rank = 1; niveau = 'Helpende'; }
 
@@ -468,6 +469,22 @@ function deriveFunctieNiveauFromDiplomas(documents: Array<{ document_name: strin
   }
 
   return highest;
+}
+
+// Helper: MBO/HBO niveaunummer extraheren uit diploma naam
+function extractDiplomaNiveau(documentName: string): number | null {
+  if (!documentName) return null;
+  const name = documentName.toLowerCase();
+  // HBO = niveau 6
+  if (/hbo|bachelor|nursing/i.test(name)) return 6;
+  // MBO: zoek trailing nummer (bijv. "Mbo Helpende Zorg en Welzijn 2" → 2)
+  const mboMatch = name.match(/\b([2-4])\s*$/);
+  if (mboMatch) return parseInt(mboMatch[1], 10);
+  // Fallback op bekende patronen
+  if (/verpleegkundige|persoonlijk\s*begeleider|sociaal\s*werker/i.test(name)) return 4;
+  if (/vig|verzorgend.*ig|begeleider/i.test(name)) return 3;
+  if (/helpende/i.test(name)) return 2;
+  return null;
 }
 
 // Helper: certificaten parsen uit Bendy certificates array
