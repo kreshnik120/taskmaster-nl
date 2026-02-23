@@ -440,7 +440,9 @@ function deriveFunctieNiveauFromDiplomas(documents: Array<{ document_name: strin
            name.includes('sociaal werker') || name.includes('spw') ||
            name.includes('maatschappelijke zorg') || name.includes('pedagogisch') ||
            name.includes('persoonlijk begeleider') ||
-           name.includes('sociaal-maatschappelijk') || name.includes('sociaal-cultureel');
+           name.includes('sociaal-maatschappelijk') || name.includes('sociaal-cultureel') ||
+           name.includes('bachelor') || name.includes('associate') ||
+           name.includes('wo ') || name.includes('propedeuse');
   });
 
   if (diplomas.length === 0) return null;
@@ -453,12 +455,14 @@ function deriveFunctieNiveauFromDiplomas(documents: Array<{ document_name: strin
     let rank = 0;
     let niveau = '';
 
-    if (/hbo.?v|hbo\s*verpleeg|nursing/i.test(name)) { rank = 7; niveau = 'HBO-V'; }
+    if (/wo\s|^wo$/i.test(name)) { rank = 8; niveau = 'WO'; }
+    else if (/hbo.?v|hbo\s*verpleeg|nursing/i.test(name)) { rank = 7; niveau = 'HBO-V'; }
+    else if (/hbo|bachelor|associate\s*degree/i.test(name)) { rank = 7; niveau = 'HBO'; }
     else if (/verpleegkunde|verpleegkundige/i.test(name)) { rank = 6; niveau = 'Verpleegkundige (MBO)'; }
     else if (/ggz/i.test(name)) { rank = 5; niveau = 'GGZ-agoog'; }
     else if (/persoonlijk\s*begeleider|evc.*begeleider/i.test(name)) { rank = 4; niveau = 'Persoonlijk begeleider'; }
     else if (/verzorgend.*ig|vig/i.test(name)) { rank = 3; niveau = 'VIG'; }
-    else if (/sociaal.*werker\s*4|spw\s*4|pedagogisch.*4/i.test(name)) { rank = 4; niveau = 'Persoonlijk begeleider'; }
+    else if (/sociaal.*werker\s*4|spw\s*4|pedagogisch.*4|dienstverlener.*4|scw\s*4|mbo\s*4\s|niveau\s*4/i.test(name)) { rank = 4; niveau = 'Persoonlijk begeleider'; }
     else if (/begeleider|sociaal.*werker|spw|maatschappelijke.*zorg|pedagogisch|sociaal.maatschappelijk|sociaal.cultureel/i.test(name)) { rank = 2; niveau = 'Begeleider'; }
     else if (/helpende/i.test(name)) { rank = 1; niveau = 'Helpende'; }
 
@@ -1455,14 +1459,22 @@ async function syncDocuments(
       // Herbereken functie_niveau op basis van gesyncte documenten
       const { data: proDocs } = await adminClient
         .from('professional_documents')
-        .select('document_name, document_type')
+        .select('document_name, document_type, expires_at')
         .eq('professional_id', pro.id);
       const diplomaNiveau = deriveFunctieNiveauFromDiplomas(proDocs || []);
 
+      // Tel documenten en verlopen/binnenkort verlopen uit DATABASE (niet alleen Bendy API)
+      const now = new Date();
+      const ninetyDaysFromNow = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+      const dbDocCount = proDocs?.length || 0;
+      const dbExpiringCount = (proDocs || []).filter(d =>
+        d.expires_at && new Date(d.expires_at) <= ninetyDaysFromNow
+      ).length;
+
       const metaData: Record<string, any> = {
         documents_synced_at: new Date().toISOString(),
-        documents_count: docCount,
-        documents_expiring_count: expiringCount,
+        documents_count: dbDocCount,
+        documents_expiring_count: dbExpiringCount,
       };
       if (diplomaNiveau) {
         metaData.functie_niveau = diplomaNiveau;
