@@ -9,6 +9,7 @@ import { formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Phone, Mail, MapPin } from "lucide-react";
 import { getOrganizationName } from "@/lib/organizationMapping";
+import { formatFunctieNiveau } from "@/lib/functieNiveau";
 import { DirectPlacementButton } from "@/components/DirectPlacementButton";
 import { AIMatchInsights } from "@/components/recruitment/AIMatchInsights";
 import { cn } from "@/lib/utils";
@@ -175,10 +176,10 @@ export function ProfessionalCard({
 
                 {/* Function · Work Type */}
                 <p className="text-sm text-muted-foreground mb-1.5">
-                  {professional.functie_niveau}
-                  {professional.werkvorm && (
-                    <span className="text-muted-foreground/60"> · {professional.werkvorm}</span>
-                  )}
+                  {formatFunctieNiveau(professional.functie_niveau)}
+                    {professional.werkvorm && (
+                      <span className="text-muted-foreground/60"> · {professional.werkvorm}</span>
+                    )}
                 </p>
 
                 {/* Region */}
@@ -323,7 +324,7 @@ export function ProfessionalCard({
             </div>
             <div className="flex gap-2 flex-wrap">
               <Badge variant="outline" className="text-xs">
-                {professional.functie_niveau}
+                {formatFunctieNiveau(professional.functie_niveau)}
               </Badge>
               {professional.werkvorm && (
                 <Badge variant="secondary" className="text-xs">

@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
+import { formatFunctieNiveau } from "@/lib/functieNiveau";
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Shield, EyeOff } from "lucide-react";
@@ -465,7 +466,7 @@ export function ProfessionalDetailModal({
 
               {/* Badges */}
               <div className="flex flex-wrap gap-2 mb-3">
-                <Badge className={getFunctieColor(professional.functie_niveau)}>{professional.functie_niveau}</Badge>
+                <Badge className={getFunctieColor(professional.functie_niveau)}>{formatFunctieNiveau(professional.functie_niveau)}</Badge>
                 {professional.werkvorm && (
                   <Badge className={getWerkvormColor(professional.werkvorm)}>{professional.werkvorm}</Badge>
                 )}

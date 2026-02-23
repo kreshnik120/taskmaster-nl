@@ -273,11 +273,10 @@ export function DiplomaLevelMismatchAlert({
 // Helper to get niveau label
 function getNiveauLabel(niveau: number): string {
   const labels: Record<number, string> = {
-    2: 'Helpende',
-    3: 'VIG',
-    4: 'Verpleegkundige MBO',
-    5: 'GGZ-agoog',
-    6: 'HBO-V'
+    2: 'Helpende (nv2)',
+    3: 'VIG / Begeleider (nv3)',
+    4: 'Persoonlijk begeleider / Verpleegkundige MBO (nv4)',
+    6: 'HBO-V / GGZ-agoog (nv6)'
   };
   return labels[niveau] || `Niveau ${niveau}`;
 }
