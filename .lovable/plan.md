@@ -1,43 +1,50 @@
 
 
-# Bendy-Sync Fix: Functie-niveau herberekening bij Document Sync
+# Fix: "Helpende" default vervangen door "Niveau onbekend"
 
-## Probleem
-1. `syncDocuments()` slaat 3.099 documenten correct op maar herberekent NIET het `functie_niveau` op basis van de gesyncte diploma's
-2. Het INSERT path in `syncUsers()` (regel 1137) roept `deriveFunctieNiveau()` aan met slechts 3 parameters -- het diploma-niveau ontbreekt als 4e parameter
+## Samenvatting
+Professionals zonder bewijs (geen diploma, groep, function_type of level) krijgen nu foutief "Helpende (nv2)". Na deze fix tonen zij "Niveau onbekend", terwijl professionals met echt bewijs hun correcte niveau behouden.
 
 ## Wijzigingen
 
-### A. Document sync: functie_niveau herberekenen (regels 1444-1451)
-Na het verwerken van documenten per professional, wordt `professional_documents` opgehaald en `deriveFunctieNiveauFromDiplomas()` aangeroepen. Als een diploma-niveau gevonden wordt, wordt `functie_niveau` meegestuurd in de meta-update.
+### A. Edge Function: `deriveFunctieNiveau()` retourneert `null` i.p.v. "Helpende"
+**Bestand:** `supabase/functions/bendy-sync/index.ts`
+- Return type wijzigt van `string` naar `string | null`
+- Regel 424: `return 'Helpende'` wordt `return null`
+- Alle aanroepers werken al correct met nullable waarden (professionals tabel accepteert NULL)
 
-### B. INSERT path: diploma-niveau meenemen (regel 1137)
-Voor nieuwe professionals worden documenten opgehaald via `fetchBendyApi(tenant, '/api/v2/users/${bendyId}/documents')` en het diploma-niveau wordt als 4e parameter doorgegeven aan `deriveFunctieNiveau()`.
+### B. Frontend utility: null-handling in `formatFunctieNiveau()`
+**Bestand:** `src/lib/functieNiveau.ts`
+- Parameter type wordt `string | null | undefined`
+- Bij null/undefined: retourneert "Niveau onbekend"
+- Bestaande logica voor bekende niveaus blijft ongewijzigd
 
-## Technische details
+### C. SQL migratie: bestaande onterechte "Helpende" naar NULL
+Professionals met "Helpende" die GEEN diploma-bewijs hebben worden naar NULL gezet. Professionals met een echt helpende-diploma behouden "Helpende".
 
-### Bestanden
-- **Gewijzigd:** `supabase/functions/bendy-sync/index.ts` (2 wijzigingen)
-
-### Wijziging A detail (regels 1444-1451)
-Huidige code bouwt enkel `documents_synced_at`, `documents_count`, `documents_expiring_count`. Wordt uitgebreid met:
-```typescript
-const { data: proDocs } = await adminClient
-  .from('professional_documents')
-  .select('document_name, document_type')
-  .eq('professional_id', pro.id);
-const diplomaNiveau = deriveFunctieNiveauFromDiplomas(proDocs || []);
-// ... metaData object opbouwen
-if (diplomaNiveau) {
-  metaData.functie_niveau = diplomaNiveau;
-}
+```sql
+UPDATE professionals p
+SET functie_niveau = NULL, updated_at = NOW()
+WHERE p.deleted_at IS NULL
+  AND p.functie_niveau = 'Helpende'
+  AND NOT EXISTS (
+    SELECT 1 FROM professional_documents pd
+    WHERE pd.professional_id = p.id
+      AND (
+        LOWER(pd.document_name) ~ 'helpende|diploma|certificaat|vig|begeleider|verpleeg|hbo|ggz|nursing|sociaal.*werker|spw|pedagogisch|maatschappelijke.*zorg'
+        OR LOWER(pd.document_type) ~ 'diploma|certificaat'
+      )
+  );
 ```
 
-### Wijziging B detail (regel 1137)
-Huidige code: `deriveFunctieNiveau(userGroupNames, decodedFunctionType, decodedLevel)` (3 params).
-Wordt uitgebreid met een `fetchBendyApi` call naar `/api/v2/users/${bendyId}/documents` om diploma's op te halen en als 4e parameter door te geven.
+## Bestanden
+- **Gewijzigd:** `supabase/functions/bendy-sync/index.ts` (2 regels)
+- **Gewijzigd:** `src/lib/functieNiveau.ts` (parameter type + null check)
+- **Nieuw:** SQL migratie
 
-### Risico
-- Wijziging A: 1 extra DB query per professional in document sync. Bij ~200 professionals met documenten is dit acceptabel.
-- Wijziging B: 1 extra API call per INSERT. Bij nieuwe professionals is dit een klein aantal per sync.
-- Beide wijzigingen zijn defensief: als ophalen faalt, wordt de bestaande 3-parameter logica gebruikt.
+## Verwacht resultaat
+- Met diploma/groep/function_type: juiste niveau (bijv. "Persoonlijk begeleider (nv4)")
+- Met function_type=ADL: "Helpende (nv2)" (correct bewijs)
+- Met helpende-diploma: "Helpende (nv2)" (correct bewijs)
+- Zonder enig bewijs: "Niveau onbekend"
+
