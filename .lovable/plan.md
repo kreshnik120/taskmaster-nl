@@ -1,48 +1,43 @@
 
 
-# Fix V3: Niveaunummers, Diploma Validatie en Sociaal Werker Fix
+# Bendy-Sync Fix: Functie-niveau herberekening bij Document Sync
 
 ## Probleem
-1. "Mbo Sociaal werker 4" (26 professionals) wordt foutief gemapt naar "Begeleider" (nv3) in plaats van "Persoonlijk begeleider" (nv4)
-2. MBO niveaunummers uit diploma-namen worden niet geparsed
-3. De UI toont geen niveaunummers (bijv. "nv4")
+1. `syncDocuments()` slaat 3.099 documenten correct op maar herberekent NIET het `functie_niveau` op basis van de gesyncte diploma's
+2. Het INSERT path in `syncUsers()` (regel 1137) roept `deriveFunctieNiveau()` aan met slechts 3 parameters -- het diploma-niveau ontbreekt als 4e parameter
 
 ## Wijzigingen
 
-### A. Edge Function: Sociaal werker 4 fix (regel 461)
-De regel die `sociaal.*werker` matcht naar "Begeleider" (rank 2) wordt opgesplitst. Een nieuwe regel voor `sociaal.*werker\s*4` met rank 4 wordt **erboven** geplaatst, zodat MBO-4 sociaal werkers correct als "Persoonlijk begeleider" worden geclassificeerd.
+### A. Document sync: functie_niveau herberekenen (regels 1444-1451)
+Na het verwerken van documenten per professional, wordt `professional_documents` opgehaald en `deriveFunctieNiveauFromDiplomas()` aangeroepen. Als een diploma-niveau gevonden wordt, wordt `functie_niveau` meegestuurd in de meta-update.
 
-### B. Edge Function: nieuwe helper `extractDiplomaNiveau()`
-Parseert het MBO/HBO niveaunummer uit een diploma-naam (bijv. "2" uit "Mbo Helpende Zorg en Welzijn 2"). Wordt na `deriveFunctieNiveauFromDiplomas()` geplaatst. Voorbereid voor toekomstig gebruik.
-
-### C. Nieuwe utility: `src/lib/functieNiveau.ts`
-Gedeelde mapping van functie_niveau naar niveaunummer + `formatFunctieNiveau()` die bijv. "Persoonlijk begeleider (nv4)" retourneert.
-
-### D. ProfessionalCard: niveau tonen
-- Card body (regel 178): `formatFunctieNiveau(professional.functie_niveau)`
-- Hover card badge (regel 326): idem
-
-### E. ProfessionalDetailModal: niveau tonen
-- Badge (regel 468): `formatFunctieNiveau(professional.functie_niveau)`
-
-### F. SQL migratie: Sociaal werker 4 corrigeren
-UPDATE professionals van "Begeleider" naar "Persoonlijk begeleider" waar het diploma `sociaal.*werker\s*4` bevat.
-
-### G. DiplomaLevelMismatchAlert: labels updaten
-`getNiveauLabel()` (regel 274-283) wordt bijgewerkt met correcte MBO niveaus en nv-nummers.
+### B. INSERT path: diploma-niveau meenemen (regel 1137)
+Voor nieuwe professionals worden documenten opgehaald via `fetchBendyApi(tenant, '/api/v2/users/${bendyId}/documents')` en het diploma-niveau wordt als 4e parameter doorgegeven aan `deriveFunctieNiveau()`.
 
 ## Technische details
 
 ### Bestanden
-- **Gewijzigd:** `supabase/functions/bendy-sync/index.ts` (wijzigingen A, B)
-- **Nieuw:** `src/lib/functieNiveau.ts` (wijziging C)
-- **Gewijzigd:** `src/components/recruitment/ProfessionalCard.tsx` (wijziging D)
-- **Gewijzigd:** `src/components/ProfessionalDetailModal.tsx` (wijziging E)
-- **Nieuw:** SQL migratie (wijziging F)
-- **Gewijzigd:** `src/components/recruitment/DiplomaLevelMismatchAlert.tsx` (wijziging G)
+- **Gewijzigd:** `supabase/functions/bendy-sync/index.ts` (2 wijzigingen)
 
-### Verwacht resultaat
-- ~26 professionals verschuiven van "Begeleider" naar "Persoonlijk begeleider"
-- Alle professionals tonen niveaunummer in de UI (bijv. "VIG (nv3) . ZZP")
-- Toekomstige syncs classificeren sociaal werker 4 correct
+### Wijziging A detail (regels 1444-1451)
+Huidige code bouwt enkel `documents_synced_at`, `documents_count`, `documents_expiring_count`. Wordt uitgebreid met:
+```typescript
+const { data: proDocs } = await adminClient
+  .from('professional_documents')
+  .select('document_name, document_type')
+  .eq('professional_id', pro.id);
+const diplomaNiveau = deriveFunctieNiveauFromDiplomas(proDocs || []);
+// ... metaData object opbouwen
+if (diplomaNiveau) {
+  metaData.functie_niveau = diplomaNiveau;
+}
+```
 
+### Wijziging B detail (regel 1137)
+Huidige code: `deriveFunctieNiveau(userGroupNames, decodedFunctionType, decodedLevel)` (3 params).
+Wordt uitgebreid met een `fetchBendyApi` call naar `/api/v2/users/${bendyId}/documents` om diploma's op te halen en als 4e parameter door te geven.
+
+### Risico
+- Wijziging A: 1 extra DB query per professional in document sync. Bij ~200 professionals met documenten is dit acceptabel.
+- Wijziging B: 1 extra API call per INSERT. Bij nieuwe professionals is dit een klein aantal per sync.
+- Beide wijzigingen zijn defensief: als ophalen faalt, wordt de bestaande 3-parameter logica gebruikt.
