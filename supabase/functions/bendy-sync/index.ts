@@ -389,7 +389,7 @@ function buildFullName(attrs: any): string {
 }
 
 // Helper: functie_niveau afleiden uit Bendy group namen + function_type/level fallback
-function deriveFunctieNiveau(groupNames: string[], functionType?: string | null, level?: string | null): string {
+function deriveFunctieNiveau(groupNames: string[], functionType?: string | null, level?: string | null, diplomaNiveau?: string | null): string {
   // Stap 1: Probeer uit groepnamen (al menselijk leesbaar)
   for (const name of groupNames) {
     if (/Persoonlijk\s*begeleider/i.test(name)) return 'Persoonlijk begeleider';
@@ -419,7 +419,55 @@ function deriveFunctieNiveau(groupNames: string[], functionType?: string | null,
     if (/ggz/.test(ft)) return 'GGZ-agoog';
     if (/helpende|adl/.test(ft)) return 'Helpende';
   }
+  // Stap 4: Fallback naar diploma-afgeleid niveau
+  if (diplomaNiveau) return diplomaNiveau;
   return 'Helpende';
+}
+
+// Helper: functie_niveau afleiden uit diploma documenten (hoogste niveau wint)
+function deriveFunctieNiveauFromDiplomas(documents: Array<{ document_name: string; document_type: string | null }>): string | null {
+  if (!documents || documents.length === 0) return null;
+
+  const diplomas = documents.filter(d => {
+    const name = (d.document_name || '').toLowerCase();
+    const type = (d.document_type || '').toLowerCase();
+    return type.includes('diploma') || type.includes('certificaat') ||
+           name.includes('diploma') || name.includes('certificaat') ||
+           name.includes('verpleegkunde') || name.includes('verzorgende') ||
+           name.includes('begeleider') || name.includes('helpende') ||
+           name.includes('vig') || name.includes('hbo-v') || name.includes('hbo v') ||
+           name.includes('ggz') || name.includes('nursing') ||
+           name.includes('sociaal werker') || name.includes('spw') ||
+           name.includes('maatschappelijke zorg') || name.includes('pedagogisch') ||
+           name.includes('persoonlijk begeleider') ||
+           name.includes('sociaal-maatschappelijk') || name.includes('sociaal-cultureel');
+  });
+
+  if (diplomas.length === 0) return null;
+
+  let highest: string | null = null;
+  let highestRank = 0;
+
+  for (const d of diplomas) {
+    const name = (d.document_name || '').toLowerCase();
+    let rank = 0;
+    let niveau = '';
+
+    if (/hbo.?v|hbo\s*verpleeg|nursing/i.test(name)) { rank = 7; niveau = 'HBO-V'; }
+    else if (/verpleegkunde|verpleegkundige/i.test(name)) { rank = 6; niveau = 'Verpleegkundige (MBO)'; }
+    else if (/ggz/i.test(name)) { rank = 5; niveau = 'GGZ-agoog'; }
+    else if (/persoonlijk\s*begeleider|evc.*begeleider/i.test(name)) { rank = 4; niveau = 'Persoonlijk begeleider'; }
+    else if (/verzorgend.*ig|vig/i.test(name)) { rank = 3; niveau = 'VIG'; }
+    else if (/begeleider|sociaal.*werker|spw|maatschappelijke.*zorg|pedagogisch|sociaal.maatschappelijk|sociaal.cultureel/i.test(name)) { rank = 2; niveau = 'Begeleider'; }
+    else if (/helpende/i.test(name)) { rank = 1; niveau = 'Helpende'; }
+
+    if (rank > highestRank) {
+      highestRank = rank;
+      highest = niveau;
+    }
+  }
+
+  return highest;
 }
 
 // Helper: certificaten parsen uit Bendy certificates array
@@ -1012,8 +1060,14 @@ async function syncUsers(
         const decodedLevel = rawLevel
           ? (selectionListMap.get(rawLevel.replace(/^,/, '')) || rawLevel)
           : null;
-        const functieNiveau = deriveFunctieNiveau(userGroupNames, decodedFunctionType, decodedLevel);
-        // Altijd bijwerken — Bendy is leidend
+        // Diploma-afgeleid niveau ophalen
+        const { data: proDocs } = await adminClient
+          .from('professional_documents')
+          .select('document_name, document_type')
+          .eq('professional_id', matchedPro.id);
+        const diplomaNiveau = deriveFunctieNiveauFromDiplomas(proDocs || []);
+        const functieNiveau = deriveFunctieNiveau(userGroupNames, decodedFunctionType, decodedLevel, diplomaNiveau);
+        // Altijd bijwerken — Bendy + diploma's zijn leidend
         updateData.functie_niveau = functieNiveau;
 
         // Verzamel voor batch
