@@ -11,6 +11,8 @@ const FUNCTIE_NIVEAU_MAP: Record<string, number> = {
   'VP4': 4,
   'GGZ-agoog': 6,
   'HBO-V': 6,
+  'HBO': 6,
+  'WO': 7,
 };
 
 export function getNiveauNummer(functieNiveau: string): number | null {

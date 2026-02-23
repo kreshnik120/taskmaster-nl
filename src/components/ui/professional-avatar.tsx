@@ -41,6 +41,8 @@ export function ProfessionalAvatar({
   // Get avatar background color based on functie niveau
   const getFunctieColor = (functie?: string): string => {
     const colors: Record<string, string> = {
+      'WO': 'bg-red-600',
+      'HBO': 'bg-blue-600',
       'HBO-V': 'bg-blue-500',
       'VIG': 'bg-green-500',
       'Verpleegkundige MBO': 'bg-cyan-500',
