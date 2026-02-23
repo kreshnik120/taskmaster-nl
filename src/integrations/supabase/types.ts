@@ -5522,7 +5522,7 @@ export type Database = {
           email: string | null
           ervaring_sector: string[] | null
           full_name: string
-          functie_niveau: string
+          functie_niveau: string | null
           geboortedatum: string | null
           geboorteplaats: string | null
           geslacht: string | null
@@ -5602,7 +5602,7 @@ export type Database = {
           email?: string | null
           ervaring_sector?: string[] | null
           full_name: string
-          functie_niveau: string
+          functie_niveau?: string | null
           geboortedatum?: string | null
           geboorteplaats?: string | null
           geslacht?: string | null
@@ -5682,7 +5682,7 @@ export type Database = {
           email?: string | null
           ervaring_sector?: string[] | null
           full_name?: string
-          functie_niveau?: string
+          functie_niveau?: string | null
           geboortedatum?: string | null
           geboorteplaats?: string | null
           geslacht?: string | null
