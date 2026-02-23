@@ -5494,6 +5494,7 @@ export type Database = {
           bendy_created_at: string | null
           bendy_external_id: string | null
           bendy_function_type: string | null
+          bendy_groepen: string[] | null
           bendy_id: string | null
           bendy_mediator_id: string | null
           bendy_username: string | null
@@ -5574,6 +5575,7 @@ export type Database = {
           bendy_created_at?: string | null
           bendy_external_id?: string | null
           bendy_function_type?: string | null
+          bendy_groepen?: string[] | null
           bendy_id?: string | null
           bendy_mediator_id?: string | null
           bendy_username?: string | null
@@ -5654,6 +5656,7 @@ export type Database = {
           bendy_created_at?: string | null
           bendy_external_id?: string | null
           bendy_function_type?: string | null
+          bendy_groepen?: string[] | null
           bendy_id?: string | null
           bendy_mediator_id?: string | null
           bendy_username?: string | null
