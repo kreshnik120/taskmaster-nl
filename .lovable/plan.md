@@ -1,55 +1,48 @@
 
-# Fix V2: functie_niveau afleiden uit Diploma Documenten
 
-## Samenvatting
-244 van de 1.425 professionals hebben diploma-documenten die we kunnen gebruiken om het juiste functie_niveau af te leiden. De Bendy selection list codes (`,adl`, `,bgl3`) leveren bijna niets bruikbaars op. Diploma's in `professional_documents` bevatten de echte kwalificatie.
+# Fix V3: Niveaunummers, Diploma Validatie en Sociaal Werker Fix
 
-## Wat er verandert
+## Probleem
+1. "Mbo Sociaal werker 4" (26 professionals) wordt foutief gemapt naar "Begeleider" (nv3) in plaats van "Persoonlijk begeleider" (nv4)
+2. MBO niveaunummers uit diploma-namen worden niet geparsed
+3. De UI toont geen niveaunummers (bijv. "nv4")
 
-### 1. Nieuwe functie: `deriveFunctieNiveauFromDiplomas()`
-Analyseert diploma-documenten en retourneert het hoogste kwalificatieniveau. De regex-patronen worden uitgebreid ten opzichte van het voorstel, omdat de werkelijke data veel meer varianten bevat:
+## Wijzigingen
 
-| Patroon | Voorbeelden in data | Niveau |
-|---------|-------------------|--------|
-| `hbo.*verpleeg\|nursing` | "HBO Bachelor Opleiding tot Verpleegkundige (Nursing)" | HBO-V |
-| `verpleegkunde\|verpleegkundige` | (nog geen in data) | Verpleegkundige (MBO) |
-| `ggz` | (nog geen in data) | GGZ-agoog |
-| `persoonlijk.*begeleider\|EVC.*begeleider` | "Mbo Persoonlijk begeleider specifieke doelgroepen 4" (51x) | Persoonlijk begeleider |
-| `verzorgend.*ig\|vig` | "MBO Verzorgende IG 3" (2x) | VIG |
-| `begeleider\|sociaal.*werker\|spw\|maatschappelijke.*zorg\|pedagogisch\|sociaal-maatschappelijk\|sociaal-cultureel` | "Mbo Sociaal werker 4" (26x), "Mbo Begeleider specifieke doelgroepen 3" (3x) | Begeleider |
-| `helpende` | "Mbo Helpende Zorg en Welzijn 2" (15x) | Helpende |
+### A. Edge Function: Sociaal werker 4 fix (regel 461)
+De regel die `sociaal.*werker` matcht naar "Begeleider" (rank 2) wordt opgesplitst. Een nieuwe regel voor `sociaal.*werker\s*4` met rank 4 wordt **erboven** geplaatst, zodat MBO-4 sociaal werkers correct als "Persoonlijk begeleider" worden geclassificeerd.
 
-### 2. `deriveFunctieNiveau()` krijgt 4e parameter
-Cascade wordt: groepnamen -> level -> function_type -> **diplomaNiveau** -> "Helpende"
+### B. Edge Function: nieuwe helper `extractDiplomaNiveau()`
+Parseert het MBO/HBO niveaunummer uit een diploma-naam (bijv. "2" uit "Mbo Helpende Zorg en Welzijn 2"). Wordt na `deriveFunctieNiveauFromDiplomas()` geplaatst. Voorbereid voor toekomstig gebruik.
 
-### 3. UPDATE path: diploma-query per professional
-Voor elke bestaande professional worden diploma-documenten opgehaald en het niveau doorgegeven als 4e argument.
+### C. Nieuwe utility: `src/lib/functieNiveau.ts`
+Gedeelde mapping van functie_niveau naar niveaunummer + `formatFunctieNiveau()` die bijv. "Persoonlijk begeleider (nv4)" retourneert.
 
-### 4. INSERT path: overgeslagen (by design)
-Nieuwe professionals hebben nog geen documenten bij eerste sync. De volgende sync corrigeert dit via de UPDATE path.
+### D. ProfessionalCard: niveau tonen
+- Card body (regel 178): `formatFunctieNiveau(professional.functie_niveau)`
+- Hover card badge (regel 326): idem
 
-### 5. SQL migratie: bestaande data direct fixen
-Een eenmalige UPDATE op basis van `professional_documents` met uitgebreide CASE/WHEN patronen die alle 244 professionals met diploma's correct mappen.
+### E. ProfessionalDetailModal: niveau tonen
+- Badge (regel 468): `formatFunctieNiveau(professional.functie_niveau)`
 
-## Verwacht resultaat
-- ~51 professionals -> Persoonlijk begeleider
-- ~26 professionals -> Begeleider (Sociaal werker)
-- ~15 professionals -> Helpende (bevestigd via diploma)
-- ~6 professionals -> Begeleider (HBO Social Work)
-- ~2 professionals -> VIG
-- ~1 professional -> HBO-V
-- Overige ~143 met generieke diploma-namen -> verdere analyse per geval
-- ~1.181 zonder diploma -> blijven "Helpende" (default)
+### F. SQL migratie: Sociaal werker 4 corrigeren
+UPDATE professionals van "Begeleider" naar "Persoonlijk begeleider" waar het diploma `sociaal.*werker\s*4` bevat.
+
+### G. DiplomaLevelMismatchAlert: labels updaten
+`getNiveauLabel()` (regel 274-283) wordt bijgewerkt met correcte MBO niveaus en nv-nummers.
 
 ## Technische details
 
 ### Bestanden
-- **Gewijzigd:** `supabase/functions/bendy-sync/index.ts` (wijzigingen A-D)
-- **Nieuw:** SQL migratie voor bestaande data correctie
+- **Gewijzigd:** `supabase/functions/bendy-sync/index.ts` (wijzigingen A, B)
+- **Nieuw:** `src/lib/functieNiveau.ts` (wijziging C)
+- **Gewijzigd:** `src/components/recruitment/ProfessionalCard.tsx` (wijziging D)
+- **Gewijzigd:** `src/components/ProfessionalDetailModal.tsx` (wijziging E)
+- **Nieuw:** SQL migratie (wijziging F)
+- **Gewijzigd:** `src/components/recruitment/DiplomaLevelMismatchAlert.tsx` (wijziging G)
 
-### Performance
-- Wijziging C voegt 1 extra DB query per UPDATE toe (`professional_documents` per professional). Bij 1.400 professionals is dit acceptabel binnen de bestaande sync-loop.
+### Verwacht resultaat
+- ~26 professionals verschuiven van "Begeleider" naar "Persoonlijk begeleider"
+- Alle professionals tonen niveaunummer in de UI (bijv. "VIG (nv3) . ZZP")
+- Toekomstige syncs classificeren sociaal werker 4 correct
 
-### Risico
-- Geen verslechtering: als geen diploma gevonden wordt, valt het terug op de bestaande logica en uiteindelijk op "Helpende"
-- De uitgebreide regex-patronen dekken alle 244 diploma-records in de huidige data
