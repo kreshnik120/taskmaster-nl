@@ -965,7 +965,8 @@ async function syncUsers(
     .from('professionals')
     .select('id, full_name, email, bendy_id, telefoonnummer, status, org_id, voorletters, geboorteplaats, geslacht, bendy_external_id, certificaten, bedrijfsnaam, kvk_nummer, btw_nummer, iban, big_nummer, agb_code, skj_registratie, iban_tenaamstelling, boekhouding_email, bedrijfstelefoon, bendy_username, bendy_mediator_id, bendy_function_type, bendy_created_at, werkvorm, bendy_groepen')
     .eq('org_id', orgId)
-    .is('deleted_at', null);
+    .is('deleted_at', null)
+    .limit(5000);
   const professionals = existingProfessionals || [];
 
   // 2b. Bendy groepen ophalen voor functie_niveau mapping
@@ -1383,7 +1384,8 @@ async function syncDocuments(
     .select('id, bendy_id, full_name')
     .eq('org_id', orgId)
     .is('deleted_at', null)
-    .not('bendy_id', 'is', null);
+    .not('bendy_id', 'is', null)
+    .limit(5000);
 
   if (!professionals || professionals.length === 0) {
     logInfo(FUNCTION_NAME, 'Geen professionals met bendy_id gevonden');
@@ -1814,7 +1816,8 @@ async function handleStatusCheck(): Promise<Response> {
       .select('id, bendy_id, full_name, email')
       .eq('org_id', orgId || '')
       .is('deleted_at', null)
-      .not('bendy_id', 'is', null);
+      .not('bendy_id', 'is', null)
+      .limit(5000);
 
     const bendyIdCounts = new Map<string, any[]>();
     for (const pro of (allProsWithBendyId || [])) {
@@ -1832,7 +1835,8 @@ async function handleStatusCheck(): Promise<Response> {
       .select('id, bendy_id, full_name, email')
       .eq('org_id', orgId || '')
       .is('deleted_at', null)
-      .not('email', 'is', null);
+      .not('email', 'is', null)
+      .limit(5000);
 
     const emailCounts = new Map<string, any[]>();
     for (const pro of (allProsWithEmail || [])) {
