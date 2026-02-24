@@ -1,39 +1,43 @@
 
+The goal is to fix the 1000-row limit issue in four critical database queries within the `bendy-sync` edge function. This ensures that the sync engine and health checks can handle up to 5,000 professionals, preventing incomplete synchronization when the database contains more than 1,000 records.
 
-# 4 Critical Fixes: Regex, Rankings, Timeout, Frontend Limiet
+### Technical Analysis
+- **Supabase/PostgREST Default**: By default, Supabase's JavaScript client (and the underlying PostgREST) limits query results to 1,000 rows.
+- **Affected Areas**:
+    - `syncUsers`: Fetches existing professionals to match with Bendy records.
+    - `syncDocuments`: Fetches professionals with a `bendy_id` to sync their documents.
+    - `handleStatusCheck` (Health checks): Two queries that check for duplicate `bendy_id`s and duplicate emails across the entire professional database.
 
-## Bestand 1: `supabase/functions/bendy-sync/index.ts`
+### Implementation Steps
 
-### Fix C1+C2: matchNiveauFromText regex (regels 404-412)
-- HBO-V check EERST (wordt nu fout als "Verpleegkundige MBO" geclassificeerd)
-- `\bPB\b` verplaatst naar Persoonlijk begeleider (was fout bij Begeleider)
-- `\bVP\b` met word boundary
-- HBO-V verwijderd uit Verpleegkundige-regex
+#### 1. Modify `supabase/functions/bendy-sync/index.ts`
+I will apply four line-based replacements to add `.limit(5000)` to the following query chains:
 
-### Fix C5: deriveFunctieNiveauFromDiplomas ranking swap (regels 489-490)
-- VP-MBO: rank 6 wordt rank 5
-- GGZ-agoog: rank 5 wordt rank 6
-- Nu consistent met NIVEAU_RANK en CAO-zorg
+- **Fix 1 (Professional Sync Matching)**:
+    - **Target**: `syncUsers` function.
+    - **Location**: Around lines 964-968.
+    - **Change**: Add `.limit(5000)` after the `.is('deleted_at', null)` filter.
 
-### Fix C3: Bulk pre-fetch professional_documents (timeout-fix)
-- Nieuw blok na regel 994: bulk query van professional_documents in batches van 500
-- Resultaat opgeslagen in `proDocsMap` (Map)
-- Regels 1122-1127: per-professional DB query vervangen door lookup uit proDocsMap
-- Elimineert ~1000 individuele DB queries uit de sync loop
+- **Fix 2 (Document Sync Processing)**:
+    - **Target**: `syncDocuments` function.
+    - **Location**: Around lines 1381-1386.
+    - **Change**: Add `.limit(5000)` after the `.not('bendy_id', 'is', null)` filter.
 
-## Bestand 2: `src/pages/Professionals.tsx`
+- **Fix 3 (Health Check - Duplicate Bendy IDs)**:
+    - **Target**: `handleStatusCheck` function.
+    - **Location**: Around lines 1812-1817.
+    - **Change**: Add `.limit(5000)` after the `.not('bendy_id', 'is', null)` filter.
 
-### Fix: 1000-rij limiet (regel 202)
-- `.limit(5000)` toevoegen na `.order("full_name")`
-- Toont alle 1.427+ professionals
+- **Fix 4 (Health Check - Duplicate Emails)**:
+    - **Target**: `handleStatusCheck` function.
+    - **Location**: Around lines 1830-1835.
+    - **Change**: Add `.limit(5000)` after the `.not('email', 'is', null)` filter.
 
-## Deployment
-- `bendy-sync` edge function wordt opnieuw gedeployed na de wijzigingen
+#### 2. Automatic Deployment
+The edge function will be automatically redeployed once the changes are saved.
 
-## Verificatie
-1. `matchNiveauFromText("HBO-V")` retourneert `'HBO-V'` (niet meer `'Verpleegkundige (MBO)'`)
-2. `matchNiveauFromText("PB")` retourneert `'Persoonlijk begeleider'` (niet meer `'Begeleider'`)
-3. `deriveFunctieNiveauFromDiplomas`: VP-MBO=5, GGZ=6 (consistent met NIVEAU_RANK)
-4. Geen `await adminClient.from('professional_documents')` meer in de sync loop
-5. Frontend toont alle 1.427+ professionals
+### Verification Plan
+1.  **Manual Trigger**: Trigger a manual sync from the backend settings or via a curl request.
+2.  **Log Inspection**: Check the function logs to verify that the professional sync count now correctly reflects the actual number of professionals (e.g., "1427") instead of being capped at "1000".
+3.  **Status Check**: Run the health check/status dashboard to ensure duplicate detection is running over the full dataset.
 
