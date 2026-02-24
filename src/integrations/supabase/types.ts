@@ -2081,6 +2081,53 @@ export type Database = {
         }
         Relationships: []
       }
+      client_contacts: {
+        Row: {
+          created_at: string | null
+          email: string | null
+          functie: string | null
+          id: string
+          is_primary: boolean | null
+          naam: string
+          organization_id: string
+          status: string | null
+          telefoon: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email?: string | null
+          functie?: string | null
+          id?: string
+          is_primary?: boolean | null
+          naam: string
+          organization_id: string
+          status?: string | null
+          telefoon?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string | null
+          functie?: string | null
+          id?: string
+          is_primary?: boolean | null
+          naam?: string
+          organization_id?: string
+          status?: string | null
+          telefoon?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_contacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "client_organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_expert_preferences: {
         Row: {
           created_at: string
