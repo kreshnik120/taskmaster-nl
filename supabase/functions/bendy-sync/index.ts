@@ -1518,7 +1518,7 @@ async function syncDocuments(
       // Herbereken functie_niveau op basis van gesyncte documenten
       const { data: proDocs } = await adminClient
         .from('professional_documents')
-        .select('document_name, document_type, expires_at')
+        .select('document_name, document_type, expires_at, published')
         .eq('professional_id', pro.id);
       const diplomaNiveau = deriveFunctieNiveauFromDiplomas(proDocs || []);
 
@@ -1530,9 +1530,11 @@ async function syncDocuments(
         d.expires_at && new Date(d.expires_at) <= ninetyDaysFromNow
       ).length;
 
+      const dbPublishedCount = (proDocs || []).filter(d => d.published === true).length;
       const metaData: Record<string, any> = {
         documents_synced_at: new Date().toISOString(),
         documents_count: dbDocCount,
+        documents_published_count: dbPublishedCount,
         documents_expiring_count: dbExpiringCount,
       };
       if (diplomaNiveau) {
