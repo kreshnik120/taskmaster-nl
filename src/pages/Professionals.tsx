@@ -102,6 +102,7 @@ interface Professional {
   specifieke_doelgroepen: string[] | null;
   max_reisafstand_km: number | null;
   documents_count: number | null;
+  documents_published_count: number | null;
   documents_expiring_count: number | null;
   documents_synced_at: string | null;
 }
@@ -298,9 +299,10 @@ const Professionals = () => {
     const matchesRegio = !filterRegio || (p.regio?.toLowerCase().includes(filterRegio.toLowerCase()) ?? false);
     const matchesDocs = filterDocuments === "all" ||
       (filterDocuments === "verlopen" && p.documents_expiring_count && p.documents_expiring_count > 0) ||
-      (filterDocuments === "ok" && p.documents_count && p.documents_count > 0 && (!p.documents_expiring_count || p.documents_expiring_count === 0)) ||
+      (filterDocuments === "ok" && p.documents_published_count && p.documents_published_count > 0 && (!p.documents_expiring_count || p.documents_expiring_count === 0)) ||
       (filterDocuments === "geen" && (!p.documents_count || p.documents_count === 0));
-    return matchesSearch && matchesFunctie && matchesWerkvorm && matchesStatus && matchesRegio && matchesDocs;
+    const matchesNieuw = activeKpi !== "nieuw" || (Math.floor((new Date().getTime() - new Date(p.created_at).getTime()) / (1000 * 60 * 60 * 24)) <= 7);
+    return matchesSearch && matchesFunctie && matchesWerkvorm && matchesStatus && matchesRegio && matchesDocs && matchesNieuw;
   }));
 
   // Reset pagina naar 1 bij elke filter/zoek wijziging

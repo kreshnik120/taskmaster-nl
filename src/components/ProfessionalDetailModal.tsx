@@ -248,7 +248,11 @@ export function ProfessionalDetailModal({
     gewenst_uurloon: "",
     cao_akkoord: false,
     kvk_nummer: "",
-    btw_nummer: ""
+    btw_nummer: "",
+    woonplaats: "",
+    postcode: "",
+    adres: "",
+    geboortedatum: "",
   });
 
   const handleEdit = () => {
@@ -268,7 +272,11 @@ export function ProfessionalDetailModal({
       gewenst_uurloon: professional.gewenst_uurloon?.toString() || "",
       cao_akkoord: professional.cao_akkoord || false,
       kvk_nummer: professional.kvk_nummer || "",
-      btw_nummer: professional.btw_nummer || ""
+      btw_nummer: professional.btw_nummer || "",
+      woonplaats: professional.woonplaats || "",
+      postcode: professional.postcode || "",
+      adres: professional.adres || "",
+      geboortedatum: professional.geboortedatum || "",
     });
     setIsEditing(true);
   };
@@ -295,6 +303,10 @@ export function ProfessionalDetailModal({
           cao_akkoord: editData.cao_akkoord,
           kvk_nummer: editData.kvk_nummer || null,
           btw_nummer: editData.btw_nummer || null,
+          woonplaats: editData.woonplaats || null,
+          postcode: editData.postcode || null,
+          adres: editData.adres || null,
+          geboortedatum: editData.geboortedatum || null,
           updated_at: new Date().toISOString()
         })
         .eq("id", professional.id);
@@ -319,7 +331,7 @@ export function ProfessionalDetailModal({
     try {
       const { error } = await supabase
         .from("professionals")
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .eq("id", professional.id);
 
       if (error) throw error;
@@ -583,21 +595,39 @@ export function ProfessionalDetailModal({
                 <div className="grid grid-cols-2 gap-4 p-3 bg-muted/20 rounded-lg">
                   <div>
                     <Label className="text-xs text-muted-foreground">Adres</Label>
-                    <p className="text-sm mt-0.5">{professional.adres || "-"}</p>
+                    {isEditing ? (
+                      <Input value={editData.adres} onChange={(e) => setEditData({ ...editData, adres: e.target.value })} placeholder="Straatnaam 123" />
+                    ) : (
+                      <p className="text-sm mt-0.5">{professional.adres || "-"}</p>
+                    )}
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Postcode & Plaats</Label>
-                    <p className="text-sm mt-0.5">
-                      {[professional.postcode, professional.woonplaats].filter(Boolean).join(' ') || "-"}
-                    </p>
+                    <Label className="text-xs text-muted-foreground">Postcode</Label>
+                    {isEditing ? (
+                      <Input value={editData.postcode} onChange={(e) => setEditData({ ...editData, postcode: e.target.value })} placeholder="1234 AB" />
+                    ) : (
+                      <p className="text-sm mt-0.5">{professional.postcode || "-"}</p>
+                    )}
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Woonplaats</Label>
+                    {isEditing ? (
+                      <Input value={editData.woonplaats} onChange={(e) => setEditData({ ...editData, woonplaats: e.target.value })} placeholder="Amsterdam" />
+                    ) : (
+                      <p className="text-sm mt-0.5">{professional.woonplaats || "-"}</p>
+                    )}
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Geboortedatum</Label>
-                    <p className="text-sm mt-0.5">
-                      {professional.geboortedatum 
-                        ? format(new Date(professional.geboortedatum), "d MMMM yyyy", { locale: nl })
-                        : "-"}
-                    </p>
+                    {isEditing ? (
+                      <Input type="date" value={editData.geboortedatum} onChange={(e) => setEditData({ ...editData, geboortedatum: e.target.value })} />
+                    ) : (
+                      <p className="text-sm mt-0.5">
+                        {professional.geboortedatum 
+                          ? format(new Date(professional.geboortedatum), "d MMMM yyyy", { locale: nl })
+                          : "-"}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Regio</Label>
@@ -1128,11 +1158,12 @@ export function ProfessionalDetailModal({
                   {documents.length > 0 ? (
                     <div className="rounded-lg border overflow-hidden">
                       {/* Tabel header */}
-                      <div className="grid grid-cols-[1fr_140px_100px_90px] gap-2 px-4 py-2.5 bg-muted/40 border-b text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      <div className="grid grid-cols-[1fr_140px_100px_70px_70px] gap-2 px-4 py-2.5 bg-muted/40 border-b text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                         <span>Document</span>
                         <span>Type</span>
                         <span>Verloopdatum</span>
                         <span className="text-right">Status</span>
+                        <span className="text-right">Gepubl.</span>
                       </div>
                       {/* Tabel rows */}
                       <div className="divide-y">
@@ -1142,7 +1173,7 @@ export function ProfessionalDetailModal({
                           const daysLeft = doc.expires_at ? Math.ceil((new Date(doc.expires_at).getTime() - documentStats.now.getTime()) / (1000 * 60 * 60 * 24)) : null;
                           return (
                             <Collapsible key={doc.id}>
-                              <CollapsibleTrigger className="grid grid-cols-[1fr_140px_100px_90px] gap-2 w-full px-4 py-2.5 text-sm hover:bg-muted/30 transition-colors text-left items-center group">
+                              <CollapsibleTrigger className="grid grid-cols-[1fr_140px_100px_70px_70px] gap-2 w-full px-4 py-2.5 text-sm hover:bg-muted/30 transition-colors text-left items-center group">
                                 {/* Kolom 1: Document naam + icoon */}
                                 <div className="flex items-center gap-2 min-w-0">
                                   <FileText className={cn(
@@ -1156,7 +1187,7 @@ export function ProfessionalDetailModal({
                                 </div>
                                 {/* Kolom 2: Type */}
                                 <span className="text-xs text-muted-foreground truncate">
-                                  {doc.document_type || "—"}
+                                  {doc.document_type && doc.document_type !== doc.document_name ? doc.document_type : "—"}
                                 </span>
                                 {/* Kolom 3: Verloopdatum */}
                                 <span className={cn(
@@ -1179,6 +1210,14 @@ export function ProfessionalDetailModal({
                                     <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-green-300 text-green-700 bg-green-500/5">Geldig</Badge>
                                   ) : (
                                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">∞</Badge>
+                                  )}
+                                </div>
+                                {/* Kolom 5: Gepubliceerd */}
+                                <div className="flex justify-end">
+                                  {doc.published ? (
+                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-green-300 text-green-700 bg-green-500/5">Ja</Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-orange-300 text-orange-600 bg-orange-500/5">Nee</Badge>
                                   )}
                                 </div>
                               </CollapsibleTrigger>
@@ -1422,23 +1461,6 @@ export function ProfessionalDetailModal({
               </>
             )}
 
-            {/* Beschikbaarheid */}
-            <div>
-              <Label>Beschikbaarheidsnotities</Label>
-              {isEditing ? (
-                <Textarea
-                  value={editData.beschikbaarheidsnotities}
-                  onChange={(e) => setEditData({ ...editData, beschikbaarheidsnotities: e.target.value })}
-                  placeholder="Notities over beschikbaarheid..."
-                  className="focus:ring-2 focus:ring-primary transition-all min-h-[100px]"
-                />
-              ) : (
-                <p className="text-sm mt-1 p-3 bg-muted/30 rounded-md min-h-[60px]">
-                  {professional.beschikbaarheidsnotities || "Geen notities"}
-                </p>
-              )}
-            </div>
-
             <Separator />
 
             {/* Metadata */}
@@ -1488,8 +1510,24 @@ export function ProfessionalDetailModal({
             />
           </TabsContent>
 
-          <TabsContent value="beschikbaarheid" className="mt-6">
+          <TabsContent value="beschikbaarheid" className="space-y-6 mt-6">
             <BeschikbaarheidMiniKalender professionalId={professional.id} />
+            <Separator />
+            <div>
+              <Label>Beschikbaarheidsnotities</Label>
+              {isEditing ? (
+                <Textarea
+                  value={editData.beschikbaarheidsnotities}
+                  onChange={(e) => setEditData({ ...editData, beschikbaarheidsnotities: e.target.value })}
+                  placeholder="Notities over beschikbaarheid..."
+                  className="focus:ring-2 focus:ring-primary transition-all min-h-[100px]"
+                />
+              ) : (
+                <p className="text-sm mt-1 p-3 bg-muted/30 rounded-md min-h-[60px]">
+                  {professional.beschikbaarheidsnotities || "Geen notities"}
+                </p>
+              )}
+            </div>
           </TabsContent>
         </Tabs>
 

@@ -27,6 +27,7 @@ interface Professional {
   skills?: string[];
   org_id?: string | null;
   documents_count?: number | null;
+  documents_published_count?: number | null;
   documents_expiring_count?: number | null;
   documents_synced_at?: string | null;
   bendy_groepen?: string[] | null;
@@ -233,11 +234,15 @@ export function ProfessionalCard({
                 {/* Document compliance badge */}
                 {professional.documents_expiring_count && professional.documents_expiring_count > 0 ? (
                   <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
-                    ⚠ {professional.documents_expiring_count} doc{professional.documents_expiring_count !== 1 ? 's' : ''} verlopen
+                    {professional.documents_expiring_count} doc{professional.documents_expiring_count !== 1 ? 's' : ''} verlopen
+                  </Badge>
+                ) : professional.documents_published_count && professional.documents_published_count > 0 ? (
+                  <Badge variant="success" className="text-[10px] px-1.5 py-0">
+                    Docs OK ({professional.documents_published_count})
                   </Badge>
                 ) : professional.documents_count && professional.documents_count > 0 ? (
-                  <Badge variant="success" className="text-[10px] px-1.5 py-0">
-                    ✓ Docs OK
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-orange-300 text-orange-600 bg-orange-500/5">
+                    {professional.documents_count} docs niet gepubliceerd
                   </Badge>
                 ) : (
                   <Badge variant="secondary" className="text-[10px] px-1.5 py-0">

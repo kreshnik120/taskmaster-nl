@@ -5518,6 +5518,7 @@ export type Database = {
           diploma_verified_at: string | null
           documents_count: number | null
           documents_expiring_count: number | null
+          documents_published_count: number | null
           documents_synced_at: string | null
           doelgroep_ervaring: string[] | null
           email: string | null
@@ -5599,6 +5600,7 @@ export type Database = {
           diploma_verified_at?: string | null
           documents_count?: number | null
           documents_expiring_count?: number | null
+          documents_published_count?: number | null
           documents_synced_at?: string | null
           doelgroep_ervaring?: string[] | null
           email?: string | null
@@ -5680,6 +5682,7 @@ export type Database = {
           diploma_verified_at?: string | null
           documents_count?: number | null
           documents_expiring_count?: number | null
+          documents_published_count?: number | null
           documents_synced_at?: string | null
           doelgroep_ervaring?: string[] | null
           email?: string | null
