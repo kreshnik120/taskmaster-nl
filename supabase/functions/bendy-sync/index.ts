@@ -388,40 +388,68 @@ function buildFullName(attrs: any): string {
   return parts.length > 0 ? parts.join(' ') : 'Onbekend';
 }
 
-// Helper: functie_niveau afleiden uit Bendy group namen + function_type/level fallback
-function deriveFunctieNiveau(groupNames: string[], functionType?: string | null, level?: string | null, diplomaNiveau?: string | null): string | null {
-  // Stap 1: Probeer uit groepnamen (al menselijk leesbaar)
-  for (const name of groupNames) {
-    if (/Persoonlijk\s*begeleider/i.test(name)) return 'Persoonlijk begeleider';
-    if (/Begeleider|BGL|PB/i.test(name)) return 'Begeleider';
-    if (/Verpleegkundige|VP|HBO-V/i.test(name)) return 'Verpleegkundige (MBO)';
-    if (/VIG/i.test(name)) return 'VIG';
-    if (/GGZ/i.test(name)) return 'GGZ-agoog';
-    if (/Helpende/i.test(name)) return 'Helpende';
-  }
-  // Stap 2: Fallback naar level (gedecodeerd via selectionListMap)
-  if (level) {
-    const lv = level.trim().toLowerCase();
-    if (/persoonlijk\s*begeleider/.test(lv)) return 'Persoonlijk begeleider';
-    if (/begeleider|bgl/.test(lv)) return 'Begeleider';
-    if (/verpleegkundige|vp|hbo.?v/.test(lv)) return 'Verpleegkundige (MBO)';
-    if (/vig|verzorgend/.test(lv)) return 'VIG';
-    if (/ggz/.test(lv)) return 'GGZ-agoog';
-    if (/helpende/.test(lv)) return 'Helpende';
-  }
-  // Stap 3: Fallback naar function_type (gedecodeerd via selectionListMap)
-  if (functionType) {
-    const ft = functionType.trim().toLowerCase();
-    if (/persoonlijk\s*begeleider/.test(ft)) return 'Persoonlijk begeleider';
-    if (/begeleider|bgl/.test(ft)) return 'Begeleider';
-    if (/verpleegkundige|vp|hbo.?v/.test(ft)) return 'Verpleegkundige (MBO)';
-    if (/vig|verzorgend/.test(ft)) return 'VIG';
-    if (/ggz/.test(ft)) return 'GGZ-agoog';
-    if (/helpende|adl/.test(ft)) return 'Helpende';
-  }
-  // Stap 4: Fallback naar diploma-afgeleid niveau
-  if (diplomaNiveau) return diplomaNiveau;
+// Ranking: hoe hoger het nummer, hoe hoger de kwalificatie
+const NIVEAU_RANK: Record<string, number> = {
+  'Helpende': 1,
+  'Begeleider': 2,
+  'VIG': 3,
+  'Persoonlijk begeleider': 4,
+  'Verpleegkundige (MBO)': 5,
+  'GGZ-agoog': 6,
+  'HBO-V': 7,
+  'HBO': 7,
+  'WO': 8,
+};
+
+function matchNiveauFromText(text: string): string | null {
+  if (/Persoonlijk\s*begeleider/i.test(text)) return 'Persoonlijk begeleider';
+  if (/Verpleegkundige|VP|HBO-V/i.test(text)) return 'Verpleegkundige (MBO)';
+  if (/GGZ/i.test(text)) return 'GGZ-agoog';
+  if (/VIG/i.test(text)) return 'VIG';
+  if (/Begeleider|BGL|PB/i.test(text)) return 'Begeleider';
+  if (/Helpende|ADL/i.test(text)) return 'Helpende';
   return null;
+}
+
+// Helper: functie_niveau afleiden uit alle bronnen — hoogste niveau wint
+function deriveFunctieNiveau(groupNames: string[], functionType?: string | null, level?: string | null, diplomaNiveau?: string | null): string | null {
+  let bestNiveau: string | null = null;
+  let bestRank = 0;
+
+  // Bron 1: Groepnamen
+  for (const name of groupNames) {
+    const niveau = matchNiveauFromText(name);
+    if (niveau && (NIVEAU_RANK[niveau] || 0) > bestRank) {
+      bestRank = NIVEAU_RANK[niveau] || 0;
+      bestNiveau = niveau;
+    }
+  }
+
+  // Bron 2: Level (gedecodeerd)
+  if (level) {
+    const niveau = matchNiveauFromText(level.trim());
+    if (niveau && (NIVEAU_RANK[niveau] || 0) > bestRank) {
+      bestRank = NIVEAU_RANK[niveau] || 0;
+      bestNiveau = niveau;
+    }
+  }
+
+  // Bron 3: Function type (gedecodeerd)
+  if (functionType) {
+    const niveau = matchNiveauFromText(functionType.trim());
+    if (niveau && (NIVEAU_RANK[niveau] || 0) > bestRank) {
+      bestRank = NIVEAU_RANK[niveau] || 0;
+      bestNiveau = niveau;
+    }
+  }
+
+  // Bron 4: Diploma-afgeleid niveau
+  if (diplomaNiveau && (NIVEAU_RANK[diplomaNiveau] || 0) > bestRank) {
+    bestRank = NIVEAU_RANK[diplomaNiveau] || 0;
+    bestNiveau = diplomaNiveau;
+  }
+
+  return bestNiveau;
 }
 
 // Helper: functie_niveau afleiden uit diploma documenten (hoogste niveau wint)
