@@ -275,7 +275,7 @@ async function parallelUpdates(
 // SYNC LOCK MECHANISME
 // ============================================
 
-const STALE_LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minuten
+const STALE_LOCK_TIMEOUT_MS = 2 * 60 * 1000; // 2 minuten (was 5 — edge functions crashen bij CPU timeout)
 
 async function acquireSyncLock(
   adminClient: any,
@@ -2228,68 +2228,106 @@ Deno.serve(async (req) => {
 
     syncLogId = syncLog?.id || '';
 
-    let result: SyncResult;
-    if (body.action === 'sync_users') {
-      result = await syncUsers(adminClient, tenant, orgId, syncType);
-    } else if (body.action === 'sync_documents') {
-      result = await syncDocuments(adminClient, tenant, orgId, syncType);
-    } else {
-      result = await syncClients(adminClient, tenant, orgId, syncType);
-    }
+    // ── FIRE-AND-FORGET: Zware sync in background via EdgeRuntime.waitUntil ──
+    // Retourneer onmiddellijk 202 Accepted, sync draait door op de achtergrond
+    const capturedAction = body.action;
+    const capturedConfigId = configId;
+    const capturedSyncLogId = syncLogId;
+    const capturedCircuitBreakerName = circuitBreakerName;
+    const capturedStartTime = startTime;
 
-    const duration = Date.now() - startTime;
-    if (syncLogId) {
-      await adminClient
-        .from('bendy_sync_log')
-        .update({
-          completed_at: new Date().toISOString(),
-          records_fetched: result.fetched,
-          records_created: result.created,
-          records_updated: result.updated,
-          records_skipped: result.skipped,
-          records_failed: result.failed,
-          errors: result.errors,
-          status: result.failed > 0 ? 'partial' : 'success',
+    // @ts-ignore — EdgeRuntime.waitUntil is Supabase-specifiek
+    EdgeRuntime.waitUntil((async () => {
+      try {
+        const bgAdminClient = createAdminClient();
+
+        let result: SyncResult;
+        if (capturedAction === 'sync_users') {
+          result = await syncUsers(bgAdminClient, tenant, orgId, syncType);
+        } else if (capturedAction === 'sync_documents') {
+          result = await syncDocuments(bgAdminClient, tenant, orgId, syncType);
+        } else {
+          result = await syncClients(bgAdminClient, tenant, orgId, syncType);
+        }
+
+        const duration = Date.now() - capturedStartTime;
+        if (capturedSyncLogId) {
+          await bgAdminClient
+            .from('bendy_sync_log')
+            .update({
+              completed_at: new Date().toISOString(),
+              records_fetched: result.fetched,
+              records_created: result.created,
+              records_updated: result.updated,
+              records_skipped: result.skipped,
+              records_failed: result.failed,
+              errors: result.errors,
+              status: result.failed > 0 ? 'partial' : 'success',
+              duration_ms: duration,
+            })
+            .eq('id', capturedSyncLogId);
+        }
+
+        await releaseSyncLock(bgAdminClient, capturedConfigId, 'idle');
+        await recordSuccess(bgAdminClient, capturedCircuitBreakerName);
+
+        logSuccess(FUNCTION_NAME, `Background sync voltooid`, {
+          tenant,
+          action: capturedAction,
+          fetched: result.fetched,
+          created: result.created,
+          updated: result.updated,
+          failed: result.failed,
           duration_ms: duration,
-        })
-        .eq('id', syncLogId);
-    }
+        });
+      } catch (bgError) {
+        const msg = bgError instanceof Error ? bgError.message : String(bgError);
+        logError(FUNCTION_NAME, `Background sync gefaald: ${msg}`, bgError);
 
-    await releaseSyncLock(adminClient, configId, 'idle');
-    await recordSuccess(adminClient, circuitBreakerName);
+        try {
+          const cleanupClient = createAdminClient();
+          if (capturedConfigId) {
+            await releaseSyncLock(cleanupClient, capturedConfigId, 'error', msg);
+          }
+          if (capturedSyncLogId) {
+            await cleanupClient
+              .from('bendy_sync_log')
+              .update({
+                completed_at: new Date().toISOString(),
+                status: 'failed',
+                errors: [msg],
+                duration_ms: Date.now() - capturedStartTime,
+              })
+              .eq('id', capturedSyncLogId);
+          }
+          if (capturedCircuitBreakerName) {
+            await recordFailure(cleanupClient, capturedCircuitBreakerName, msg);
+          }
+        } catch (cleanupError) {
+          logError(FUNCTION_NAME, 'Background cleanup ook gefaald', cleanupError);
+        }
+      }
+    })());
 
-    logSuccess(FUNCTION_NAME, `Manuele sync voltooid`, {
-      tenant,
-      fetched: result.fetched,
-      updated: result.updated,
-      skipped: result.skipped,
-      failed: result.failed,
-      duration_ms: duration,
-    });
-
+    // Onmiddellijk 202 Accepted terugsturen — frontend kan status pollen via GET
     return jsonResponse({
       success: true,
       data: {
         action: body.action,
         tenant,
-        records_fetched: result.fetched,
-        records_created: result.created,
-        records_updated: result.updated,
-        records_skipped: result.skipped,
-        records_failed: result.failed,
-        errors: result.errors,
+        status: 'accepted',
+        message: 'Sync gestart op de achtergrond. Gebruik GET /bendy-sync voor status.',
+        sync_log_id: syncLogId,
       },
       metadata: {
         trigger: 'manual',
-        duration_ms: duration,
-        sync_log_id: syncLogId,
         sync_type: syncType,
         version: FUNCTION_VERSION,
       },
-    });
+    }, 202);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    logError(FUNCTION_NAME, `Manuele sync gefaald: ${msg}`, error);
+    logError(FUNCTION_NAME, `Manuele sync setup gefaald: ${msg}`, error);
 
     try {
       const adminClient = createAdminClient();
