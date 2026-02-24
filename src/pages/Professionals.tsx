@@ -199,7 +199,8 @@ const Professionals = () => {
         .from("professionals")
         .select("*")
         .is("deleted_at", null)
-        .order("full_name");
+        .order("full_name")
+        .limit(5000);
 
       if (error) throw error;
       setProfessionals(data || []);

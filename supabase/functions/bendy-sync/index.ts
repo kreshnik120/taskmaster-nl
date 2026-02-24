@@ -402,11 +402,13 @@ const NIVEAU_RANK: Record<string, number> = {
 };
 
 function matchNiveauFromText(text: string): string | null {
-  if (/Persoonlijk\s*begeleider/i.test(text)) return 'Persoonlijk begeleider';
-  if (/Verpleegkundige|VP|HBO-V/i.test(text)) return 'Verpleegkundige (MBO)';
+  // Volgorde: meest specifiek eerst, breed patroon laatst
+  if (/HBO.?V|hbo\s*verpleeg/i.test(text)) return 'HBO-V';
+  if (/Persoonlijk\s*begeleider|\bPB\b/i.test(text)) return 'Persoonlijk begeleider';
+  if (/Verpleegkundige|\bVP\b/i.test(text)) return 'Verpleegkundige (MBO)';
   if (/GGZ/i.test(text)) return 'GGZ-agoog';
   if (/VIG/i.test(text)) return 'VIG';
-  if (/Begeleider|BGL|PB/i.test(text)) return 'Begeleider';
+  if (/Begeleider|BGL/i.test(text)) return 'Begeleider';
   if (/Helpende|ADL/i.test(text)) return 'Helpende';
   return null;
 }
@@ -486,8 +488,8 @@ function deriveFunctieNiveauFromDiplomas(documents: Array<{ document_name: strin
     if (/wo\s|^wo$/i.test(name)) { rank = 8; niveau = 'WO'; }
     else if (/hbo.?v|hbo\s*verpleeg|nursing/i.test(name)) { rank = 7; niveau = 'HBO-V'; }
     else if (/hbo|bachelor|associate\s*degree/i.test(name)) { rank = 7; niveau = 'HBO'; }
-    else if (/verpleegkunde|verpleegkundige/i.test(name)) { rank = 6; niveau = 'Verpleegkundige (MBO)'; }
-    else if (/ggz/i.test(name)) { rank = 5; niveau = 'GGZ-agoog'; }
+    else if (/verpleegkunde|verpleegkundige/i.test(name)) { rank = 5; niveau = 'Verpleegkundige (MBO)'; }
+    else if (/ggz/i.test(name)) { rank = 6; niveau = 'GGZ-agoog'; }
     else if (/persoonlijk\s*begeleider|evc.*begeleider/i.test(name)) { rank = 4; niveau = 'Persoonlijk begeleider'; }
     else if (/verzorgend.*ig|vig/i.test(name)) { rank = 3; niveau = 'VIG'; }
     else if (/socia(al|l)?.*werker\s*4|spw\s*4|pedagogisch.*4|dienstverlener.*4|scw\)?\s*4|mbo\s*4\s|niveau\s*4/i.test(name)) { rank = 4; niveau = 'Persoonlijk begeleider'; }
@@ -993,6 +995,25 @@ async function syncUsers(
   }
   logInfo(FUNCTION_NAME, `${companyMap.size} company records uit included data`);
 
+  // 2d. Bulk pre-fetch professional_documents voor diploma-analyse (voorkomt N+1 queries in de loop)
+  const allProIds = professionals.map((p: any) => p.id);
+  const proDocsMap = new Map<string, Array<{ document_name: string; document_type: string | null }>>();
+  if (allProIds.length > 0) {
+    for (let i = 0; i < allProIds.length; i += 500) {
+      const batch = allProIds.slice(i, i + 500);
+      const { data: batchDocs } = await adminClient
+        .from('professional_documents')
+        .select('professional_id, document_name, document_type')
+        .in('professional_id', batch);
+      for (const doc of (batchDocs || [])) {
+        const existing = proDocsMap.get(doc.professional_id) || [];
+        existing.push({ document_name: doc.document_name, document_type: doc.document_type });
+        proDocsMap.set(doc.professional_id, existing);
+      }
+    }
+    logInfo(FUNCTION_NAME, `${proDocsMap.size} professionals met documenten pre-fetched (${allProIds.length} totaal)`);
+  }
+
   // ══════════════════════════════════════════════
   // FASE 1: Verzamel alle data in-memory (GEEN DB writes)
   // ══════════════════════════════════════════════
@@ -1119,12 +1140,9 @@ async function syncUsers(
         const decodedLevel = rawLevel
           ? (selectionListMap.get(rawLevel.replace(/^,/, '')) || rawLevel)
           : null;
-        // Diploma-afgeleid niveau ophalen
-        const { data: proDocs } = await adminClient
-          .from('professional_documents')
-          .select('document_name, document_type')
-          .eq('professional_id', matchedPro.id);
-        const diplomaNiveau = deriveFunctieNiveauFromDiplomas(proDocs || []);
+        // Diploma-afgeleid niveau ophalen (uit pre-fetched Map — geen DB query meer)
+        const proDocs = proDocsMap.get(matchedPro.id) || [];
+        const diplomaNiveau = deriveFunctieNiveauFromDiplomas(proDocs);
         const functieNiveau = deriveFunctieNiveau(userGroupNames, decodedFunctionType, decodedLevel, diplomaNiveau);
         // Altijd bijwerken — Bendy + diploma's zijn leidend
         updateData.functie_niveau = functieNiveau;
