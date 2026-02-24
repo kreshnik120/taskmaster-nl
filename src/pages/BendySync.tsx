@@ -135,6 +135,8 @@ export default function BendySync() {
   const [userSyncResult, setUserSyncResult] = useState<SyncResult | null>(null);
   const [syncingDocs, setSyncingDocs] = useState(false);
   const [docSyncResult, setDocSyncResult] = useState<SyncResult | null>(null);
+  const [pollingSyncLogId, setPollingSyncLogId] = useState<string | null>(null);
+  const [pollingAction, setPollingAction] = useState<string | null>(null);
   const [resettingLock, setResettingLock] = useState(false);
   const [bsnStatus, setBsnStatus] = useState<{
     total: number; encrypted: number; plaintext: number; fully_encrypted: boolean; loading: boolean;
@@ -161,6 +163,72 @@ export default function BendySync() {
     const interval = setInterval(fetchStatus, 30000);
     return () => clearInterval(interval);
   }, [fetchStatus]);
+
+  // Poll elke 3s voor sync resultaat nadat de backend "accepted" heeft geretourneerd
+  useEffect(() => {
+    if (!pollingSyncLogId || !pollingAction) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bendy-sync`;
+        const response = await fetch(url, { method: "GET" });
+        const json = await response.json();
+        if (!json.success) return;
+
+        const log = (json.data?.recent_logs || []).find(
+          (l: SyncLog) => l.id === pollingSyncLogId
+        );
+
+        if (log && log.status !== 'running') {
+          const result: SyncResult = {
+            records_fetched: log.records_fetched,
+            records_created: log.records_created,
+            records_updated: log.records_updated,
+            records_skipped: log.records_skipped,
+            records_failed: log.records_failed,
+          };
+
+          if (pollingAction === 'sync_clients') {
+            setSyncResult(result);
+            setSyncing(false);
+            toast.success(`Client sync voltooid: ${log.records_fetched} records opgehaald`);
+          } else if (pollingAction === 'sync_users') {
+            setUserSyncResult(result);
+            setSyncingUsers(false);
+            toast.success(`Professional sync voltooid: ${log.records_fetched} users opgehaald`);
+          } else if (pollingAction === 'sync_documents') {
+            setDocSyncResult(result);
+            setSyncingDocs(false);
+            toast.success(`Document sync voltooid: ${log.records_fetched} documenten opgehaald`);
+          }
+
+          setPollingSyncLogId(null);
+          setPollingAction(null);
+          fetchStatus();
+          clearInterval(interval);
+        }
+      } catch (err) {
+        console.error('Sync polling error:', err);
+      }
+    }, 3000);
+
+    // Timeout na 5 minuten
+    const timeout = setTimeout(() => {
+      clearInterval(interval);
+      setPollingSyncLogId(null);
+      setPollingAction(null);
+      if (pollingAction === 'sync_clients') setSyncing(false);
+      if (pollingAction === 'sync_users') setSyncingUsers(false);
+      if (pollingAction === 'sync_documents') setSyncingDocs(false);
+      toast.error('Sync timeout — check de logs voor de status');
+      fetchStatus();
+    }, 5 * 60 * 1000);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [pollingSyncLogId, pollingAction]);
 
   const config = statusData?.configs?.[0] || null;
   const stats = statusData?.statistics;
@@ -213,15 +281,22 @@ export default function BendySync() {
       });
       if (error) throw error;
       if (data?.success) {
-        setSyncResult(data.data);
-        toast.success(`Sync voltooid: ${data.data.records_fetched} records opgehaald`);
+        if (data.data?.status === 'accepted') {
+          toast.info('Client sync gestart op de achtergrond...');
+          setPollingSyncLogId(data.data.sync_log_id);
+          setPollingAction('sync_clients');
+        } else {
+          setSyncResult(data.data);
+          setSyncing(false);
+          toast.success(`Sync voltooid: ${data.data.records_fetched} records opgehaald`);
+          fetchStatus();
+        }
       } else {
         toast.error(`Sync mislukt: ${data?.error || "Onbekende fout"}`);
+        setSyncing(false);
       }
-      await fetchStatus();
     } catch (err: any) {
       toast.error(`Sync mislukt: ${err.message || "Onbekende fout"}`);
-    } finally {
       setSyncing(false);
     }
   };
@@ -235,15 +310,22 @@ export default function BendySync() {
       });
       if (error) throw error;
       if (data?.success) {
-        setUserSyncResult(data.data);
-        toast.success(`User sync voltooid: ${data.data.records_fetched} users opgehaald`);
-        fetchStatus();
+        if (data.data?.status === 'accepted') {
+          toast.info('Professional sync gestart op de achtergrond...');
+          setPollingSyncLogId(data.data.sync_log_id);
+          setPollingAction('sync_users');
+        } else {
+          setUserSyncResult(data.data);
+          setSyncingUsers(false);
+          toast.success(`User sync voltooid: ${data.data.records_fetched} users opgehaald`);
+          fetchStatus();
+        }
       } else {
         toast.error(data?.error || "User sync mislukt");
+        setSyncingUsers(false);
       }
     } catch (err: any) {
       toast.error(`Fout: ${err.message}`);
-    } finally {
       setSyncingUsers(false);
     }
   };
@@ -645,7 +727,7 @@ export default function BendySync() {
           <CardContent className="space-y-4">
             <Button onClick={handleSync} disabled={syncing} className="w-full sm:w-auto">
               <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
-              {syncing ? "Bezig met synchroniseren..." : "Client Sync Starten"}
+              {syncing ? (pollingAction === 'sync_clients' ? "Sync draait op achtergrond..." : "Verbinden...") : "Client Sync Starten"}
             </Button>
 
             {syncResult && (
@@ -680,7 +762,7 @@ export default function BendySync() {
           <CardContent className="space-y-4">
             <Button onClick={handleUserSync} disabled={syncingUsers} variant="outline" className="w-full sm:w-auto">
               <RefreshCw className={`h-4 w-4 mr-2 ${syncingUsers ? "animate-spin" : ""}`} />
-              {syncingUsers ? "Bezig met user sync..." : "Professional Sync Starten"}
+              {syncingUsers ? (pollingAction === 'sync_users' ? "Sync draait op achtergrond..." : "Verbinden...") : "Professional Sync Starten"}
             </Button>
             {userSyncResult && (
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-3 rounded-lg bg-muted/50">
@@ -713,15 +795,22 @@ export default function BendySync() {
                   });
                   if (error) throw error;
                   if (data?.success) {
-                    setDocSyncResult(data.data);
-                    toast.success(`Document sync voltooid: ${data.data.records_fetched} documenten opgehaald`);
-                    fetchStatus();
+                    if (data.data?.status === 'accepted') {
+                      toast.info('Document sync gestart op de achtergrond...');
+                      setPollingSyncLogId(data.data.sync_log_id);
+                      setPollingAction('sync_documents');
+                    } else {
+                      setDocSyncResult(data.data);
+                      setSyncingDocs(false);
+                      toast.success(`Document sync voltooid: ${data.data.records_fetched} documenten opgehaald`);
+                      fetchStatus();
+                    }
                   } else {
                     toast.error(data?.error || "Document sync mislukt");
+                    setSyncingDocs(false);
                   }
                 } catch (err: any) {
                   toast.error(`Fout: ${err.message}`);
-                } finally {
                   setSyncingDocs(false);
                 }
               }}
@@ -730,7 +819,7 @@ export default function BendySync() {
               className="w-full sm:w-auto"
             >
               <RefreshCw className={`h-4 w-4 mr-2 ${syncingDocs ? "animate-spin" : ""}`} />
-              {syncingDocs ? "Bezig met document sync..." : "Document Sync Starten"}
+              {syncingDocs ? (pollingAction === 'sync_documents' ? "Sync draait op achtergrond..." : "Verbinden...") : "Document Sync Starten"}
             </Button>
             {docSyncResult && (
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-3 rounded-lg bg-muted/50">
