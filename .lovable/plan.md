@@ -1,186 +1,104 @@
 
 
-# SYNC VERFIJNING: Bendy Data Altijd Bijwerken + Groepen Opslaan
+# BUGFIX: deriveFunctieNiveau — Hoogste Niveau Wint
 
-## Samenvatting
-Bendy is de bron van waarheid, maar momenteel worden veel velden alleen gevuld als ze NULL zijn (null-only fill). Dit betekent dat updates in Bendy nooit doorstromen. Daarnaast worden Bendy groepen (flexpools) opgehaald maar nergens opgeslagen. Deze wijziging lost beide problemen op.
+## Probleem
+De huidige `deriveFunctieNiveau()` functie (regels 392-425) gebruikt een cascade: de eerste match wint. Als een professional in Bendy-groep "Helpende" zit maar een diploma "Persoonlijk begeleider" (nv4) heeft, wordt "Helpende" (nv2) geretourneerd. Het hogere diploma wordt genegeerd.
+
+## Oplossing
+Vervang de cascade-logica door een "highest-wins" aanpak: alle 4 bronnen (groepen, level, function_type, diploma) worden gecontroleerd en het hoogste kwalificatieniveau wint.
 
 ## Wijzigingen
 
-### A. SQL Migratie - nieuwe kolom `bendy_groepen`
-Voegt een `text[]` kolom toe aan de `professionals` tabel voor het opslaan van Bendy flexpool groepnamen.
+### 1. Bestand: `supabase/functions/bendy-sync/index.ts`
 
-### B. Edge Function - select query uitbreiden
-`werkvorm` en `bendy_groepen` toevoegen aan de bestaande select in `syncProfessionals` (regel 936).
+**Wat wordt vervangen:** Regels 391-425 (de hele `deriveFunctieNiveau` functie + commentaar erboven)
 
-### C. UPDATE path - Bendy is leidend (4 sub-wijzigingen)
+**Wat komt ervoor in de plaats:**
+- Een `NIVEAU_RANK` object (9 niveaus: Helpende=1 t/m WO=8)
+- Een `matchNiveauFromText()` helper met dezelfde regex patronen
+- Een herschreven `deriveFunctieNiveau()` die alle 4 bronnen checkt en het hoogste niveau retourneert
 
-**C1. Certificaten** (regels 1031-1035): Verwijder de `!matchedPro.certificaten` null-check zodat certificaten altijd worden bijgewerkt vanuit Bendy.
+**Niet aangeraakt:**
+- `deriveFunctieNiveauFromDiplomas()` (regels 428-476) - blijft ongewijzigd
+- Alle frontend code - blijft ongewijzigd
+- Alle andere sync logica - blijft ongewijzigd
 
-**C2. Werkvorm** (nieuw na certificaten): Voeg `mapWerkvorm()` call toe in het update path, vergelijk met bestaande waarde, en update als gewijzigd.
-
-**C3. Bendy groepen** (nieuw na werkvorm): Sla groepnamen op vanuit `userGroupIds` + `groupMap` (variabelen bestaan al op regels 1071-1075). Plaats dit VOOR de functie_niveau berekening zodat dezelfde variabelen hergebruikt worden.
-
-**C4. Company data** (regels 1043-1053): Verwijder alle 10 `!matchedPro.xxx` null-checks zodat bedrijfsgegevens altijd worden bijgewerkt.
-
-### D. INSERT path - bendy_groepen toevoegen
-Voeg `bendy_groepen` toe aan `insertData` (na regel 1181) met de al bestaande `userGroupNames` variabele.
-
-### E. Frontend - Groepen op ProfessionalCard
-- Voeg `bendy_groepen` toe aan de Professional interface
-- Toon teal-kleurige badges na de skills badges (max 2 zichtbaar + "+N" overflow)
-
-### F. Frontend - Groepen in ProfessionalDetailModal
-- Voeg `bendy_groepen` toe aan de Professional interface
-- Toon een "Bendy Groepen" collapsible sectie na CV en voor Contact, met teal badges
-- `Users` icon is al geimporteerd (regel 21)
-
-## Bestanden
-- **Nieuw:** SQL migratie (ALTER TABLE)
-- **Gewijzigd:** `supabase/functions/bendy-sync/index.ts` (wijzigingen B, C, D)
-- **Gewijzigd:** `src/components/recruitment/ProfessionalCard.tsx` (wijziging E)
-- **Gewijzigd:** `src/components/ProfessionalDetailModal.tsx` (wijziging F)
+### 2. Edge function deployen
+Na de codewijziging wordt `bendy-sync` opnieuw gedeployed.
 
 ## Technische details
 
-### SQL Migratie
-```sql
-ALTER TABLE professionals ADD COLUMN IF NOT EXISTS bendy_groepen text[] DEFAULT '{}';
-COMMENT ON COLUMN professionals.bendy_groepen IS 'Bendy flexpool groepnamen, automatisch gesyncet';
-```
+Regels 391-425 worden vervangen door:
 
-### Edge function - select query (regel 936)
-Toevoegen aan het einde van de select string: `, werkvorm, bendy_groepen`
-
-### Edge function - UPDATE path wijzigingen
-
-**C1 - Certificaten (regels 1031-1035):**
 ```typescript
-if (attrs.certificates) {
-  const parsed = parseCertificates(attrs.certificates);
-  if (parsed && parsed.length > 0) {
-    updateData.certificaten = parsed;
+// Ranking: hoe hoger het nummer, hoe hoger de kwalificatie
+const NIVEAU_RANK: Record<string, number> = {
+  'Helpende': 1,
+  'Begeleider': 2,
+  'VIG': 3,
+  'Persoonlijk begeleider': 4,
+  'Verpleegkundige (MBO)': 5,
+  'GGZ-agoog': 6,
+  'HBO-V': 7,
+  'HBO': 7,
+  'WO': 8,
+};
+
+function matchNiveauFromText(text: string): string | null {
+  if (/Persoonlijk\s*begeleider/i.test(text)) return 'Persoonlijk begeleider';
+  if (/Verpleegkundige|VP|HBO-V/i.test(text)) return 'Verpleegkundige (MBO)';
+  if (/GGZ/i.test(text)) return 'GGZ-agoog';
+  if (/VIG/i.test(text)) return 'VIG';
+  if (/Begeleider|BGL|PB/i.test(text)) return 'Begeleider';
+  if (/Helpende|ADL/i.test(text)) return 'Helpende';
+  return null;
+}
+
+function deriveFunctieNiveau(groupNames: string[], functionType?: string | null, level?: string | null, diplomaNiveau?: string | null): string | null {
+  let bestNiveau: string | null = null;
+  let bestRank = 0;
+
+  // Bron 1: Groepnamen
+  for (const name of groupNames) {
+    const niveau = matchNiveauFromText(name);
+    if (niveau && (NIVEAU_RANK[niveau] || 0) > bestRank) {
+      bestRank = NIVEAU_RANK[niveau] || 0;
+      bestNiveau = niveau;
+    }
   }
+
+  // Bron 2: Level (gedecodeerd)
+  if (level) {
+    const niveau = matchNiveauFromText(level.trim());
+    if (niveau && (NIVEAU_RANK[niveau] || 0) > bestRank) {
+      bestRank = NIVEAU_RANK[niveau] || 0;
+      bestNiveau = niveau;
+    }
+  }
+
+  // Bron 3: Function type (gedecodeerd)
+  if (functionType) {
+    const niveau = matchNiveauFromText(functionType.trim());
+    if (niveau && (NIVEAU_RANK[niveau] || 0) > bestRank) {
+      bestRank = NIVEAU_RANK[niveau] || 0;
+      bestNiveau = niveau;
+    }
+  }
+
+  // Bron 4: Diploma-afgeleid niveau
+  if (diplomaNiveau && (NIVEAU_RANK[diplomaNiveau] || 0) > bestRank) {
+    bestRank = NIVEAU_RANK[diplomaNiveau] || 0;
+    bestNiveau = diplomaNiveau;
+  }
+
+  return bestNiveau;
 }
 ```
 
-**C2 - Werkvorm (nieuw, na certificaten blok, rond regel 1036):**
-```typescript
-// Werkvorm bijwerken vanuit Bendy professional_type
-const mappedWerkvorm = mapWerkvorm(attrs.professional_type || null);
-if (mappedWerkvorm && mappedWerkvorm !== matchedPro.werkvorm) {
-  updateData.werkvorm = mappedWerkvorm;
-}
-```
-
-**C3 - Bendy groepen (nieuw, invoegen rond regel 1069, VOOR de bestaande userGroupIds declaratie op regel 1071):**
-
-De bestaande code op regels 1071-1075 declareert al `userGroupIds` en `userGroupNames`. We voegen de groepen-opslag toe direct na die declaratie (rond regel 1075):
-```typescript
-// Bendy groepen opslaan
-const userGroupNamesForStorage = userGroupIds
-  .map((id: string) => groupMap.get(id))
-  .filter(Boolean) as string[];
-if (userGroupNamesForStorage.length > 0) {
-  updateData.bendy_groepen = userGroupNamesForStorage;
-} else {
-  updateData.bendy_groepen = [];
-}
-```
-
-Noot: `userGroupNames` op regel 1073-1075 IS al exact wat we nodig hebben, dus we kunnen dit vereenvoudigen door direct `userGroupNames` te gebruiken:
-```typescript
-updateData.bendy_groepen = userGroupNames.length > 0 ? userGroupNames : [];
-```
-
-**C4 - Company data (regels 1043-1053):**
-```typescript
-if (companyAttrs.name) updateData.bedrijfsnaam = companyAttrs.name;
-if (companyAttrs.chamber_of_commerce_number) updateData.kvk_nummer = companyAttrs.chamber_of_commerce_number;
-if (companyAttrs.vat_id) updateData.btw_nummer = companyAttrs.vat_id;
-if (companyAttrs.iban) updateData.iban = companyAttrs.iban;
-if (companyAttrs.big_number) updateData.big_nummer = companyAttrs.big_number;
-if (companyAttrs.agb_code) updateData.agb_code = companyAttrs.agb_code;
-if (companyAttrs.skj_registration_number) updateData.skj_registratie = companyAttrs.skj_registration_number;
-if (companyAttrs.iban_name_of) updateData.iban_tenaamstelling = companyAttrs.iban_name_of;
-if (companyAttrs.bookkeeping_email) updateData.boekhouding_email = companyAttrs.bookkeeping_email;
-if (companyAttrs.telephone) updateData.bedrijfstelefoon = companyAttrs.telephone;
-```
-
-### Edge function - INSERT path (na regel 1181)
-```typescript
-bendy_groepen: userGroupNames.length > 0 ? userGroupNames : [],
-```
-
-### ProfessionalCard.tsx
-
-Interface uitbreiding (rond regel 30):
-```typescript
-bendy_groepen?: string[] | null;
-```
-
-Teal badges na skills blok (na regel 210, voor document compliance badge):
-```tsx
-{professional.bendy_groepen && professional.bendy_groepen.length > 0 && (
-  <div className="flex gap-1.5 flex-wrap mb-2">
-    {professional.bendy_groepen.slice(0, 2).map((groep, idx) => (
-      <Badge
-        key={idx}
-        variant="outline"
-        className="text-xs font-normal bg-teal-500/10 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800"
-      >
-        {groep}
-      </Badge>
-    ))}
-    {professional.bendy_groepen.length > 2 && (
-      <Badge variant="ghost" className="text-xs font-normal">
-        +{professional.bendy_groepen.length - 2}
-      </Badge>
-    )}
-  </div>
-)}
-```
-
-### ProfessionalDetailModal.tsx
-
-Interface uitbreiding (na regel 93):
-```typescript
-bendy_groepen?: string[] | null;
-```
-
-Bendy Groepen sectie (na CV sectie, voor Contact sectie - na regel 785):
-```tsx
-{/* Bendy Groepen */}
-{professional.bendy_groepen && professional.bendy_groepen.length > 0 && (
-  <>
-    <Separator />
-    <Collapsible defaultOpen>
-      <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg collapsible-glass collapsible-glass-rose">
-        <h3 className="text-sm font-semibold flex items-center gap-2">
-          <Users className="h-4 w-4" />
-          Bendy Groepen
-        </h3>
-        <ChevronDown className="h-4 w-4" />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="mt-3">
-        <div className="flex flex-wrap gap-2 p-3">
-          {professional.bendy_groepen.map((groep: string) => (
-            <Badge key={groep} variant="outline" className="bg-teal-500/10 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800">
-              {groep}
-            </Badge>
-          ))}
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
-  </>
-)}
-```
-
-`Users` is al geimporteerd op regel 21.
-
-## Verwacht resultaat
-- Certificaten, werkvorm, bedrijfsgegevens worden bij elke sync bijgewerkt (niet meer null-only)
-- Bendy groepen worden opgeslagen in `bendy_groepen` kolom
-- Teal badges zichtbaar op ProfessionalCard en in ProfessionalDetailModal
-- INSERT path bevat ook bendy_groepen voor nieuwe professionals
+## Verificatie
+1. `NIVEAU_RANK` bevat alle 9 niveaus (Helpende=1 t/m WO=8)
+2. `matchNiveauFromText()` bevat dezelfde regex patronen als de oude stap 1/2/3
+3. `deriveFunctieNiveau()` berekent bestRank uit alle 4 bronnen en retourneert het hoogste
+4. Bij gelijke rank wint de eerste gevonden bron
 
