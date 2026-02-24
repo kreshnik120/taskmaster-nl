@@ -1,43 +1,43 @@
 
-The goal is to fix the 1000-row limit issue in four critical database queries within the `bendy-sync` edge function. This ensures that the sync engine and health checks can handle up to 5,000 professionals, preventing incomplete synchronization when the database contains more than 1,000 records.
 
-### Technical Analysis
-- **Supabase/PostgREST Default**: By default, Supabase's JavaScript client (and the underlying PostgREST) limits query results to 1,000 rows.
-- **Affected Areas**:
-    - `syncUsers`: Fetches existing professionals to match with Bendy records.
-    - `syncDocuments`: Fetches professionals with a `bendy_id` to sync their documents.
-    - `handleStatusCheck` (Health checks): Two queries that check for duplicate `bendy_id`s and duplicate emails across the entire professional database.
+# BendySync Polling Fix — HTTP 202 Achtergrond-sync
 
-### Implementation Steps
+De backend retourneert nu `202 Accepted` met `{ status: "accepted", sync_log_id: "..." }` in plaats van directe resultaten. De frontend moet hierop reageren met een polling-mechanisme.
 
-#### 1. Modify `supabase/functions/bendy-sync/index.ts`
-I will apply four line-based replacements to add `.limit(5000)` to the following query chains:
+## Wijzigingen in `src/pages/BendySync.tsx`
 
-- **Fix 1 (Professional Sync Matching)**:
-    - **Target**: `syncUsers` function.
-    - **Location**: Around lines 964-968.
-    - **Change**: Add `.limit(5000)` after the `.is('deleted_at', null)` filter.
+### A. Nieuwe state variabelen (na regel 137)
+- `pollingSyncLogId` — houdt het sync_log_id bij dat we polled
+- `pollingAction` — welke sync actie actief is (`sync_clients`, `sync_users`, `sync_documents`)
 
-- **Fix 2 (Document Sync Processing)**:
-    - **Target**: `syncDocuments` function.
-    - **Location**: Around lines 1381-1386.
-    - **Change**: Add `.limit(5000)` after the `.not('bendy_id', 'is', null)` filter.
+### B. Polling useEffect (na regel 163)
+- Pollt elke 3 seconden de GET status endpoint
+- Zoekt in `recent_logs` naar het log met het bewaarde `sync_log_id`
+- Wanneer `status !== 'running'`: vult het resultaat in, stopt spinner, toont success toast
+- Timeout na 5 minuten: stopt polling, toont error toast, reset spinner
 
-- **Fix 3 (Health Check - Duplicate Bendy IDs)**:
-    - **Target**: `handleStatusCheck` function.
-    - **Location**: Around lines 1812-1817.
-    - **Change**: Add `.limit(5000)` after the `.not('bendy_id', 'is', null)` filter.
+### C. handleSync (Client Sync) — regels 207-227
+- Bij `data.data.status === 'accepted'`: toast.info + start polling (spinner blijft draaien)
+- Anders: bestaand gedrag (direct resultaat)
+- `finally { setSyncing(false) }` verwijderd — spinner stopt pas na polling-resultaat
 
-- **Fix 4 (Health Check - Duplicate Emails)**:
-    - **Target**: `handleStatusCheck` function.
-    - **Location**: Around lines 1830-1835.
-    - **Change**: Add `.limit(5000)` after the `.not('email', 'is', null)` filter.
+### D. handleUserSync (Professional Sync) — regels 229-249
+- Zelfde patroon als handleSync maar voor `sync_users`
+- `finally { setSyncingUsers(false) }` verwijderd
 
-#### 2. Automatic Deployment
-The edge function will be automatically redeployed once the changes are saved.
+### E. Document Sync onClick (regels 707-726)
+- Zelfde patroon als handleSync maar voor `sync_documents`
+- `finally { setSyncingDocs(false) }` verwijderd
 
-### Verification Plan
-1.  **Manual Trigger**: Trigger a manual sync from the backend settings or via a curl request.
-2.  **Log Inspection**: Check the function logs to verify that the professional sync count now correctly reflects the actual number of professionals (e.g., "1427") instead of being capped at "1000".
-3.  **Status Check**: Run the health check/status dashboard to ensure duplicate detection is running over the full dataset.
+### F. Knopteksten tonen polling-status
+- **Client** (regel 648): "Sync draait op achtergrond..." / "Verbinden..."
+- **Professional** (regel 683): idem
+- **Document** (regel 733): idem
+
+## Verificatie
+1. Klik op sync knop -> blauwe info-toast "... gestart op de achtergrond..."
+2. Knoptekst: "Sync draait op achtergrond..." met spinner
+3. Na voltooiing: groene toast met numeriek resultaat (geen "undefined")
+4. Resultaat-grid toont correcte aantallen
+5. Na 5 min zonder resultaat: rode timeout-toast, spinner stopt
 
