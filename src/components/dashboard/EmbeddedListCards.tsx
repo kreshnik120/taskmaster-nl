@@ -11,33 +11,38 @@
  import { getAssigneeColor } from '@/hooks/useAssigneeColor';
  import { getDateUrgency } from '@/lib/dateFormatters';
  
- interface Task {
-   id: string;
-   sequence_number: number;
-   title: string;
-   priority: string;
-   start_at: string | null;
-   due_at: string | null;
-   next_action: string | null;
-   completed_at: string | null;
-   org_id: string;
-   application_id: string | null;
-   recruitment_action_type: string | null;
-   assignee_id: string | null;
-   accepted_at: string | null;
-   accepted_by: string | null;
-   description: string | null;
-   organizations: { name: string } | null;
-   profiles: { 
-     name: string | null;
-     email: string | null;
-   } | null;
-   subtasks?: Array<{
-     id: string;
-     title: string;
-     status: string;
-   }>;
- }
+interface Task {
+  id: string;
+  sequence_number: number;
+  title: string;
+  priority: string;
+  start_at: string | null;
+  due_at: string | null;
+  next_action: string | null;
+  completed_at: string | null;
+  org_id: string;
+  application_id: string | null;
+  recruitment_action_type: string | null;
+  assignee_id: string | null;
+  reporter_id?: string | null;
+  accepted_at: string | null;
+  accepted_by: string | null;
+  description: string | null;
+  organizations: { name: string } | null;
+  profiles: { 
+    name: string | null;
+    email: string | null;
+  } | null;
+  reporter?: {
+    name: string | null;
+    email: string | null;
+  } | null;
+  subtasks?: Array<{
+    id: string;
+    title: string;
+    status: string;
+  }>;
+}
  
  interface EmbeddedListCardsProps {
    tasks: Task[];
@@ -139,8 +144,15 @@
                  <div className="flex items-center gap-1">
                    <User className="h-3.5 w-3.5" />
                    <span>{task.profiles?.name || 'Niet toegewezen'}</span>
-                   {isAccepted && <Check className="h-3 w-3 text-green-600" />}
-                 </div>
+                    {isAccepted && <Check className="h-3 w-3 text-green-600" />}
+                  </div>
+
+                  {/* Toegewezen door */}
+                  {task.reporter?.name && task.reporter_id && task.reporter_id !== task.assignee_id && (
+                    <div className="flex items-center gap-1 text-muted-foreground italic">
+                      <span className="text-[10px]">Toegewezen door {task.reporter.name}</span>
+                    </div>
+                  )}
  
                  {/* Deadline */}
                  {task.due_at && (

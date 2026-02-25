@@ -268,12 +268,13 @@ export function MyTasksFlowSection() {
       const { data: tasksData, error: tasksError } = await supabase
         .from("tasks")
         .select(`
-          id, title, description, priority, assignee_id,
+          id, title, description, priority, assignee_id, reporter_id,
           due_at, completed_at, column_id, order_key,
           application_id, recruitment_action_type, start_at,
           next_action, created_at, updated_at,
           accepted_at, accepted_by,
-          profiles:profiles!tasks_assignee_id_fkey(name, email)
+          profiles:profiles!tasks_assignee_id_fkey(name, email),
+          reporter:profiles!tasks_reporter_id_fkey(name, email)
         `)
         .eq("assignee_id", user.id)
         .is("deleted_at", null)

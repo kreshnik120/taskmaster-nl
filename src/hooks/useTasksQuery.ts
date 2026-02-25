@@ -32,11 +32,16 @@ export interface Task {
   application_id: string | null;
   recruitment_action_type: string | null;
   assignee_id: string | null;
+  reporter_id: string | null;
   org_id: string;
   // Dashboard fields
   profiles: { 
     name: string | null; 
     email: string | null; 
+  } | null;
+  reporter: {
+    name: string | null;
+    email: string | null;
   } | null;
   subtasks?: Subtask[];
   subtask_count?: number;
@@ -90,6 +95,7 @@ export function useTasksQuery() {
         .select(`
           *,
           profiles:profiles!tasks_assignee_id_fkey(name, email),
+          reporter:profiles!tasks_reporter_id_fkey(name, email),
           organizations(name),
           task_scoring_metadata(
             estimated_value_eur,

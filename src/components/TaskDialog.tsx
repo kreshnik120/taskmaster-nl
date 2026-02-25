@@ -304,6 +304,7 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, de
           description: values.description || null,
           priority: values.priority,
           assignee_id: assigneeId,
+          reporter_id: currentUser?.id || null,
           start_at: startAtISO,
           due_at: dueAtISO,
           next_action: values.next_action || null,

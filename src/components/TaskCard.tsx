@@ -25,6 +25,7 @@ interface Task {
   description: string | null;
   priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
   assignee_id: string | null;
+  reporter_id?: string | null;
   due_at: string | null;
   completed_at: string | null;
   order_key: string;
@@ -39,6 +40,10 @@ interface Task {
   accepted_by?: string | null;
   recurrence_rule?: string | null;
   profiles: {
+    name: string | null;
+    email: string | null;
+  } | null;
+  reporter?: {
     name: string | null;
     email: string | null;
   } | null;
@@ -206,6 +211,13 @@ export function TaskCard({ task, subtasks = [], onClick, onAccept }: TaskCardPro
                         </Button>
                       )}
                     </div>
+                  )}
+
+                  {/* Reporter / Toegewezen door */}
+                  {task.reporter?.name && task.reporter_id && task.reporter_id !== task.assignee_id && (
+                    <p className="text-[10px] text-muted-foreground/70 italic">
+                      Toegewezen door {task.reporter.name}
+                    </p>
                   )}
 
                   {/* Description */}
