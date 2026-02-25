@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
 
   // Validate API key
   const apiKey = req.headers.get("x-api-key");
-  const expectedKey = Deno.env.get("CITOZORG_API_KEY");
+  const expectedKey = Deno.env.get("OPENCLAW_API_KEY");
   if (!apiKey || apiKey !== expectedKey) {
     return jsonResponse({ error: "Unauthorized" }, 401);
   }
