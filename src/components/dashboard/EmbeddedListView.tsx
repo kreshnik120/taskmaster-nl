@@ -174,6 +174,7 @@ export default function EmbeddedListView() {
           completed_at,
           org_id,
           assignee_id,
+          reporter_id,
           accepted_at,
           accepted_by,
           description,
@@ -181,6 +182,7 @@ export default function EmbeddedListView() {
           recruitment_action_type,
           organizations(name),
           profiles:profiles!tasks_assignee_id_fkey(name, email),
+          reporter:profiles!tasks_reporter_id_fkey(name, email),
           subtasks:subtasks(id, title, status)
         `)
         .is("deleted_at", null)
