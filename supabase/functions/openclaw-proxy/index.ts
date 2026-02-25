@@ -145,6 +145,8 @@ async function handleQueryDb(supabase: ReturnType<typeof createClient>, body: Re
       return await getAvailability(supabase, professionalId, dateFrom, dateTo);
     case "get_documents":
       return await getDocuments(supabase, professionalId);
+    case "get_profile":
+      return await getProfile(supabase, professionalId);
     default:
       return jsonResponse({ error: `Unknown query_type: ${queryType}` }, 400);
   }
@@ -269,4 +271,30 @@ async function getDocuments(supabase: ReturnType<typeof createClient>, professio
   }
 
   return jsonResponse({ documents: data ?? [] });
+}
+
+// ─── get_profile ─────────────────────────────────────────────────────────────
+
+async function getProfile(supabase: ReturnType<typeof createClient>, professionalId: string) {
+  if (!professionalId) {
+    return jsonResponse({ error: "Missing professional_id" }, 400);
+  }
+
+  // SECURITY: Only safe columns — NEVER bsn, iban, iban_tenaamstelling, gewenst_uurloon, geboortedatum
+  const { data, error } = await supabase
+    .from("professionals")
+    .select("id, full_name, functie_niveau, status, telefoonnummer, email")
+    .eq("id", professionalId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("get_profile error:", error);
+    return jsonResponse({ error: "Failed to fetch profile" }, 500);
+  }
+
+  if (!data) {
+    return jsonResponse({ error: "Professional niet gevonden" }, 404);
+  }
+
+  return jsonResponse({ profile: data });
 }
