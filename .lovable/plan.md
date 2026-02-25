@@ -1,58 +1,87 @@
 
 
-# Client Contacts Tabel voor OpenClaw AI-integratie
+# OpenClaw Proxy Edge Function
 
-## Migratie: `client_contacts` tabel aanmaken
+## Wat wordt gebouwd
 
-De SQL wordt uitgevoerd met een kleine aanpassing: de functie `update_updated_at()` bestaat al als `update_updated_at_column()` in de database. We hergebruiken die bestaande functie in plaats van een nieuwe aan te maken — dit voorkomt conflicten.
+Een nieuwe edge function `openclaw-proxy` die als veilige backend dient voor de OpenClaw AI-gateway op je VPS. De functie draait met `service_role` rechten (via `SUPABASE_SERVICE_ROLE_KEY` die automatisch beschikbaar is in edge functions) en wordt beveiligd met een API key in de `X-API-Key` header.
 
-### SQL die wordt uitgevoerd:
+## Authenticatie
 
-```sql
-CREATE TABLE public.client_contacts (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id UUID NOT NULL REFERENCES public.client_organizations(id) ON DELETE CASCADE,
-  naam TEXT NOT NULL,
-  functie TEXT,
-  telefoon TEXT,
-  email TEXT,
-  is_primary BOOLEAN DEFAULT false,
-  status TEXT DEFAULT 'actief' CHECK (status IN ('actief', 'inactief')),
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
+De functie valideert requests via de bestaande `CITOZORG_API_KEY` secret (al geconfigureerd). Je VPS stuurt deze mee als `X-API-Key` header. Geen JWT nodig.
 
-CREATE INDEX idx_client_contacts_telefoon ON public.client_contacts(telefoon);
-CREATE INDEX idx_client_contacts_org_id ON public.client_contacts(organization_id);
+## Actie 1: `lookup_sender`
 
-ALTER TABLE public.client_contacts ENABLE ROW LEVEL SECURITY;
+Input: `{ "action": "lookup_sender", "telefoon": "+31648005001" }`
 
-CREATE POLICY "service_role_full_access" ON public.client_contacts
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
+Zoeklogica (in volgorde):
+1. **Hardcoded admins** — Controleert tegen een lijst van admin-nummers (`+31648005001`, `+31618710360`). Retourneert `{ role: "admin", naam: "Admin" }`.
+2. **professionals** — Zoekt in `telefoonnummer` met `ilike '%<laatste 8 cijfers>%'`. Retourneert `{ role: "professional", id, full_name, functie_niveau, status }`.
+3. **client_contacts** — Zoekt in `telefoon` met dezelfde ilike, JOIN naar `client_organizations` voor `org_id` en `org_name`. Retourneert `{ role: "client_contact", id, naam, functie, organization_id, organization_name }`.
+4. **Niet gevonden** — `{ role: "unknown" }`.
 
-CREATE POLICY "anon_no_access" ON public.client_contacts
-  FOR ALL TO anon, authenticated USING (false);
+## Actie 2: `query_db`
 
--- Hergebruik bestaande functie update_updated_at_column()
-CREATE TRIGGER client_contacts_updated_at
-  BEFORE UPDATE ON public.client_contacts
-  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+Input: `{ "action": "query_db", "query_type": "get_schedule", "professional_id": "...", "org_id": "...", "date_from": "2026-02-24", "date_to": "2026-03-03" }`
+
+Ondersteunde query types:
+
+| query_type | Beschrijving | JOINs |
+|---|---|---|
+| `get_schedule` | Rooster van een professional | `dienst_toewijzingen` -> `diensten` -> `client_sublocations` -> `client_locations` -> `client_organizations` |
+| `get_availability` | Beschikbaarheid van een professional | `professional_availability` tabel |
+| `get_documents` | Documenten van een professional | `professional_documents` tabel |
+
+### get_schedule JOINs detail
+```
+dienst_toewijzingen (professional_id)
+  -> diensten (dienst_id = diensten.id)
+    -> client_sublocations (sublocation_id = client_sublocations.id)
+      -> client_locations (location_id = client_locations.id)
+        -> client_organizations (client_org_id = client_organizations.id)
 ```
 
-### Aanpassingen t.o.v. jouw originele SQL:
-- `CREATE OR REPLACE FUNCTION update_updated_at()` is **verwijderd** — de functie `update_updated_at_column()` bestaat al in de database en wordt hergebruikt
-- De trigger verwijst naar `update_updated_at_column()` in plaats van `update_updated_at()`
+Retourneert per dienst: datum, start/eind tijd, titel, locatie naam, organisatie naam, status.
 
----
+## Beveiliging
 
-## Vraag 2: SUPABASE_SERVICE_ROLE_KEY
+- `verify_jwt = false` in config.toml (auth in code via API key)
+- Validatie van `X-API-Key` header tegen `CITOZORG_API_KEY`
+- Alleen specifieke, voorgedefinieerde queries — geen raw SQL
+- Rate limiting is niet nodig (VPS-to-VPS communicatie)
 
-De Service Role Key is **niet beschikbaar** via Lovable. Dit is een beveiligingsmaatregel — de service_role key geeft volledige onbeperkte toegang tot de database (omzeilt alle RLS) en wordt daarom niet blootgesteld.
+## Na deployment
 
-**Wat je kunt doen:**
-1. Ga naar je Lovable project Settings (tandwiel icoon)
-2. Klik op "Cloud" (of "Connectors" > "Lovable Cloud")
-3. Klik op "Open in Supabase" — als deze optie beschikbaar is, kun je daar de key vinden onder Settings > API > service_role key
+Je krijgt:
+- **URL**: `https://oelmsmcgryeoryhonexw.supabase.co/functions/v1/openclaw-proxy`
+- **Header**: `X-API-Key: <jouw CITOZORG_API_KEY waarde>`
+- **Content-Type**: `application/json`
+- **Method**: `POST`
 
-Als die optie niet beschikbaar is, is een alternatief om een **edge function** te maken die als proxy dient. De edge function draait met service_role rechten en kan de data veilig ophalen. Zo hoeft de VPS de service_role key niet direct te hebben — alleen een API key voor de edge function.
+## Technische details
 
+### Bestanden
+| Bestand | Actie |
+|---|---|
+| `supabase/functions/openclaw-proxy/index.ts` | Nieuw — volledige edge function |
+| `supabase/config.toml` | Wordt automatisch bijgewerkt |
+
+### Request voorbeelden
+
+```json
+// lookup_sender
+POST /functions/v1/openclaw-proxy
+X-API-Key: <CITOZORG_API_KEY>
+{ "action": "lookup_sender", "telefoon": "+31648005001" }
+
+// get_schedule
+POST /functions/v1/openclaw-proxy
+X-API-Key: <CITOZORG_API_KEY>
+{
+  "action": "query_db",
+  "query_type": "get_schedule",
+  "professional_id": "uuid-hier",
+  "date_from": "2026-02-24",
+  "date_to": "2026-03-03"
+}
+```
