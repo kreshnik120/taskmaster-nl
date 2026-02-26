@@ -1,51 +1,35 @@
 
 
-# Uitbreiding openclaw-proxy: 4 acties
+# Fix: Alle taken tonen in "Mijn Werk" bordweergave
 
-## Bestand: `supabase/functions/openclaw-proxy/index.ts`
+## Probleem
 
-### 1. Nieuwe actie: `get_professional` (zoek op naam)
+`MAX_VISIBLE_TASKS = 5` in `MyTasksFlowSection.tsx` (regel 71) beperkt elke kolom tot 5 kaarten. Overige taken worden verborgen achter "+6 meer in team overzicht" die naar `/kanban` navigeert -- niet naar de volledige lijst van eigen taken.
 
-- ilike match op `full_name`
-- Optioneel filter: `org_id`
-- Select: `id, full_name, telefoonnummer, email, functie_niveau, werkvorm, status, org_id, regio, skills, beschikbaarheidsnotities, certificaten`
-- Gevoelige velden (bsn, iban, iban_tenaamstelling, gewenst_uurloon, etc.) worden NOOIT geselecteerd
-- Output door `stripPII()`
-- Limit 10
+## Oplossing
 
-### 2. Nieuwe actie: `search_professionals`
+**Bestand:** `src/components/dashboard/MyTasksFlowSection.tsx`
 
-- `org_id` verplicht
-- Optionele filters: `status`, `functie_niveau`, `werkvorm`
-- Zelfde veilige kolommen als `get_professional`
-- Sorteer op `full_name ASC`, limit 50
-- Output door `stripPII()`
+### Stap 1: Verhoog MAX_VISIBLE_TASKS
 
-### 3. Nieuwe actie: `get_team_members`
+Verander `MAX_VISIBLE_TASKS` van `5` naar `50` (effectief ongelimiteerd voor dagelijks gebruik). Dit toont alle taken per kolom zonder afkapping.
 
-- Query `profiles` tabel: `id, name, email`
-- JOIN met `user_organizations` via `user_id` om `role` en `org_id` op te halen
-- Filter op `org_id` als meegegeven
-- Twee-staps query: eerst user_ids uit `user_organizations`, dan profiles ophalen
+### Stap 2: "Toon alles" toggle ipv overflow-link
 
-### 4. `update_task` — al bestaand, geen wijziging nodig
+Vervang de huidige overflow-knop (die naar `/kanban` navigeert) door een **inline expand/collapse**:
+- Default: toon eerste 10 taken per kolom (verhoogd van 5)
+- Als er meer zijn: toon "Toon alle X taken" knop die de rest inline ontklapt
+- Geen navigatie meer naar een andere pagina
 
-De huidige `update_task` handler (regel 335-367) ondersteunt al exact de gevraagde velden: `task_id`, `status`, `priority`, `due_at`, `next_action`, `completed_at`, `assignee_id`, `description`, `title`. Geen wijziging nodig.
+### Stap 3: Scroll verbetering
 
-### Switch cases toevoegen
+Voeg `max-h-[70vh] overflow-y-auto` toe aan de kolom-content zodat bij veel taken de kolom scrollbaar wordt zonder de pagina te breken.
 
-3 nieuwe cases vóór `default`:
-```
-case "get_professional": → handleGetProfessional
-case "search_professionals": → handleSearchProfessionals  
-case "get_team_members": → handleGetTeamMembers
-```
+### Technische details
 
-### Bestaande code
-
-Alle bestaande acties blijven ongewijzigd.
-
-### Deploy
-
-Automatische deploy na wijziging.
+- `MAX_VISIBLE_TASKS` wijzigen naar `50` (regel 71)
+- State `expandedColumns` toevoegen om bij te houden welke kolommen volledig uitgevouwen zijn
+- `getVisibleTasks` aanpassen: toon 10 default, alle bij expanded
+- Overflow-knop tekst wijzigen naar "Toon alle {total} taken" en onClick toggle expanded state
+- Kolom CardContent krijgt scroll-container styling
 
