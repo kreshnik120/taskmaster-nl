@@ -68,7 +68,8 @@ import { useDragContextOptional } from "@/hooks/useDragContext";
  import { PRIORITY_ORDER, PRIORITY_DEFAULT } from "@/lib/constants/priorities";
 
 // ENTERPRISE CONFIG
-const MAX_VISIBLE_TASKS = 5;
+const DEFAULT_VISIBLE_TASKS = 10;
+const MAX_VISIBLE_TASKS = 50;
 const COLUMNS_TO_SHOW: ("BACKLOG" | "READY" | "DOING" | "BLOCKED" | "REVIEW")[] = [
   "BACKLOG", "READY", "DOING", "BLOCKED", "REVIEW"
 ];
@@ -144,6 +145,9 @@ export function MyTasksFlowSection() {
   // Column name editing state
   const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+
+  // Expanded columns state for "toon alles" toggle
+  const [expandedColumns, setExpandedColumns] = useState<string[]>([]);
 
   // Optional drag context (used when wrapped in DragContextProvider)
   const dragContext = useDragContextOptional();
@@ -340,14 +344,23 @@ export function MyTasksFlowSection() {
     });
   };
 
-  // Visible tasks (max 5) and overflow count
+  // Visible tasks with expand/collapse per column
   const getVisibleTasks = (columnId: string) => {
     const allTasks = getTasksForColumn(columnId);
+    const isExpanded = expandedColumns.includes(columnId);
+    const limit = isExpanded ? MAX_VISIBLE_TASKS : DEFAULT_VISIBLE_TASKS;
     return {
-      visible: allTasks.slice(0, MAX_VISIBLE_TASKS),
-      overflow: Math.max(0, allTasks.length - MAX_VISIBLE_TASKS),
-      total: allTasks.length
+      visible: allTasks.slice(0, limit),
+      overflow: Math.max(0, allTasks.length - limit),
+      total: allTasks.length,
+      isExpanded,
     };
+  };
+
+  const toggleColumnExpanded = (columnId: string) => {
+    setExpandedColumns(prev =>
+      prev.includes(columnId) ? prev.filter(id => id !== columnId) : [...prev, columnId]
+    );
   };
 
   // Drag handlers with AI context
@@ -803,7 +816,7 @@ export function MyTasksFlowSection() {
                           </Badge>
                         </CardTitle>
                       </CardHeader>
-                      <CardContent className="px-3 pb-3">
+                      <CardContent className="px-3 pb-3 max-h-[70vh] overflow-y-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
                         {/* COLUMN CONTENT */}
                         <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
                           <div className="space-y-2 min-h-[100px]">
@@ -874,15 +887,25 @@ export function MyTasksFlowSection() {
                                   </div>
                                 ))}
 
-                                {/* OVERFLOW INDICATOR */}
+                                {/* EXPAND/COLLAPSE TOGGLE */}
                                 {overflow > 0 && (
                                   <Button
                                     variant="ghost"
                                     size="sm"
                                     className="w-full text-xs text-tab-mijn-werk-500 hover:text-tab-mijn-werk-600 dark:text-tab-mijn-werk-400 dark:hover:text-tab-mijn-werk-300 hover:bg-white/50 dark:hover:bg-slate-800/50 hover:backdrop-blur-sm hover:shadow-[0_2px_8px_hsla(234,45%,52%,0.08)] transition-all duration-200"
-                                    onClick={() => navigate("/kanban")}
+                                    onClick={() => toggleColumnExpanded(column.id)}
                                   >
-                                    +{overflow} meer in team overzicht
+                                    Toon alle {total} taken
+                                  </Button>
+                                )}
+                                {getVisibleTasks(column.id).isExpanded && total > DEFAULT_VISIBLE_TASKS && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="w-full text-xs text-muted-foreground hover:text-foreground transition-all duration-200"
+                                    onClick={() => toggleColumnExpanded(column.id)}
+                                  >
+                                    Toon minder
                                   </Button>
                                 )}
                               </>
