@@ -5,7 +5,19 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-api-key",
 };
 
-const ADMIN_NUMBERS = ["+31648005001", "+31618710360"];
+// Admin phone → profile mapping
+const ADMIN_MAP: Record<string, { id: string; naam: string }> = {
+  "+31648005001": { id: "7095191d-c12f-4df2-a974-9087c0f35455", naam: "Kreshnik Atashi" },
+  "+31618710360": { id: "daeb8147-1506-492a-919b-60ca103f9c40", naam: "Leonie Pattipeilohy" },
+};
+
+const FALLBACK_ORG_IDS = [
+  "650e8400-e29b-41d4-a716-446655440001",
+  "550e8400-e29b-41d4-a716-446655440000",
+];
+
+// Safe task columns — never expose sensitive data
+const TASK_SAFE_COLUMNS = "id, title, description, status, priority, due_at, start_at, assignee_id, reporter_id, category, next_action, project_id, column_id, created_at";
 
 function extractLast8(telefoon: string): string {
   const digits = telefoon.replace(/\D/g, "");
@@ -51,12 +63,23 @@ Deno.serve(async (req) => {
   const { action } = body;
 
   try {
-    if (action === "lookup_sender") {
-      return await handleLookupSender(supabase, body);
-    } else if (action === "query_db") {
-      return await handleQueryDb(supabase, body);
-    } else {
-      return jsonResponse({ error: `Unknown action: ${action}` }, 400);
+    switch (action) {
+      case "lookup_sender":
+        return await handleLookupSender(supabase, body);
+      case "query_db":
+        return await handleQueryDb(supabase, body);
+      case "get_tasks":
+        return await handleGetTasks(supabase, body);
+      case "create_task":
+        return await handleCreateTask(supabase, body);
+      case "update_task":
+        return await handleUpdateTask(supabase, body);
+      case "get_professionals":
+        return await handleGetProfessionals(supabase, body);
+      case "get_clients":
+        return await handleGetClients(supabase, body);
+      default:
+        return jsonResponse({ error: `Unknown action: ${action}` }, 400);
     }
   } catch (err) {
     console.error("openclaw-proxy error:", err);
@@ -72,9 +95,25 @@ async function handleLookupSender(supabase: ReturnType<typeof createClient>, bod
     return jsonResponse({ error: "Missing telefoon parameter" }, 400);
   }
 
-  // 1. Hardcoded admins
-  if (ADMIN_NUMBERS.includes(telefoon)) {
-    return jsonResponse({ role: "admin", naam: "Admin" });
+  // 1. Admin check with profile lookup
+  const adminInfo = ADMIN_MAP[telefoon];
+  if (adminInfo) {
+    // Fetch org_ids from user_organizations
+    const { data: orgs } = await supabase
+      .from("user_organizations")
+      .select("org_id")
+      .eq("user_id", adminInfo.id);
+
+    const orgIds = orgs && orgs.length > 0
+      ? orgs.map((o: { org_id: string }) => o.org_id)
+      : FALLBACK_ORG_IDS;
+
+    return jsonResponse({
+      role: "admin",
+      naam: adminInfo.naam,
+      id: adminInfo.id,
+      org_ids: orgIds,
+    });
   }
 
   const last8 = extractLast8(telefoon);
@@ -152,12 +191,159 @@ async function handleQueryDb(supabase: ReturnType<typeof createClient>, body: Re
   }
 }
 
+// ─── get_tasks ───────────────────────────────────────────────────────────────
+
+async function handleGetTasks(supabase: ReturnType<typeof createClient>, body: Record<string, unknown>) {
+  const userId = body.user_id as string | undefined;
+  const orgId = body.org_id as string | undefined;
+  const limit = Math.min(Number(body.limit) || 50, 100);
+
+  let query = supabase
+    .from("tasks")
+    .select(TASK_SAFE_COLUMNS)
+    .is("completed_at", null)
+    .is("deleted_at", null);
+
+  if (userId) query = query.eq("assignee_id", userId);
+  if (orgId) query = query.eq("org_id", orgId);
+
+  const { data, error } = await query
+    .order("due_at", { ascending: true, nullsFirst: false })
+    .limit(limit);
+
+  if (error) {
+    console.error("get_tasks error:", error);
+    return jsonResponse({ error: "Failed to fetch tasks" }, 500);
+  }
+
+  return jsonResponse({ tasks: data ?? [] });
+}
+
+// ─── create_task ─────────────────────────────────────────────────────────────
+
+async function handleCreateTask(supabase: ReturnType<typeof createClient>, body: Record<string, unknown>) {
+  const title = body.title as string;
+  const orgId = body.org_id as string;
+
+  if (!title || !orgId) {
+    return jsonResponse({ error: "Missing required fields: title, org_id" }, 400);
+  }
+
+  const insertData: Record<string, unknown> = {
+    title,
+    org_id: orgId,
+    status: (body.status as string) || "open",
+  };
+
+  // Optional fields
+  const optionalFields = ["description", "assignee_id", "reporter_id", "due_at", "start_at", "priority", "category", "project_id", "column_id"];
+  for (const field of optionalFields) {
+    if (body[field] !== undefined && body[field] !== null) {
+      insertData[field] = body[field];
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("tasks")
+    .insert(insertData)
+    .select(TASK_SAFE_COLUMNS)
+    .single();
+
+  if (error) {
+    console.error("create_task error:", error);
+    return jsonResponse({ error: "Failed to create task" }, 500);
+  }
+
+  return jsonResponse({ task: data });
+}
+
+// ─── update_task ─────────────────────────────────────────────────────────────
+
+async function handleUpdateTask(supabase: ReturnType<typeof createClient>, body: Record<string, unknown>) {
+  const taskId = body.task_id as string;
+  if (!taskId) {
+    return jsonResponse({ error: "Missing task_id" }, 400);
+  }
+
+  const allowedFields = ["title", "description", "status", "priority", "due_at", "start_at", "assignee_id", "completed_at", "next_action", "category", "column_id"];
+  const updateData: Record<string, unknown> = {};
+
+  for (const field of allowedFields) {
+    if (body[field] !== undefined) {
+      updateData[field] = body[field];
+    }
+  }
+
+  if (Object.keys(updateData).length === 0) {
+    return jsonResponse({ error: "No fields to update" }, 400);
+  }
+
+  const { data, error } = await supabase
+    .from("tasks")
+    .update(updateData)
+    .eq("id", taskId)
+    .select(TASK_SAFE_COLUMNS)
+    .single();
+
+  if (error) {
+    console.error("update_task error:", error);
+    return jsonResponse({ error: "Failed to update task" }, 500);
+  }
+
+  return jsonResponse({ task: data });
+}
+
+// ─── get_professionals ───────────────────────────────────────────────────────
+
+async function handleGetProfessionals(supabase: ReturnType<typeof createClient>, body: Record<string, unknown>) {
+  const orgId = body.org_id as string | undefined;
+
+  // SECURITY: Only safe columns — NEVER bsn, iban, iban_tenaamstelling, gewenst_uurloon, geboortedatum
+  let query = supabase
+    .from("professionals")
+    .select("id, full_name, email, telefoonnummer, functie_niveau, status, org_id")
+    .is("deleted_at", null);
+
+  if (orgId) query = query.eq("org_id", orgId);
+
+  const { data, error } = await query.order("full_name", { ascending: true });
+
+  if (error) {
+    console.error("get_professionals error:", error);
+    return jsonResponse({ error: "Failed to fetch professionals" }, 500);
+  }
+
+  return jsonResponse({ professionals: data ?? [] });
+}
+
+// ─── get_clients ─────────────────────────────────────────────────────────────
+
+async function handleGetClients(supabase: ReturnType<typeof createClient>, body: Record<string, unknown>) {
+  const orgId = body.org_id as string | undefined;
+
+  let query = supabase
+    .from("client_organizations")
+    .select("id, name, org_id, client_contacts(naam, functie, telefoon, email)");
+
+  if (orgId) query = query.eq("org_id", orgId);
+
+  const { data, error } = await query.order("name", { ascending: true });
+
+  if (error) {
+    console.error("get_clients error:", error);
+    return jsonResponse({ error: "Failed to fetch clients" }, 500);
+  }
+
+  return jsonResponse({ clients: data ?? [] });
+}
+
+// ─── query_db handlers (unchanged) ──────────────────────────────────────────
+
 async function getSchedule(supabase: ReturnType<typeof createClient>, professionalId: string, dateFrom?: string, dateTo?: string) {
   if (!professionalId) {
     return jsonResponse({ error: "Missing professional_id" }, 400);
   }
 
-  // Get toewijzingen for this professional
   let query = supabase
     .from("dienst_toewijzingen")
     .select(`
@@ -189,13 +375,8 @@ async function getSchedule(supabase: ReturnType<typeof createClient>, profession
     `)
     .eq("professional_id", professionalId);
 
-  // Date filtering via the nested diensten.datum
-  if (dateFrom) {
-    query = query.gte("diensten.datum", dateFrom);
-  }
-  if (dateTo) {
-    query = query.lte("diensten.datum", dateTo);
-  }
+  if (dateFrom) query = query.gte("diensten.datum", dateFrom);
+  if (dateTo) query = query.lte("diensten.datum", dateTo);
 
   const { data, error } = await query.order("created_at", { ascending: true });
 
@@ -204,7 +385,6 @@ async function getSchedule(supabase: ReturnType<typeof createClient>, profession
     return jsonResponse({ error: "Failed to fetch schedule" }, 500);
   }
 
-  // Flatten the nested response
   const schedule = (data ?? [])
     .filter((t: any) => t.diensten)
     .map((t: any) => {
