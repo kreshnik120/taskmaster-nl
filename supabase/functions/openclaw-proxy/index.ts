@@ -157,6 +157,14 @@ Deno.serve(async (req) => {
       case "update_application_stage":
         return await handleUpdateApplicationStage(supabase, body);
 
+      // ── 3 nieuwe acties (get_professional, search_professionals, get_team_members) ──
+      case "get_professional":
+        return await handleGetProfessional(supabase, body);
+      case "search_professionals":
+        return await handleSearchProfessionals(supabase, body);
+      case "get_team_members":
+        return await handleGetTeamMembers(supabase, body);
+
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 400);
     }
@@ -958,4 +966,116 @@ async function getProfile(supabase: ReturnType<typeof createClient>, professiona
   }
 
   return jsonResponse({ profile: data });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 3 NIEUWE ACTIES: get_professional, search_professionals, get_team_members
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const PROFESSIONAL_SAFE_COLUMNS = 'id, full_name, telefoonnummer, email, functie_niveau, werkvorm, status, org_id, regio, skills, beschikbaarheidsnotities, certificaten';
+
+// ─── get_professional (zoek op naam) ─────────────────────────────────────────
+
+async function handleGetProfessional(supabase: ReturnType<typeof createClient>, body: Record<string, unknown>) {
+  const name = body.name as string | undefined;
+  if (!name || name.length < 2) {
+    return jsonResponse({ error: "Verplicht: name (minimaal 2 tekens)" }, 400);
+  }
+
+  let query = supabase
+    .from("professionals")
+    .select(PROFESSIONAL_SAFE_COLUMNS)
+    .ilike("full_name", `%${name}%`)
+    .is("deleted_at", null)
+    .limit(10);
+
+  if (body.org_id) query = query.eq("org_id", body.org_id as string);
+
+  const { data, error } = await query;
+  if (error) {
+    console.error("get_professional error:", error);
+    return jsonResponse({ error: "Zoeken mislukt" }, 500);
+  }
+
+  return jsonResponse(stripPII({ professionals: data ?? [] }));
+}
+
+// ─── search_professionals (filter op org + optionele criteria) ───────────────
+
+async function handleSearchProfessionals(supabase: ReturnType<typeof createClient>, body: Record<string, unknown>) {
+  const orgId = body.org_id as string | undefined;
+  if (!orgId) {
+    return jsonResponse({ error: "Verplicht: org_id" }, 400);
+  }
+
+  let query = supabase
+    .from("professionals")
+    .select(PROFESSIONAL_SAFE_COLUMNS)
+    .eq("org_id", orgId)
+    .is("deleted_at", null)
+    .order("full_name", { ascending: true })
+    .limit(50);
+
+  if (body.status) query = query.eq("status", body.status as string);
+  if (body.functie_niveau) query = query.eq("functie_niveau", body.functie_niveau as string);
+  if (body.werkvorm) query = query.eq("werkvorm", body.werkvorm as string);
+
+  const { data, error } = await query;
+  if (error) {
+    console.error("search_professionals error:", error);
+    return jsonResponse({ error: "Zoeken mislukt" }, 500);
+  }
+
+  return jsonResponse(stripPII({ professionals: data ?? [] }));
+}
+
+// ─── get_team_members (profiles + user_organizations) ────────────────────────
+
+async function handleGetTeamMembers(supabase: ReturnType<typeof createClient>, body: Record<string, unknown>) {
+  const orgId = body.org_id as string | undefined;
+
+  // Stap 1: Haal user_organizations op (optioneel gefilterd op org_id)
+  let uoQuery = supabase
+    .from("user_organizations")
+    .select("user_id, role, org_id");
+
+  if (orgId) uoQuery = uoQuery.eq("org_id", orgId);
+
+  const { data: userOrgs, error: uoError } = await uoQuery;
+  if (uoError) {
+    console.error("get_team_members uoError:", uoError);
+    return jsonResponse({ error: "Kon team niet ophalen" }, 500);
+  }
+
+  if (!userOrgs || userOrgs.length === 0) {
+    return jsonResponse({ team_members: [] });
+  }
+
+  // Stap 2: Haal profiles op voor deze user_ids
+  const userIds = [...new Set(userOrgs.map((uo: any) => uo.user_id))];
+
+  const { data: profiles, error: profError } = await supabase
+    .from("profiles")
+    .select("id, name, email")
+    .in("id", userIds);
+
+  if (profError) {
+    console.error("get_team_members profError:", profError);
+    return jsonResponse({ error: "Kon profielen niet ophalen" }, 500);
+  }
+
+  // Stap 3: Combineer profiles met hun rollen
+  const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
+  const teamMembers = userOrgs.map((uo: any) => {
+    const profile = profileMap.get(uo.user_id) || {};
+    return {
+      id: uo.user_id,
+      name: (profile as any).name || null,
+      email: (profile as any).email || null,
+      role: uo.role,
+      org_id: uo.org_id,
+    };
+  });
+
+  return jsonResponse({ team_members: teamMembers });
 }
