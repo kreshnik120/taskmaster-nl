@@ -1,106 +1,88 @@
 
 
-# Uitbreiding openclaw-proxy Edge Function
+# Uitbreiding openclaw-proxy: 14 nieuwe acties
 
-## Overzicht
+## Kritisch: Kolomnamen corrigeren
 
-6 wijzigingen in één bestand: `supabase/functions/openclaw-proxy/index.ts`
+De user-opgegeven kolomnamen wijken op **veel plekken** af van de echte database. Ik corrigeer ze allemaal:
 
----
+| User-opgave | Echte DB-kolom | Tabel |
+|---|---|---|
+| `opmerking` | `publieke_opmerking` | diensten |
+| `type` | `dienst_type` | diensten |
+| `aantal_professionals` | `gevraagd_aantal` | diensten |
+| `hours_per_week` | `weekly_hours` | assignments |
+| `org_id` | *(bestaat niet)* | assignments |
+| `function_title` | *(bestaat niet)* | assignments |
+| `factuurnummer` | `factuur_nummer` | factuur |
+| `totaal_bedrag` | `totaal` | factuur |
+| `btw_bedrag` | `btw_bedrag` ✓ | factuur |
+| `periode_van/tot` | *(bestaan niet)* | factuur |
+| `score` | `completeness_score` | professional_applications |
+| `source` | `source_label` | professional_applications |
+| `notes` | *(bestaat niet)* | professional_applications |
+| `title` | `titel` | vacancies |
+| `description` | `beschrijving` | vacancies |
+| `function_level` | `functie_niveau` | vacancies |
+| `hours_per_week` | `uren_per_week` | vacancies |
+| `start_date` | `start_datum` | vacancies |
+| `org_id` | *(bestaat niet)* | vacancies |
+| `client_sublocations.name` | `naam` | client_sublocations |
+| `client_organizations.status` | *(bestaat niet)* | client_organizations |
 
-## 1. Fix lookup_sender voor admins
+## Wijzigingen — 1 bestand
 
-**Probleem**: Admins krijgen alleen `{"role":"admin","naam":"Admin"}` zonder `id` of `org_ids`.
+**Bestand:** `supabase/functions/openclaw-proxy/index.ts`
 
-**Oplossing**: Vervang de hardcoded admin-check door een lookup-map die phone → profile_id + naam mapt, en haal org_ids op uit `user_organizations`.
+### Stap 1: Constanten + `stripPII` toevoegen (na regel 20, vóór `extractLast8`)
 
+Voeg toe:
+- Gecorrigeerde `DIENST_SAFE_COLUMNS` (met echte kolomnamen)
+- `DIENST_TOEWIJZING_SAFE_COLUMNS`
+- Gecorrigeerde `ASSIGNMENT_SAFE_COLUMNS` (zonder niet-bestaande kolommen)
+- Gecorrigeerde `FACTUUR_SAFE_COLUMNS` (echte kolomnamen, zonder `periode_van/tot`)
+- Gecorrigeerde `APPLICATION_SAFE_COLUMNS` (echte kolomnamen)
+- Gecorrigeerde `VACANCY_SAFE_COLUMNS` (echte kolomnamen)
+- `PII_PATTERNS` regex array
+- `stripPII()` functie
+
+### Stap 2: Switch cases toevoegen (14 nieuwe cases)
+
+Voeg 14 nieuwe cases toe aan de bestaande switch (vóór `default`):
 ```text
-ADMIN_MAP = {
-  "+31648005001" → { id: "7095191d-...", naam: "Kreshnik Atashi" },
-  "+31618710360" → { id: "daeb8147-...", naam: "Lesley Pattipeilohy" }
-}
+get_diensten, get_dienst_toewijzingen, get_assignments, get_facturen,
+get_applications, get_vacancies, get_dashboard_stats, search,
+create_dienst, update_dienst, assign_professional, update_assignment,
+update_factuur_status, update_application_stage
 ```
 
-- Query `user_organizations` voor de org_ids van dat profile id
-- Fallback: als geen org_ids gevonden, hardcode beide bureau-IDs
-- Response: `{ role: "admin", naam: "...", id: "uuid", org_ids: [...] }`
+### Stap 3: 14 handler functies toevoegen
 
----
+Elk met gecorrigeerde kolomnamen:
 
-## 2. Nieuwe actie: `get_tasks`
+**READ (8):**
+1. `get_diensten` — kolom `publieke_opmerking` ipv `opmerking`, `dienst_type` ipv `type`, `gevraagd_aantal` ipv `aantal_professionals`
+2. `get_dienst_toewijzingen` — join `professionals(id, full_name, email, functie_niveau)`
+3. `get_assignments` — `weekly_hours` ipv `hours_per_week`, join `client_sublocations(id, naam, ...)`, zonder `org_id`/`function_title`
+4. `get_facturen` — `factuur_nummer` ipv `factuurnummer`, `totaal` ipv `totaal_bedrag`, zonder `periode_van/tot`, join via `opdrachtgever_id`
+5. `get_applications` — `completeness_score` ipv `score`, `source_label` ipv `source`, zonder `notes`
+6. `get_vacancies` — `titel`, `beschrijving`, `functie_niveau`, `uren_per_week`, `start_datum`, join `client_sublocations(id, naam)`, zonder `org_id`
+7. `get_dashboard_stats` — parallel counts; vacancies count ipv `org_id` filter (niet beschikbaar)
+8. `search` — `client_organizations` zonder `.status` filter
 
-Toegevoegd als top-level action (niet onder `query_db`).
+**WRITE (6):**
+9. `create_dienst` — gecorrigeerde veldnamen
+10. `update_dienst` — gecorrigeerde veldnamen
+11. `assign_professional` — ongewijzigd (dienst_toewijzingen kolommen kloppen)
+12. `update_assignment` — `weekly_hours` ipv `hours_per_week`, zonder `function_title`
+13. `update_factuur_status` — ongewijzigd (alleen `status` + `updated_at`)
+14. `update_application_stage` — ongewijzigd (alleen `pipeline_stage` + `updated_at`)
 
-- Query: `tasks` tabel
-- Filters: `completed_at IS NULL`, `deleted_at IS NULL`
-- Optioneel: `user_id` → filter `assignee_id`, `org_id` → filter `org_id`
-- Admin zonder filters → alle open taken
-- Select: `id, title, description, status, priority, due_at, start_at, assignee_id, reporter_id, category, next_action, project_id, column_id, created_at`
-- Order: `due_at ASC NULLS LAST`
-- Limit: 50
+### Bestaande code
 
----
+Alle 7 bestaande acties blijven **exact** ongewijzigd.
 
-## 3. Nieuwe actie: `create_task`
+### Deploy
 
-- Verplicht: `title`, `org_id`
-- Optioneel: `description`, `assignee_id`, `reporter_id`, `due_at`, `start_at`, `priority`, `category`, `status` (default `open`), `project_id`, `column_id`
-- Insert + return aangemaakte taak (zelfde veilige kolommen)
-
----
-
-## 4. Nieuwe actie: `update_task`
-
-- Verplicht: `task_id`
-- Optionele updates: `title`, `description`, `status`, `priority`, `due_at`, `start_at`, `assignee_id`, `completed_at`, `next_action`, `category`, `column_id`
-- Update + return bijgewerkte taak
-
----
-
-## 5. Nieuwe actie: `get_professionals`
-
-- Query: `professionals` tabel
-- Optioneel filter: `org_id`
-- Filter: `deleted_at IS NULL`
-- Veilige kolommen: `id, full_name, email, telefoonnummer, functie_niveau, status, org_id`
-- Gevoelige velden (bsn, iban, iban_tenaamstelling, gewenst_uurloon, geboortedatum) worden NOOIT opgehaald
-
----
-
-## 6. Nieuwe actie: `get_clients`
-
-Er is geen `clients` tabel. Ik gebruik `client_organizations` + geneste `client_contacts`.
-
-- Query: `client_organizations` met JOIN op `client_contacts`
-- Optioneel filter: `org_id`
-- Return per organisatie: `id, name, org_id, contacts: [{ naam, functie, telefoon, email }]`
-
----
-
-## Routing-structuur
-
-De huidige code heeft 2 top-level actions: `lookup_sender` en `query_db`. De nieuwe acties worden toegevoegd als extra top-level actions:
-
-```text
-action = "lookup_sender"    → bestaand (gefixt)
-action = "query_db"         → bestaand (ongewijzigd)
-action = "get_tasks"        → NIEUW
-action = "create_task"      → NIEUW
-action = "update_task"      → NIEUW
-action = "get_professionals" → NIEUW
-action = "get_clients"      → NIEUW
-```
-
----
-
-## Beveiliging
-
-- Zelfde `X-API-Key` authenticatie
-- Zelfde `service_role` client
-- Expliciet whitelisten van kolommen (nooit `SELECT *`)
-- Gevoelige velden worden nergens opgehaald
-
-## Geen database-wijzigingen nodig
-
-Alle tabellen bestaan al met de juiste kolommen.
+Automatische deploy na wijziging.
 
