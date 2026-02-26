@@ -1,35 +1,29 @@
 
 
-# Fix: Alle taken tonen in "Mijn Werk" bordweergave
+# Fix: HoverCard toont niet alle kaartinformatie
 
 ## Probleem
 
-`MAX_VISIBLE_TASKS = 5` in `MyTasksFlowSection.tsx` (regel 71) beperkt elke kolom tot 5 kaarten. Overige taken worden verborgen achter "+6 meer in team overzicht" die naar `/kanban` navigeert -- niet naar de volledige lijst van eigen taken.
+De HoverCard mist informatie die wél op de kaart zelf staat:
+- **Acceptatiestatus** ("Wacht op acceptatie") ontbreekt
+- **Urgentie-indicator** (kleur-gecodeerde deadline) ontbreekt
+- **Reporter** ("Toegewezen door ...") ontbreekt
+- **Herhalingsindicator** ontbreekt
+- **Tijd in kolom** ontbreekt
+
+De beschrijving en titel worden wél volledig getoond (niet truncated), maar de context-informatie die de kaart visueel toont is afwezig in de hover.
 
 ## Oplossing
 
-**Bestand:** `src/components/dashboard/MyTasksFlowSection.tsx`
+**Bestand:** `src/components/TaskCard.tsx` — HoverCardContent (regels 297-353)
 
-### Stap 1: Verhoog MAX_VISIBLE_TASKS
+Voeg de ontbrekende secties toe aan de HoverCard:
 
-Verander `MAX_VISIBLE_TASKS` van `5` naar `50` (effectief ongelimiteerd voor dagelijks gebruik). Dit toont alle taken per kolom zonder afkapping.
+1. **Acceptatiestatus** — "Wacht op acceptatie" badge tonen wanneer `isPendingAcceptance(task)` true is
+2. **Reporter** — "Toegewezen door ..." regel als reporter verschilt van assignee
+3. **Urgentie-badge** — `UrgencyBadge` component hergebruiken voor kleur-gecodeerde deadline
+4. **Herhaling** — Tekst "Herhaalt dagelijks/wekelijks/etc." tonen bij `recurrence_rule`
+5. **Tijd in kolom** — "X dagen in deze kolom" toevoegen
 
-### Stap 2: "Toon alles" toggle ipv overflow-link
-
-Vervang de huidige overflow-knop (die naar `/kanban` navigeert) door een **inline expand/collapse**:
-- Default: toon eerste 10 taken per kolom (verhoogd van 5)
-- Als er meer zijn: toon "Toon alle X taken" knop die de rest inline ontklapt
-- Geen navigatie meer naar een andere pagina
-
-### Stap 3: Scroll verbetering
-
-Voeg `max-h-[70vh] overflow-y-auto` toe aan de kolom-content zodat bij veel taken de kolom scrollbaar wordt zonder de pagina te breken.
-
-### Technische details
-
-- `MAX_VISIBLE_TASKS` wijzigen naar `50` (regel 71)
-- State `expandedColumns` toevoegen om bij te houden welke kolommen volledig uitgevouwen zijn
-- `getVisibleTasks` aanpassen: toon 10 default, alle bij expanded
-- Overflow-knop tekst wijzigen naar "Toon alle {total} taken" en onClick toggle expanded state
-- Kolom CardContent krijgt scroll-container styling
+Alle informatie die op de kaart zelf (truncated) staat, wordt in de hover volledig en leesbaar getoond.
 
