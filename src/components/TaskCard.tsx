@@ -294,22 +294,53 @@ export function TaskCard({ task, subtasks = [], onClick, onAccept }: TaskCardPro
             </div>
           </Card>
         </HoverCardTrigger>
-        <HoverCardContent className="w-80 glass-layer-2 glass-light-bleed rounded-xl" side="right" align="start">
+      <HoverCardContent className="w-80 glass-layer-2 glass-light-bleed rounded-xl" side="right" align="start">
         <div className="space-y-2">
           <h4 className="text-sm font-semibold text-foreground">{task.title}</h4>
-          <div className="space-y-1 text-xs text-muted-foreground">
+          <div className="space-y-1.5 text-xs text-muted-foreground">
+            {/* Acceptatiestatus */}
+            {isPendingAcceptance(task) && (
+              <div className="flex items-center gap-1.5">
+                <Clock className="h-3 w-3 text-amber-500" />
+                <span className="text-amber-700 dark:text-amber-400 font-medium">Wacht op acceptatie</span>
+              </div>
+            )}
+
+            {/* Reporter */}
+            {task.reporter?.name && task.reporter_id && task.reporter_id !== task.assignee_id && (
+              <p className="text-muted-foreground/70 italic">
+                Toegewezen door {task.reporter.name}
+              </p>
+            )}
+
             {task.description && (
               <p className="text-foreground/80">{task.description}</p>
             )}
             {task.assignee_id && (
               <p>👤 {assigneeName}</p>
             )}
+
+            {/* Urgentie-badge */}
             {task.due_at && (
-              <p>📅 {formatDateFull(task.due_at)}</p>
+              <UrgencyBadge dueAt={task.due_at} className="text-xs" />
             )}
+
             {task.priority && (
               <p>⚡ Prioriteit: {task.priority}</p>
             )}
+
+            {/* Herhaling */}
+            {task.recurrence_rule && (
+              <div className="flex items-center gap-1.5">
+                <Repeat className="h-3 w-3" />
+                <span>Herhaalt {
+                  task.recurrence_rule === 'DAILY' ? 'dagelijks' :
+                  task.recurrence_rule === 'WEEKLY' ? 'wekelijks' :
+                  task.recurrence_rule === 'BIWEEKLY' ? 'tweewekelijks' : 'maandelijks'
+                }</span>
+              </div>
+            )}
+
             {task.next_action && (
               <div className="mt-2 pt-2 border-t border-border/50">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-1">
@@ -345,9 +376,17 @@ export function TaskCard({ task, subtasks = [], onClick, onAccept }: TaskCardPro
                 </div>
               </div>
             )}
-            <p className="text-[10px] mt-2 text-muted-foreground/60">
-              Aangemaakt: {format(new Date(task.created_at), "d MMM yyyy", { locale: nl })}
-            </p>
+
+            {/* Tijd in kolom */}
+            <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-between">
+              <p className="text-[10px] text-muted-foreground/60">
+                Aangemaakt: {format(new Date(task.created_at), "d MMM yyyy", { locale: nl })}
+              </p>
+              <span className="text-[10px] text-muted-foreground/60 flex items-center gap-1">
+                <div className={`h-1.5 w-1.5 rounded-full ${getStatusDotColor(daysInColumn)}`} />
+                {getHumanizedTime(daysInColumn)} in kolom
+              </span>
+            </div>
           </div>
         </div>
       </HoverCardContent>
