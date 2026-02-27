@@ -768,16 +768,18 @@ const Professionals = () => {
         )}
       </div>
 
-      {/* Resultaten Teller */}
-      <div className="text-sm text-muted-foreground">
-        {filteredProfessionals.length === professionals.length
-          ? `${professionals.length} professionals`
-          : `${filteredProfessionals.length} van ${professionals.length} professionals`
-        }
+      {/* Resultaten Teller – inline */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          {filteredProfessionals.length === professionals.length
+            ? `${professionals.length} professionals`
+            : `${filteredProfessionals.length} van ${professionals.length} professionals`
+          }
+        </p>
       </div>
 
       {/* Professionals Grid - Minimal Cards */}
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {paginatedProfessionals.map((professional) => (
           <motion.div
             key={professional.id}
