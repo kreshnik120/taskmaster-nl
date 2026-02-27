@@ -140,7 +140,7 @@ export function ProfessionalCard({
 
               {/* Avatar */}
               <div className="relative inline-flex">
-                <Avatar className="h-10 w-10 ring-2 ring-background">
+                <Avatar className="h-11 w-11 ring-2 ring-background">
                   <AvatarFallback className={cn(
                     getFunctieColor(professional.functie_niveau),
                     "text-white font-medium text-sm"
@@ -163,7 +163,7 @@ export function ProfessionalCard({
               <div className="flex-1 min-w-0">
                 {/* Header: Name + Bureau */}
                 <div className="flex items-center gap-2 mb-0.5">
-                  <h3 className="font-medium text-foreground truncate">
+                  <h3 className="font-semibold text-[15px] text-foreground truncate">
                     {professional.full_name}
                   </h3>
                   {professional.org_id && (
@@ -231,29 +231,32 @@ export function ProfessionalCard({
                   </div>
                 )}
 
-                {/* Document compliance badge */}
-                {professional.documents_expiring_count && professional.documents_expiring_count > 0 ? (
-                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
-                    {professional.documents_expiring_count} doc{professional.documents_expiring_count !== 1 ? 's' : ''} verlopen
-                  </Badge>
-                ) : professional.documents_published_count && professional.documents_published_count > 0 ? (
-                  <Badge variant="success" className="text-[10px] px-1.5 py-0">
-                    Docs OK ({professional.documents_published_count})
-                  </Badge>
-                ) : professional.documents_count && professional.documents_count > 0 ? (
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-orange-300 text-orange-600 bg-orange-500/5">
-                    {professional.documents_count} docs niet gepubliceerd
-                  </Badge>
-                ) : (
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                    Geen docs
-                  </Badge>
-                )}
+                {/* Document badge + timestamp footer group */}
+                <div className="mt-auto pt-2 border-t border-border/30 space-y-1">
+                  {/* Document compliance badge */}
+                  {professional.documents_expiring_count && professional.documents_expiring_count > 0 ? (
+                    <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                      {professional.documents_expiring_count} doc{professional.documents_expiring_count !== 1 ? 's' : ''} verlopen
+                    </Badge>
+                  ) : professional.documents_published_count && professional.documents_published_count > 0 ? (
+                    <Badge variant="success" className="text-[10px] px-1.5 py-0">
+                      Docs OK ({professional.documents_published_count})
+                    </Badge>
+                  ) : professional.documents_count && professional.documents_count > 0 ? (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-orange-300 text-orange-600 bg-orange-500/5">
+                      {professional.documents_count} docs niet gepubliceerd
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                      Geen docs
+                    </Badge>
+                  )}
 
-                {/* Timestamp */}
-                <p className="text-xs text-muted-foreground/50">
-                  {timeLabel}
-                </p>
+                  {/* Timestamp */}
+                  <p className="text-xs text-muted-foreground/50">
+                    {timeLabel}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -268,7 +271,7 @@ export function ProfessionalCard({
                     variant="ghost"
                     onClick={handlePhoneClick}
                     disabled={!professional.telefoonnummer}
-                    className="h-8 text-xs px-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_6px_hsla(270,45%,55%,0.08)] hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_10px_hsla(270,45%,55%,0.12)] transition-all duration-200"
+                    className="h-8 text-xs px-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_6px_hsla(270,45%,55%,0.08)] hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_10px_hsla(270,45%,55%,0.12)] transition-all duration-200 disabled:opacity-30"
                   >
                     <Phone className="h-3.5 w-3.5" />
                   </Button>
@@ -285,7 +288,7 @@ export function ProfessionalCard({
                     variant="ghost"
                     onClick={handleEmailClick}
                     disabled={!professional.email}
-                    className="h-8 text-xs px-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_6px_hsla(270,45%,55%,0.08)] hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_10px_hsla(270,45%,55%,0.12)] transition-all duration-200"
+                    className="h-8 text-xs px-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_6px_hsla(270,45%,55%,0.08)] hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_10px_hsla(270,45%,55%,0.12)] transition-all duration-200 disabled:opacity-30"
                   >
                     <Mail className="h-3.5 w-3.5" />
                   </Button>
@@ -302,7 +305,7 @@ export function ProfessionalCard({
                     variant="ghost"
                     onClick={handleLocationClick}
                     disabled={!professional.regio}
-                    className="h-8 text-xs px-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_6px_hsla(270,45%,55%,0.08)] hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_10px_hsla(270,45%,55%,0.12)] transition-all duration-200"
+                    className="h-8 text-xs px-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_6px_hsla(270,45%,55%,0.08)] hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_10px_hsla(270,45%,55%,0.12)] transition-all duration-200 disabled:opacity-30"
                   >
                     <MapPin className="h-3.5 w-3.5" />
                   </Button>
