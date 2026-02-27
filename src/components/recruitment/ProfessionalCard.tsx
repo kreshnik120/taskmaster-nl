@@ -7,7 +7,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Phone, Mail, MapPin } from "lucide-react";
+import { Phone, Mail, MapPin, Clock } from "lucide-react";
+import { getOrganizationBadgeColor } from "@/lib/organizationMapping";
 import { getOrganizationName } from "@/lib/organizationMapping";
 import { formatFunctieNiveau } from "@/lib/functieNiveau";
 import { DirectPlacementButton } from "@/components/DirectPlacementButton";
@@ -134,13 +135,13 @@ export function ProfessionalCard({
                 <Checkbox
                   checked={isSelected}
                   onCheckedChange={(checked) => onSelect(professional.id, checked as boolean)}
-                  className="data-[state=checked]:bg-primary"
+                  className="data-[state=checked]:bg-primary opacity-60 hover:opacity-100 transition-opacity"
                 />
               </div>
 
               {/* Avatar */}
               <div className="relative inline-flex">
-                <Avatar className="h-11 w-11 ring-2 ring-background">
+                <Avatar className="h-11 w-11 ring-2 ring-white/50 dark:ring-white/10 shadow-sm">
                   <AvatarFallback className={cn(
                     getFunctieColor(professional.functie_niveau),
                     "text-white font-medium text-sm"
@@ -168,8 +169,11 @@ export function ProfessionalCard({
                   </h3>
                   {professional.org_id && (
                     <Badge 
-                      variant="ghost"
-                      className="text-[10px] px-1.5 py-0 h-4 flex-shrink-0"
+                      variant="outline"
+                      className={cn(
+                        "text-[10px] px-1.5 py-0 h-4 flex-shrink-0",
+                        getOrganizationBadgeColor(getOrganizationName(professional.org_id))
+                      )}
                     >
                       {getOrganizationName(professional.org_id)}
                     </Badge>
@@ -177,7 +181,7 @@ export function ProfessionalCard({
                 </div>
 
                 {/* Function · Work Type */}
-                <p className="text-sm text-muted-foreground mb-1.5">
+                <p className="text-[13px] text-muted-foreground/80 mb-1.5">
                   {formatFunctieNiveau(professional.functie_niveau)}
                     {professional.werkvorm && (
                       <span className="text-muted-foreground/60"> · {professional.werkvorm}</span>
@@ -235,25 +239,26 @@ export function ProfessionalCard({
                 <div className="mt-auto pt-2 border-t border-border/30 space-y-1">
                   {/* Document compliance badge */}
                   {professional.documents_expiring_count && professional.documents_expiring_count > 0 ? (
-                    <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                    <Badge variant="destructive" className="text-[10px] px-1.5 py-0 rounded-full">
                       {professional.documents_expiring_count} doc{professional.documents_expiring_count !== 1 ? 's' : ''} verlopen
                     </Badge>
                   ) : professional.documents_published_count && professional.documents_published_count > 0 ? (
-                    <Badge variant="success" className="text-[10px] px-1.5 py-0">
+                    <Badge variant="success" className="text-[10px] px-1.5 py-0 rounded-full">
                       Docs OK ({professional.documents_published_count})
                     </Badge>
                   ) : professional.documents_count && professional.documents_count > 0 ? (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-orange-300 text-orange-600 bg-orange-500/5">
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 rounded-full border-orange-300 text-orange-600 bg-orange-500/5">
                       {professional.documents_count} docs niet gepubliceerd
                     </Badge>
                   ) : (
-                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 rounded-full">
                       Geen docs
                     </Badge>
                   )}
 
                   {/* Timestamp */}
-                  <p className="text-xs text-muted-foreground/50">
+                  <p className="text-xs text-muted-foreground/50 flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
                     {timeLabel}
                   </p>
                 </div>
@@ -262,7 +267,7 @@ export function ProfessionalCard({
           </div>
 
           {/* Quick Actions Footer */}
-          <div className="bg-muted/20 px-4 py-2 flex gap-1">
+          <div className="bg-gradient-to-t from-muted/30 to-transparent border-t border-border/20 px-4 py-2 flex gap-1">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -327,7 +332,7 @@ export function ProfessionalCard({
               }}
               variant="outline"
               size="sm"
-              className="ml-auto h-8 text-xs"
+              className="ml-auto h-8 text-xs hover:bg-primary/5 hover:border-primary/30"
             />
           </div>
         </Card>
