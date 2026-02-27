@@ -1,34 +1,56 @@
 
 
-# Document-indicatoren verfijnen — overzichtelijker en mooier
+# Documenten Tab Herstructurering — Enterprise Niveau
 
-Op de screenshot zijn de document-badges te groot, te druk, en de tekst te lang. Ze nemen te veel ruimte in en scannen slecht. De volgende verfijningen maken ze compacter, rustiger en meer "at-a-glance" leesbaar.
+Na grondige analyse van het Documenten tab in `ProfessionalDetailModal.tsx` (regels 1075-1291) zijn de volgende problemen geïdentificeerd:
 
-## Bestand: `src/components/recruitment/ProfessionalCard.tsx`
+1. **Platte, ongegroepeerde lijst** — Alle documenten staan in één lange tabel zonder categorisering
+2. **Geen visuele hiërarchie** — Verlopen, bijna verlopen en geldige docs hebben dezelfde rowgrootte
+3. **Tabel past niet bij Liquid Glass systeem** — Harde borders, platte achtergronden, geen glaseffecten
+4. **Alert-blokken zijn te luid** — Grote rode/oranje blokken boven de tabel zijn overweldigend
+5. **Collapsible detail panel** is functioneel maar visueel onafgewerkt
+6. **"Bendy" referentie** staat nog in de footer van detail panels en sync-info
 
-### 1. Compactere tekst — korter en krachtiger
-De huidige labels zijn te lang ("11 docs niet gepubliceerd", "3 docs verlopen"). Verkort naar:
-- Verlopen: `"3 verlopen"` (i.p.v. "3 docs verlopen")
-- OK: `"✓ Compleet"` of `"Compleet (5)"` (i.p.v. "Docs OK (5)")
-- Niet gepubliceerd: `"11 in concept"` (i.p.v. "11 docs niet gepubliceerd")
-- Geen docs: `"Geen documenten"` (blijft)
+## Bestand: `src/components/ProfessionalDetailModal.tsx` (regels 1075-1291)
 
-### 2. Icoon + getal prominenter, tekst secundair
-Herstructureer de badge layout zodat het getal visueel opvalt:
-- Het icoon en getal worden `font-semibold`, de beschrijvende tekst `font-normal text-current/70`
-- Dit geeft een "at-a-glance" scanervaring: je ziet direct het getal + kleur
+### 1. Documenten groeperen per categorie
+Groepeer documenten in secties: **Basis**, **ZZP**, **Certificaat**, **Overig** (gebaseerd op `doc.category`). Elke sectie krijgt een eigen header met een subtiel icoon en teller. Lege categorieën worden verborgen.
 
-### 3. Badge sizing uniformer en iets kleiner
-Alle badges worden `text-[10px] px-2 py-0.5 h-5` — net iets strakker dan nu, met vaste hoogte zodat ze niet verspringen.
+### 2. KPI grid — Liquid Glass styling
+Huidige KPI-blokken zijn plat (`bg-card/50`). Verfijn naar:
+- `backdrop-blur-sm bg-white/60 dark:bg-slate-900/60 border-white/30 dark:border-white/10 shadow-[0_2px_8px_hsla(0,0%,0%,0.04)]`
+- Subtielere kleur-tints: groene/oranje/rode KPI's met `/[0.06]` achtergrond i.p.v. `/5`
 
-### 4. Shadow verwijderen van badges
-De huidige `shadow-[0_1px_2px_...]` op de badges voegt visuele ruis toe. Verwijder de shadow — de kleur-tint en border zijn voldoende voor differentiatie. Dit maakt het rustiger.
+### 3. Alert-blokken vervangen door inline status
+De grote rode/oranje alert-blokken boven de tabel verwijderen. In plaats daarvan krijgen verlopen/bijna-verlopen documenten een subtiele inline-markering in de rij zelf (gekleurde linkerborder + zachte achtergrondtint). Dit is genoeg — de KPI's boven tonen al de aantallen.
 
-### 5. Timestamp en document-badge beter gescheiden
-Voeg `gap-1.5` toe aan de container i.p.v. `space-y-1` en gebruik `flex flex-col` voor betere controle. De timestamp krijgt `mt-0.5` voor net iets meer ademruimte.
+### 4. Tabel → Gestylede kaartlijst
+Vervang de harde tabelstructuur door een lijst van glasachtige document-rijen:
+- Verwijder de tabel header (`bg-muted/40` grid header)
+- Elke document-rij wordt een subtiele kaart: `rounded-lg bg-white/40 dark:bg-slate-900/40 border border-white/20 dark:border-white/8 mb-1.5`
+- Status wordt visueel getoond via een gekleurde linkerborder (groen=geldig, oranje=binnenkort, rood=verlopen)
+- Gepubliceerd-status als klein dot-icoon i.p.v. aparte kolom
 
-### 6. "Geen documenten" state minder prominent
-De "Geen docs" badge is nu even opvallend als de andere states. Maak deze nog subtieler: verwijder border, gebruik alleen `text-muted-foreground/40` met een klein icoon — het is informatief maar niet alarmerend.
+### 5. Document-rij layout herstructureren
+Huidige 5-kolom grid is te krap. Nieuw layout per rij:
+- **Links**: Status-kleur border (2px) + Document icoon + Naam (bold)
+- **Midden**: Type (als badge) + Verloopdatum
+- **Rechts**: Status badge + Gepubliceerd dot + Chevron voor expand
+- Alles in een `flex items-center` i.p.v. strak 5-kolom grid
 
-Alle wijzigingen zijn puur className + tekst-aanpassingen in `ProfessionalCard.tsx`.
+### 6. Collapsible detail panel verfijnen
+Het uitklap-panel krijgt Liquid Glass styling:
+- `bg-white/30 dark:bg-slate-900/30 backdrop-blur-sm rounded-lg border border-white/20 mx-2 mb-2`
+- Grid layout `grid-cols-2 sm:grid-cols-3` voor betere ruimtebenutting
+- Verwijder "Bendy" referentie uit de footer — vervang door "Laatst bijgewerkt: [datum]"
+
+### 7. Sync-info verfijnen
+De sync-tekst "Laatst gesynchroniseerd" wordt subtieler:
+- Verplaats naar onder de KPI grid als een `text-[10px] text-muted-foreground/50` regel
+- Verwijder "Bendy" uit de tekst
+
+### 8. Lege state verfijnen
+De lege state ("Geen documenten gesynchroniseerd") krijgt glasachtige styling:
+- `bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm rounded-xl border border-white/20 py-16`
+- Verwijder "Synchroniseer documenten via de Bendy Sync pagina" — vervang door "Nog geen documenten beschikbaar"
 
