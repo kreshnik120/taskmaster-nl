@@ -92,10 +92,34 @@ export function ProfessionalCard({
   onSelect, 
   onClick 
 }: ProfessionalCardProps) {
-  const timeLabel = professional.documents_synced_at
-    ? `Docs gesyncet ${formatDistanceToNow(new Date(professional.documents_synced_at), { addSuffix: true, locale: nl })}`
-    : `Geregistreerd ${formatDistanceToNow(new Date(professional.created_at), { addSuffix: true, locale: nl })}`;
+  const timeLabel = `Geregistreerd ${formatDistanceToNow(new Date(professional.created_at), { addSuffix: true, locale: nl })}`;
 
+  // Document progress calculations
+  const totalDocs = professional.documents_count || 0;
+  const publishedDocs = professional.documents_published_count || 0;
+  const expiringDocs = professional.documents_expiring_count || 0;
+  const progressPercent = totalDocs > 0 ? Math.round((publishedDocs / totalDocs) * 100) : 0;
+
+  const getDocStatusLabel = () => {
+    if (expiringDocs > 0) return `${expiringDocs} ${expiringDocs === 1 ? 'document' : 'documenten'} verlopen`;
+    if (totalDocs > 0 && publishedDocs < totalDocs) return `${totalDocs - publishedDocs} documenten nog niet gepubliceerd`;
+    if (totalDocs > 0 && publishedDocs >= totalDocs) return 'Alle documenten in orde';
+    return 'Nog geen documenten';
+  };
+
+  const getDocStatusColor = () => {
+    if (expiringDocs > 0) return 'bg-red-500';
+    if (totalDocs > 0 && publishedDocs < totalDocs) return 'bg-amber-500';
+    if (totalDocs > 0 && publishedDocs >= totalDocs) return 'bg-emerald-500';
+    return 'bg-muted-foreground/30';
+  };
+
+  const getDocStatusTextColor = () => {
+    if (expiringDocs > 0) return 'text-red-600 dark:text-red-400';
+    if (totalDocs > 0 && publishedDocs < totalDocs) return 'text-amber-600 dark:text-amber-400';
+    if (totalDocs > 0 && publishedDocs >= totalDocs) return 'text-emerald-600 dark:text-emerald-400';
+    return 'text-muted-foreground/50';
+  };
   const handlePhoneClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (professional.telefoonnummer) {
@@ -149,11 +173,11 @@ export function ProfessionalCard({
                     {getInitials(professional.full_name)}
                   </AvatarFallback>
                 </Avatar>
-                {/* Status dot */}
+                {/* Status dot — enlarged for visibility */}
                 <span 
                   className={cn(
-                    "absolute rounded-full ring-2 ring-background",
-                    "h-2.5 w-2.5 -bottom-0.5 -right-0.5",
+                    "absolute rounded-full ring-3 ring-background",
+                    "h-3 w-3 -bottom-0.5 -right-0.5",
                     getStatusColor(professional.status)
                   )}
                   title={professional.status}
@@ -235,36 +259,29 @@ export function ProfessionalCard({
                   </div>
                 )}
 
-                {/* Document badge + timestamp footer group */}
-                <div className="mt-auto pt-2 border-t border-border/30 flex flex-col gap-1.5">
-                  {/* Document compliance badge */}
-                  {professional.documents_expiring_count && professional.documents_expiring_count > 0 ? (
-                    <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-5 rounded-full inline-flex items-center gap-1 bg-red-500/[0.08] text-red-600 dark:text-red-400 border-red-200/40 dark:border-red-800/40">
-                      <FileWarning className="h-3 w-3" />
-                      <span className="font-semibold">{professional.documents_expiring_count}</span>
-                      <span className="font-normal opacity-70">verlopen</span>
-                    </Badge>
-                  ) : professional.documents_published_count && professional.documents_published_count > 0 ? (
-                    <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-5 rounded-full inline-flex items-center gap-1 bg-emerald-500/[0.08] text-emerald-600 dark:text-emerald-400 border-emerald-200/40 dark:border-emerald-800/40">
-                      <CheckCircle2 className="h-3 w-3" />
-                      <span className="font-semibold">Compleet</span>
-                      <span className="font-normal opacity-70">({professional.documents_published_count})</span>
-                    </Badge>
-                  ) : professional.documents_count && professional.documents_count > 0 ? (
-                    <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-5 rounded-full inline-flex items-center gap-1 bg-amber-500/[0.08] text-amber-600 dark:text-amber-400 border-amber-200/40 dark:border-amber-800/40">
-                      <AlertCircle className="h-3 w-3" />
-                      <span className="font-semibold">{professional.documents_count}</span>
-                      <span className="font-normal opacity-70">in concept</span>
-                    </Badge>
-                  ) : (
-                    <span className="text-[10px] inline-flex items-center gap-1 text-muted-foreground/40">
-                      <FileX className="h-3 w-3" />
-                      Geen documenten
-                    </span>
-                  )}
+                {/* Document progress + timestamp footer */}
+                <div className="mt-auto pt-2 border-t border-border/30 flex flex-col gap-2">
+                  {/* Document status label + progress bar */}
+                  <div className="space-y-1">
+                    <p className={cn("text-[11px] font-medium flex items-center gap-1", getDocStatusTextColor())}>
+                      {expiringDocs > 0 && <FileWarning className="h-3 w-3" />}
+                      {expiringDocs === 0 && totalDocs > 0 && publishedDocs >= totalDocs && <CheckCircle2 className="h-3 w-3" />}
+                      {expiringDocs === 0 && totalDocs > 0 && publishedDocs < totalDocs && <AlertCircle className="h-3 w-3" />}
+                      {totalDocs === 0 && <FileX className="h-3 w-3" />}
+                      {getDocStatusLabel()}
+                    </p>
+                    {totalDocs > 0 && (
+                      <div className="h-1 w-full bg-muted/30 rounded-full overflow-hidden">
+                        <div
+                          className={cn("h-full rounded-full transition-all duration-300", getDocStatusColor())}
+                          style={{ width: `${progressPercent}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
 
                   {/* Timestamp */}
-                  <p className="text-[11px] text-muted-foreground/40 flex items-center gap-1 mt-0.5">
+                  <p className="text-[11px] text-muted-foreground/40 flex items-center gap-1">
                     <Clock className="h-3 w-3" />
                     {timeLabel}
                   </p>
@@ -283,9 +300,9 @@ export function ProfessionalCard({
                     variant="ghost"
                     onClick={handlePhoneClick}
                     disabled={!professional.telefoonnummer}
-                    className="h-8 text-xs px-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_6px_hsla(270,45%,55%,0.08)] hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_10px_hsla(270,45%,55%,0.12)] transition-all duration-200 disabled:opacity-30"
+                    className="h-9 text-xs px-2.5 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_6px_hsla(270,45%,55%,0.08)] hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_10px_hsla(270,45%,55%,0.12)] transition-all duration-200 disabled:opacity-30"
                   >
-                    <Phone className="h-3.5 w-3.5" />
+                    <Phone className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -300,9 +317,9 @@ export function ProfessionalCard({
                     variant="ghost"
                     onClick={handleEmailClick}
                     disabled={!professional.email}
-                    className="h-8 text-xs px-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_6px_hsla(270,45%,55%,0.08)] hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_10px_hsla(270,45%,55%,0.12)] transition-all duration-200 disabled:opacity-30"
+                    className="h-9 text-xs px-2.5 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_6px_hsla(270,45%,55%,0.08)] hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_10px_hsla(270,45%,55%,0.12)] transition-all duration-200 disabled:opacity-30"
                   >
-                    <Mail className="h-3.5 w-3.5" />
+                    <Mail className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -317,9 +334,9 @@ export function ProfessionalCard({
                     variant="ghost"
                     onClick={handleLocationClick}
                     disabled={!professional.regio}
-                    className="h-8 text-xs px-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_6px_hsla(270,45%,55%,0.08)] hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_10px_hsla(270,45%,55%,0.12)] transition-all duration-200 disabled:opacity-30"
+                    className="h-9 text-xs px-2.5 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_6px_hsla(270,45%,55%,0.08)] hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_10px_hsla(270,45%,55%,0.12)] transition-all duration-200 disabled:opacity-30"
                   >
-                    <MapPin className="h-3.5 w-3.5" />
+                    <MapPin className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
