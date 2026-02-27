@@ -236,32 +236,35 @@ export function ProfessionalCard({
                 )}
 
                 {/* Document badge + timestamp footer group */}
-                <div className="mt-auto pt-2 border-t border-border/30 space-y-1">
+                <div className="mt-auto pt-2 border-t border-border/30 flex flex-col gap-1.5">
                   {/* Document compliance badge */}
                   {professional.documents_expiring_count && professional.documents_expiring_count > 0 ? (
-                    <Badge variant="outline" className="text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-1 font-medium backdrop-blur-sm shadow-[0_1px_2px_rgba(0,0,0,0.04)] bg-red-500/[0.08] text-red-600 dark:text-red-400 border-red-200/40 dark:border-red-800/40">
+                    <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-5 rounded-full inline-flex items-center gap-1 bg-red-500/[0.08] text-red-600 dark:text-red-400 border-red-200/40 dark:border-red-800/40">
                       <FileWarning className="h-3 w-3" />
-                      {professional.documents_expiring_count} doc{professional.documents_expiring_count !== 1 ? 's' : ''} verlopen
+                      <span className="font-semibold">{professional.documents_expiring_count}</span>
+                      <span className="font-normal opacity-70">verlopen</span>
                     </Badge>
                   ) : professional.documents_published_count && professional.documents_published_count > 0 ? (
-                    <Badge variant="outline" className="text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-1 font-medium backdrop-blur-sm shadow-[0_1px_2px_rgba(0,0,0,0.04)] bg-emerald-500/[0.08] text-emerald-600 dark:text-emerald-400 border-emerald-200/40 dark:border-emerald-800/40">
+                    <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-5 rounded-full inline-flex items-center gap-1 bg-emerald-500/[0.08] text-emerald-600 dark:text-emerald-400 border-emerald-200/40 dark:border-emerald-800/40">
                       <CheckCircle2 className="h-3 w-3" />
-                      Docs OK ({professional.documents_published_count})
+                      <span className="font-semibold">Compleet</span>
+                      <span className="font-normal opacity-70">({professional.documents_published_count})</span>
                     </Badge>
                   ) : professional.documents_count && professional.documents_count > 0 ? (
-                    <Badge variant="outline" className="text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-1 font-medium backdrop-blur-sm shadow-[0_1px_2px_rgba(0,0,0,0.04)] bg-amber-500/[0.08] text-amber-600 dark:text-amber-400 border-amber-200/40 dark:border-amber-800/40">
+                    <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-5 rounded-full inline-flex items-center gap-1 bg-amber-500/[0.08] text-amber-600 dark:text-amber-400 border-amber-200/40 dark:border-amber-800/40">
                       <AlertCircle className="h-3 w-3" />
-                      {professional.documents_count} docs niet gepubliceerd
+                      <span className="font-semibold">{professional.documents_count}</span>
+                      <span className="font-normal opacity-70">in concept</span>
                     </Badge>
                   ) : (
-                    <Badge variant="outline" className="text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-1 font-medium backdrop-blur-sm shadow-[0_1px_2px_rgba(0,0,0,0.04)] bg-muted/50 text-muted-foreground/60 border-border/30">
+                    <span className="text-[10px] inline-flex items-center gap-1 text-muted-foreground/40">
                       <FileX className="h-3 w-3" />
-                      Geen docs
-                    </Badge>
+                      Geen documenten
+                    </span>
                   )}
 
                   {/* Timestamp */}
-                  <p className="text-[11px] text-muted-foreground/40 flex items-center gap-1">
+                  <p className="text-[11px] text-muted-foreground/40 flex items-center gap-1 mt-0.5">
                     <Clock className="h-3 w-3" />
                     {timeLabel}
                   </p>
