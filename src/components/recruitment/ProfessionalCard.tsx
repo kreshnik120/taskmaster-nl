@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Phone, Mail, MapPin, Clock } from "lucide-react";
+import { Phone, Mail, MapPin, Clock, FileWarning, CheckCircle2, AlertCircle, FileX } from "lucide-react";
 import { getOrganizationBadgeColor } from "@/lib/organizationMapping";
 import { getOrganizationName } from "@/lib/organizationMapping";
 import { formatFunctieNiveau } from "@/lib/functieNiveau";
@@ -239,25 +239,29 @@ export function ProfessionalCard({
                 <div className="mt-auto pt-2 border-t border-border/30 space-y-1">
                   {/* Document compliance badge */}
                   {professional.documents_expiring_count && professional.documents_expiring_count > 0 ? (
-                    <Badge variant="destructive" className="text-[10px] px-1.5 py-0 rounded-full">
+                    <Badge variant="outline" className="text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-1 font-medium backdrop-blur-sm shadow-[0_1px_2px_rgba(0,0,0,0.04)] bg-red-500/[0.08] text-red-600 dark:text-red-400 border-red-200/40 dark:border-red-800/40">
+                      <FileWarning className="h-3 w-3" />
                       {professional.documents_expiring_count} doc{professional.documents_expiring_count !== 1 ? 's' : ''} verlopen
                     </Badge>
                   ) : professional.documents_published_count && professional.documents_published_count > 0 ? (
-                    <Badge variant="success" className="text-[10px] px-1.5 py-0 rounded-full">
+                    <Badge variant="outline" className="text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-1 font-medium backdrop-blur-sm shadow-[0_1px_2px_rgba(0,0,0,0.04)] bg-emerald-500/[0.08] text-emerald-600 dark:text-emerald-400 border-emerald-200/40 dark:border-emerald-800/40">
+                      <CheckCircle2 className="h-3 w-3" />
                       Docs OK ({professional.documents_published_count})
                     </Badge>
                   ) : professional.documents_count && professional.documents_count > 0 ? (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 rounded-full border-orange-300 text-orange-600 bg-orange-500/5">
+                    <Badge variant="outline" className="text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-1 font-medium backdrop-blur-sm shadow-[0_1px_2px_rgba(0,0,0,0.04)] bg-amber-500/[0.08] text-amber-600 dark:text-amber-400 border-amber-200/40 dark:border-amber-800/40">
+                      <AlertCircle className="h-3 w-3" />
                       {professional.documents_count} docs niet gepubliceerd
                     </Badge>
                   ) : (
-                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 rounded-full">
+                    <Badge variant="outline" className="text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-1 font-medium backdrop-blur-sm shadow-[0_1px_2px_rgba(0,0,0,0.04)] bg-muted/50 text-muted-foreground/60 border-border/30">
+                      <FileX className="h-3 w-3" />
                       Geen docs
                     </Badge>
                   )}
 
                   {/* Timestamp */}
-                  <p className="text-xs text-muted-foreground/50 flex items-center gap-1">
+                  <p className="text-[11px] text-muted-foreground/40 flex items-center gap-1">
                     <Clock className="h-3 w-3" />
                     {timeLabel}
                   </p>
