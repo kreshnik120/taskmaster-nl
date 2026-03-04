@@ -397,8 +397,8 @@ export function ProfessionalDetailModal({
     return { contentType: 'application/octet-stream', extension: '.bin' };
   };
 
-  const handleFetchFromBendy = useCallback(async (doc: any) => {
-    if (!professional) return;
+  const handleFetchFromBendy = useCallback(async (doc: any): Promise<'success' | 'not_found' | 'error'> => {
+    if (!professional) return 'error';
     setFetchingDocId(doc.id);
     try {
       const { data: response, error } = await supabase.functions.invoke('bendy-proxy', {
@@ -407,8 +407,28 @@ export function ProfessionalDetailModal({
           endpoint: `/api/v2/users/${professional.bendy_id}/documents/${doc.bendy_document_id}`,
         },
       });
-      if (error) throw new Error(error.message || 'Bendy ophalen mislukt');
-      if (!response?.success || !response?.data?.data) throw new Error('Geen bestandsdata ontvangen');
+
+      // Handle 404 gracefully — document no longer exists in Bendy
+      if (error) {
+        const errorBody = typeof error === 'object' && error?.context?.body ? await error.context.text?.() : null;
+        let parsed: any = null;
+        try { parsed = errorBody ? JSON.parse(errorBody) : null; } catch {}
+        if (parsed?.metadata?.status === 404 || error?.message?.includes('404')) {
+          console.warn(`Document ${doc.bendy_document_id} niet gevonden in Bendy (404), overslaan`);
+          return 'not_found';
+        }
+        throw new Error(error.message || 'Bendy ophalen mislukt');
+      }
+
+      if (!response?.success) {
+        if (response?.metadata?.status === 404) {
+          console.warn(`Document ${doc.bendy_document_id} niet gevonden in Bendy (404), overslaan`);
+          return 'not_found';
+        }
+        throw new Error('Geen bestandsdata ontvangen');
+      }
+
+      if (!response?.data?.data) throw new Error('Geen bestandsdata ontvangen');
 
       const base64Data = typeof response.data.data === 'string' ? response.data.data : response.data.data?.file_data;
       if (!base64Data) throw new Error('Geen base64 data in response');
@@ -436,12 +456,13 @@ export function ProfessionalDetailModal({
         .eq('id', doc.id);
       if (updateError) throw updateError;
 
-      // Update local state
       setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, file_path: filePath, file_name: (doc.document_name || 'document') + extension, content_type: contentType } : d));
       toast.success('Document opgehaald en opgeslagen');
+      return 'success';
     } catch (err: any) {
       console.error('Fetch from Bendy failed:', err);
       toast.error(`Ophalen mislukt: ${err.message || 'Onbekende fout'}`);
+      return 'error';
     } finally {
       setFetchingDocId(null);
     }
@@ -455,19 +476,20 @@ export function ProfessionalDetailModal({
     let done = 0;
     let failed = 0;
 
+    let skipped = 0;
     for (const doc of docsWithoutFile) {
-      try {
-        await handleFetchFromBendy(doc);
-        done++;
-      } catch {
-        failed++;
-      }
-      setBulkProgress({ done: done + failed, total, failed });
+      const result = await handleFetchFromBendy(doc);
+      if (result === 'success') done++;
+      else if (result === 'not_found') skipped++;
+      else failed++;
+      setBulkProgress({ done: done + skipped + failed, total, failed });
     }
 
     setBulkFetching(false);
-    if (failed === 0) {
+    if (failed === 0 && skipped === 0) {
       toast.success(`${done} documenten opgehaald`);
+    } else if (failed === 0) {
+      toast.success(`${done} opgehaald, ${skipped} niet gevonden in Bendy`);
     } else {
       toast.warning(`${done} opgehaald, ${failed} mislukt`);
     }
