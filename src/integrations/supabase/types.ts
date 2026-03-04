@@ -5365,14 +5365,19 @@ export type Database = {
       professional_documents: {
         Row: {
           bendy_created_at: string | null
-          bendy_document_id: string
+          bendy_document_id: string | null
           bendy_updated_at: string | null
+          category: string | null
+          content_type: string | null
           created_at: string | null
           document_name: string
           document_number: string | null
           document_type: string | null
           expires_at: string | null
+          file_name: string | null
+          file_path: string | null
           id: string
+          is_manual: boolean | null
           issuer: string | null
           last_synced_at: string | null
           org_id: string
@@ -5382,17 +5387,23 @@ export type Database = {
           start_date: string | null
           status: string | null
           updated_at: string | null
+          uploaded_by: string | null
         }
         Insert: {
           bendy_created_at?: string | null
-          bendy_document_id: string
+          bendy_document_id?: string | null
           bendy_updated_at?: string | null
+          category?: string | null
+          content_type?: string | null
           created_at?: string | null
           document_name: string
           document_number?: string | null
           document_type?: string | null
           expires_at?: string | null
+          file_name?: string | null
+          file_path?: string | null
           id?: string
+          is_manual?: boolean | null
           issuer?: string | null
           last_synced_at?: string | null
           org_id: string
@@ -5402,17 +5413,23 @@ export type Database = {
           start_date?: string | null
           status?: string | null
           updated_at?: string | null
+          uploaded_by?: string | null
         }
         Update: {
           bendy_created_at?: string | null
-          bendy_document_id?: string
+          bendy_document_id?: string | null
           bendy_updated_at?: string | null
+          category?: string | null
+          content_type?: string | null
           created_at?: string | null
           document_name?: string
           document_number?: string | null
           document_type?: string | null
           expires_at?: string | null
+          file_name?: string | null
+          file_path?: string | null
           id?: string
+          is_manual?: boolean | null
           issuer?: string | null
           last_synced_at?: string | null
           org_id?: string
@@ -5422,6 +5439,7 @@ export type Database = {
           start_date?: string | null
           status?: string | null
           updated_at?: string | null
+          uploaded_by?: string | null
         }
         Relationships: [
           {
