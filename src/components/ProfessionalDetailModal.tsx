@@ -491,7 +491,7 @@ export function ProfessionalDetailModal({
     } else if (failed === 0) {
       toast.success(`${done} opgehaald, ${skipped} niet gevonden in Bendy`);
     } else {
-      toast.warning(`${done} opgehaald, ${failed} mislukt`);
+      toast.warning(`${done} opgehaald, ${skipped} niet gevonden, ${failed} mislukt`);
     }
   }, [professional, docsWithoutFile, handleFetchFromBendy]);
 
