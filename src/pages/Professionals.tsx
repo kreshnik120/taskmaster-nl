@@ -78,6 +78,8 @@ interface Professional {
   geboorteplaats: string | null;
   geslacht: string | null;
   bendy_external_id: string | null;
+  bendy_id: string | null;
+  org_id: string;
   // Company/Bendy fields
   iban: string | null;
   big_nummer: string | null;

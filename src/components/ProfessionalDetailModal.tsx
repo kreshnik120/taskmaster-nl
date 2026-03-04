@@ -20,7 +20,8 @@ import { toast } from "sonner";
 import { 
   Phone, Mail, MapPin, Briefcase, Car, Calendar, User, Users,
   Star, Edit, Trash2, CheckCircle2, X, Link2, ChevronDown, Award, Clock, 
-  Home, Cake, Upload, MoreHorizontal, FileText, Download, Eye, XCircle
+  Home, Cake, Upload, MoreHorizontal, FileText, Download, Eye, XCircle,
+  HardDrive, Loader2
 } from "lucide-react";
 import { PlacementHistory } from "./PlacementHistory";
 import { BeschikbaarheidMiniKalender } from "./beschikbaarheid/BeschikbaarheidMiniKalender";
@@ -65,6 +66,8 @@ interface Professional {
   geboorteplaats: string | null;
   geslacht: string | null;
   bendy_external_id: string | null;
+  bendy_id: string | null;
+  org_id: string;
   // Company/Bendy fields
   iban: string | null;
   big_nummer: string | null;
@@ -184,6 +187,10 @@ export function ProfessionalDetailModal({
   const { isAdmin } = useUserRole();
 
   const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [fetchingDocId, setFetchingDocId] = useState<string | null>(null);
+  const [bulkFetching, setBulkFetching] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0, failed: 0 });
+  const [categoryOpen, setCategoryOpen] = useState<Record<string, boolean>>({ basis: true, zzp: true, certificaat: true, overig: true });
 
   useEffect(() => {
     if (open && professional) {
@@ -373,7 +380,118 @@ export function ProfessionalDetailModal({
     return { now, ninetyDays, expired, expiringSoon, valid };
   }, [documents]);
 
-  // Calculate completeness score
+  const fileStats = useMemo(() => {
+    const withFile = documents.filter(d => d.file_path).length;
+    return { withFile, total: documents.length };
+  }, [documents]);
+
+  const docsWithoutFile = useMemo(() => {
+    return documents.filter(d => d.bendy_document_id && !d.file_path);
+  }, [documents]);
+
+  const detectContentType = (bytes: Uint8Array): { contentType: string; extension: string } => {
+    if (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) return { contentType: 'application/pdf', extension: '.pdf' };
+    if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) return { contentType: 'image/jpeg', extension: '.jpg' };
+    if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) return { contentType: 'image/png', extension: '.png' };
+    if (bytes[0] === 0x50 && bytes[1] === 0x4B && bytes[2] === 0x03 && bytes[3] === 0x04) return { contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', extension: '.docx' };
+    return { contentType: 'application/octet-stream', extension: '.bin' };
+  };
+
+  const handleFetchFromBendy = useCallback(async (doc: any) => {
+    if (!professional) return;
+    setFetchingDocId(doc.id);
+    try {
+      const { data: response, error } = await supabase.functions.invoke('bendy-proxy', {
+        body: {
+          tenant: 'citozorg',
+          endpoint: `/api/v2/users/${professional.bendy_id}/documents/${doc.bendy_document_id}`,
+        },
+      });
+      if (error) throw new Error(error.message || 'Bendy ophalen mislukt');
+      if (!response?.success || !response?.data?.data) throw new Error('Geen bestandsdata ontvangen');
+
+      const base64Data = typeof response.data.data === 'string' ? response.data.data : response.data.data?.file_data;
+      if (!base64Data) throw new Error('Geen base64 data in response');
+
+      const binaryStr = atob(base64Data);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+
+      const { contentType, extension } = detectContentType(bytes);
+      const blob = new Blob([bytes], { type: contentType });
+      const filePath = `${professional.org_id}/${professional.id}/${doc.bendy_document_id}${extension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('professional-documents')
+        .upload(filePath, blob, { contentType, upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { error: updateError } = await supabase
+        .from('professional_documents')
+        .update({
+          file_path: filePath,
+          file_name: (doc.document_name || 'document') + extension,
+          content_type: contentType,
+        })
+        .eq('id', doc.id);
+      if (updateError) throw updateError;
+
+      // Update local state
+      setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, file_path: filePath, file_name: (doc.document_name || 'document') + extension, content_type: contentType } : d));
+      toast.success('Document opgehaald en opgeslagen');
+    } catch (err: any) {
+      console.error('Fetch from Bendy failed:', err);
+      toast.error(`Ophalen mislukt: ${err.message || 'Onbekende fout'}`);
+    } finally {
+      setFetchingDocId(null);
+    }
+  }, [professional]);
+
+  const handleBulkFetch = useCallback(async () => {
+    if (!professional || docsWithoutFile.length === 0) return;
+    setBulkFetching(true);
+    const total = docsWithoutFile.length;
+    setBulkProgress({ done: 0, total, failed: 0 });
+    let done = 0;
+    let failed = 0;
+
+    for (const doc of docsWithoutFile) {
+      try {
+        await handleFetchFromBendy(doc);
+        done++;
+      } catch {
+        failed++;
+      }
+      setBulkProgress({ done: done + failed, total, failed });
+    }
+
+    setBulkFetching(false);
+    if (failed === 0) {
+      toast.success(`${done} documenten opgehaald`);
+    } else {
+      toast.warning(`${done} opgehaald, ${failed} mislukt`);
+    }
+  }, [professional, docsWithoutFile, handleFetchFromBendy]);
+
+  const handleViewDocument = useCallback(async (filePath: string) => {
+    const { data } = await supabase.storage.from('professional-documents').createSignedUrl(filePath, 60);
+    if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+    else toast.error('Kan bestand niet openen');
+  }, []);
+
+  const handleDownloadDocument = useCallback(async (filePath: string, fileName: string) => {
+    const { data } = await supabase.storage.from('professional-documents').createSignedUrl(filePath, 60);
+    if (data?.signedUrl) {
+      const a = document.createElement('a');
+      a.href = data.signedUrl;
+      a.download = fileName || 'document';
+      a.click();
+    } else {
+      toast.error('Kan bestand niet downloaden');
+    }
+  }, []);
+
+
   const calculateCompleteness = () => {
     if (!professional) return 0;
     const fields = [
@@ -1081,7 +1199,7 @@ export function ProfessionalDetailModal({
             ) : (
                 <>
                   {/* KPI Grid — Liquid Glass */}
-                  <div className="grid grid-cols-4 gap-3">
+                  <div className="grid grid-cols-5 gap-3">
                     <div className="rounded-xl backdrop-blur-sm bg-white/60 dark:bg-slate-900/60 border border-white/30 dark:border-white/10 shadow-[0_2px_8px_hsla(0,0%,0%,0.04)] p-3 text-center">
                       <p className="text-2xl font-bold">{documents.length}</p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">Totaal</p>
@@ -1098,6 +1216,20 @@ export function ProfessionalDetailModal({
                       <p className="text-2xl font-bold text-red-700 dark:text-red-400">{documentStats.expired.length}</p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">Verlopen</p>
                     </div>
+                    <div className={cn(
+                      "rounded-xl backdrop-blur-sm border shadow-[0_2px_8px_hsla(0,0%,0%,0.04)] p-3 text-center",
+                      fileStats.withFile === fileStats.total && fileStats.total > 0
+                        ? "bg-emerald-500/[0.06] border-emerald-200/30 dark:border-emerald-800/20"
+                        : "bg-white/60 dark:bg-slate-900/60 border-white/30 dark:border-white/10"
+                    )}>
+                      <div className="flex items-center justify-center gap-1">
+                        <HardDrive className={cn("h-4 w-4", fileStats.withFile === fileStats.total && fileStats.total > 0 ? "text-emerald-600" : "text-muted-foreground/60")} />
+                      </div>
+                      <p className={cn("text-lg font-bold mt-0.5", fileStats.withFile === fileStats.total && fileStats.total > 0 ? "text-emerald-700 dark:text-emerald-400" : "")}>
+                        {fileStats.withFile}/{fileStats.total}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Bestanden</p>
+                    </div>
                   </div>
 
                   {/* Sync info — subtiel onder KPI grid */}
@@ -1107,171 +1239,261 @@ export function ProfessionalDetailModal({
                     </p>
                   )}
 
+                  {/* Bulk ophalen knop */}
+                  {docsWithoutFile.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleBulkFetch}
+                        disabled={bulkFetching}
+                        className="text-xs"
+                      >
+                        {bulkFetching ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            Ophalen: {bulkProgress.done}/{bulkProgress.total}...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="h-3.5 w-3.5" />
+                            Alle documenten ophalen ({docsWithoutFile.length})
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+
                   {/* Documenten gegroepeerd per categorie */}
                   {documents.length > 0 ? (
-                    <div className="space-y-5">
+                    <div className="space-y-4">
                       {(() => {
-                        // Groepeer documenten per categorie
                         const categoryOrder = ['basis', 'zzp', 'certificaat', 'overig'] as const;
-                        const categoryLabels: Record<string, { label: string; icon: string }> = {
-                          basis: { label: 'Basis', icon: '📋' },
-                          zzp: { label: 'ZZP', icon: '🏢' },
-                          certificaat: { label: 'Certificaten', icon: '🎓' },
-                          overig: { label: 'Overig', icon: '📎' },
+                        const categoryConfig: Record<string, { label: string; icon: string; badgeClass: string }> = {
+                          basis: { label: 'Basisdocumenten', icon: '📋', badgeClass: 'bg-blue-500/10 text-blue-700 border-blue-200 dark:text-blue-400' },
+                          zzp: { label: 'ZZP Documenten', icon: '🏢', badgeClass: 'bg-purple-500/10 text-purple-700 border-purple-200 dark:text-purple-400' },
+                          certificaat: { label: 'Certificaten', icon: '🎓', badgeClass: 'bg-amber-500/10 text-amber-700 border-amber-200 dark:text-amber-400' },
+                          overig: { label: 'Overige Documenten', icon: '📎', badgeClass: 'bg-muted text-muted-foreground border-border' },
                         };
                         const grouped = categoryOrder
                           .map(cat => ({
                             key: cat,
-                            ...categoryLabels[cat],
+                            ...categoryConfig[cat],
                             docs: documents.filter(d => (d.category || 'overig') === cat),
                           }))
                           .filter(g => g.docs.length > 0);
 
                         return grouped.map(group => (
-                          <div key={group.key} className="space-y-1.5">
-                            {/* Categorie header */}
-                            <div className="flex items-center gap-2 px-1">
+                          <Collapsible
+                            key={group.key}
+                            open={categoryOpen[group.key] !== false}
+                            onOpenChange={(open) => setCategoryOpen(prev => ({ ...prev, [group.key]: open }))}
+                          >
+                            {/* Categorie header — opvouwbaar */}
+                            <CollapsibleTrigger className="flex items-center gap-2 px-1 py-1.5 w-full text-left hover:bg-muted/10 rounded-md transition-colors group cursor-pointer">
                               <span className="text-sm">{group.icon}</span>
-                              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{group.label}</span>
-                              <span className="text-[10px] text-muted-foreground/50 font-normal">({group.docs.length})</span>
-                            </div>
+                              <span className="text-xs font-semibold uppercase tracking-wider text-foreground/80">{group.label}</span>
+                              <Badge className={cn("text-[10px] px-1.5 py-0 h-5 font-medium border", group.badgeClass)}>
+                                {group.docs.length}
+                              </Badge>
+                              <ChevronDown className={cn(
+                                "h-3.5 w-3.5 text-muted-foreground/40 ml-auto transition-transform",
+                                categoryOpen[group.key] !== false ? "rotate-0" : "-rotate-90"
+                              )} />
+                            </CollapsibleTrigger>
 
-                            {/* Document kaart-rijen */}
-                            <div className="space-y-1.5">
-                              {group.docs.map((doc) => {
-                                const isExpired = doc.expires_at && new Date(doc.expires_at) < documentStats.now;
-                                const isExpiringSoon = doc.expires_at && !isExpired && new Date(doc.expires_at) <= documentStats.ninetyDays;
-                                const daysLeft = doc.expires_at ? Math.ceil((new Date(doc.expires_at).getTime() - documentStats.now.getTime()) / (1000 * 60 * 60 * 24)) : null;
+                            <CollapsibleContent>
+                              <div className="space-y-1.5 mt-1">
+                                {group.docs.map((doc) => {
+                                  const isExpired = doc.expires_at && new Date(doc.expires_at) < documentStats.now;
+                                  const isExpiringSoon = doc.expires_at && !isExpired && new Date(doc.expires_at) <= documentStats.ninetyDays;
+                                  const daysLeft = doc.expires_at ? Math.ceil((new Date(doc.expires_at).getTime() - documentStats.now.getTime()) / (1000 * 60 * 60 * 24)) : null;
 
-                                const borderColor = isExpired
-                                  ? 'border-l-red-500/60'
-                                  : isExpiringSoon
-                                    ? 'border-l-amber-500/60'
-                                    : doc.expires_at
-                                      ? 'border-l-emerald-500/40'
-                                      : 'border-l-muted-foreground/20';
+                                  const borderColor = isExpired
+                                    ? 'border-l-red-500/60'
+                                    : isExpiringSoon
+                                      ? 'border-l-amber-500/60'
+                                      : doc.expires_at
+                                        ? 'border-l-emerald-500/40'
+                                        : 'border-l-muted-foreground/20';
 
-                                const rowBg = isExpired
-                                  ? 'bg-red-500/[0.03]'
-                                  : isExpiringSoon
-                                    ? 'bg-amber-500/[0.03]'
-                                    : 'bg-white/40 dark:bg-slate-900/40';
+                                  const rowBg = isExpired
+                                    ? 'bg-red-500/[0.03]'
+                                    : isExpiringSoon
+                                      ? 'bg-amber-500/[0.03]'
+                                      : 'bg-white/40 dark:bg-slate-900/40';
 
-                                return (
-                                  <Collapsible key={doc.id}>
-                                    <CollapsibleTrigger className={cn(
-                                      "flex items-center w-full rounded-lg border border-white/20 dark:border-white/[0.08] border-l-2 backdrop-blur-sm px-3 py-2.5 text-sm hover:bg-muted/20 transition-all text-left group cursor-pointer",
-                                      borderColor,
-                                      rowBg
-                                    )}>
-                                      {/* Links: icoon + naam */}
-                                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                        <FileText className={cn(
-                                          "h-4 w-4 flex-shrink-0",
-                                          isExpired ? "text-red-500" :
-                                          isExpiringSoon ? "text-amber-500" :
-                                          "text-muted-foreground/60"
-                                        )} />
-                                        <span className="truncate font-medium text-[13px]">{doc.document_name}</span>
-                                      </div>
-
-                                      {/* Midden: type badge + verloopdatum */}
-                                      <div className="flex items-center gap-3 mx-3 shrink-0">
-                                        {doc.document_type && doc.document_type !== doc.document_name && (
-                                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 font-normal">
-                                            {doc.document_type}
-                                          </Badge>
-                                        )}
-                                        <span className={cn(
-                                          "text-[11px] tabular-nums whitespace-nowrap",
-                                          isExpired ? "text-red-600 font-semibold" :
-                                          isExpiringSoon ? "text-amber-600 font-medium" :
-                                          doc.expires_at ? "text-muted-foreground" : "text-muted-foreground/40"
-                                        )}>
-                                          {doc.expires_at
-                                            ? format(new Date(doc.expires_at), "d MMM yyyy", { locale: nl })
-                                            : "Permanent"}
-                                        </span>
-                                      </div>
-
-                                      {/* Rechts: status badge + gepubliceerd dot + chevron */}
-                                      <div className="flex items-center gap-2 shrink-0">
-                                        {isExpired ? (
-                                          <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-5">Verlopen</Badge>
-                                        ) : isExpiringSoon ? (
-                                          <Badge variant="warning" className="text-[10px] px-1.5 py-0 h-5">{daysLeft}d</Badge>
-                                        ) : doc.expires_at ? (
-                                          <Badge variant="success" className="text-[10px] px-1.5 py-0 h-5">Geldig</Badge>
-                                        ) : (
-                                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5">∞</Badge>
-                                        )}
-                                        {/* Gepubliceerd dot */}
-                                        <div className={cn(
-                                          "h-2 w-2 rounded-full flex-shrink-0",
-                                          doc.published
-                                            ? "bg-emerald-500"
-                                            : "bg-amber-400/60"
-                                        )} title={doc.published ? "Gepubliceerd" : "Niet gepubliceerd"} />
-                                        <ChevronDown className="h-3 w-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors flex-shrink-0" />
-                                      </div>
-                                    </CollapsibleTrigger>
-
-                                    {/* Detail panel — Liquid Glass */}
-                                    <CollapsibleContent>
+                                  return (
+                                    <Collapsible key={doc.id}>
                                       <div className={cn(
-                                        "mx-2 mb-2 mt-0.5 rounded-lg backdrop-blur-sm border border-white/20 dark:border-white/[0.08] px-4 py-3 text-sm",
-                                        "bg-white/30 dark:bg-slate-900/30"
+                                        "flex items-center rounded-lg border border-white/20 dark:border-white/[0.08] border-l-2 backdrop-blur-sm px-3 py-2.5 text-sm transition-all",
+                                        borderColor,
+                                        rowBg
                                       )}>
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                          {doc.document_number && (
-                                            <div>
-                                              <p className="text-[11px] text-muted-foreground/70">Documentnummer</p>
-                                              <p className="font-mono text-xs mt-0.5">{doc.document_number}</p>
-                                            </div>
-                                          )}
-                                          {doc.issuer && (
-                                            <div>
-                                              <p className="text-[11px] text-muted-foreground/70">Uitgever</p>
-                                              <p className="text-xs mt-0.5">{doc.issuer}</p>
-                                            </div>
-                                          )}
-                                          {doc.start_date && (
-                                            <div>
-                                              <p className="text-[11px] text-muted-foreground/70">Geldig vanaf</p>
-                                              <p className="text-xs mt-0.5 tabular-nums">{format(new Date(doc.start_date), "d MMM yyyy", { locale: nl })}</p>
-                                            </div>
-                                          )}
-                                          {doc.expires_at && (
-                                            <div>
-                                              <p className="text-[11px] text-muted-foreground/70">Geldig tot</p>
-                                              <p className={cn("text-xs mt-0.5 tabular-nums", isExpired && "text-red-600 font-semibold")}>
-                                                {format(new Date(doc.expires_at), "d MMM yyyy", { locale: nl })}
-                                              </p>
-                                            </div>
-                                          )}
-                                          {doc.source && (
-                                            <div>
-                                              <p className="text-[11px] text-muted-foreground/70">Bron</p>
-                                              <p className="text-xs mt-0.5">{doc.source}</p>
-                                            </div>
-                                          )}
-                                          <div>
-                                            <p className="text-[11px] text-muted-foreground/70">Gepubliceerd</p>
-                                            <p className="text-xs mt-0.5">{doc.published ? "Ja" : "Nee"}</p>
+                                        <CollapsibleTrigger className="flex items-center min-w-0 flex-1 text-left group cursor-pointer">
+                                          {/* Links: icoon + naam + badges */}
+                                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                                            <FileText className={cn(
+                                              "h-4 w-4 flex-shrink-0",
+                                              isExpired ? "text-red-500" :
+                                              isExpiringSoon ? "text-amber-500" :
+                                              "text-muted-foreground/60"
+                                            )} />
+                                            <span className="truncate font-medium text-[13px]">{doc.document_name}</span>
+                                            {doc.file_path && (
+                                              <Badge variant="success" className="text-[9px] px-1 py-0 h-4">Bestand</Badge>
+                                            )}
+                                            {doc.is_manual && (
+                                              <Badge variant="info" className="text-[9px] px-1 py-0 h-4">Handmatig</Badge>
+                                            )}
                                           </div>
+
+                                          {/* Midden: type badge + verloopdatum */}
+                                          <div className="flex items-center gap-3 mx-3 shrink-0">
+                                            {doc.document_type && doc.document_type !== doc.document_name && (
+                                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 font-normal">
+                                                {doc.document_type}
+                                              </Badge>
+                                            )}
+                                            <span className={cn(
+                                              "text-[11px] tabular-nums whitespace-nowrap",
+                                              isExpired ? "text-red-600 font-semibold" :
+                                              isExpiringSoon ? "text-amber-600 font-medium" :
+                                              doc.expires_at ? "text-muted-foreground" : "text-muted-foreground/40"
+                                            )}>
+                                              {doc.expires_at
+                                                ? format(new Date(doc.expires_at), "d MMM yyyy", { locale: nl })
+                                                : "Permanent"}
+                                            </span>
+                                          </div>
+
+                                          {/* Status badge + gepubliceerd dot */}
+                                          <div className="flex items-center gap-2 shrink-0">
+                                            {isExpired ? (
+                                              <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-5">Verlopen</Badge>
+                                            ) : isExpiringSoon ? (
+                                              <Badge variant="warning" className="text-[10px] px-1.5 py-0 h-5">{daysLeft}d</Badge>
+                                            ) : doc.expires_at ? (
+                                              <Badge variant="success" className="text-[10px] px-1.5 py-0 h-5">Geldig</Badge>
+                                            ) : (
+                                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5">∞</Badge>
+                                            )}
+                                            <div className={cn(
+                                              "h-2 w-2 rounded-full flex-shrink-0",
+                                              doc.published ? "bg-emerald-500" : "bg-amber-400/60"
+                                            )} title={doc.published ? "Gepubliceerd" : "Niet gepubliceerd"} />
+                                          </div>
+                                        </CollapsibleTrigger>
+
+                                        {/* Bestand-acties (buiten CollapsibleTrigger) */}
+                                        <div className="flex items-center gap-1 ml-2 shrink-0">
+                                          {doc.file_path ? (
+                                            <>
+                                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleViewDocument(doc.file_path)} title="Bekijk">
+                                                <Eye className="h-3.5 w-3.5" />
+                                              </Button>
+                                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDownloadDocument(doc.file_path, doc.file_name || doc.document_name)} title="Download">
+                                                <Download className="h-3.5 w-3.5" />
+                                              </Button>
+                                            </>
+                                          ) : doc.bendy_document_id ? (
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              className="h-7 text-[11px] px-2"
+                                              onClick={() => handleFetchFromBendy(doc)}
+                                              disabled={fetchingDocId === doc.id || bulkFetching}
+                                            >
+                                              {fetchingDocId === doc.id ? (
+                                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                              ) : (
+                                                <Download className="h-3.5 w-3.5" />
+                                              )}
+                                              Ophalen
+                                            </Button>
+                                          ) : doc.is_manual ? (
+                                            <Button variant="outline" size="sm" className="h-7 text-[11px] px-2" disabled title="Upload (beschikbaar in volgende update)">
+                                              <Upload className="h-3.5 w-3.5" />
+                                              Upload
+                                            </Button>
+                                          ) : null}
+                                          <CollapsibleTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                                              <ChevronDown className="h-3 w-3 text-muted-foreground/40" />
+                                            </Button>
+                                          </CollapsibleTrigger>
                                         </div>
-                                        {doc.bendy_updated_at && (
-                                          <p className="text-[10px] text-muted-foreground/40 mt-2.5 pt-2 border-t border-white/10">
-                                            Laatst bijgewerkt: {format(new Date(doc.bendy_updated_at), "d MMM yyyy, HH:mm", { locale: nl })}
-                                          </p>
-                                        )}
                                       </div>
-                                    </CollapsibleContent>
-                                  </Collapsible>
-                                );
-                              })}
-                            </div>
-                          </div>
+
+                                      {/* Detail panel — Liquid Glass */}
+                                      <CollapsibleContent>
+                                        <div className={cn(
+                                          "mx-2 mb-2 mt-0.5 rounded-lg backdrop-blur-sm border border-white/20 dark:border-white/[0.08] px-4 py-3 text-sm",
+                                          "bg-white/30 dark:bg-slate-900/30"
+                                        )}>
+                                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                            {doc.document_number && (
+                                              <div>
+                                                <p className="text-[11px] text-muted-foreground/70">Documentnummer</p>
+                                                <p className="font-mono text-xs mt-0.5">{doc.document_number}</p>
+                                              </div>
+                                            )}
+                                            {doc.issuer && (
+                                              <div>
+                                                <p className="text-[11px] text-muted-foreground/70">Uitgever</p>
+                                                <p className="text-xs mt-0.5">{doc.issuer}</p>
+                                              </div>
+                                            )}
+                                            {doc.start_date && (
+                                              <div>
+                                                <p className="text-[11px] text-muted-foreground/70">Geldig vanaf</p>
+                                                <p className="text-xs mt-0.5 tabular-nums">{format(new Date(doc.start_date), "d MMM yyyy", { locale: nl })}</p>
+                                              </div>
+                                            )}
+                                            {doc.expires_at && (
+                                              <div>
+                                                <p className="text-[11px] text-muted-foreground/70">Geldig tot</p>
+                                                <p className={cn("text-xs mt-0.5 tabular-nums", isExpired && "text-red-600 font-semibold")}>
+                                                  {format(new Date(doc.expires_at), "d MMM yyyy", { locale: nl })}
+                                                </p>
+                                              </div>
+                                            )}
+                                            {doc.source && (
+                                              <div>
+                                                <p className="text-[11px] text-muted-foreground/70">Bron</p>
+                                                <p className="text-xs mt-0.5">{doc.source}</p>
+                                              </div>
+                                            )}
+                                            <div>
+                                              <p className="text-[11px] text-muted-foreground/70">Gepubliceerd</p>
+                                              <p className="text-xs mt-0.5">{doc.published ? "Ja" : "Nee"}</p>
+                                            </div>
+                                            {doc.file_name && (
+                                              <div>
+                                                <p className="text-[11px] text-muted-foreground/70">Bestandsnaam</p>
+                                                <p className="text-xs mt-0.5 truncate">{doc.file_name}</p>
+                                              </div>
+                                            )}
+                                            {doc.content_type && (
+                                              <div>
+                                                <p className="text-[11px] text-muted-foreground/70">Type</p>
+                                                <p className="text-xs mt-0.5">{doc.content_type}</p>
+                                              </div>
+                                            )}
+                                          </div>
+                                          {doc.bendy_updated_at && (
+                                            <p className="text-[10px] text-muted-foreground/40 mt-2.5 pt-2 border-t border-white/10">
+                                              Laatst bijgewerkt: {format(new Date(doc.bendy_updated_at), "d MMM yyyy, HH:mm", { locale: nl })}
+                                            </p>
+                                          )}
+                                        </div>
+                                      </CollapsibleContent>
+                                    </Collapsible>
+                                  );
+                                })}
+                              </div>
+                            </CollapsibleContent>
+                          </Collapsible>
                         ));
                       })()}
                     </div>
