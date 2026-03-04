@@ -380,7 +380,118 @@ export function ProfessionalDetailModal({
     return { now, ninetyDays, expired, expiringSoon, valid };
   }, [documents]);
 
-  // Calculate completeness score
+  const fileStats = useMemo(() => {
+    const withFile = documents.filter(d => d.file_path).length;
+    return { withFile, total: documents.length };
+  }, [documents]);
+
+  const docsWithoutFile = useMemo(() => {
+    return documents.filter(d => d.bendy_document_id && !d.file_path);
+  }, [documents]);
+
+  const detectContentType = (bytes: Uint8Array): { contentType: string; extension: string } => {
+    if (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) return { contentType: 'application/pdf', extension: '.pdf' };
+    if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) return { contentType: 'image/jpeg', extension: '.jpg' };
+    if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) return { contentType: 'image/png', extension: '.png' };
+    if (bytes[0] === 0x50 && bytes[1] === 0x4B && bytes[2] === 0x03 && bytes[3] === 0x04) return { contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', extension: '.docx' };
+    return { contentType: 'application/octet-stream', extension: '.bin' };
+  };
+
+  const handleFetchFromBendy = useCallback(async (doc: any) => {
+    if (!professional) return;
+    setFetchingDocId(doc.id);
+    try {
+      const { data: response, error } = await supabase.functions.invoke('bendy-proxy', {
+        body: {
+          tenant: 'citozorg',
+          endpoint: `/api/v2/users/${professional.bendy_id}/documents/${doc.bendy_document_id}`,
+        },
+      });
+      if (error) throw new Error(error.message || 'Bendy ophalen mislukt');
+      if (!response?.success || !response?.data?.data) throw new Error('Geen bestandsdata ontvangen');
+
+      const base64Data = typeof response.data.data === 'string' ? response.data.data : response.data.data?.file_data;
+      if (!base64Data) throw new Error('Geen base64 data in response');
+
+      const binaryStr = atob(base64Data);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+
+      const { contentType, extension } = detectContentType(bytes);
+      const blob = new Blob([bytes], { type: contentType });
+      const filePath = `${professional.org_id}/${professional.id}/${doc.bendy_document_id}${extension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('professional-documents')
+        .upload(filePath, blob, { contentType, upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { error: updateError } = await supabase
+        .from('professional_documents')
+        .update({
+          file_path: filePath,
+          file_name: (doc.document_name || 'document') + extension,
+          content_type: contentType,
+        })
+        .eq('id', doc.id);
+      if (updateError) throw updateError;
+
+      // Update local state
+      setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, file_path: filePath, file_name: (doc.document_name || 'document') + extension, content_type: contentType } : d));
+      toast.success('Document opgehaald en opgeslagen');
+    } catch (err: any) {
+      console.error('Fetch from Bendy failed:', err);
+      toast.error(`Ophalen mislukt: ${err.message || 'Onbekende fout'}`);
+    } finally {
+      setFetchingDocId(null);
+    }
+  }, [professional]);
+
+  const handleBulkFetch = useCallback(async () => {
+    if (!professional || docsWithoutFile.length === 0) return;
+    setBulkFetching(true);
+    const total = docsWithoutFile.length;
+    setBulkProgress({ done: 0, total, failed: 0 });
+    let done = 0;
+    let failed = 0;
+
+    for (const doc of docsWithoutFile) {
+      try {
+        await handleFetchFromBendy(doc);
+        done++;
+      } catch {
+        failed++;
+      }
+      setBulkProgress({ done: done + failed, total, failed });
+    }
+
+    setBulkFetching(false);
+    if (failed === 0) {
+      toast.success(`${done} documenten opgehaald`);
+    } else {
+      toast.warning(`${done} opgehaald, ${failed} mislukt`);
+    }
+  }, [professional, docsWithoutFile, handleFetchFromBendy]);
+
+  const handleViewDocument = useCallback(async (filePath: string) => {
+    const { data } = await supabase.storage.from('professional-documents').createSignedUrl(filePath, 60);
+    if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+    else toast.error('Kan bestand niet openen');
+  }, []);
+
+  const handleDownloadDocument = useCallback(async (filePath: string, fileName: string) => {
+    const { data } = await supabase.storage.from('professional-documents').createSignedUrl(filePath, 60);
+    if (data?.signedUrl) {
+      const a = document.createElement('a');
+      a.href = data.signedUrl;
+      a.download = fileName || 'document';
+      a.click();
+    } else {
+      toast.error('Kan bestand niet downloaden');
+    }
+  }, []);
+
+
   const calculateCompleteness = () => {
     if (!professional) return 0;
     const fields = [
