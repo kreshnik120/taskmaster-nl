@@ -20,7 +20,8 @@ import { toast } from "sonner";
 import { 
   Phone, Mail, MapPin, Briefcase, Car, Calendar, User, Users,
   Star, Edit, Trash2, CheckCircle2, X, Link2, ChevronDown, Award, Clock, 
-  Home, Cake, Upload, MoreHorizontal, FileText, Download, Eye, XCircle
+  Home, Cake, Upload, MoreHorizontal, FileText, Download, Eye, XCircle,
+  HardDrive, Loader2
 } from "lucide-react";
 import { PlacementHistory } from "./PlacementHistory";
 import { BeschikbaarheidMiniKalender } from "./beschikbaarheid/BeschikbaarheidMiniKalender";
@@ -65,6 +66,8 @@ interface Professional {
   geboorteplaats: string | null;
   geslacht: string | null;
   bendy_external_id: string | null;
+  bendy_id: string | null;
+  org_id: string;
   // Company/Bendy fields
   iban: string | null;
   big_nummer: string | null;
@@ -184,6 +187,10 @@ export function ProfessionalDetailModal({
   const { isAdmin } = useUserRole();
 
   const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [fetchingDocId, setFetchingDocId] = useState<string | null>(null);
+  const [bulkFetching, setBulkFetching] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0, failed: 0 });
+  const [categoryOpen, setCategoryOpen] = useState<Record<string, boolean>>({ basis: true, zzp: true, certificaat: true, overig: true });
 
   useEffect(() => {
     if (open && professional) {
