@@ -8,7 +8,7 @@ verify_jwt = false
 
 [functions.bendy-sync]
 verify_jwt = false
-schedule = "*/15 * * * *"
+schedule = "0 */4 * * *"
 # Purpose: Bendy data sync engine (clients, later users/requisitions)
 # Auth: JWT + admin role for manual, SERVICE_ROLE_KEY for cron
 # Modes: GET (status), POST + trigger=scheduler (cron), POST + JWT (manual)
@@ -195,7 +195,7 @@ verify_jwt = true
 
 [functions.ai-task-scorer]
 verify_jwt = true
-schedule = "0 */12 * * *"
+schedule = "0 11 * * *"
 # Purpose: Score tasks using AI (runs every 12 hours)
 
 [functions.ai-chat]
@@ -271,40 +271,40 @@ schedule = "0 2 * * *"
 # --- Every 5 Minutes ---
 [functions.process-system-events]
 verify_jwt = false
-schedule = "*/5 * * * *"
+schedule = "0 */2 * * *"
 # Purpose: Process system events for AI learning
 # Frequency: 288 executions/day
 
 [functions.ai-agent-orchestrator]
 verify_jwt = false
-schedule = "*/5 * * * *"
+schedule = "15 */2 * * *"
 # Purpose: Orchestrate AI agent goals and actions
 # Frequency: 288 executions/day
 
 # --- Every 15 Minutes ---
 [functions.cleanup-stale-jobs]
 verify_jwt = false
-schedule = "*/15 * * * *"
+schedule = "15 */4 * * *"
 # Purpose: Clean up stale/stuck jobs
 # Frequency: 96 executions/day
 
 [functions.cleanup-stuck-test-runs]
 verify_jwt = false
-schedule = "*/15 * * * *"
+schedule = "30 */4 * * *"
 # Purpose: Clean up stuck AI chat test runs (running > 5 minutes)
 # Frequency: 96 executions/day
 
 # --- Every 30 Minutes ---
 [functions.auto-resolve-alerts]
 verify_jwt = false
-schedule = "*/30 * * * *"
+schedule = "45 */4 * * *"
 # Purpose: Auto-resolve low-priority conflicts
 # Frequency: 48 executions/day
 
 # --- Hourly (Spread across 0/15/30/45) ---
 [functions.auto-restart-backfill]
 verify_jwt = false
-schedule = "0 * * * *"
+schedule = "0 */6 * * *"
 # Purpose: Restart paused/stalled backfill processes
 # Frequency: 24 executions/day (at :00)
 
@@ -313,13 +313,13 @@ schedule = "0 * * * *"
 
 [functions.master-scheduler]
 verify_jwt = false
-schedule = "30 * * * *"
+schedule = "30 */6 * * *"
 # Purpose: Master scheduler for background tasks
 # Frequency: 24 executions/day (at :30)
 
 [functions.auto-validate-trusted-knowledge]
 verify_jwt = false
-schedule = "45 * * * *"
+schedule = "45 */6 * * *"
 # Purpose: Auto-validate knowledge from trusted sources
 # Frequency: 24 executions/day (at :45)
 
@@ -330,20 +330,20 @@ schedule = "45 * * * *"
 # --- Every 6 Hours ---
 [functions.data-quality-auditor]
 verify_jwt = false
-schedule = "0 */6 * * *"
+schedule = "0 8 * * *"
 # Purpose: Audit data quality and detect issues
 # Frequency: 4 executions/day
 
 [functions.detect-and-resolve-conflicts]
 verify_jwt = false
-schedule = "0 */6 * * *"
+schedule = "0 9 * * *"
 # Purpose: Detect and resolve knowledge conflicts
 # Frequency: 4 executions/day
 
 # --- Every 10 Minutes ---
 [functions.system-health-monitor]
 verify_jwt = false
-schedule = "*/10 * * * *"
+schedule = "45 */2 * * *"
 # Purpose: Monitor system health metrics
 # Frequency: 144 executions/day
 
@@ -373,7 +373,7 @@ schedule = "0 6 * * *"
 # --- Phase 2: Self-Learning Reinforcement ---
 [functions.apply-meta-patterns]
 verify_jwt = false
-schedule = "0 */6 * * *"
+schedule = "0 10 * * *"
 # Purpose: Apply high-confidence meta-patterns to knowledge items (every 6 hours)
 # Protects core Gemini data, only applies to items with generic categories
 
@@ -407,9 +407,9 @@ verify_jwt = false
 
 [functions.ai-chat-health-monitor]
 verify_jwt = false
-schedule = "*/5 * * * *"
+schedule = "30 */2 * * *"
 # Purpose: Monitor AI Chat health and send email alerts on failures
-# Frequency: 288 executions/day (every 5 minutes)
+# Frequency: 12 executions/day (every 2 hours)
 # Dependencies: Calls ai-chat?health=true, logs to system_health_log, alerts via Resend
 
 # -----------------------------------------------------------------------------
@@ -478,7 +478,7 @@ verify_jwt = false
 
 [functions.cache-warmer]
 verify_jwt = false
-schedule = "0 */2 * * *"
+schedule = "0 1 * * *"
 # Purpose: Proactively refresh expiring cache entries (every 2 hours)
 
 # -----------------------------------------------------------------------------
