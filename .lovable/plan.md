@@ -1,34 +1,35 @@
 
 
-# Fix: Bendy base64 data extractie — JSON:API formaat
+# Professionals Kaarten — Gebruiksvriendelijker voor Medewerkers
 
-## Probleem
-De Bendy API retourneert data in JSON:API formaat:
-```json
-{ "data": { "id": "...", "type": "...", "attributes": { "data": "base64..." } } }
-```
+Na analyse van de screenshot en het huidige component, zijn dit de concrete verbeteringen:
 
-De code op regel 433 zoekt verkeerd:
-```typescript
-const base64Data = typeof response.data.data === 'string' ? response.data.data : response.data.data?.file_data;
-```
+## Bestand: `src/components/recruitment/ProfessionalCard.tsx`
 
-`response.data.data` is een object (niet een string), en `file_data` bestaat niet — de base64 zit in `attributes.data`.
+### 1. Progress bar toevoegen voor documentstatus
+De gekleurde balk op de screenshot is een goede indicator maar mist context. Vervang de losse badge door een compacte **progress bar met label** die in één oogopslag toont: "3 van 14 documenten verlopen". De bar krijgt statuskleur (groen = compleet, oranje = concept, rood = verlopen).
 
-## Fix
-**Bestand**: `src/components/ProfessionalDetailModal.tsx`, regel 433
+### 2. "Docs gesyncet" timestamp verwijderen
+Dit is interne systeeminfo die medewerkers niet nodig hebben. Vervang door alleen de registratiedatum: `"Geregistreerd 2 dagen geleden"`. Sync-status hoort niet op de kaart.
 
-Vervang:
-```typescript
-const base64Data = typeof response.data.data === 'string' ? response.data.data : response.data.data?.file_data;
-```
+### 3. Document-badge tekst verduidelijken
+Huidige tekst "11 in concept" is onduidelijk voor medewerkers. Verduidelijk naar:
+- Verlopen: `"3 documenten verlopen"` (volledige zin)
+- Concept: `"11 documenten nog niet gepubliceerd"`
+- Compleet: `"Alle documenten in orde"`
+- Geen: `"Nog geen documenten"`
 
-Door:
-```typescript
-const base64Data = response.data.data?.attributes?.data
-  || response.data.data?.file_data
-  || (typeof response.data.data === 'string' ? response.data.data : null);
-```
+### 4. Visuele progress indicator
+Voeg een dunne horizontale progress bar toe (h-1 rounded-full) onder de document-badge:
+- Breedte = `published / total * 100%`
+- Kleur volgt status: emerald (compleet), amber (concept), red (verlopen)
+- Achtergrond: `bg-muted/30`
 
-Dit checkt eerst de JSON:API structuur (`attributes.data`), dan een fallback (`file_data`), dan directe string data. Eén regel wijzigen, geen andere bestanden.
+### 5. Actieknoppen duidelijker labelen
+De icoon-only knoppen (telefoon, mail, locatie) zijn niet direct herkenbaar voor alle medewerkers. Voeg op hover een duidelijke tooltip toe (al aanwezig) maar maak de knoppen iets groter (`h-9` i.p.v. `h-8`) en voeg een subtiele label toe aan de "Plaatsen" knop.
+
+### 6. Statusdot vergroten en labelen
+De kleine statusdot (2.5px) op de avatar is moeilijk te zien. Vergroot naar `h-3 w-3` en voeg een ring toe met hogere contrast (`ring-3`).
+
+Alle wijzigingen zijn puur visueel in `ProfessionalCard.tsx`.
 
