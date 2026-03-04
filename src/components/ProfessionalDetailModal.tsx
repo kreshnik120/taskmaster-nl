@@ -430,7 +430,9 @@ export function ProfessionalDetailModal({
 
       if (!response?.data?.data) throw new Error('Geen bestandsdata ontvangen');
 
-      const base64Data = typeof response.data.data === 'string' ? response.data.data : response.data.data?.file_data;
+      const base64Data = response.data.data?.attributes?.data
+        || response.data.data?.file_data
+        || (typeof response.data.data === 'string' ? response.data.data : null);
       if (!base64Data) throw new Error('Geen base64 data in response');
 
       const binaryStr = atob(base64Data);
