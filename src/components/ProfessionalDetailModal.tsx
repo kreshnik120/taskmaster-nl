@@ -1506,6 +1506,8 @@ export function ProfessionalDetailModal({
                 </>
             )}
           </TabsContent>
+
+          <TabsContent value="ervaring" className="space-y-6 mt-6">
             {/* Sector Ervaring */}
             <div className="space-y-3">
               <h3 className="text-sm font-semibold flex items-center gap-2">
