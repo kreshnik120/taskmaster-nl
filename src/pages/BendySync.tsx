@@ -160,9 +160,20 @@ export default function BendySync() {
 
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 30000);
+    const interval = setInterval(fetchStatus, 120000);
     return () => clearInterval(interval);
   }, [fetchStatus]);
+
+  // Refresh status wanneer tab weer zichtbaar wordt
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchStatus();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
 
   // Poll elke 3s voor sync resultaat nadat de backend "accepted" heeft geretourneerd
   useEffect(() => {
@@ -210,7 +221,7 @@ export default function BendySync() {
       } catch (err) {
         console.error('Sync polling error:', err);
       }
-    }, 3000);
+    }, 10000);
 
     // Timeout na 5 minuten
     const timeout = setTimeout(() => {

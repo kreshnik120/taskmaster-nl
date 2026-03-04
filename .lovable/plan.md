@@ -1,47 +1,35 @@
 
 
-# Plan: S41-A (Kosten Optimalisatie) + S41-B1 (Database Migratie)
+# Professionals Kaarten — Gebruiksvriendelijker voor Medewerkers
 
-Twee onafhankelijke wijzigingen die parallel uitgevoerd worden.
+Na analyse van de screenshot en het huidige component, zijn dit de concrete verbeteringen:
 
----
+## Bestand: `src/components/recruitment/ProfessionalCard.tsx`
 
-## Deel 1: Kosten Optimalisatie (S41-A)
+### 1. Progress bar toevoegen voor documentstatus
+De gekleurde balk op de screenshot is een goede indicator maar mist context. Vervang de losse badge door een compacte **progress bar met label** die in één oogopslag toont: "3 van 14 documenten verlopen". De bar krijgt statuskleur (groen = compleet, oranje = concept, rood = verlopen).
 
-### Bestand: `src/pages/BendySync.tsx`
-- Regel 163: polling interval 30s → 120s
-- Regel 213: sync polling 3s → 10s
-- Nieuw useEffect voor visibility change (refresh bij tab-terugkeer)
+### 2. "Docs gesyncet" timestamp verwijderen
+Dit is interne systeeminfo die medewerkers niet nodig hebben. Vervang door alleen de registratiedatum: `"Geregistreerd 2 dagen geleden"`. Sync-status hoort niet op de kaart.
 
-### Bestand: `supabase/config.toml`
-16 schedule-wijzigingen (alle naar lagere frequentie):
-- 3× elke 5min → elke 2 uur (process-system-events, ai-agent-orchestrator, ai-chat-health-monitor)
-- 1× elke 10min → elke 2 uur (system-health-monitor)
-- 3× elke 15min → elke 4 uur (bendy-sync, cleanup-stale-jobs, cleanup-stuck-test-runs)
-- 1× elke 30min → elke 4 uur (auto-resolve-alerts)
-- 3× elk uur → elke 6 uur (auto-restart-backfill, master-scheduler, auto-validate-trusted-knowledge)
-- 1× elke 2 uur → dagelijks (cache-warmer)
-- 3× elke 6 uur → dagelijks (data-quality-auditor, detect-and-resolve-conflicts, apply-meta-patterns)
-- 1× elke 12 uur → dagelijks (ai-task-scorer)
+### 3. Document-badge tekst verduidelijken
+Huidige tekst "11 in concept" is onduidelijk voor medewerkers. Verduidelijk naar:
+- Verlopen: `"3 documenten verlopen"` (volledige zin)
+- Concept: `"11 documenten nog niet gepubliceerd"`
+- Compleet: `"Alle documenten in orde"`
+- Geen: `"Nog geen documenten"`
 
----
+### 4. Visuele progress indicator
+Voeg een dunne horizontale progress bar toe (h-1 rounded-full) onder de document-badge:
+- Breedte = `published / total * 100%`
+- Kleur volgt status: emerald (compleet), amber (concept), red (verlopen)
+- Achtergrond: `bg-muted/30`
 
-## Deel 2: Database Migratie (S41-B1)
+### 5. Actieknoppen duidelijker labelen
+De icoon-only knoppen (telefoon, mail, locatie) zijn niet direct herkenbaar voor alle medewerkers. Voeg op hover een duidelijke tooltip toe (al aanwezig) maar maak de knoppen iets groter (`h-9` i.p.v. `h-8`) en voeg een subtiele label toe aan de "Plaatsen" knop.
 
-Eén SQL-migratie (via migration tool):
-- **1A**: 6 kolommen toevoegen (file_path, file_name, content_type, category, uploaded_by, is_manual)
-- **1B**: bendy_document_id nullable maken
-- **1C**: UNIQUE constraint → partial unique index
-- **1D**: Index op category
-- **1E**: Storage bucket `professional-documents` (private, 10MB, PDF/JPG/PNG/DOCX)
-- **1F**: Storage RLS (org-leden upload + read, pad-gebaseerd)
-- **1G**: Tabel RLS (INSERT + UPDATE voor org-leden)
+### 6. Statusdot vergroten en labelen
+De kleine statusdot (2.5px) op de avatar is moeilijk te zien. Vergroot naar `h-3 w-3` en voeg een ring toe met hogere contrast (`ring-3`).
 
-Na migratie, via insert tool (data-update):
-- **1H**: Categorie-mapping voor ~6.210 bestaande documenten (basis/zzp/certificaat/overig)
-
-### Verificatie
-- `SELECT category, count(*) FROM professional_documents GROUP BY category ORDER BY count DESC;`
-- Storage bucket moet bestaan
-- Nieuwe kolommen moeten zichtbaar zijn
+Alle wijzigingen zijn puur visueel in `ProfessionalCard.tsx`.
 
