@@ -1,35 +1,52 @@
 
 
-# Professionals Kaarten — Gebruiksvriendelijker voor Medewerkers
+# Fix: Document viewer geblokkeerd door browser
 
-Na analyse van de screenshot en het huidige component, zijn dit de concrete verbeteringen:
+## Probleem
+`handleViewDocument` opent de signed URL via `window.open(signedUrl, '_blank')`. Microsoft Edge (en andere browsers met ad-blockers/security) blokkeren directe navigatie naar het Supabase storage domein (`oelmsmcgryeoryhonexw.supabase.co`).
 
-## Bestand: `src/components/recruitment/ProfessionalCard.tsx`
+## Oplossing
+In plaats van `window.open` naar een extern domein, **fetch de signed URL en open het bestand als een blob URL** in de browser. Dit omzeilt domeinblokkering omdat de blob URL lokaal is (`blob:https://taskmaster-nl.lovable.app/...`).
 
-### 1. Progress bar toevoegen voor documentstatus
-De gekleurde balk op de screenshot is een goede indicator maar mist context. Vervang de losse badge door een compacte **progress bar met label** die in één oogopslag toont: "3 van 14 documenten verlopen". De bar krijgt statuskleur (groen = compleet, oranje = concept, rood = verlopen).
+## Wijzigingen
 
-### 2. "Docs gesyncet" timestamp verwijderen
-Dit is interne systeeminfo die medewerkers niet nodig hebben. Vervang door alleen de registratiedatum: `"Geregistreerd 2 dagen geleden"`. Sync-status hoort niet op de kaart.
+**Bestand**: `src/components/ProfessionalDetailModal.tsx`
 
-### 3. Document-badge tekst verduidelijken
-Huidige tekst "11 in concept" is onduidelijk voor medewerkers. Verduidelijk naar:
-- Verlopen: `"3 documenten verlopen"` (volledige zin)
-- Concept: `"11 documenten nog niet gepubliceerd"`
-- Compleet: `"Alle documenten in orde"`
-- Geen: `"Nog geen documenten"`
+### handleViewDocument (regel 500-504)
+Vervang `window.open(signedUrl)` door: fetch de signed URL → maak blob → `URL.createObjectURL` → `window.open(blobUrl)`.
 
-### 4. Visuele progress indicator
-Voeg een dunne horizontale progress bar toe (h-1 rounded-full) onder de document-badge:
-- Breedte = `published / total * 100%`
-- Kleur volgt status: emerald (compleet), amber (concept), red (verlopen)
-- Achtergrond: `bg-muted/30`
+```typescript
+const handleViewDocument = useCallback(async (filePath: string) => {
+  const { data } = await supabase.storage.from('professional-documents').createSignedUrl(filePath, 60);
+  if (!data?.signedUrl) { toast.error('Kan bestand niet openen'); return; }
+  try {
+    const res = await fetch(data.signedUrl);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    window.open(blobUrl, '_blank');
+  } catch { toast.error('Kan bestand niet openen'); }
+}, []);
+```
 
-### 5. Actieknoppen duidelijker labelen
-De icoon-only knoppen (telefoon, mail, locatie) zijn niet direct herkenbaar voor alle medewerkers. Voeg op hover een duidelijke tooltip toe (al aanwezig) maar maak de knoppen iets groter (`h-9` i.p.v. `h-8`) en voeg een subtiele label toe aan de "Plaatsen" knop.
+### handleDownloadDocument (regel 506-516)
+Zelfde aanpak voor download — fetch als blob, maak object URL, trigger download link.
 
-### 6. Statusdot vergroten en labelen
-De kleine statusdot (2.5px) op de avatar is moeilijk te zien. Vergroot naar `h-3 w-3` en voeg een ring toe met hogere contrast (`ring-3`).
+```typescript
+const handleDownloadDocument = useCallback(async (filePath: string, fileName: string) => {
+  const { data } = await supabase.storage.from('professional-documents').createSignedUrl(filePath, 60);
+  if (!data?.signedUrl) { toast.error('Kan bestand niet downloaden'); return; }
+  try {
+    const res = await fetch(data.signedUrl);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = fileName || 'document';
+    a.click();
+    URL.revokeObjectURL(blobUrl);
+  } catch { toast.error('Kan bestand niet downloaden'); }
+}, []);
+```
 
-Alle wijzigingen zijn puur visueel in `ProfessionalCard.tsx`.
+Twee functies wijzigen, geen andere bestanden.
 
