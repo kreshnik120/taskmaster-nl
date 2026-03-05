@@ -53,18 +53,8 @@ const getInitials = (name: string): string => {
     .toUpperCase();
 };
 
-const getFunctieColor = (functie?: string): string => {
-  const colors: Record<string, string> = {
-    'HBO-V': 'bg-blue-500',
-    'VIG': 'bg-green-500',
-    'Verpleegkundige MBO': 'bg-cyan-500',
-    'Helpende': 'bg-amber-500',
-    'Begeleider': 'bg-purple-500',
-    'Persoonlijk begeleider': 'bg-indigo-500',
-    'GGZ-agoog': 'bg-rose-500',
-  };
-  return colors[functie || ''] || 'bg-muted-foreground';
-};
+import { getFunctieNiveauColor } from "@/types/organization";
+const getFunctieColor = (functie?: string): string => getFunctieNiveauColor(functie).solid;
 
 const getStatusColor = (status: string): string => {
   switch (status?.toLowerCase()) {

@@ -108,12 +108,28 @@ export const DOELGROEP_COLORS: Record<string, { selected: string; outline: strin
   "Verslaving": { selected: "bg-slate-500 text-white border-slate-500 hover:bg-slate-600", outline: "border-slate-500 text-slate-700 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-950" },
 };
 
-export const FUNCTIE_COLORS: Record<string, { selected: string; outline: string }> = {
-  "VIG": { selected: "bg-blue-600 text-white border-blue-600 hover:bg-blue-700", outline: "border-blue-600 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950" },
-  "HBO-V": { selected: "bg-purple-600 text-white border-purple-600 hover:bg-purple-700", outline: "border-purple-600 text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950" },
-  "Verpleegkundige MBO": { selected: "bg-green-600 text-white border-green-600 hover:bg-green-700", outline: "border-green-600 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950" },
-  "Helpende": { selected: "bg-orange-600 text-white border-orange-600 hover:bg-orange-700", outline: "border-orange-600 text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950" },
-  "Begeleider": { selected: "bg-teal-600 text-white border-teal-600 hover:bg-teal-700", outline: "border-teal-600 text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950" },
-  "Persoonlijk begeleider": { selected: "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700", outline: "border-indigo-600 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950" },
-  "GGZ-agoog": { selected: "bg-pink-600 text-white border-pink-600 hover:bg-pink-700", outline: "border-pink-600 text-pink-700 dark:text-pink-400 hover:bg-pink-50 dark:hover:bg-pink-950" },
+export const FUNCTIE_NIVEAU_COLORS: Record<string, {
+  bg: string;
+  text: string;
+  border: string;
+  solid: string;
+  selected: string;
+  outline: string;
+}> = {
+  'WO':                     { bg: 'bg-red-500/10',    text: 'text-red-700',    border: 'border-red-200',    solid: 'bg-red-600',    selected: 'bg-red-600 text-white border-red-600',    outline: 'border-red-600 text-red-700 hover:bg-red-50' },
+  'HBO':                    { bg: 'bg-blue-500/10',   text: 'text-blue-700',   border: 'border-blue-200',   solid: 'bg-blue-600',   selected: 'bg-blue-600 text-white border-blue-600',  outline: 'border-blue-600 text-blue-700 hover:bg-blue-50' },
+  'HBO-V':                  { bg: 'bg-purple-500/10', text: 'text-purple-700', border: 'border-purple-200', solid: 'bg-purple-500', selected: 'bg-purple-600 text-white border-purple-600', outline: 'border-purple-600 text-purple-700 hover:bg-purple-50' },
+  'Verpleegkundige MBO':    { bg: 'bg-cyan-500/10',   text: 'text-cyan-700',   border: 'border-cyan-200',   solid: 'bg-cyan-500',   selected: 'bg-cyan-600 text-white border-cyan-600',  outline: 'border-cyan-600 text-cyan-700 hover:bg-cyan-50' },
+  'GGZ-agoog':              { bg: 'bg-rose-500/10',   text: 'text-rose-700',   border: 'border-rose-200',   solid: 'bg-rose-500',   selected: 'bg-rose-600 text-white border-rose-600',  outline: 'border-rose-600 text-rose-700 hover:bg-rose-50' },
+  'VIG':                    { bg: 'bg-green-500/10',  text: 'text-green-700',  border: 'border-green-200',  solid: 'bg-green-500',  selected: 'bg-green-600 text-white border-green-600', outline: 'border-green-600 text-green-700 hover:bg-green-50' },
+  'Persoonlijk begeleider': { bg: 'bg-indigo-500/10', text: 'text-indigo-700', border: 'border-indigo-200', solid: 'bg-indigo-500', selected: 'bg-indigo-600 text-white border-indigo-600', outline: 'border-indigo-600 text-indigo-700 hover:bg-indigo-50' },
+  'Begeleider':             { bg: 'bg-teal-500/10',   text: 'text-teal-700',   border: 'border-teal-200',   solid: 'bg-teal-500',   selected: 'bg-teal-600 text-white border-teal-600',  outline: 'border-teal-600 text-teal-700 hover:bg-teal-50' },
+  'Helpende':               { bg: 'bg-amber-500/10',  text: 'text-amber-700',  border: 'border-amber-200',  solid: 'bg-amber-500',  selected: 'bg-amber-600 text-white border-amber-600', outline: 'border-amber-600 text-amber-700 hover:bg-amber-50' },
 };
+
+export const getFunctieNiveauColor = (functie?: string) =>
+  FUNCTIE_NIVEAU_COLORS[functie || ''] || {
+    bg: 'bg-muted', text: 'text-muted-foreground', border: 'border-border',
+    solid: 'bg-muted-foreground', selected: 'bg-muted text-foreground border-border',
+    outline: 'border-border text-foreground hover:bg-muted'
+  };

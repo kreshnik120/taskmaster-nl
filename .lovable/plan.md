@@ -1,49 +1,37 @@
 
 
-# S41-C1 + S41-C2 — Backend + Frontend Audit Fixes
+# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
 
-## C1: Backend Fixes (supabase/functions/bendy-sync/index.ts)
+## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
 
-### H1 — Promise.all → Promise.allSettled (regels 266-270)
-Vervang `Promise.all` door `Promise.allSettled` met warning logging voor failures.
+### 1. Nieuwe state variabelen (na regel 193)
+- `showAddDocDialog` (boolean)
+- `addDocLoading` (boolean)
+- `addDocForm` object: `{ name, category, type, expiryDate, file }`
 
-### H3 — geboortedatum + profile_photo_url in UPDATE path (na regel 1079)
-Twee regels toevoegen, zelfde conditioneel patroon als bestaande velden.
+### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
+- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
+- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
+- Haal `user` op via `supabase.auth.getUser()`
+- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
 
-### L4 — matchNiveauFromText uitbreiden (regels 404-414)
-Voeg `WO` (eerste) en `HBO` standalone (na HBO-V) toe met correcte regex.
+### 3. `handleUploadForManualDoc` functie
+- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
+- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
+- Update lokale `documents` state
 
----
+### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
+- Plus icoon, variant outline, opent dialog
 
-## C2: Frontend Fixes (meerdere bestanden)
+### 5. UI: Dialog component (onder de TabsContent of aan het eind)
+- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
+- Na file selectie: toon bestandsnaam + grootte
+- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
 
-### M5 — Kleur-consistentie: 1 centrale bron
+### 6. Scenario C Upload knop activeren (regel ~1447)
+- Verwijder `disabled` van de Upload knop
+- onClick: trigger hidden file input → `handleUploadForManualDoc`
 
-**Stap 1:** `src/types/organization.ts` — Vervang `FUNCTIE_COLORS` (regels 111-119) door `FUNCTIE_NIVEAU_COLORS` met uitgebreide mapping (bg, text, border, solid, selected, outline) + `getFunctieNiveauColor()` helper.
-
-**Stap 2:** Vervang lokale `getFunctieColor` in 4 bestanden + lokale `FUNCTIE_COLORS` in 1 bestand:
-1. `ProfessionalDetailModal.tsx` — verwijder regels 112-123, importeer helper
-2. `ProfessionalCard.tsx` — verwijder regels 56-67, gebruik `getFunctieNiveauColor(f).solid`
-3. `professional-avatar.tsx` — verwijder regels 42-55, gebruik `getFunctieNiveauColor(f).solid`
-4. `ApplicationDetailModal.tsx` — verwijder regels 131-141, gebruik bg/text/border
-5. `ClientDetailModal.tsx` — verwijder regels 70-78, importeer `FUNCTIE_NIVEAU_COLORS`, gebruik `.selected`/`.outline`
-6. `NewClientDialog.tsx` — update import van `FUNCTIE_COLORS` naar `FUNCTIE_NIVEAU_COLORS`
-
-### M3 — Completeness ring 7 → 20 velden
-`ProfessionalDetailModal.tsx` regels 639-647 — uitbreiden naar 20 velden (basis/professioneel/bedrijf/documenten/bendy).
-
-### L1 — IBAN maskeren
-`ProfessionalDetailModal.tsx` regel 1313 — toon `NL91••••••4567` formaat.
-
----
-
-## Totaal: 8 bestanden
-1. `supabase/functions/bendy-sync/index.ts` (3 fixes)
-2. `src/types/organization.ts` (nieuwe centrale mapping)
-3. `src/components/ProfessionalDetailModal.tsx` (kleur + completeness + IBAN)
-4. `src/components/recruitment/ProfessionalCard.tsx` (kleur)
-5. `src/components/ui/professional-avatar.tsx` (kleur)
-6. `src/components/ApplicationDetailModal.tsx` (kleur)
-7. `src/components/ClientDetailModal.tsx` (kleur)
-8. `src/components/NewClientDialog.tsx` (import update)
+### Bestanden die NIET worden aangepast
+- Edge functions, storage config, andere tabs, bendy-sync
 

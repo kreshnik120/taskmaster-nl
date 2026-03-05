@@ -128,17 +128,10 @@ const getDoelgroepColor = (doelgroep: string) => {
   return colors[doelgroep] || "bg-muted text-foreground";
 };
 
+import { getFunctieNiveauColor } from "@/types/organization";
 const getFunctieColor = (functie: string) => {
-  const colors: Record<string, string> = {
-    "VIG": "bg-blue-100 text-blue-700 border-blue-300",
-    "HBO-V": "bg-purple-100 text-purple-700 border-purple-300",
-    "Verpleegkundige MBO": "bg-green-100 text-green-700 border-green-300",
-    "Helpende": "bg-orange-100 text-orange-700 border-orange-300",
-    "Begeleider": "bg-cyan-100 text-cyan-700 border-cyan-300",
-    "Persoonlijk begeleider": "bg-pink-100 text-pink-700 border-pink-300",
-    "GGZ-agoog": "bg-indigo-100 text-indigo-700 border-indigo-300",
-  };
-  return colors[functie] || "bg-muted text-foreground";
+  const c = getFunctieNiveauColor(functie);
+  return `${c.bg} ${c.text} ${c.border}`;
 };
 
 // === Helper functions for per-field confidence (backwards compatible) ===

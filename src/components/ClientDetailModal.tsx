@@ -67,15 +67,8 @@ const DOELGROEP_COLORS: Record<string, { selected: string; outline: string }> = 
   "Verslaving": { selected: "bg-slate-500 text-white border-slate-500", outline: "border-slate-500 text-slate-700 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-950" },
 };
 
-const FUNCTIE_COLORS: Record<string, { selected: string; outline: string }> = {
-  "VIG": { selected: "bg-blue-600 text-white border-blue-600", outline: "border-blue-600 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950" },
-  "HBO-V": { selected: "bg-purple-600 text-white border-purple-600", outline: "border-purple-600 text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950" },
-  "Verpleegkundige MBO": { selected: "bg-green-600 text-white border-green-600", outline: "border-green-600 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950" },
-  "Helpende": { selected: "bg-orange-600 text-white border-orange-600", outline: "border-orange-600 text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950" },
-  "Begeleider": { selected: "bg-teal-600 text-white border-teal-600", outline: "border-teal-600 text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950" },
-  "Persoonlijk begeleider": { selected: "bg-indigo-600 text-white border-indigo-600", outline: "border-indigo-600 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950" },
-  "GGZ-agoog": { selected: "bg-pink-600 text-white border-pink-600", outline: "border-pink-600 text-pink-700 dark:text-pink-400 hover:bg-pink-50 dark:hover:bg-pink-950" },
-};
+import { FUNCTIE_NIVEAU_COLORS } from "@/types/organization";
+const FUNCTIE_COLORS = FUNCTIE_NIVEAU_COLORS;
 
 export default function ClientDetailModal({ open, onOpenChange, client, onUpdate }: ClientDetailModalProps) {
   const [isEditing, setIsEditing] = useState(false);

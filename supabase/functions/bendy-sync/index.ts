@@ -263,11 +263,15 @@ async function parallelUpdates(
   if (updates.length === 0) return;
   for (let i = 0; i < updates.length; i += PARALLEL_CHUNK_SIZE) {
     const chunk = updates.slice(i, i + PARALLEL_CHUNK_SIZE);
-    await Promise.all(
+    const results = await Promise.allSettled(
       chunk.map(u =>
         adminClient.from(table).update(u.data).eq('id', u.id)
       )
     );
+    const failures = results.filter(r => r.status === 'rejected');
+    if (failures.length > 0) {
+      console.warn(`[bendy-sync] ${failures.length}/${chunk.length} updates mislukt in ${table}`);
+    }
   }
 }
 
@@ -402,8 +406,10 @@ const NIVEAU_RANK: Record<string, number> = {
 };
 
 function matchNiveauFromText(text: string): string | null {
-  // Volgorde: meest specifiek eerst, breed patroon laatst
+  // Volgorde: hoogste niveau eerst, meest specifiek eerst, breed patroon laatst
+  if (/\bWO\b|Universitair/i.test(text)) return 'WO';
   if (/HBO.?V|hbo\s*verpleeg/i.test(text)) return 'HBO-V';
+  if (/\bHBO\b(?!.?V)/i.test(text)) return 'HBO';
   if (/Persoonlijk\s*begeleider|\bPB\b/i.test(text)) return 'Persoonlijk begeleider';
   if (/Verpleegkundige|\bVP\b/i.test(text)) return 'Verpleegkundige (MBO)';
   if (/GGZ/i.test(text)) return 'GGZ-agoog';
@@ -1077,6 +1083,8 @@ async function syncUsers(
         if (attrs.initials && !matchedPro.voorletters) updateData.voorletters = attrs.initials;
         if (attrs.birthtown && !matchedPro.geboorteplaats) updateData.geboorteplaats = attrs.birthtown;
         if (attrs.gender && !matchedPro.geslacht) updateData.geslacht = attrs.gender;
+        if (attrs.birthdate && !matchedPro.geboortedatum) updateData.geboortedatum = attrs.birthdate;
+        if (attrs.photo_url && !matchedPro.profile_photo_url) updateData.profile_photo_url = attrs.photo_url;
         if (attrs.external_id && !matchedPro.bendy_external_id) updateData.bendy_external_id = String(attrs.external_id);
         if (attrs.certificates) {
           const parsed = parseCertificates(attrs.certificates);
