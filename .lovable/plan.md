@@ -1,25 +1,37 @@
 
 
-# Fix: Alle `window.open(signedUrl)` calls vervangen door blob-proxy
+# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
 
-## Probleem
-Er zijn nog plekken in de code die `window.open(signedUrl, '_blank')` gebruiken in plaats van de blob-proxy methode. Microsoft Edge blokkeert directe navigatie naar het Supabase storage domein.
+## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
 
-## Gevonden locaties
+### 1. Nieuwe state variabelen (na regel 193)
+- `showAddDocDialog` (boolean)
+- `addDocLoading` (boolean)
+- `addDocForm` object: `{ name, category, type, expiryDate, file }`
 
-### 1. CV Bekijken knop (ProfessionalDetailModal.tsx, regel ~982-987)
-De "Bekijken" knop bij het CV gebruikt nog `window.open(data.signedUrl, '_blank')`. Moet vervangen worden door: `supabase.storage.download()` → `URL.createObjectURL(blob)` → `window.open(blobUrl)`.
+### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
+- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
+- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
+- Haal `user` op via `supabase.auth.getUser()`
+- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
 
-### 2. ZZPDocumentWizard.tsx (regel ~429-432)
-Documenten bekijken in de ZZP wizard gebruikt ook `window.open(data.signedUrl, '_blank')`. Zelfde fix toepassen.
+### 3. `handleUploadForManualDoc` functie
+- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
+- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
+- Update lokale `documents` state
 
-## Wijzigingen
+### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
+- Plus icoon, variant outline, opent dialog
 
-### Bestand 1: `src/components/ProfessionalDetailModal.tsx`
-- Regel ~980-992: CV Bekijken knop — vervang `createSignedUrl` + `window.open` door `download()` + `URL.createObjectURL` + `window.open(blobUrl)`.
+### 5. UI: Dialog component (onder de TabsContent of aan het eind)
+- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
+- Na file selectie: toon bestandsnaam + grootte
+- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
 
-### Bestand 2: `src/components/recruitment/ZZPDocumentWizard.tsx`  
-- Regel ~429-433: Bekijk knop — zelfde blob-proxy aanpak.
+### 6. Scenario C Upload knop activeren (regel ~1447)
+- Verwijder `disabled` van de Upload knop
+- onClick: trigger hidden file input → `handleUploadForManualDoc`
 
-Beide wijzigingen zijn identiek aan de eerder toegepaste fix in `handleViewDocument`.
+### Bestanden die NIET worden aangepast
+- Edge functions, storage config, andere tabs, bendy-sync
 

@@ -426,10 +426,19 @@ export function ZZPDocumentWizard({
                 variant="ghost"
                 size="sm"
                 onClick={async () => {
-                  const { data } = await supabase.storage
-                    .from('application-documents')
-                    .createSignedUrl(uploadedDocs[docType]!, 60);
-                  if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+                  try {
+                    const { data, error } = await supabase.storage
+                      .from('application-documents')
+                      .download(uploadedDocs[docType]!);
+                    if (error) throw error;
+                    if (data) {
+                      const blobUrl = URL.createObjectURL(data);
+                      window.open(blobUrl, '_blank');
+                    }
+                  } catch (error) {
+                    console.error('Error viewing document:', error);
+                    toast.error('Kon document niet openen');
+                  }
                 }}
               >
                 <Eye className="h-4 w-4" />
