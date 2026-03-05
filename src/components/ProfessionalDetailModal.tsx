@@ -979,11 +979,13 @@ export function ProfessionalDetailModal({
                           variant="outline"
                           onClick={async () => {
                             try {
-                              const { data } = await supabase.storage
+                              const { data, error } = await supabase.storage
                                 .from('application-cvs')
-                                .createSignedUrl(professional.cv_file_path!, 60);
-                              if (data?.signedUrl) {
-                                window.open(data.signedUrl, '_blank');
+                                .download(professional.cv_file_path!);
+                              if (error) throw error;
+                              if (data) {
+                                const blobUrl = URL.createObjectURL(data);
+                                window.open(blobUrl, '_blank');
                               }
                             } catch (error) {
                               console.error('Error opening CV:', error);
