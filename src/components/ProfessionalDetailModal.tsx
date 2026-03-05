@@ -21,7 +21,7 @@ import {
   Phone, Mail, MapPin, Briefcase, Car, Calendar, User, Users,
   Star, Edit, Trash2, CheckCircle2, X, Link2, ChevronDown, Award, Clock, 
   Home, Cake, Upload, MoreHorizontal, FileText, Download, Eye, XCircle,
-  HardDrive, Loader2
+  HardDrive, Loader2, Plus
 } from "lucide-react";
 import { PlacementHistory } from "./PlacementHistory";
 import { BeschikbaarheidMiniKalender } from "./beschikbaarheid/BeschikbaarheidMiniKalender";
@@ -191,6 +191,9 @@ export function ProfessionalDetailModal({
   const [bulkFetching, setBulkFetching] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0, failed: 0 });
   const [categoryOpen, setCategoryOpen] = useState<Record<string, boolean>>({ basis: true, zzp: true, certificaat: true, overig: true });
+  const [showAddDocDialog, setShowAddDocDialog] = useState(false);
+  const [addDocLoading, setAddDocLoading] = useState(false);
+  const [addDocForm, setAddDocForm] = useState({ name: '', category: 'overig', type: '', expiryDate: '', file: null as File | null });
 
   useEffect(() => {
     if (open && professional) {
@@ -523,6 +526,113 @@ export function ProfessionalDetailModal({
     } catch { toast.error('Kan bestand niet downloaden'); }
   }, []);
 
+  const handleAddDocument = useCallback(async () => {
+    if (!professional || !addDocForm.name.trim()) return;
+    setAddDocLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { toast.error('Niet ingelogd'); setAddDocLoading(false); return; }
+
+      let filePath: string | null = null;
+      let fileName: string | null = null;
+      let contentType: string | null = null;
+
+      if (addDocForm.file) {
+        if (addDocForm.file.size > 10 * 1024 * 1024) {
+          toast.error('Bestand mag maximaal 10MB zijn');
+          setAddDocLoading(false);
+          return;
+        }
+        const ext = addDocForm.file.name.split('.').pop()?.toLowerCase() || 'bin';
+        filePath = `${professional.org_id}/${professional.id}/manual_${Date.now()}.${ext}`;
+        fileName = addDocForm.file.name;
+        contentType = addDocForm.file.type;
+
+        const { error: uploadError } = await supabase.storage
+          .from('professional-documents')
+          .upload(filePath, addDocForm.file, { contentType: addDocForm.file.type, upsert: false });
+        if (uploadError) {
+          console.error('Upload error:', uploadError);
+          toast.error('Bestand uploaden mislukt');
+          setAddDocLoading(false);
+          return;
+        }
+      }
+
+      const { error: insertError } = await supabase
+        .from('professional_documents')
+        .insert({
+          professional_id: professional.id,
+          org_id: professional.org_id,
+          document_name: addDocForm.name.trim(),
+          document_type: addDocForm.type.trim() || null,
+          category: addDocForm.category,
+          expires_at: addDocForm.expiryDate || null,
+          is_manual: true,
+          bendy_document_id: null,
+          file_path: filePath,
+          file_name: fileName,
+          content_type: contentType,
+          uploaded_by: user.id,
+          status: 'active',
+          published: false,
+        });
+
+      if (insertError) {
+        console.error('Insert error:', insertError);
+        toast.error('Document opslaan mislukt');
+        setAddDocLoading(false);
+        return;
+      }
+
+      // Refresh documents
+      const { data: refreshed } = await supabase
+        .from('professional_documents')
+        .select('*')
+        .eq('professional_id', professional.id)
+        .order('expires_at', { ascending: true, nullsFirst: false });
+      setDocuments(refreshed || []);
+
+      setShowAddDocDialog(false);
+      setAddDocForm({ name: '', category: 'overig', type: '', expiryDate: '', file: null });
+      toast.success('Document toegevoegd');
+    } catch (err) {
+      console.error('handleAddDocument error:', err);
+      toast.error('Er ging iets mis');
+    } finally {
+      setAddDocLoading(false);
+    }
+  }, [professional, addDocForm]);
+
+  const handleUploadForManualDoc = useCallback(async (doc: any) => {
+    if (!professional) return;
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.pdf,.jpg,.jpeg,.png,.docx';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      if (file.size > 10 * 1024 * 1024) { toast.error('Bestand mag maximaal 10MB zijn'); return; }
+
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'bin';
+      const filePath = `${professional.org_id}/${professional.id}/manual_${Date.now()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('professional-documents')
+        .upload(filePath, file, { contentType: file.type, upsert: false });
+      if (uploadError) { toast.error('Upload mislukt'); return; }
+
+      const { error: updateError } = await supabase
+        .from('professional_documents')
+        .update({ file_path: filePath, file_name: file.name, content_type: file.type })
+        .eq('id', doc.id);
+      if (updateError) { toast.error('Record bijwerken mislukt'); return; }
+
+      setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, file_path: filePath, file_name: file.name, content_type: file.type } : d));
+      toast.success('Bestand geüpload');
+    };
+    input.click();
+  }, [professional]);
 
   const calculateCompleteness = () => {
     if (!professional) return 0;
@@ -544,6 +654,7 @@ export function ProfessionalDetailModal({
   const completeness = calculateCompleteness();
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         {/* Hero Header met Foto */}
@@ -1271,9 +1382,18 @@ export function ProfessionalDetailModal({
                     </p>
                   )}
 
-                  {/* Bulk ophalen knop */}
-                  {docsWithoutFile.length > 0 && (
-                    <div className="flex items-center gap-2">
+                  {/* Actie knoppen */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAddDocDialog(true)}
+                      className="text-xs"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Document toevoegen
+                    </Button>
+                    {docsWithoutFile.length > 0 && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -1293,8 +1413,8 @@ export function ProfessionalDetailModal({
                           </>
                         )}
                       </Button>
-                    </div>
-                  )}
+                    )}
+                  </div>
 
                   {/* Documenten gegroepeerd per categorie */}
                   {documents.length > 0 ? (
@@ -1444,7 +1564,7 @@ export function ProfessionalDetailModal({
                                               Ophalen
                                             </Button>
                                           ) : doc.is_manual ? (
-                                            <Button variant="outline" size="sm" className="h-7 text-[11px] px-2" disabled title="Upload (beschikbaar in volgende update)">
+                                            <Button variant="outline" size="sm" className="h-7 text-[11px] px-2" onClick={() => handleUploadForManualDoc(doc)} title="Upload bestand">
                                               <Upload className="h-3.5 w-3.5" />
                                               Upload
                                             </Button>
@@ -1810,5 +1930,80 @@ export function ProfessionalDetailModal({
         )}
       </DialogContent>
     </Dialog>
+
+      {/* Document Toevoegen Dialog */}
+      <Dialog open={showAddDocDialog} onOpenChange={setShowAddDocDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Document toevoegen</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="doc-name">Documentnaam *</Label>
+              <Input
+                id="doc-name"
+                placeholder="Bijv. VOG, Diploma, BHV certificaat"
+                value={addDocForm.name}
+                onChange={e => setAddDocForm(prev => ({ ...prev, name: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Categorie *</Label>
+              <Select value={addDocForm.category} onValueChange={v => setAddDocForm(prev => ({ ...prev, category: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="basis">Basisdocument</SelectItem>
+                  <SelectItem value="zzp">ZZP Document</SelectItem>
+                  <SelectItem value="certificaat">Certificaat</SelectItem>
+                  <SelectItem value="overig">Overig</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="doc-type">Document type (optioneel)</Label>
+              <Input
+                id="doc-type"
+                placeholder="Bijv. Verklaring Omtrent Gedrag"
+                value={addDocForm.type}
+                onChange={e => setAddDocForm(prev => ({ ...prev, type: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="doc-expiry">Verloopdatum (optioneel)</Label>
+              <Input
+                id="doc-expiry"
+                type="date"
+                value={addDocForm.expiryDate}
+                onChange={e => setAddDocForm(prev => ({ ...prev, expiryDate: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Bestand (optioneel, max 10MB)</Label>
+              <Input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.docx"
+                onChange={e => {
+                  const f = e.target.files?.[0] || null;
+                  setAddDocForm(prev => ({ ...prev, file: f }));
+                }}
+              />
+              {addDocForm.file && (
+                <p className="text-xs text-muted-foreground">
+                  {addDocForm.file.name} — {(addDocForm.file.size / 1024).toFixed(0)} KB
+                </p>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => { setShowAddDocDialog(false); setAddDocForm({ name: '', category: 'overig', type: '', expiryDate: '', file: null }); }}>
+                Annuleren
+              </Button>
+              <Button onClick={handleAddDocument} disabled={!addDocForm.name.trim() || addDocLoading}>
+                {addDocLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Opslaan...</> : 'Opslaan'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
