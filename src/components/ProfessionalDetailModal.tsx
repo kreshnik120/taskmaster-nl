@@ -499,20 +499,28 @@ export function ProfessionalDetailModal({
 
   const handleViewDocument = useCallback(async (filePath: string) => {
     const { data } = await supabase.storage.from('professional-documents').createSignedUrl(filePath, 60);
-    if (data?.signedUrl) window.open(data.signedUrl, '_blank');
-    else toast.error('Kan bestand niet openen');
+    if (!data?.signedUrl) { toast.error('Kan bestand niet openen'); return; }
+    try {
+      const res = await fetch(data.signedUrl);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank');
+    } catch { toast.error('Kan bestand niet openen'); }
   }, []);
 
   const handleDownloadDocument = useCallback(async (filePath: string, fileName: string) => {
     const { data } = await supabase.storage.from('professional-documents').createSignedUrl(filePath, 60);
-    if (data?.signedUrl) {
+    if (!data?.signedUrl) { toast.error('Kan bestand niet downloaden'); return; }
+    try {
+      const res = await fetch(data.signedUrl);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = data.signedUrl;
+      a.href = blobUrl;
       a.download = fileName || 'document';
       a.click();
-    } else {
-      toast.error('Kan bestand niet downloaden');
-    }
+      URL.revokeObjectURL(blobUrl);
+    } catch { toast.error('Kan bestand niet downloaden'); }
   }, []);
 
 
