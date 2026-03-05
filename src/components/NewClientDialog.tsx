@@ -33,7 +33,7 @@ import {
   FUNCTIES,
   SECTOR_COLORS,
   DOELGROEP_COLORS,
-  FUNCTIE_COLORS,
+  FUNCTIE_NIVEAU_COLORS as FUNCTIE_COLORS,
 } from "@/types/organization";
 
 // Schema for creating a new client organization

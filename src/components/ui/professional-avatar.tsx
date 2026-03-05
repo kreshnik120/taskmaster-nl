@@ -38,21 +38,8 @@ export function ProfessionalAvatar({
       .toUpperCase();
   };
 
-  // Get avatar background color based on functie niveau
-  const getFunctieColor = (functie?: string): string => {
-    const colors: Record<string, string> = {
-      'WO': 'bg-red-600',
-      'HBO': 'bg-blue-600',
-      'HBO-V': 'bg-blue-500',
-      'VIG': 'bg-green-500',
-      'Verpleegkundige MBO': 'bg-cyan-500',
-      'Helpende': 'bg-amber-500',
-      'Begeleider': 'bg-purple-500',
-      'Persoonlijk begeleider': 'bg-indigo-500',
-      'GGZ-agoog': 'bg-rose-500',
-    };
-    return colors[functie || ''] || 'bg-muted-foreground';
-  };
+  // Get avatar background color based on functie niveau (central source)
+  const getFunctieColor = (functie?: string): string => getFunctieNiveauColor(functie).solid;
 
   const sizeClasses = {
     sm: {

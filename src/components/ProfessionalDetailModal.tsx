@@ -108,18 +108,11 @@ const FUNCTIE_NIVEAUS = ["VIG", "HBO-V", "Verpleegkundige MBO", "Helpende", "Beg
 const WERKVORMEN = ["ZZP", "Uitzendkracht", "ABCito constructie"];
 const SECTOREN = ["VVT", "GGZ", "GHZ", "Jeugdzorg", "Ziekenhuis", "Thuiszorg"];
 
-// Semantic badge colors for functie niveau
+// Functie colors from central source
+import { getFunctieNiveauColor } from "@/types/organization";
 const getFunctieColor = (functie: string) => {
-  const colors: Record<string, string> = {
-    "VIG": "bg-blue-500/10 text-blue-700 border-blue-200",
-    "HBO-V": "bg-purple-500/10 text-purple-700 border-purple-200",
-    "Verpleegkundige MBO": "bg-green-500/10 text-green-700 border-green-200",
-    "Helpende": "bg-orange-500/10 text-orange-700 border-orange-200",
-    "Begeleider": "bg-cyan-500/10 text-cyan-700 border-cyan-200",
-    "Persoonlijk begeleider": "bg-pink-500/10 text-pink-700 border-pink-200",
-    "GGZ-agoog": "bg-indigo-500/10 text-indigo-700 border-indigo-200",
-  };
-  return colors[functie] || "bg-muted";
+  const c = getFunctieNiveauColor(functie);
+  return `${c.bg} ${c.text} ${c.border}`;
 };
 
 // Semantic badge colors for werkvorm
@@ -637,13 +630,31 @@ export function ProfessionalDetailModal({
   const calculateCompleteness = () => {
     if (!professional) return 0;
     const fields = [
+      // Basis (6)
       professional.full_name,
+      professional.email,
+      professional.telefoonnummer,
+      professional.geslacht,
+      professional.geboortedatum,
+      professional.geboorteplaats,
+      // Professioneel (5)
       professional.functie_niveau,
       professional.werkvorm,
       professional.regio,
-      professional.telefoonnummer,
-      professional.email,
-      professional.skills?.length > 0
+      professional.skills?.length > 0,
+      professional.certificaten?.length > 0,
+      // Bedrijf (5)
+      professional.bedrijfsnaam,
+      professional.kvk_nummer,
+      professional.btw_nummer,
+      professional.iban,
+      professional.big_nummer,
+      // Documenten (2)
+      (professional.documents_count || 0) > 0,
+      (professional.documents_expiring_count || 0) === 0,
+      // Bendy (2)
+      professional.bendy_id,
+      professional.bendy_groepen?.length > 0,
     ];
     const filledFields = fields.filter(Boolean).length;
     return Math.round((filledFields / fields.length) * 100);
@@ -1310,7 +1321,11 @@ export function ProfessionalDetailModal({
                     {professional.iban && (
                       <div className="col-span-2">
                         <Label className="text-xs text-muted-foreground">IBAN</Label>
-                        <p className="text-sm mt-1 p-2 bg-muted/30 rounded-md font-mono">{professional.iban}</p>
+                        <p className="text-sm mt-1 p-2 bg-muted/30 rounded-md font-mono">
+                          {professional.iban.replace(/(.{4})(.+)(.{4})/, (_, start, middle, end) =>
+                            start + middle.replace(/./g, '•') + end
+                          )}
+                        </p>
                         {professional.iban_tenaamstelling && (
                           <p className="text-xs text-muted-foreground mt-1">t.n.v. {professional.iban_tenaamstelling}</p>
                         )}
