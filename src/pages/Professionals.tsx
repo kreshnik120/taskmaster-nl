@@ -520,6 +520,7 @@ const Professionals = () => {
       <PageHero
         title="Professionals"
         subtitle={filteredProfessionals.length !== professionals.length ? `${filteredProfessionals.length} van ${professionals.length} professionals` : `${professionals.length} professionals in je netwerk`}
+        className="mb-2"
       >
         {canEdit() && (
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
