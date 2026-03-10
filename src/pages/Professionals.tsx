@@ -795,13 +795,8 @@ const Professionals = () => {
       {viewMode === 'grid' ? (
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {paginatedProfessionals.map((professional) => (
-            <motion.div
-              key={professional.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.15 }}
-            >
               <ProfessionalCard
+                key={professional.id}
                 professional={professional}
                 isSelected={selectedProfessionalIds.has(professional.id)}
                 onSelect={handleSelectProfessional}
@@ -810,7 +805,6 @@ const Professionals = () => {
                   setDetailModalOpen(true);
                 }}
               />
-            </motion.div>
           ))}
         </div>
       ) : (
