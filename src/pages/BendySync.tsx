@@ -273,6 +273,108 @@ export default function BendySync() {
     }
   };
 
+  const fetchAssignedUserTest = async () => {
+    setUserTestLoading(true);
+    try {
+      const testResults: any[] = [];
+
+      // Test 1: include=user
+      const { data: t1, error: e1 } = await supabase.functions.invoke('bendy-proxy', {
+        body: { endpoint: '/api/v2/requisitions/assigned', method: 'GET', params: { include: 'user' } }
+      });
+      const t1data = t1?.data;
+      const t1records = Array.isArray(t1data?.data) ? t1data.data : (Array.isArray(t1data) ? t1data : []);
+      const t1included = t1data?.included || t1?.included || [];
+      const t1users = t1included.filter((i: any) => i.type === 'users');
+      const t1userRel = t1records.length > 0 ? t1records[0]?.relationships?.user : null;
+      testResults.push({
+        name: 'include=user',
+        success: !e1 && t1records.length > 0,
+        error: e1?.message || null,
+        recordCount: t1records.length,
+        includedUsers: t1users.length,
+        includedTypes: t1included.reduce((acc: Record<string, number>, i: any) => { acc[i.type || 'unknown'] = (acc[i.type || 'unknown'] || 0) + 1; return acc; }, {}),
+        userRelationship: t1userRel ? JSON.stringify(t1userRel) : 'niet aanwezig',
+        sampleRelationships: t1records.length > 0 ? Object.keys(t1records[0]?.relationships || {}) : [],
+        rawFirstRecord: t1records.length > 0 ? t1records[0] : null,
+      });
+
+      // Test 2: include=flex_user
+      const { data: t2, error: e2 } = await supabase.functions.invoke('bendy-proxy', {
+        body: { endpoint: '/api/v2/requisitions/assigned', method: 'GET', params: { include: 'flex_user' } }
+      });
+      const t2data = t2?.data;
+      const t2records = Array.isArray(t2data?.data) ? t2data.data : (Array.isArray(t2data) ? t2data : []);
+      const t2included = t2data?.included || t2?.included || [];
+      const t2users = t2included.filter((i: any) => i.type === 'users');
+      const t2userRel = t2records.length > 0 ? t2records[0]?.relationships?.flex_user : null;
+      testResults.push({
+        name: 'include=flex_user',
+        success: !e2 && t2records.length > 0,
+        error: e2?.message || null,
+        recordCount: t2records.length,
+        includedUsers: t2users.length,
+        includedTypes: t2included.reduce((acc: Record<string, number>, i: any) => { acc[i.type || 'unknown'] = (acc[i.type || 'unknown'] || 0) + 1; return acc; }, {}),
+        userRelationship: t2userRel ? JSON.stringify(t2userRel) : 'niet aanwezig',
+        sampleRelationships: t2records.length > 0 ? Object.keys(t2records[0]?.relationships || {}) : [],
+        rawFirstRecord: t2records.length > 0 ? t2records[0] : null,
+      });
+
+      // Test 3: include=client,user,flex_user
+      const { data: t3, error: e3 } = await supabase.functions.invoke('bendy-proxy', {
+        body: { endpoint: '/api/v2/requisitions/assigned', method: 'GET', params: { include: 'client,user,flex_user' } }
+      });
+      const t3data = t3?.data;
+      const t3records = Array.isArray(t3data?.data) ? t3data.data : (Array.isArray(t3data) ? t3data : []);
+      const t3included = t3data?.included || t3?.included || [];
+      const t3users = t3included.filter((i: any) => i.type === 'users');
+      const t3userRel = t3records.length > 0 ? t3records[0]?.relationships?.user : null;
+      const t3flexUserRel = t3records.length > 0 ? t3records[0]?.relationships?.flex_user : null;
+      testResults.push({
+        name: 'include=client,user,flex_user',
+        success: !e3 && t3records.length > 0,
+        error: e3?.message || null,
+        recordCount: t3records.length,
+        includedUsers: t3users.length,
+        includedTypes: t3included.reduce((acc: Record<string, number>, i: any) => { acc[i.type || 'unknown'] = (acc[i.type || 'unknown'] || 0) + 1; return acc; }, {}),
+        userRelationship: t3userRel ? JSON.stringify(t3userRel) : 'niet aanwezig',
+        flexUserRelationship: t3flexUserRel ? JSON.stringify(t3flexUserRel) : 'niet aanwezig',
+        sampleRelationships: t3records.length > 0 ? Object.keys(t3records[0]?.relationships || {}) : [],
+        rawFirstRecord: t3records.length > 0 ? t3records[0] : null,
+      });
+
+      // Test 4: Alle relationship keys over alle records
+      const allRecords = [...t1records, ...t2records, ...t3records];
+      const allRelKeys = new Set<string>();
+      allRecords.forEach(r => Object.keys(r?.relationships || {}).forEach(k => allRelKeys.add(k)));
+
+      // Test 5: flex_user_company IDs
+      const flexCompanyIds = t1records
+        .map((r: any) => r.relationships?.flex_user_company?.data?.id)
+        .filter((v: any) => v)
+        .slice(0, 5);
+
+      setUserTestResult({
+        tests: testResults,
+        allRelationshipKeys: Array.from(allRelKeys),
+        flexCompanyIds,
+        totalRecordsTested: allRecords.length,
+      });
+
+      const foundUsers = testResults.some(t => t.includedUsers > 0);
+      if (foundUsers) {
+        toast.success('User data GEVONDEN! Bekijk de resultaten.');
+      } else {
+        toast.warning('Geen user data gevonden in alle 3 tests. Bekijk details.');
+      }
+    } catch (err) {
+      console.error('User test error:', err);
+      toast.error('User test mislukt: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setUserTestLoading(false);
+    }
+  };
+
   const fetchStatus = useCallback(async () => {
     try {
       const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bendy-sync`;
