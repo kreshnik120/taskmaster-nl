@@ -640,7 +640,7 @@ const Professionals = () => {
       </div>
 
       {/* Sticky Filter Toolbar */}
-      <div className="sticky top-0 z-30 -mx-4 px-4 py-3 bg-background/90 backdrop-blur-md border-b border-border/20 space-y-2">
+      <div className="sticky top-0 z-30 py-2.5 bg-background/90 backdrop-blur-md border-b border-border/20 space-y-2">
         {/* Row 1: Search + Result count + View toggle */}
         <div className="flex items-center gap-3">
           <div className="relative flex-1 max-w-lg">
