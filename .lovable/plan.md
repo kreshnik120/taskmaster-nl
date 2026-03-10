@@ -1,37 +1,27 @@
 
 
-# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
+# Diagnostisch paneel "Ongebruikte velden" toevoegen aan BendySync
 
-## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
+## Wat
 
-### 1. Nieuwe state variabelen (na regel 193)
-- `showAddDocDialog` (boolean)
-- `addDocLoading` (boolean)
-- `addDocForm` object: `{ name, category, type, expiryDate, file }`
+Een nieuw Card onderaan `src/pages/BendySync.tsx` dat analyseert welke Bendy user-velden we niet gebruiken. On-demand laden via een knop.
 
-### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
-- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
-- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
-- Haal `user` op via `supabase.auth.getUser()`
-- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
+## Wijzigingen
 
-### 3. `handleUploadForManualDoc` functie
-- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
-- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
-- Update lokale `documents` state
+**Bestand:** `src/pages/BendySync.tsx`
 
-### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
-- Plus icoon, variant outline, opent dialog
+1. **State toevoegen** (bij bestaande state, ~regel 144):
+   - `unusedFieldsAnalysis` (array | null)
+   - `analysisLoading` (boolean)
 
-### 5. UI: Dialog component (onder de TabsContent of aan het eind)
-- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
-- Na file selectie: toon bestandsnaam + grootte
-- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
+2. **Analyse-functie toevoegen**: `fetchUnusedFieldsAnalysis` — haalt 500 records uit `bendy_raw_cache` (entity_type = 'users'), analyseert 13 ongebruikte velden (languages, region, working_hours_per_week, etc.), telt fill-rates en verzamelt 5 voorbeeldwaarden per veld.
 
-### 6. Scenario C Upload knop activeren (regel ~1447)
-- Verwijder `disabled` van de Upload knop
-- onClick: trigger hidden file input → `handleUploadForManualDoc`
+3. **Card toevoegen** na de pending mappings sectie (~regel 1042), vóór de sluitende `</div>`:
+   - Titel: "Bendy Data Analyse — Ongebruikte velden"
+   - Beschrijving onder de titel
+   - "Analyse starten" knop met loading state
+   - Resultaat-tabel met kolommen: Veld, Gevuld ({filled}/{total}), percentage-badge (groen >50%, oranje 10-50%, grijs <10%), Voorbeelden als badges
+   - Gesorteerd op percentage (hoogste eerst)
 
-### Bestanden die NIET worden aangepast
-- Edge functions, storage config, andere tabs, bendy-sync
+Geen bestaande code wordt gewijzigd — alleen toevoegingen.
 
