@@ -1,29 +1,37 @@
 
 
-# BENDY-REQ-3: Flex Company → Professional Matching Test — Sectie H
+# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
 
-## Wat
+## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
 
-Sectie H toevoegen binnen het bestaande "Bendy Requisitions Verkenning" Card, na Sectie G (regel 1658), vóór de `</CardContent>` op regel 1661.
+### 1. Nieuwe state variabelen (na regel 193)
+- `showAddDocDialog` (boolean)
+- `addDocLoading` (boolean)
+- `addDocForm` object: `{ name, category, type, expiryDate, file }`
 
-## Wijzigingen — `src/pages/BendySync.tsx`
+### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
+- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
+- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
+- Haal `user` op via `supabase.auth.getUser()`
+- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
 
-### 1. State (bij regel 152)
-Twee nieuwe states: `companyMatchLoading` en `companyMatchResult`.
+### 3. `handleUploadForManualDoc` functie
+- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
+- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
+- Update lokale `documents` state
 
-### 2. Functie `fetchCompanyMatchTest` (na `fetchAssignedUserTest`)
-Exact zoals opgegeven: haalt assigned requisitions op voor flex_user_company IDs, laadt user cache, bouwt company→users map, matcht, en berekent samenvatting (exact/geen/meerdere).
+### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
+- Plus icoon, variant outline, opent dialog
 
-### 3. UI — Sectie H (invoegen na regel 1658, vóór `</CardContent>`)
-Binnen het bestaande Card, na Sectie G, conditioneel op `reqAnalysisResult`:
+### 5. UI: Dialog component (onder de TabsContent of aan het eind)
+- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
+- Na file selectie: toon bestandsnaam + grootte
+- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
 
-- `<Separator />` scheidingslijn
-- Sub-titel "Flex Company → Professional Matching" + beschrijving
-- "Matching Testen" button (outline, spinner)
-- Samenvatting: 4 badges (unieke bedrijven, exact match, meerdere, geen match)
-- Stats rij met assigned reqs, users in cache, bedrijven in cache
-- Resultaten tabel: Company ID, Match badge (groen/oranje/rood), Professional(s) naam+email, Type, Diensten count
-- Gesorteerd op requisitionCount
+### 6. Scenario C Upload knop activeren (regel ~1447)
+- Verwijder `disabled` van de Upload knop
+- onClick: trigger hidden file input → `handleUploadForManualDoc`
 
-Geen bestaande code wordt gewijzigd — alleen toevoegingen.
+### Bestanden die NIET worden aangepast
+- Edge functions, storage config, andere tabs, bendy-sync
 

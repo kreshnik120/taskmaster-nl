@@ -150,6 +150,8 @@ export default function BendySync() {
   const [reqAnalysisResult, setReqAnalysisResult] = useState<any>(null);
   const [userTestLoading, setUserTestLoading] = useState(false);
   const [userTestResult, setUserTestResult] = useState<any>(null);
+  const [companyMatchLoading, setCompanyMatchLoading] = useState(false);
+  const [companyMatchResult, setCompanyMatchResult] = useState<any>(null);
 
   const fetchUnusedFieldsAnalysis = async () => {
     setAnalysisLoading(true);
@@ -372,6 +374,93 @@ export default function BendySync() {
       toast.error('User test mislukt: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setUserTestLoading(false);
+    }
+  };
+
+  const fetchCompanyMatchTest = async () => {
+    setCompanyMatchLoading(true);
+    try {
+      // Stap A: Haal assigned requisitions op
+      const { data: assignedData, error: assignedError } = await supabase.functions.invoke('bendy-proxy', {
+        body: { endpoint: '/api/v2/requisitions/assigned', method: 'GET', params: {} }
+      });
+      if (assignedError) throw new Error('Assigned requisitions ophalen mislukt');
+
+      const nested = assignedData?.data;
+      const assignedRecords = Array.isArray(nested?.data) ? nested.data : (Array.isArray(nested) ? nested : []);
+
+      // Verzamel alle unieke flex_user_company IDs
+      const flexCompanyIds = new Set<string>();
+      assignedRecords.forEach((r: any) => {
+        const id = r.relationships?.flex_user_company?.data?.id;
+        if (id) flexCompanyIds.add(String(id));
+      });
+
+      // Stap B: Haal ALLE user records uit bendy_raw_cache
+      const { data: cachedUsers, error: cacheError } = await supabase
+        .from('bendy_raw_cache')
+        .select('bendy_id, raw_data')
+        .eq('entity_type', 'users')
+        .order('fetched_at', { ascending: false })
+        .limit(2000);
+
+      if (cacheError) throw new Error('Cache ophalen mislukt: ' + cacheError.message);
+
+      // Stap C: Bouw een map van company_id → users
+      const companyToUsers: Record<string, Array<{ bendy_id: string; name: string; email: string; type: string }>> = {};
+      (cachedUsers || []).forEach((row: any) => {
+        const attrs = row.raw_data?.attributes || {};
+        const rels = row.raw_data?.relationships || {};
+        const companyId = rels?.company?.data?.id;
+        if (companyId) {
+          if (!companyToUsers[String(companyId)]) companyToUsers[String(companyId)] = [];
+          companyToUsers[String(companyId)].push({
+            bendy_id: row.bendy_id,
+            name: `${attrs.firstname || ''} ${attrs.middlename || ''} ${attrs.lastname || ''}`.replace(/\s+/g, ' ').trim(),
+            email: attrs.email || '',
+            type: attrs.professional_type || '',
+          });
+        }
+      });
+
+      // Stap D: Voor elke flex_user_company, zoek de matchende users
+      const companyFrequency: Record<string, number> = {};
+      assignedRecords.forEach((r: any) => {
+        const id = r.relationships?.flex_user_company?.data?.id;
+        if (id) companyFrequency[String(id)] = (companyFrequency[String(id)] || 0) + 1;
+      });
+
+      const matchResults = Array.from(flexCompanyIds).map(companyId => {
+        const users = companyToUsers[companyId] || [];
+        return {
+          companyId,
+          userCount: users.length,
+          users: users.slice(0, 5),
+          matchType: users.length === 1 ? 'exact' : users.length === 0 ? 'geen' : 'meerdere',
+          requisitionCount: companyFrequency[companyId] || 0,
+        };
+      });
+
+      // Stap F: Samenvatting
+      const exact = matchResults.filter(m => m.matchType === 'exact').length;
+      const geen = matchResults.filter(m => m.matchType === 'geen').length;
+      const meerdere = matchResults.filter(m => m.matchType === 'meerdere').length;
+
+      setCompanyMatchResult({
+        totalFlexCompanies: flexCompanyIds.size,
+        totalAssignedReqs: assignedRecords.length,
+        totalCachedUsers: (cachedUsers || []).length,
+        totalCompaniesInCache: Object.keys(companyToUsers).length,
+        summary: { exact, geen, meerdere },
+        matches: matchResults.sort((a, b) => b.requisitionCount - a.requisitionCount),
+      });
+
+      toast.success(`Matching klaar: ${exact} exact, ${meerdere} meerdere, ${geen} geen match`);
+    } catch (err) {
+      console.error('Company match test error:', err);
+      toast.error('Matching test mislukt: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setCompanyMatchLoading(false);
     }
   };
 
@@ -1653,6 +1742,77 @@ export default function BendySync() {
                           Totaal records getest: {userTestResult.totalRecordsTested}
                         </div>
                       </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Sectie H: Flex Company → Professional Matching ── */}
+                <Separator className="my-6" />
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-semibold text-sm">Flex Company → Professional Matching</h4>
+                      <p className="text-xs text-muted-foreground">Test of flex_user_company IDs matchen met precies 1 professional in onze cache</p>
+                    </div>
+                    <Button onClick={fetchCompanyMatchTest} disabled={companyMatchLoading} variant="outline" size="sm">
+                      {companyMatchLoading ? <><RefreshCw className="h-4 w-4 animate-spin mr-2" /> Testen...</> : 'Matching Testen'}
+                    </Button>
+                  </div>
+
+                  {companyMatchResult && (
+                    <div className="space-y-4">
+                      {/* Samenvatting badges */}
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="info">{companyMatchResult.totalFlexCompanies} unieke bedrijven</Badge>
+                        <Badge variant="success">{companyMatchResult.summary.exact} exact match (1 user)</Badge>
+                        <Badge variant="warning">{companyMatchResult.summary.meerdere} meerdere users</Badge>
+                        <Badge variant="destructive">{companyMatchResult.summary.geen} geen match</Badge>
+                      </div>
+
+                      {/* Stats rij */}
+                      <div className="flex gap-4 text-xs text-muted-foreground">
+                        <span>Assigned requisitions: {companyMatchResult.totalAssignedReqs}</span>
+                        <span>Users in cache: {companyMatchResult.totalCachedUsers}</span>
+                        <span>Bedrijven in cache: {companyMatchResult.totalCompaniesInCache}</span>
+                      </div>
+
+                      {/* Resultaten tabel */}
+                      {companyMatchResult.matches.length > 0 && (
+                        <div className="rounded-lg border overflow-hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Company ID</TableHead>
+                                <TableHead>Match</TableHead>
+                                <TableHead>Professional(s)</TableHead>
+                                <TableHead>Type</TableHead>
+                                <TableHead>Diensten</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {companyMatchResult.matches.map((m: any) => (
+                                <TableRow key={m.companyId}>
+                                  <TableCell className="font-mono text-xs">{m.companyId}</TableCell>
+                                  <TableCell>
+                                    {m.matchType === 'exact' && <Badge variant="success">1 user</Badge>}
+                                    {m.matchType === 'meerdere' && <Badge variant="warning">{m.userCount} users</Badge>}
+                                    {m.matchType === 'geen' && <Badge variant="destructive">geen</Badge>}
+                                  </TableCell>
+                                  <TableCell className="text-xs max-w-[250px]">
+                                    {m.users.slice(0, 3).map((u: any, i: number) => (
+                                      <div key={i}>{u.name} {u.email && <span className="text-muted-foreground">({u.email})</span>}</div>
+                                    ))}
+                                    {m.users.length > 3 && <div className="text-muted-foreground">+{m.users.length - 3} meer</div>}
+                                    {m.users.length === 0 && <span className="text-muted-foreground">—</span>}
+                                  </TableCell>
+                                  <TableCell className="text-xs">{m.users[0]?.type || '—'}</TableCell>
+                                  <TableCell className="text-xs">{m.requisitionCount}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
