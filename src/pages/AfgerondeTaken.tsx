@@ -289,7 +289,7 @@ const AfgerondeTaken = () => {
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                   <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="all">
-                      Alle ({tasks.length})
+                      Alle ({searchFilteredTasks.length})
                     </TabsTrigger>
                     <TabsTrigger value="ontime" className="data-[state=active]:text-green-600">
                       <CheckCircle2 className="h-4 w-4 mr-2" />
