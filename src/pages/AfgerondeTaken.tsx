@@ -275,7 +275,7 @@ const AfgerondeTaken = () => {
         <CardHeader>
               <CardTitle className="text-lg">Alle afgeronde taken</CardTitle>
               <CardDescription>
-                {tasks.length > 0 ? `${tasks.length} taken voltooid` : 'Geen taken voltooid'}
+                {searchFilteredTasks.length > 0 ? `${searchFilteredTasks.length} taken voltooid` : 'Geen taken voltooid'}
               </CardDescription>
             </CardHeader>
             <CardContent>
