@@ -148,13 +148,6 @@ export function ProfessionalCard({ professional, isSelected, onSelect, onClick }
                   </span>
               </div>
 
-              {/* Content */}
-              <div className="flex-1 min-w-0">
-                {/* Name + Org */}
-                <div className="flex items-center gap-2 mb-0.5">
-                  <h3 className="font-semibold text-[14px] leading-tight text-foreground truncate">
-                    {professional.full_name}
-                  </h3>
                   {professional.org_id && (
                     <Badge
                       variant="outline"

@@ -85,19 +85,17 @@ export function ProfessionalListView({ professionals, selectedIds, onSelect, onC
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2.5">
-                    <Avatar className="h-8 w-8 flex-shrink-0">
-                      <AvatarFallback className={cn(getFunctieNiveauColor(p.functie_niveau).solid, "text-white text-xs font-medium")}>
+                    <Avatar className="h-7 w-7 flex-shrink-0">
+                      <AvatarFallback className={cn(getFunctieNiveauColor(p.functie_niveau).solid, "text-white text-[10px] font-medium")}>
                         {getInitials(p.full_name)}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{p.full_name}</p>
-                      {p.org_id && (
-                        <Badge variant="outline" className={cn("text-[9px] px-1 py-0 h-3.5", getOrganizationBadgeColor(getOrganizationName(p.org_id)))}>
-                          {getOrganizationName(p.org_id)}
-                        </Badge>
-                      )}
-                    </div>
+                    <span className="text-sm font-medium text-foreground truncate">{p.full_name}</span>
+                    {p.org_id && (
+                      <Badge variant="outline" className={cn("text-[9px] px-1 py-0 h-3.5 flex-shrink-0", getOrganizationBadgeColor(getOrganizationName(p.org_id)))}>
+                        {getOrganizationName(p.org_id)}
+                      </Badge>
+                    )}
                   </div>
                 </TableCell>
                 <TableCell className="hidden md:table-cell">
