@@ -508,7 +508,7 @@ const Professionals = () => {
       {/* Hero Section - Unified PageHero */}
       <PageHero
         title="Professionals"
-        subtitle={`${professionals.length} professionals in je netwerk`}
+        subtitle={filteredProfessionals.length !== professionals.length ? `${filteredProfessionals.length} van ${professionals.length} professionals` : `${professionals.length} professionals in je netwerk`}
       >
         {canEdit() && (
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
