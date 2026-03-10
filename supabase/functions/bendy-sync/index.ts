@@ -2452,7 +2452,7 @@ Deno.serve(async (req) => {
         org_id: orgId,
         tenant,
         sync_type: syncType,
-        entity_type: body.action === 'sync_users' ? 'users' : body.action === 'sync_documents' ? 'documents' : 'clients',
+        entity_type: body.action === 'sync_users' ? 'users' : body.action === 'sync_documents' ? 'documents' : body.action === 'sync_requisitions' ? 'requisitions_open' : 'clients',
         status: 'running',
       })
       .select('id')
