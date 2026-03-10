@@ -1745,6 +1745,77 @@ export default function BendySync() {
                     </div>
                   )}
                 </div>
+
+                {/* ── Sectie H: Flex Company → Professional Matching ── */}
+                <Separator className="my-6" />
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-semibold text-sm">Flex Company → Professional Matching</h4>
+                      <p className="text-xs text-muted-foreground">Test of flex_user_company IDs matchen met precies 1 professional in onze cache</p>
+                    </div>
+                    <Button onClick={fetchCompanyMatchTest} disabled={companyMatchLoading} variant="outline" size="sm">
+                      {companyMatchLoading ? <><RefreshCw className="h-4 w-4 animate-spin mr-2" /> Testen...</> : 'Matching Testen'}
+                    </Button>
+                  </div>
+
+                  {companyMatchResult && (
+                    <div className="space-y-4">
+                      {/* Samenvatting badges */}
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="info">{companyMatchResult.totalFlexCompanies} unieke bedrijven</Badge>
+                        <Badge variant="success">{companyMatchResult.summary.exact} exact match (1 user)</Badge>
+                        <Badge variant="warning">{companyMatchResult.summary.meerdere} meerdere users</Badge>
+                        <Badge variant="destructive">{companyMatchResult.summary.geen} geen match</Badge>
+                      </div>
+
+                      {/* Stats rij */}
+                      <div className="flex gap-4 text-xs text-muted-foreground">
+                        <span>Assigned requisitions: {companyMatchResult.totalAssignedReqs}</span>
+                        <span>Users in cache: {companyMatchResult.totalCachedUsers}</span>
+                        <span>Bedrijven in cache: {companyMatchResult.totalCompaniesInCache}</span>
+                      </div>
+
+                      {/* Resultaten tabel */}
+                      {companyMatchResult.matches.length > 0 && (
+                        <div className="rounded-lg border overflow-hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Company ID</TableHead>
+                                <TableHead>Match</TableHead>
+                                <TableHead>Professional(s)</TableHead>
+                                <TableHead>Type</TableHead>
+                                <TableHead>Diensten</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {companyMatchResult.matches.map((m: any) => (
+                                <TableRow key={m.companyId}>
+                                  <TableCell className="font-mono text-xs">{m.companyId}</TableCell>
+                                  <TableCell>
+                                    {m.matchType === 'exact' && <Badge variant="success">1 user</Badge>}
+                                    {m.matchType === 'meerdere' && <Badge variant="warning">{m.userCount} users</Badge>}
+                                    {m.matchType === 'geen' && <Badge variant="destructive">geen</Badge>}
+                                  </TableCell>
+                                  <TableCell className="text-xs max-w-[250px]">
+                                    {m.users.slice(0, 3).map((u: any, i: number) => (
+                                      <div key={i}>{u.name} {u.email && <span className="text-muted-foreground">({u.email})</span>}</div>
+                                    ))}
+                                    {m.users.length > 3 && <div className="text-muted-foreground">+{m.users.length - 3} meer</div>}
+                                    {m.users.length === 0 && <span className="text-muted-foreground">—</span>}
+                                  </TableCell>
+                                  <TableCell className="text-xs">{m.users[0]?.type || '—'}</TableCell>
+                                  <TableCell className="text-xs">{m.requisitionCount}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </CardContent>
