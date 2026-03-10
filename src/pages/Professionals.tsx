@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, ChevronLeft, ChevronRight, X, Users, CheckCircle, UserPlus, TrendingUp, FileWarning, LayoutGrid, List } from "lucide-react";
+import { Plus, Search, ChevronLeft, ChevronRight, X, Users, LayoutGrid, List, AlertTriangle, Lightbulb, Sparkles, ArrowRight } from "lucide-react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { ProfessionalBulkActionBar } from "@/components/recruitment/ProfessionalBulkActionBar";
 import { ProfessionalCard } from "@/components/recruitment/ProfessionalCard";
@@ -15,7 +15,7 @@ import { ProfessionalDetailModal } from "@/components/ProfessionalDetailModal";
 
 import { useUserRole } from "@/hooks/useUserRole";
 import { Badge } from "@/components/ui/badge";
-import { KPICard } from "@/components/ui/kpi-card";
+
 import { PageHero } from "@/components/ui/page-hero";
 import { PageContainer } from "@/components/ui/page-container";
 import { cn } from "@/lib/utils";
@@ -630,14 +630,42 @@ const Professionals = () => {
         )}
       </PageHero>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <KPICard icon={Users} title="Totaal" value={totalCount} variant="rose" isActive={activeKpi === "all"} onClick={() => handleKpiClick("all")} />
-        <KPICard icon={CheckCircle} title="Beschikbaar" value={availableCount} variant="rose" isActive={activeKpi === "beschikbaar"} onClick={() => handleKpiClick("beschikbaar")} />
-        <KPICard icon={TrendingUp} title="Gekoppeld" value={withActivePlacementCount} variant="rose" onClick={() => handleKpiClick("gekoppeld")} />
-        <KPICard icon={UserPlus} title="Nieuw (7d)" value={newInLast7Days} variant="rose" isActive={activeKpi === "nieuw"} onClick={() => handleKpiClick("nieuw")} />
-        <KPICard icon={FileWarning} title="Doc. verlopen" value={docsExpiredCount} variant="amber" isActive={activeKpi === "docs_verlopen"} onClick={() => handleKpiClick("docs_verlopen")} />
-      </div>
+      {/* Dynamic Alert Bar - prioriteitsgestuurd */}
+      {(() => {
+        const alert = docsExpiredCount > 0
+          ? { icon: AlertTriangle, message: `${docsExpiredCount} professionals met verlopen documenten`, action: "docs_verlopen" as const, borderColor: "border-l-amber-500", iconColor: "text-amber-600 dark:text-amber-400", bgTint: "from-amber-50/60 to-transparent dark:from-amber-950/20" }
+          : availableCount > 20
+          ? { icon: Lightbulb, message: `${availableCount} professionals beschikbaar — overweeg actieve matching`, action: "beschikbaar" as const, borderColor: "border-l-blue-500", iconColor: "text-blue-600 dark:text-blue-400", bgTint: "from-blue-50/60 to-transparent dark:from-blue-950/20" }
+          : newInLast7Days > 0
+          ? { icon: Sparkles, message: `${newInLast7Days} nieuwe professionals deze week`, action: "nieuw" as const, borderColor: "border-l-emerald-500", iconColor: "text-emerald-600 dark:text-emerald-400", bgTint: "from-emerald-50/60 to-transparent dark:from-emerald-950/20" }
+          : null;
+
+        if (!alert) return null;
+        const AlertIcon = alert.icon;
+
+        return (
+          <div
+            className={cn(
+              "relative overflow-hidden rounded-xl border border-border/40 border-l-4",
+              alert.borderColor,
+              "bg-white/70 dark:bg-slate-900/60 backdrop-blur-md",
+              "flex items-center justify-between px-4 py-2.5 gap-3",
+              "cursor-pointer transition-all duration-200 hover:shadow-sm",
+              activeKpi === alert.action && "ring-2 ring-primary/30 ring-offset-1"
+            )}
+            onClick={() => handleKpiClick(alert.action)}
+          >
+            <div className={cn("absolute inset-0 bg-gradient-to-r pointer-events-none", alert.bgTint)} />
+            <div className="relative flex items-center gap-2.5">
+              <AlertIcon className={cn("h-4 w-4 shrink-0", alert.iconColor)} />
+              <span className="text-sm font-medium text-foreground">{alert.message}</span>
+            </div>
+            <Button variant="ghost" size="sm" className="relative h-7 px-2.5 text-xs gap-1 text-muted-foreground hover:text-foreground">
+              Bekijk <ArrowRight className="h-3 w-3" />
+            </Button>
+          </div>
+        );
+      })()}
 
       {/* Sticky Filter Toolbar */}
       <div className="sticky top-0 z-30 py-2.5 bg-background/90 backdrop-blur-md border-b border-border/20 space-y-2">
