@@ -146,8 +146,6 @@ export function ProfessionalCard({ professional, isSelected, onSelect, onClick }
                   })}>
                     {professional.status === 'op_pauze' ? 'Pauze' : professional.status?.charAt(0).toUpperCase() + professional.status?.slice(1)}
                   </span>
-              </div>
-
                   {professional.org_id && (
                     <Badge
                       variant="outline"
