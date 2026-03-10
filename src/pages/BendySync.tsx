@@ -152,6 +152,8 @@ export default function BendySync() {
   const [userTestResult, setUserTestResult] = useState<any>(null);
   const [companyMatchLoading, setCompanyMatchLoading] = useState(false);
   const [companyMatchResult, setCompanyMatchResult] = useState<any>(null);
+  const [clientMatchLoading, setClientMatchLoading] = useState(false);
+  const [clientMatchResult, setClientMatchResult] = useState<any>(null);
 
   const fetchUnusedFieldsAnalysis = async () => {
     setAnalysisLoading(true);
