@@ -7,10 +7,12 @@ import { PageContainer } from "@/components/ui/page-container";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Undo2, Clock, CheckCircle2, AlertCircle, TrendingUp } from "lucide-react";
+import { Undo2, Clock, CheckCircle2, AlertCircle, TrendingUp, Search } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { KPICard } from "@/components/ui/kpi-card";
 import { getPrioritySolidClass, getPriorityLabel } from "@/hooks/usePriorityConfig";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { Input } from "@/components/ui/input";
 import { nl } from "date-fns/locale";
 import {
   Table,
