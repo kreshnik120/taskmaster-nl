@@ -145,6 +145,8 @@ export default function BendySync() {
   const [migrating, setMigrating] = useState(false);
   const [unusedFieldsAnalysis, setUnusedFieldsAnalysis] = useState<any[] | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [reqAnalysisLoading, setReqAnalysisLoading] = useState(false);
+  const [reqAnalysisResult, setReqAnalysisResult] = useState<any>(null);
 
   const fetchUnusedFieldsAnalysis = async () => {
     setAnalysisLoading(true);
