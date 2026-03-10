@@ -302,7 +302,7 @@ const AfgerondeTaken = () => {
                   </TabsList>
                   
                   <TabsContent value="all" className="mt-4">
-                    {renderTasksTable(tasks)}
+                    {renderTasksTable(searchFilteredTasks)}
                   </TabsContent>
                   
                   <TabsContent value="ontime" className="mt-4">

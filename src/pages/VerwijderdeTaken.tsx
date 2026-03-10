@@ -247,35 +247,12 @@ const VerwijderdeTaken = () => {
                 <div className="text-center py-8 px-6 rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] text-muted-foreground">
                   Geen verwijderde taken gevonden
                 </div>
-               ) : isMobile ? (
+              ) : isMobile ? (
                  <VerwijderdeTakenCards
-                   tasks={tasks.filter(task => {
-                     if (filterPriority === "all") return true;
-                     if (filterPriority === "CRITICAL") return task.priority === "CRITICAL";
-                     if (filterPriority === "RECENT") {
-                       const deletedDate = new Date(task.deleted_at);
-                       const threeDaysAgo = new Date();
-                       threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-                       return deletedDate >= threeDaysAgo;
-                     }
-                     return true;
-                   })}
-                   onRestore={handleRestore}
-                   onDelete={openDeleteDialog}
-                 />
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Taak</TableHead>
-                      <TableHead>Organisatie</TableHead>
-                      <TableHead>Prioriteit</TableHead>
-                      <TableHead>Verwijderd op</TableHead>
-                      <TableHead className="text-right">Acties</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {tasks.filter(task => {
+                    tasks={tasks.filter(task => {
+                      const q = debouncedSearch.toLowerCase();
+                      const matchesSearch = !debouncedSearch || task.title.toLowerCase().includes(q) || task.organizations?.name?.toLowerCase().includes(q);
+                      if (!matchesSearch) return false;
                       if (filterPriority === "all") return true;
                       if (filterPriority === "CRITICAL") return task.priority === "CRITICAL";
                       if (filterPriority === "RECENT") {
@@ -285,7 +262,36 @@ const VerwijderdeTaken = () => {
                         return deletedDate >= threeDaysAgo;
                       }
                       return true;
-                    }).map((task) => (
+                    })}
+                    onRestore={handleRestore}
+                    onDelete={openDeleteDialog}
+                  />
+              ) : (
+                 <Table>
+                   <TableHeader>
+                     <TableRow>
+                       <TableHead>Taak</TableHead>
+                       <TableHead>Organisatie</TableHead>
+                       <TableHead>Prioriteit</TableHead>
+                       <TableHead>Verwijderd op</TableHead>
+                       <TableHead className="text-right">Acties</TableHead>
+                     </TableRow>
+                   </TableHeader>
+                   <TableBody>
+                    {tasks.filter(task => {
+                       const q = debouncedSearch.toLowerCase();
+                       const matchesSearch = !debouncedSearch || task.title.toLowerCase().includes(q) || task.organizations?.name?.toLowerCase().includes(q);
+                       if (!matchesSearch) return false;
+                       if (filterPriority === "all") return true;
+                       if (filterPriority === "CRITICAL") return task.priority === "CRITICAL";
+                       if (filterPriority === "RECENT") {
+                         const deletedDate = new Date(task.deleted_at);
+                         const threeDaysAgo = new Date();
+                         threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+                         return deletedDate >= threeDaysAgo;
+                       }
+                       return true;
+                     }).map((task) => (
                       <TableRow key={task.id} className="table-row-hover-slate">
                         <TableCell className="font-medium">{task.title}</TableCell>
                         <TableCell>{task.organizations?.name || "-"}</TableCell>
