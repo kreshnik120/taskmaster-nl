@@ -15,7 +15,7 @@ import { ProfessionalDetailModal } from "@/components/ProfessionalDetailModal";
 
 import { useUserRole } from "@/hooks/useUserRole";
 import { Badge } from "@/components/ui/badge";
-import { KPICard } from "@/components/ui/kpi-card";
+
 import { PageHero } from "@/components/ui/page-hero";
 import { PageContainer } from "@/components/ui/page-container";
 import { cn } from "@/lib/utils";
