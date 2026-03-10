@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { Plus, Search, ChevronLeft, ChevronRight, X, Users, CheckCircle, UserPlus, TrendingUp, FileWarning, LayoutGrid, List } from "lucide-react";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { ProfessionalBulkActionBar } from "@/components/recruitment/ProfessionalBulkActionBar";
 import { ProfessionalCard } from "@/components/recruitment/ProfessionalCard";
 import { ProfessionalListView } from "@/components/recruitment/ProfessionalListView";
@@ -130,6 +131,7 @@ const Professionals = () => {
   const [sortOption, setSortOption] = useState<string>("naam_az");
   const [linkedProfessionalIds, setLinkedProfessionalIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [viewModeManuallySet, setViewModeManuallySet] = useState(false);
   const { toast } = useToast();
   const { canEdit } = useUserRole();
   const navigate = useNavigate();
@@ -291,8 +293,17 @@ const Professionals = () => {
     });
   };
 
+  const debouncedSearchTerm = useDebouncedValue(searchTerm, 300);
+
+  // Smart default: list view for large datasets
+  useEffect(() => {
+    if (!viewModeManuallySet && professionals.length > 100) {
+      setViewMode('list');
+    }
+  }, [professionals.length, viewModeManuallySet]);
+
   const filteredProfessionals = sortProfessionals(professionals.filter((p) => {
-    const term = searchTerm.toLowerCase();
+    const term = debouncedSearchTerm.toLowerCase();
     const matchesSearch = !term ||
       p.full_name.toLowerCase().includes(term) ||
       (p.email?.toLowerCase().includes(term) ?? false) ||
@@ -313,7 +324,7 @@ const Professionals = () => {
   // Reset pagina naar 1 bij elke filter/zoek wijziging
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterFunctie, filterWerkvorm, filterStatus, filterRegio, filterDocuments, activeKpi, sortOption]);
+  }, [debouncedSearchTerm, filterFunctie, filterWerkvorm, filterStatus, filterRegio, filterDocuments, activeKpi, sortOption]);
 
   // Paginering berekenen
   const PAGE_SIZE = 24;
@@ -627,146 +638,154 @@ const Professionals = () => {
         <KPICard icon={FileWarning} title="Doc. verlopen" value={docsExpiredCount} variant="amber" isActive={activeKpi === "docs_verlopen"} onClick={() => handleKpiClick("docs_verlopen")} />
       </div>
 
-      {/* Filter Bar — inline chips + view toggle */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="text"
-            placeholder="Zoek op naam, email, telefoon of regio..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 h-9 border-border"
-          />
+      {/* Sticky Filter Toolbar */}
+      <div className="sticky top-0 z-30 -mx-4 px-4 py-3 bg-background/90 backdrop-blur-md border-b border-border/20 space-y-2">
+        {/* Row 1: Search + Result count + View toggle */}
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 max-w-lg">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Zoek op naam, email, telefoon of regio..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 h-10 border-border text-sm"
+            />
+          </div>
+
+          <span className="text-xs text-muted-foreground/60 whitespace-nowrap hidden sm:inline">
+            {filteredProfessionals.length !== professionals.length
+              ? `${filteredProfessionals.length} van ${professionals.length}`
+              : `${professionals.length} professionals`}
+          </span>
+
+          {/* View toggle */}
+          <div className="flex items-center rounded-lg border border-border/50 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm p-0.5 gap-0.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn("h-7 w-7 p-0", viewMode === 'grid' && "bg-rose-100/60 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300")}
+              onClick={() => { setViewMode('grid'); setViewModeManuallySet(true); }}
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn("h-7 w-7 p-0", viewMode === 'list' && "bg-rose-100/60 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300")}
+              onClick={() => { setViewMode('list'); setViewModeManuallySet(true); }}
+            >
+              <List className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
-        {/* Inline filter selects */}
-        <Select value={filterFunctie} onValueChange={setFilterFunctie}>
-          <SelectTrigger className={cn("w-auto min-w-[130px] h-9 text-xs", filterFunctie !== "all" && "border-rose-300 bg-rose-50/50 dark:border-rose-700 dark:bg-rose-950/30")}>
-            <SelectValue placeholder="Functie" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Alle functies</SelectItem>
-            <SelectItem value="VIG">VIG</SelectItem>
-            <SelectItem value="HBO-V">HBO-V</SelectItem>
-            <SelectItem value="Verpleegkundige MBO">Verpleegkundige MBO</SelectItem>
-            <SelectItem value="Helpende">Helpende</SelectItem>
-            <SelectItem value="Begeleider">Begeleider</SelectItem>
-            <SelectItem value="Persoonlijk begeleider">Persoonlijk begeleider</SelectItem>
-            <SelectItem value="GGZ-agoog">GGZ-agoog</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select value={filterWerkvorm} onValueChange={setFilterWerkvorm}>
-          <SelectTrigger className={cn("w-auto min-w-[120px] h-9 text-xs", filterWerkvorm !== "all" && "border-rose-300 bg-rose-50/50 dark:border-rose-700 dark:bg-rose-950/30")}>
-            <SelectValue placeholder="Werkvorm" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Alle werkvormen</SelectItem>
-            <SelectItem value="ZZP">ZZP</SelectItem>
-            <SelectItem value="Uitzendkracht">Uitzendkracht</SelectItem>
-            <SelectItem value="ABCito constructie">ABCito constructie</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className={cn("w-auto min-w-[110px] h-9 text-xs", filterStatus !== "all" && "border-rose-300 bg-rose-50/50 dark:border-rose-700 dark:bg-rose-950/30")}>
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Alle statussen</SelectItem>
-            <SelectItem value="actief">Actief</SelectItem>
-            <SelectItem value="inactief">Inactief</SelectItem>
-            <SelectItem value="op_pauze">Op pauze</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select value={filterDocuments} onValueChange={setFilterDocuments}>
-          <SelectTrigger className={cn("w-auto min-w-[120px] h-9 text-xs", filterDocuments !== "all" && "border-rose-300 bg-rose-50/50 dark:border-rose-700 dark:bg-rose-950/30")}>
-            <SelectValue placeholder="Documenten" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Alle docs</SelectItem>
-            <SelectItem value="verlopen">Verlopen</SelectItem>
-            <SelectItem value="ok">Docs OK</SelectItem>
-            <SelectItem value="geen">Geen docs</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select value={sortOption} onValueChange={setSortOption}>
-          <SelectTrigger className="w-auto min-w-[130px] h-9 text-xs">
-            <SelectValue placeholder="Sorteer op..." />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="naam_az">Naam (A → Z)</SelectItem>
-            <SelectItem value="naam_za">Naam (Z → A)</SelectItem>
-            <SelectItem value="nieuwste">Nieuwste eerst</SelectItem>
-            <SelectItem value="oudste">Oudste eerst</SelectItem>
-            <SelectItem value="status">Status</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {hasActiveFilters && (
-          <Button variant="ghost" size="sm" onClick={resetFilters} className="h-9 gap-1 text-xs text-muted-foreground hover:text-foreground">
-            <X className="h-3.5 w-3.5" /> Reset
-          </Button>
-        )}
-
-        {/* Spacer */}
-        <span className="flex-1" />
-
-        {/* View toggle */}
-        <div className="flex items-center rounded-lg border border-border/50 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm p-0.5 gap-0.5">
-          <Button
-            variant="ghost"
-            size="sm"
-            className={cn("h-7 w-7 p-0", viewMode === 'grid' && "bg-rose-100/60 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300")}
-            onClick={() => setViewMode('grid')}
-          >
-            <LayoutGrid className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className={cn("h-7 w-7 p-0", viewMode === 'list' && "bg-rose-100/60 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300")}
-            onClick={() => setViewMode('list')}
-          >
-            <List className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Active filter badges */}
-      {hasActiveFilters && (
+        {/* Row 2: Filters + Sort */}
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs text-muted-foreground/60">Actief:</span>
-          {filterFunctie !== "all" && (
-            <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-rose-50/50 border-rose-200 text-rose-700 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-300">
-              {filterFunctie} <X className="h-2.5 w-2.5 cursor-pointer" onClick={() => setFilterFunctie("all")} />
-            </Badge>
-          )}
-          {filterWerkvorm !== "all" && (
-            <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-rose-50/50 border-rose-200 text-rose-700 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-300">
-              {filterWerkvorm} <X className="h-2.5 w-2.5 cursor-pointer" onClick={() => setFilterWerkvorm("all")} />
-            </Badge>
-          )}
-          {filterStatus !== "all" && (
-            <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-rose-50/50 border-rose-200 text-rose-700 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-300">
-              {filterStatus} <X className="h-2.5 w-2.5 cursor-pointer" onClick={() => setFilterStatus("all")} />
-            </Badge>
-          )}
-          {filterDocuments !== "all" && (
-            <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-rose-50/50 border-rose-200 text-rose-700 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-300">
-              {filterDocuments} <X className="h-2.5 w-2.5 cursor-pointer" onClick={() => setFilterDocuments("all")} />
-            </Badge>
-          )}
-          {filterRegio && (
-            <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-rose-50/50 border-rose-200 text-rose-700 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-300">
-              Regio: {filterRegio} <X className="h-2.5 w-2.5 cursor-pointer" onClick={() => setFilterRegio("")} />
-            </Badge>
+          <Select value={filterFunctie} onValueChange={setFilterFunctie}>
+            <SelectTrigger className={cn("w-auto min-w-[120px] h-8 text-xs", filterFunctie !== "all" && "border-rose-300 bg-rose-50/50 dark:border-rose-700 dark:bg-rose-950/30")}>
+              <SelectValue placeholder="Functie" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle functies</SelectItem>
+              <SelectItem value="VIG">VIG</SelectItem>
+              <SelectItem value="HBO-V">HBO-V</SelectItem>
+              <SelectItem value="Verpleegkundige MBO">Verpleegkundige MBO</SelectItem>
+              <SelectItem value="Helpende">Helpende</SelectItem>
+              <SelectItem value="Begeleider">Begeleider</SelectItem>
+              <SelectItem value="Persoonlijk begeleider">Persoonlijk begeleider</SelectItem>
+              <SelectItem value="GGZ-agoog">GGZ-agoog</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={filterWerkvorm} onValueChange={setFilterWerkvorm}>
+            <SelectTrigger className={cn("w-auto min-w-[110px] h-8 text-xs", filterWerkvorm !== "all" && "border-rose-300 bg-rose-50/50 dark:border-rose-700 dark:bg-rose-950/30")}>
+              <SelectValue placeholder="Werkvorm" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle werkvormen</SelectItem>
+              <SelectItem value="ZZP">ZZP</SelectItem>
+              <SelectItem value="Uitzendkracht">Uitzendkracht</SelectItem>
+              <SelectItem value="ABCito constructie">ABCito constructie</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className={cn("w-auto min-w-[100px] h-8 text-xs", filterStatus !== "all" && "border-rose-300 bg-rose-50/50 dark:border-rose-700 dark:bg-rose-950/30")}>
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle statussen</SelectItem>
+              <SelectItem value="actief">Actief</SelectItem>
+              <SelectItem value="inactief">Inactief</SelectItem>
+              <SelectItem value="op_pauze">Op pauze</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={filterDocuments} onValueChange={setFilterDocuments}>
+            <SelectTrigger className={cn("w-auto min-w-[110px] h-8 text-xs", filterDocuments !== "all" && "border-rose-300 bg-rose-50/50 dark:border-rose-700 dark:bg-rose-950/30")}>
+              <SelectValue placeholder="Documenten" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle docs</SelectItem>
+              <SelectItem value="verlopen">Verlopen</SelectItem>
+              <SelectItem value="ok">Docs OK</SelectItem>
+              <SelectItem value="geen">Geen docs</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={sortOption} onValueChange={setSortOption}>
+            <SelectTrigger className="w-auto min-w-[120px] h-8 text-xs">
+              <SelectValue placeholder="Sorteer op..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="naam_az">Naam (A → Z)</SelectItem>
+              <SelectItem value="naam_za">Naam (Z → A)</SelectItem>
+              <SelectItem value="nieuwste">Nieuwste eerst</SelectItem>
+              <SelectItem value="oudste">Oudste eerst</SelectItem>
+              <SelectItem value="status">Status</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={resetFilters} className="h-8 gap-1 text-xs text-muted-foreground hover:text-foreground">
+              <X className="h-3.5 w-3.5" /> Reset
+            </Button>
           )}
         </div>
-      )}
+
+        {/* Active filter badges */}
+        {hasActiveFilters && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] text-muted-foreground/50">Actief:</span>
+            {filterFunctie !== "all" && (
+              <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-rose-50/50 border-rose-200 text-rose-700 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-300">
+                {filterFunctie} <X className="h-2.5 w-2.5 cursor-pointer" onClick={() => setFilterFunctie("all")} />
+              </Badge>
+            )}
+            {filterWerkvorm !== "all" && (
+              <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-rose-50/50 border-rose-200 text-rose-700 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-300">
+                {filterWerkvorm} <X className="h-2.5 w-2.5 cursor-pointer" onClick={() => setFilterWerkvorm("all")} />
+              </Badge>
+            )}
+            {filterStatus !== "all" && (
+              <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-rose-50/50 border-rose-200 text-rose-700 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-300">
+                {filterStatus} <X className="h-2.5 w-2.5 cursor-pointer" onClick={() => setFilterStatus("all")} />
+              </Badge>
+            )}
+            {filterDocuments !== "all" && (
+              <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-rose-50/50 border-rose-200 text-rose-700 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-300">
+                {filterDocuments} <X className="h-2.5 w-2.5 cursor-pointer" onClick={() => setFilterDocuments("all")} />
+              </Badge>
+            )}
+            {filterRegio && (
+              <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-rose-50/50 border-rose-200 text-rose-700 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-300">
+                Regio: {filterRegio} <X className="h-2.5 w-2.5 cursor-pointer" onClick={() => setFilterRegio("")} />
+              </Badge>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Professionals Grid or List */}
       {viewMode === 'grid' ? (

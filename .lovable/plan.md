@@ -1,94 +1,37 @@
 
 
-# UI Analyse: Professionals Pagina — Indeling & Hierarchie
+# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
 
-## Wat ik zie (huidige situatie)
+## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
 
-De pagina heeft 4 lagen boven de data:
-```text
-┌─────────────────────────────────────────────┐
-│  1. Hero: "Professionals" + "1000 in je     │  ~50px
-│     netwerk" + Toevoegen knop               │
-├─────────────────────────────────────────────┤
-│  2. KPI rij: 5 kaarten breed               │  ~90px
-├─────────────────────────────────────────────┤
-│  3. Filter bar: zoek + 5 dropdowns + sort   │  ~40px
-│     + view toggle                           │
-├─────────────────────────────────────────────┤
-│  4. Data (kaarten of tabel)                 │  rest
-└─────────────────────────────────────────────┘
-```
+### 1. Nieuwe state variabelen (na regel 193)
+- `showAddDocDialog` (boolean)
+- `addDocLoading` (boolean)
+- `addDocForm` object: `{ name, category, type, expiryDate, file }`
 
-**~180px aan overhead** voordat je de eerste professional ziet. Op een 995px viewport is dat 18% van het scherm.
+### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
+- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
+- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
+- Haal `user` op via `supabase.auth.getUser()`
+- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
 
-### Specifieke problemen in de huidige indeling
+### 3. `handleUploadForManualDoc` functie
+- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
+- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
+- Update lokale `documents` state
 
-**A. Filter bar is overweldigend**
-6 dropdowns + zoekbalk op één rij. De sortering staat visueel op dezelfde lijn als filters, maar is functioneel iets anders. Een gebruiker die snel wil zoeken moet door een muur van controls navigeren.
+### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
+- Plus icoon, variant outline, opent dialog
 
-**B. Zoeken is niet gedebounced**
-Elke toetsaanslag filtert direct over 1000 records — merkbare vertraging.
+### 5. UI: Dialog component (onder de TabsContent of aan het eind)
+- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
+- Na file selectie: toon bestandsnaam + grootte
+- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
 
-**C. Lijstweergave: rijen zijn te hoog**
-Elke rij is ~55px omdat de org-badge onder de naam staat op een tweede regel. In een tabel met 1000 records is elke pixel per rij significant — dat is het verschil tussen 9 en 13 zichtbare rijen.
+### 6. Scenario C Upload knop activeren (regel ~1447)
+- Verwijder `disabled` van de Upload knop
+- onClick: trigger hidden file input → `handleUploadForManualDoc`
 
-**D. Lijstweergave: lege kolommen**
-"Regio" is bij bijna alle records "—". "Geregistreerd" toont overal "20 dagen geleden". Deze kolommen nemen breedte in maar voegen geen scanwaarde toe.
-
-**E. Grid: geen statuslabel**
-De status is alleen een 2.5px dot. In de lijstweergave staat wél een badge met tekst. In de grid mis je dit volledig.
-
-**F. Filters scrollen weg**
-Bij het scrollen verdwijnt de hele toolbar. Je moet terug naar boven om te filteren.
-
----
-
-## Verbeterplan — alleen herindeling, geen nieuwe functionaliteit
-
-### 1. Zoekbalk debounce toevoegen
-- `useDebouncedValue` (300ms) toepassen op `searchTerm` — hook bestaat al in het project
-- **Bestand**: `Professionals.tsx`
-
-### 2. Filter bar opsplitsen: zoek apart, filters gegroepeerd
-Huidige situatie: alles op één rij. Voorstel:
-```text
-┌─ Zoek ──────────────────────┐  ┌─ Resultaat ─┐  ┌─ View ─┐
-│ 🔍 Zoek op naam...          │  │ 322 van 1000│  │ ⊞  ☰  │
-└─────────────────────────────┘  └─────────────┘  └────────┘
-  Functie ▾   Werkvorm ▾   Status ▾   Docs ▾   Sorteer ▾   ✕ Reset
-```
-- Zoekbalk op eigen regel, breder en prominenter (dit is de #1 actie)
-- Resultaatcount + view toggle rechts op dezelfde regel
-- Filters + sorteer op tweede regel, kleiner
-- **Bestand**: `Professionals.tsx`
-
-### 3. Sticky filter toolbar
-- Wrap de hele filterzone in `sticky top-0 z-30` met `bg-background/90 backdrop-blur-md`
-- Zodat filters altijd bereikbaar zijn bij scrollen
-- **Bestand**: `Professionals.tsx`
-
-### 4. Lijstweergave: compactere rijen
-- Org-badge naast de naam plaatsen (op dezelfde regel) in plaats van eronder — scheelt ~20px per rij
-- "Regio" en "Geregistreerd" kolommen verbergen op kleinere schermen maar ook op xl alleen tonen als ze daadwerkelijk gevuld zijn (niet allemaal "—")
-- **Bestand**: `ProfessionalListView.tsx`
-
-### 5. Grid: statuslabel toevoegen
-- Klein tekstlabel naast de status-dot: "Actief" / "Inactief" / "Pauze"
-- 10px tekst, zelfde kleur als de dot, op de naam-regel rechts uitgelijnd
-- **Bestand**: `ProfessionalCard.tsx`
-
-### 6. Lijst als standaard bij 1000 records
-- Bij `professionals.length > 100`: default `viewMode` naar `'list'`
-- Gebruiker kan altijd handmatig naar grid switchen
-- **Bestand**: `Professionals.tsx`
-
----
-
-## Bestanden
-
-| Bestand | Wijziging |
-|---|---|
-| `src/pages/Professionals.tsx` | Debounce, filterbar herindeling, sticky toolbar, smart default view |
-| `src/components/recruitment/ProfessionalCard.tsx` | Statuslabel naast dot |
-| `src/components/recruitment/ProfessionalListView.tsx` | Compactere rijen, org-badge inline |
+### Bestanden die NIET worden aangepast
+- Edge functions, storage config, andere tabs, bendy-sync
 
