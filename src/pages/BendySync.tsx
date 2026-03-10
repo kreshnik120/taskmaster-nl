@@ -1094,6 +1094,81 @@ export default function BendySync() {
             </CardContent>
           </Card>
         )}
+
+        {/* Diagnostisch paneel: Ongebruikte velden */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Database className="h-5 w-5" />
+              Bendy Data Analyse — Ongebruikte velden
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Velden die Bendy levert maar die we nog niet gebruiken bij professionals
+            </p>
+          </CardHeader>
+          <CardContent>
+            <Button
+              onClick={fetchUnusedFieldsAnalysis}
+              disabled={analysisLoading}
+              variant="outline"
+              className="mb-4"
+            >
+              {analysisLoading ? (
+                <><RefreshCw className="h-4 w-4 animate-spin" /> Analyseren...</>
+              ) : (
+                <><Play className="h-4 w-4" /> Analyse starten</>
+              )}
+            </Button>
+
+            {unusedFieldsAnalysis && (
+              <div className="rounded-md border overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Veld</TableHead>
+                      <TableHead>Gevuld</TableHead>
+                      <TableHead>%</TableHead>
+                      <TableHead>Voorbeelden</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {unusedFieldsAnalysis.map((item) => (
+                      <TableRow key={item.field}>
+                        <TableCell className="font-mono text-sm">{item.field}</TableCell>
+                        <TableCell className="text-sm whitespace-nowrap">
+                          {item.filled}/{item.total}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              item.percentage > 50 ? "success" :
+                              item.percentage >= 10 ? "warning" : "secondary"
+                            }
+                          >
+                            {item.percentage}%
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1 max-w-md">
+                            {item.examples.length > 0 ? (
+                              item.examples.map((ex: string, i: number) => (
+                                <Badge key={i} variant="outline" className="text-xs font-mono max-w-[200px] truncate">
+                                  {ex}
+                                </Badge>
+                              ))
+                            ) : (
+                              <span className="text-muted-foreground text-xs italic">geen data</span>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </PageContainer>
   );
