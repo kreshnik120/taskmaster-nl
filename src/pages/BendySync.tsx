@@ -466,6 +466,110 @@ export default function BendySync() {
     }
   };
 
+  const fetchClientMatchTest = async () => {
+    setClientMatchLoading(true);
+    try {
+      const { data: openData } = await supabase.functions.invoke('bendy-proxy', {
+        body: { endpoint: '/api/v2/requisitions/open', method: 'GET', params: {} }
+      });
+      const { data: assignedData } = await supabase.functions.invoke('bendy-proxy', {
+        body: { endpoint: '/api/v2/requisitions/assigned', method: 'GET', params: {} }
+      });
+
+      const openNested = openData?.data;
+      const openRecords = Array.isArray(openNested?.data) ? openNested.data : (Array.isArray(openNested) ? openNested : []);
+      const assignedNested = assignedData?.data;
+      const assignedRecords = Array.isArray(assignedNested?.data) ? assignedNested.data : (Array.isArray(assignedNested) ? assignedNested : []);
+      const allRecords = [...openRecords, ...assignedRecords];
+
+      const clientIdCounts: Record<string, { open: number; assigned: number; name: string }> = {};
+      openRecords.forEach((r: any) => {
+        const id = r.relationships?.client?.data?.id;
+        if (id) {
+          if (!clientIdCounts[id]) clientIdCounts[id] = { open: 0, assigned: 0, name: '' };
+          clientIdCounts[id].open++;
+          if (!clientIdCounts[id].name) clientIdCounts[id].name = r.attributes?.name || '';
+        }
+      });
+      assignedRecords.forEach((r: any) => {
+        const id = r.relationships?.client?.data?.id;
+        if (id) {
+          if (!clientIdCounts[id]) clientIdCounts[id] = { open: 0, assigned: 0, name: '' };
+          clientIdCounts[id].assigned++;
+          if (!clientIdCounts[id].name) clientIdCounts[id].name = r.attributes?.name || '';
+        }
+      });
+
+      const uniqueClientIds = Object.keys(clientIdCounts);
+
+      const { data: sublocations, error: subError } = await supabase
+        .from('client_sublocations')
+        .select('id, bendy_id, naam, plaats, client_locations!inner(client_organizations!inner(name))')
+        .not('bendy_id', 'is', null);
+
+      if (subError) throw new Error('Sublocations ophalen mislukt: ' + subError.message);
+
+      const subMap: Record<string, any> = {};
+      (sublocations || []).forEach((s: any) => {
+        subMap[s.bendy_id] = {
+          id: s.id,
+          naam: s.naam,
+          plaats: s.plaats,
+          organisatie: s.client_locations?.client_organizations?.name || '—',
+        };
+      });
+
+      const matchResults: any[] = uniqueClientIds.map(clientId => {
+        const sub = subMap[clientId];
+        const counts = clientIdCounts[clientId];
+        return {
+          clientId,
+          matched: !!sub,
+          sublocation: sub || null,
+          reqName: counts.name,
+          openCount: counts.open,
+          assignedCount: counts.assigned,
+          totalCount: counts.open + counts.assigned,
+          isPending: false,
+        };
+      }).sort((a, b) => b.totalCount - a.totalCount);
+
+      const { data: pendingMappings } = await supabase
+        .from('bendy_id_mapping')
+        .select('bendy_id, conflict_data')
+        .eq('entity_type', 'sublocation')
+        .eq('sync_status', 'pending');
+
+      const pendingBendyIds = new Set((pendingMappings || []).map((p: any) => p.bendy_id));
+      matchResults.forEach(m => {
+        m.isPending = pendingBendyIds.has(m.clientId);
+      });
+
+      const matched = matchResults.filter(m => m.matched).length;
+      const unmatched = matchResults.filter(m => !m.matched && !m.isPending).length;
+      const pending = matchResults.filter(m => m.isPending).length;
+      const matchedReqs = matchResults.filter(m => m.matched).reduce((sum: number, m: any) => sum + m.totalCount, 0);
+      const unmatchedReqs = matchResults.filter(m => !m.matched).reduce((sum: number, m: any) => sum + m.totalCount, 0);
+
+      setClientMatchResult({
+        totalUniqueClients: uniqueClientIds.length,
+        totalOpenReqs: openRecords.length,
+        totalAssignedReqs: assignedRecords.length,
+        totalSublocations: (sublocations || []).length,
+        summary: { matched, unmatched, pending },
+        reqCoverage: { matched: matchedReqs, unmatched: unmatchedReqs, total: allRecords.length },
+        matches: matchResults,
+      });
+
+      toast.success(`Client matching klaar: ${matched} gematcht, ${unmatched} niet gematcht, ${pending} pending`);
+    } catch (err) {
+      console.error('Client match test error:', err);
+      toast.error('Client matching mislukt: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setClientMatchLoading(false);
+    }
+  };
+
   const fetchStatus = useCallback(async () => {
     try {
       const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bendy-sync`;
