@@ -270,7 +270,7 @@ export default function BendySync() {
     }
   };
 
-
+  const fetchStatus = useCallback(async () => {
     try {
       const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bendy-sync`;
       const response = await fetch(url, { method: "GET" });
