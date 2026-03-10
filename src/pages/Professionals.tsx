@@ -6,16 +6,18 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, ChevronDown, ChevronLeft, ChevronRight, X, Users, CheckCircle, UserPlus, TrendingUp, FileWarning } from "lucide-react";
+import { Plus, Search, ChevronLeft, ChevronRight, X, Users, CheckCircle, UserPlus, TrendingUp, FileWarning, LayoutGrid, List } from "lucide-react";
 import { ProfessionalBulkActionBar } from "@/components/recruitment/ProfessionalBulkActionBar";
 import { ProfessionalCard } from "@/components/recruitment/ProfessionalCard";
+import { ProfessionalListView } from "@/components/recruitment/ProfessionalListView";
 import { ProfessionalDetailModal } from "@/components/ProfessionalDetailModal";
 import { motion } from "framer-motion";
 import { useUserRole } from "@/hooks/useUserRole";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Badge } from "@/components/ui/badge";
 import { KPICard } from "@/components/ui/kpi-card";
 import { PageHero } from "@/components/ui/page-hero";
 import { PageContainer } from "@/components/ui/page-container";
+import { cn } from "@/lib/utils";
 
 import {
   Dialog,
