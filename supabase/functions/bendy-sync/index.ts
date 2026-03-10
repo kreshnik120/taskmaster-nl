@@ -1630,11 +1630,233 @@ function analyzeFieldFillRates(rawCacheRecords: any[] | null): FieldFillRate[] {
 }
 
 // ============================================
+// SYNC REQUISITIONS (Diensten importeren)
+// ============================================
+
+async function syncRequisitions(
+  adminClient: any,
+  tenant: string,
+  orgId: string,
+  _syncType: string,
+): Promise<SyncResult> {
+  const result: SyncResult = { fetched: 0, created: 0, updated: 0, skipped: 0, failed: 0, errors: [] };
+
+  // ═══ STAP 1: Haal data op ═══
+  const { records: openRecords } = await fetchAllBendyRecords(tenant, '/api/v2/requisitions/open');
+  const { records: assignedRecords } = await fetchAllBendyRecords(tenant, '/api/v2/requisitions/assigned');
+  const allRecords = [...openRecords, ...assignedRecords];
+  result.fetched = allRecords.length;
+  if (allRecords.length === 0) return result;
+
+  // ═══ STAP 2: Pre-fetch lokale data ═══
+  const { data: existingDiensten } = await adminClient
+    .from('diensten')
+    .select('id, bendy_id, status, datum, start_tijd, eind_tijd, sublocation_id')
+    .eq('org_id', orgId)
+    .not('bendy_id', 'is', null);
+
+  const dienstMap = new Map<string, any>();
+  (existingDiensten || []).forEach((d: any) => dienstMap.set(d.bendy_id, d));
+
+  const { data: sublocations } = await adminClient
+    .from('client_sublocations')
+    .select('id, bendy_id')
+    .not('bendy_id', 'is', null);
+
+  const subMap = new Map<string, string>();
+  (sublocations || []).forEach((s: any) => subMap.set(String(s.bendy_id), s.id));
+
+  // ═══ STAP 3: FASE 1 — Verwerk in-memory ═══
+  const cacheWrites: any[] = [];
+  const dienstInserts: any[] = [];
+  const dienstUpdates: any[] = [];
+  const mappingWrites: any[] = [];
+
+  for (const record of allRecords) {
+    try {
+      const bendyId = String(record.id);
+      const attrs = record.attributes || {};
+      const rels = record.relationships || {};
+
+      cacheWrites.push({
+        org_id: orgId,
+        tenant,
+        entity_type: 'requisitions',
+        bendy_id: bendyId,
+        raw_data: record,
+        fetched_at: new Date().toISOString(),
+      });
+
+      const clientBendyId = rels.client?.data?.id ? String(rels.client.data.id) : null;
+      const sublocationId = clientBendyId ? subMap.get(clientBendyId) : null;
+
+      if (!sublocationId) {
+        result.skipped++;
+        mappingWrites.push({
+          org_id: orgId,
+          tenant,
+          entity_type: 'dienst',
+          bendy_id: bendyId,
+          local_id: '00000000-0000-0000-0000-000000000000',
+          sync_status: 'pending',
+          conflict_data: {
+            reason: 'sublocation_not_found',
+            client_bendy_id: clientBendyId,
+            name: attrs.name,
+            date: attrs.date,
+          },
+          last_synced_at: new Date().toISOString(),
+        });
+        continue;
+      }
+
+      const extractTime = (dt: string | null): string | null => {
+        if (!dt) return null;
+        const match = dt.match(/T(\d{2}:\d{2})/);
+        return match ? match[1] + ':00' : null;
+      };
+
+      let pauzeMinuten = 0;
+      if (attrs.pauze_required && attrs.pauze_start_time && attrs.pauze_end_time) {
+        const ps = new Date(attrs.pauze_start_time).getTime();
+        const pe = new Date(attrs.pauze_end_time).getTime();
+        pauzeMinuten = Math.round((pe - ps) / 60000);
+        if (pauzeMinuten < 0) pauzeMinuten = 0;
+        if (pauzeMinuten > 480) pauzeMinuten = 480;
+      }
+
+      const mapStatus = (bendyStatus: string): string => {
+        if (bendyStatus === 'open') return 'open';
+        if (bendyStatus === 'closed') return 'volledig_bezet';
+        return 'open';
+      };
+
+      const deriveDienstType = (startTime: string | null): string => {
+        if (!startTime) return 'dag';
+        const hour = parseInt(startTime.split(':')[0], 10);
+        if (hour >= 22 || hour < 7) return 'nacht';
+        if (hour >= 17) return 'avond';
+        return 'dag';
+      };
+
+      const deriveFunctieNiveau = (comment: string | null): string[] => {
+        if (!comment) return [];
+        const c = comment.toLowerCase().trim();
+        if (c.includes('begeleider') && !c.includes('assistent')) return ['Begeleider'];
+        if (c.includes('assistent begeleider') || c.includes('assistent-begeleider')) return ['Assistent begeleider'];
+        if (c.includes('verpleegkundige')) return ['Verpleegkundige'];
+        if (c.includes('verzorgende')) return ['Verzorgende'];
+        return [];
+      };
+
+      const startTijd = extractTime(attrs.start_time);
+      const eindTijd = extractTime(attrs.end_time);
+
+      if (!attrs.date || !startTijd || !eindTijd) {
+        result.failed++;
+        result.errors.push(`Req ${bendyId}: datum/tijd ontbreekt`);
+        continue;
+      }
+
+      const existingDienst = dienstMap.get(bendyId);
+
+      if (existingDienst) {
+        const updateData: Record<string, any> = {};
+        const newStatus = mapStatus(attrs.status);
+        if (existingDienst.status !== newStatus &&
+            existingDienst.status !== 'geannuleerd' &&
+            existingDienst.status !== 'voltooid') {
+          updateData.status = newStatus;
+        }
+        if (existingDienst.datum !== attrs.date) updateData.datum = attrs.date;
+        if (existingDienst.start_tijd !== startTijd) updateData.start_tijd = startTijd;
+        if (existingDienst.eind_tijd !== eindTijd) updateData.eind_tijd = eindTijd;
+
+        if (Object.keys(updateData).length > 0) {
+          dienstUpdates.push({ id: existingDienst.id, data: updateData });
+          result.updated++;
+        } else {
+          result.skipped++;
+        }
+        existingDienst.bendy_id = bendyId;
+      } else {
+        dienstInserts.push({
+          org_id: orgId,
+          sublocation_id: sublocationId,
+          bendy_id: bendyId,
+          titel: attrs.name || 'Bendy dienst',
+          datum: attrs.date,
+          start_tijd: startTijd,
+          eind_tijd: eindTijd,
+          pauze_minuten: pauzeMinuten,
+          status: mapStatus(attrs.status),
+          dienst_type: deriveDienstType(startTijd),
+          gevraagd_functie_niveau: deriveFunctieNiveau(attrs.comment),
+          gevraagd_aantal: 1,
+          publieke_opmerking: attrs.comment || null,
+          prive_opmerking: attrs.private_comment || null,
+          flexwerker_opmerking: attrs.flexwerker_comment || null,
+          is_slaapdienst: attrs.sleep_duty || false,
+          slaap_start_tijd: extractTime(attrs.sleep_duty_start_time),
+          slaap_eind_tijd: extractTime(attrs.sleep_duty_end_time),
+          bron: 'geimporteerd',
+          accepteerbaar: true,
+        });
+        result.created++;
+      }
+
+      mappingWrites.push({
+        org_id: orgId,
+        tenant,
+        entity_type: 'dienst',
+        bendy_id: bendyId,
+        local_id: existingDienst?.id || '00000000-0000-0000-0000-000000000000',
+        sync_status: 'synced',
+        bendy_updated_at: attrs.updated_at,
+        last_synced_at: new Date().toISOString(),
+      });
+
+    } catch (error) {
+      result.failed++;
+      const msg = error instanceof Error ? error.message : String(error);
+      result.errors.push(`Req ${record.id}: ${msg.substring(0, 200)}`);
+      if (result.errors.length > 20) break;
+    }
+  }
+
+  // ═══ STAP 4: FASE 2 — Batch DB writes ═══
+  if (cacheWrites.length > 0) {
+    await batchUpsert(adminClient, 'bendy_raw_cache', cacheWrites, 'tenant,entity_type,bendy_id');
+  }
+  if (dienstUpdates.length > 0) {
+    await parallelUpdates(adminClient, 'diensten', dienstUpdates);
+  }
+  if (dienstInserts.length > 0) {
+    const inserted = await batchInsert(adminClient, 'diensten', dienstInserts);
+    if (inserted && inserted.length > 0) {
+      inserted.forEach((row: any, idx: number) => {
+        const bendyId = dienstInserts[idx]?.bendy_id;
+        const mapping = mappingWrites.find((m: any) => m.bendy_id === bendyId && m.sync_status === 'synced');
+        if (mapping && row.id) {
+          mapping.local_id = row.id;
+        }
+      });
+    }
+  }
+  if (mappingWrites.length > 0) {
+    await batchUpsert(adminClient, 'bendy_id_mapping', mappingWrites, 'tenant,entity_type,bendy_id');
+  }
+
+  logInfo(FUNCTION_NAME, `Requisition sync voltooid: ${result.fetched} opgehaald, ${result.created} nieuw, ${result.updated} bijgewerkt, ${result.failed} gefaald`);
+  return result;
+}
+
+// ============================================
 // REQUEST TYPES
 // ============================================
 
 interface BendySyncRequest {
-  action: 'sync_clients' | 'sync_users' | 'update_config';
+  action: 'sync_clients' | 'sync_users' | 'sync_documents' | 'sync_requisitions' | 'update_config';
   tenant?: string;
   sync_type?: 'full' | 'incremental';
   enabled?: boolean;
