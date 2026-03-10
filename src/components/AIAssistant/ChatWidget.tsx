@@ -150,7 +150,7 @@ const PAGE_CONTEXTS: Record<string, PageContext> = {
       { icon: Calendar, label: 'Sorteren', prompt: 'Help me mijn taken te sorteren op prioriteit' },
     ]
   },
-  '/sollicitaties-archief': {
+  '/sollicitaties/archief': {
     label: 'Sollicitaties Archief',
     description: 'Gearchiveerde en afgeronde sollicitaties',
     icon: Users,
