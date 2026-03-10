@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { Plus, Search, ChevronLeft, ChevronRight, X, Users, CheckCircle, UserPlus, TrendingUp, FileWarning, LayoutGrid, List } from "lucide-react";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { ProfessionalBulkActionBar } from "@/components/recruitment/ProfessionalBulkActionBar";
 import { ProfessionalCard } from "@/components/recruitment/ProfessionalCard";
 import { ProfessionalListView } from "@/components/recruitment/ProfessionalListView";
