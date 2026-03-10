@@ -142,6 +142,60 @@ export default function BendySync() {
     total: number; encrypted: number; plaintext: number; fully_encrypted: boolean; loading: boolean;
   }>({ total: 0, encrypted: 0, plaintext: 0, fully_encrypted: false, loading: false });
   const [migrating, setMigrating] = useState(false);
+  const [unusedFieldsAnalysis, setUnusedFieldsAnalysis] = useState<any[] | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+
+  const fetchUnusedFieldsAnalysis = async () => {
+    setAnalysisLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('bendy_raw_cache')
+        .select('raw_data')
+        .eq('entity_type', 'users')
+        .order('fetched_at', { ascending: false })
+        .limit(500);
+
+      if (error || !data) {
+        toast.error('Analyse mislukt: ' + (error?.message || 'Geen data'));
+        return;
+      }
+
+      const UNUSED_FIELDS = [
+        'languages', 'region', 'working_hours_per_week', 'working_hours_custom',
+        'shift', 'transportation', 'description', 'function',
+        'employment_history', 'locale', 'bookkeeping_email', 'website_url', 'custom_fields'
+      ];
+
+      const analysis = UNUSED_FIELDS.map(field => {
+        const values = data
+          .map(row => {
+            const attrs = (row.raw_data as any)?.attributes || {};
+            return attrs[field];
+          })
+          .filter(v => v !== null && v !== undefined && v !== '');
+
+        const uniqueExamples = [...new Set(values.map(v =>
+          typeof v === 'object' ? JSON.stringify(v) : String(v)
+        ))].slice(0, 5);
+
+        return {
+          field,
+          filled: values.length,
+          total: data.length,
+          percentage: Math.round((values.length / data.length) * 100),
+          examples: uniqueExamples,
+        };
+      });
+
+      setUnusedFieldsAnalysis(analysis.sort((a, b) => b.percentage - a.percentage));
+      toast.success(`Analyse voltooid: ${data.length} records geanalyseerd`);
+    } catch (err) {
+      console.error('Analyse error:', err);
+      toast.error('Analyse mislukt');
+    } finally {
+      setAnalysisLoading(false);
+    }
+  };
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -1040,6 +1094,81 @@ export default function BendySync() {
             </CardContent>
           </Card>
         )}
+
+        {/* Diagnostisch paneel: Ongebruikte velden */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Database className="h-5 w-5" />
+              Bendy Data Analyse — Ongebruikte velden
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Velden die Bendy levert maar die we nog niet gebruiken bij professionals
+            </p>
+          </CardHeader>
+          <CardContent>
+            <Button
+              onClick={fetchUnusedFieldsAnalysis}
+              disabled={analysisLoading}
+              variant="outline"
+              className="mb-4"
+            >
+              {analysisLoading ? (
+                <><RefreshCw className="h-4 w-4 animate-spin" /> Analyseren...</>
+              ) : (
+                <><Play className="h-4 w-4" /> Analyse starten</>
+              )}
+            </Button>
+
+            {unusedFieldsAnalysis && (
+              <div className="rounded-md border overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Veld</TableHead>
+                      <TableHead>Gevuld</TableHead>
+                      <TableHead>%</TableHead>
+                      <TableHead>Voorbeelden</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {unusedFieldsAnalysis.map((item) => (
+                      <TableRow key={item.field}>
+                        <TableCell className="font-mono text-sm">{item.field}</TableCell>
+                        <TableCell className="text-sm whitespace-nowrap">
+                          {item.filled}/{item.total}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              item.percentage > 50 ? "success" :
+                              item.percentage >= 10 ? "warning" : "secondary"
+                            }
+                          >
+                            {item.percentage}%
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1 max-w-md">
+                            {item.examples.length > 0 ? (
+                              item.examples.map((ex: string, i: number) => (
+                                <Badge key={i} variant="outline" className="text-xs font-mono max-w-[200px] truncate">
+                                  {ex}
+                                </Badge>
+                              ))
+                            ) : (
+                              <span className="text-muted-foreground text-xs italic">geen data</span>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </PageContainer>
   );
