@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, ChevronLeft, ChevronRight, X, LayoutGrid, List, AlertTriangle, Lightbulb, Sparkles, ArrowRight } from "lucide-react";
+import { Plus, Search, ChevronLeft, ChevronRight, X, Users, LayoutGrid, List, AlertTriangle, Lightbulb, Sparkles, ArrowRight } from "lucide-react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { ProfessionalBulkActionBar } from "@/components/recruitment/ProfessionalBulkActionBar";
 import { ProfessionalCard } from "@/components/recruitment/ProfessionalCard";
