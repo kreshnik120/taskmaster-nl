@@ -142,6 +142,60 @@ export default function BendySync() {
     total: number; encrypted: number; plaintext: number; fully_encrypted: boolean; loading: boolean;
   }>({ total: 0, encrypted: 0, plaintext: 0, fully_encrypted: false, loading: false });
   const [migrating, setMigrating] = useState(false);
+  const [unusedFieldsAnalysis, setUnusedFieldsAnalysis] = useState<any[] | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+
+  const fetchUnusedFieldsAnalysis = async () => {
+    setAnalysisLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('bendy_raw_cache')
+        .select('raw_data')
+        .eq('entity_type', 'users')
+        .order('fetched_at', { ascending: false })
+        .limit(500);
+
+      if (error || !data) {
+        toast.error('Analyse mislukt: ' + (error?.message || 'Geen data'));
+        return;
+      }
+
+      const UNUSED_FIELDS = [
+        'languages', 'region', 'working_hours_per_week', 'working_hours_custom',
+        'shift', 'transportation', 'description', 'function',
+        'employment_history', 'locale', 'bookkeeping_email', 'website_url', 'custom_fields'
+      ];
+
+      const analysis = UNUSED_FIELDS.map(field => {
+        const values = data
+          .map(row => {
+            const attrs = (row.raw_data as any)?.attributes || {};
+            return attrs[field];
+          })
+          .filter(v => v !== null && v !== undefined && v !== '');
+
+        const uniqueExamples = [...new Set(values.map(v =>
+          typeof v === 'object' ? JSON.stringify(v) : String(v)
+        ))].slice(0, 5);
+
+        return {
+          field,
+          filled: values.length,
+          total: data.length,
+          percentage: Math.round((values.length / data.length) * 100),
+          examples: uniqueExamples,
+        };
+      });
+
+      setUnusedFieldsAnalysis(analysis.sort((a, b) => b.percentage - a.percentage));
+      toast.success(`Analyse voltooid: ${data.length} records geanalyseerd`);
+    } catch (err) {
+      console.error('Analyse error:', err);
+      toast.error('Analyse mislukt');
+    } finally {
+      setAnalysisLoading(false);
+    }
+  };
 
   const fetchStatus = useCallback(async () => {
     try {
