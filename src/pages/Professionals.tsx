@@ -12,7 +12,7 @@ import { ProfessionalBulkActionBar } from "@/components/recruitment/Professional
 import { ProfessionalCard } from "@/components/recruitment/ProfessionalCard";
 import { ProfessionalListView } from "@/components/recruitment/ProfessionalListView";
 import { ProfessionalDetailModal } from "@/components/ProfessionalDetailModal";
-import { motion } from "framer-motion";
+
 import { useUserRole } from "@/hooks/useUserRole";
 import { Badge } from "@/components/ui/badge";
 import { KPICard } from "@/components/ui/kpi-card";
