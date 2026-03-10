@@ -264,7 +264,7 @@ const AfgerondeTaken = () => {
         <KPICard
           icon={TrendingUp}
           title="Success Rate"
-          value={tasks.length > 0 ? Math.round(onTimeTasks.length / tasks.length * 100) : 0}
+          value={searchFilteredTasks.length > 0 ? Math.round(onTimeTasks.length / searchFilteredTasks.length * 100) : 0}
           suffix="%"
           variant="time"
           onClick={() => toast.info("Dit is je totale succes percentage")}
