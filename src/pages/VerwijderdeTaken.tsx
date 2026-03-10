@@ -57,6 +57,8 @@ const VerwijderdeTaken = () => {
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [filterPriority, setFilterPriority] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebouncedValue(searchQuery, 300);
   const navigate = useNavigate();
    const isMobile = useIsMobile();
 
