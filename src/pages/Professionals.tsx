@@ -324,7 +324,7 @@ const Professionals = () => {
   // Reset pagina naar 1 bij elke filter/zoek wijziging
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterFunctie, filterWerkvorm, filterStatus, filterRegio, filterDocuments, activeKpi, sortOption]);
+  }, [debouncedSearchTerm, filterFunctie, filterWerkvorm, filterStatus, filterRegio, filterDocuments, activeKpi, sortOption]);
 
   // Paginering berekenen
   const PAGE_SIZE = 24;
