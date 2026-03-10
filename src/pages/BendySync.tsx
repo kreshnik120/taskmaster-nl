@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { RefreshCw, Power, Play, Database, Clock, AlertTriangle, CheckCircle2, MinusCircle, Users, FileText, Shield, ChevronDown } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
 import { PageContainer } from "@/components/ui/page-container";
 import { PageHero } from "@/components/ui/page-hero";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -147,6 +148,8 @@ export default function BendySync() {
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [reqAnalysisLoading, setReqAnalysisLoading] = useState(false);
   const [reqAnalysisResult, setReqAnalysisResult] = useState<any>(null);
+  const [userTestLoading, setUserTestLoading] = useState(false);
+  const [userTestResult, setUserTestResult] = useState<any>(null);
 
   const fetchUnusedFieldsAnalysis = async () => {
     setAnalysisLoading(true);
@@ -267,6 +270,108 @@ export default function BendySync() {
       toast.error('Requisition analyse mislukt: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setReqAnalysisLoading(false);
+    }
+  };
+
+  const fetchAssignedUserTest = async () => {
+    setUserTestLoading(true);
+    try {
+      const testResults: any[] = [];
+
+      // Test 1: include=user
+      const { data: t1, error: e1 } = await supabase.functions.invoke('bendy-proxy', {
+        body: { endpoint: '/api/v2/requisitions/assigned', method: 'GET', params: { include: 'user' } }
+      });
+      const t1data = t1?.data;
+      const t1records = Array.isArray(t1data?.data) ? t1data.data : (Array.isArray(t1data) ? t1data : []);
+      const t1included = t1data?.included || t1?.included || [];
+      const t1users = t1included.filter((i: any) => i.type === 'users');
+      const t1userRel = t1records.length > 0 ? t1records[0]?.relationships?.user : null;
+      testResults.push({
+        name: 'include=user',
+        success: !e1 && t1records.length > 0,
+        error: e1?.message || null,
+        recordCount: t1records.length,
+        includedUsers: t1users.length,
+        includedTypes: t1included.reduce((acc: Record<string, number>, i: any) => { acc[i.type || 'unknown'] = (acc[i.type || 'unknown'] || 0) + 1; return acc; }, {}),
+        userRelationship: t1userRel ? JSON.stringify(t1userRel) : 'niet aanwezig',
+        sampleRelationships: t1records.length > 0 ? Object.keys(t1records[0]?.relationships || {}) : [],
+        rawFirstRecord: t1records.length > 0 ? t1records[0] : null,
+      });
+
+      // Test 2: include=flex_user
+      const { data: t2, error: e2 } = await supabase.functions.invoke('bendy-proxy', {
+        body: { endpoint: '/api/v2/requisitions/assigned', method: 'GET', params: { include: 'flex_user' } }
+      });
+      const t2data = t2?.data;
+      const t2records = Array.isArray(t2data?.data) ? t2data.data : (Array.isArray(t2data) ? t2data : []);
+      const t2included = t2data?.included || t2?.included || [];
+      const t2users = t2included.filter((i: any) => i.type === 'users');
+      const t2userRel = t2records.length > 0 ? t2records[0]?.relationships?.flex_user : null;
+      testResults.push({
+        name: 'include=flex_user',
+        success: !e2 && t2records.length > 0,
+        error: e2?.message || null,
+        recordCount: t2records.length,
+        includedUsers: t2users.length,
+        includedTypes: t2included.reduce((acc: Record<string, number>, i: any) => { acc[i.type || 'unknown'] = (acc[i.type || 'unknown'] || 0) + 1; return acc; }, {}),
+        userRelationship: t2userRel ? JSON.stringify(t2userRel) : 'niet aanwezig',
+        sampleRelationships: t2records.length > 0 ? Object.keys(t2records[0]?.relationships || {}) : [],
+        rawFirstRecord: t2records.length > 0 ? t2records[0] : null,
+      });
+
+      // Test 3: include=client,user,flex_user
+      const { data: t3, error: e3 } = await supabase.functions.invoke('bendy-proxy', {
+        body: { endpoint: '/api/v2/requisitions/assigned', method: 'GET', params: { include: 'client,user,flex_user' } }
+      });
+      const t3data = t3?.data;
+      const t3records = Array.isArray(t3data?.data) ? t3data.data : (Array.isArray(t3data) ? t3data : []);
+      const t3included = t3data?.included || t3?.included || [];
+      const t3users = t3included.filter((i: any) => i.type === 'users');
+      const t3userRel = t3records.length > 0 ? t3records[0]?.relationships?.user : null;
+      const t3flexUserRel = t3records.length > 0 ? t3records[0]?.relationships?.flex_user : null;
+      testResults.push({
+        name: 'include=client,user,flex_user',
+        success: !e3 && t3records.length > 0,
+        error: e3?.message || null,
+        recordCount: t3records.length,
+        includedUsers: t3users.length,
+        includedTypes: t3included.reduce((acc: Record<string, number>, i: any) => { acc[i.type || 'unknown'] = (acc[i.type || 'unknown'] || 0) + 1; return acc; }, {}),
+        userRelationship: t3userRel ? JSON.stringify(t3userRel) : 'niet aanwezig',
+        flexUserRelationship: t3flexUserRel ? JSON.stringify(t3flexUserRel) : 'niet aanwezig',
+        sampleRelationships: t3records.length > 0 ? Object.keys(t3records[0]?.relationships || {}) : [],
+        rawFirstRecord: t3records.length > 0 ? t3records[0] : null,
+      });
+
+      // Test 4: Alle relationship keys over alle records
+      const allRecords = [...t1records, ...t2records, ...t3records];
+      const allRelKeys = new Set<string>();
+      allRecords.forEach(r => Object.keys(r?.relationships || {}).forEach(k => allRelKeys.add(k)));
+
+      // Test 5: flex_user_company IDs
+      const flexCompanyIds = t1records
+        .map((r: any) => r.relationships?.flex_user_company?.data?.id)
+        .filter((v: any) => v)
+        .slice(0, 5);
+
+      setUserTestResult({
+        tests: testResults,
+        allRelationshipKeys: Array.from(allRelKeys),
+        flexCompanyIds,
+        totalRecordsTested: allRecords.length,
+      });
+
+      const foundUsers = testResults.some(t => t.includedUsers > 0);
+      if (foundUsers) {
+        toast.success('User data GEVONDEN! Bekijk de resultaten.');
+      } else {
+        toast.warning('Geen user data gevonden in alle 3 tests. Bekijk details.');
+      }
+    } catch (err) {
+      console.error('User test error:', err);
+      toast.error('User test mislukt: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setUserTestLoading(false);
     }
   };
 
@@ -1458,6 +1563,98 @@ export default function BendySync() {
                       )}
                     </CollapsibleContent>
                   </Collapsible>
+                </div>
+
+                {/* Sectie G: Assigned User Koppeling Test */}
+                <Separator className="my-6" />
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="text-sm font-semibold">Assigned User Koppeling Test</h4>
+                    <p className="text-xs text-muted-foreground">Test welke include= parameter de toegewezen professional oplevert</p>
+                  </div>
+                  <Button onClick={fetchAssignedUserTest} disabled={userTestLoading} variant="outline" size="sm">
+                    {userTestLoading ? <><RefreshCw className="h-4 w-4 animate-spin mr-2" /> Testen...</> : 'User Koppeling Testen'}
+                  </Button>
+
+                  {userTestResult && (
+                    <div className="space-y-4">
+                      {userTestResult.tests.map((test: any, idx: number) => (
+                        <div key={idx} className="border border-border rounded-lg p-3 space-y-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-bold font-mono">{test.name}</span>
+                            {test.error ? (
+                              <Badge variant="secondary">Fout</Badge>
+                            ) : test.includedUsers > 0 ? (
+                              <Badge variant="success">Users gevonden: {test.includedUsers}</Badge>
+                            ) : (
+                              <Badge variant="destructive">Geen users</Badge>
+                            )}
+                            <span className="text-xs text-muted-foreground">{test.recordCount} records</span>
+                          </div>
+
+                          {Object.keys(test.includedTypes).length > 0 && (
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <span className="text-xs text-muted-foreground">Included:</span>
+                              {Object.entries(test.includedTypes).map(([type, count]) => (
+                                <Badge key={type} variant="outline" className="text-xs">{String(count)}x {type}</Badge>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="text-xs">
+                            <span className="text-muted-foreground">user relationship: </span>
+                            <code className="bg-muted px-1 py-0.5 rounded text-xs">{test.userRelationship}</code>
+                          </div>
+                          {test.flexUserRelationship && (
+                            <div className="text-xs">
+                              <span className="text-muted-foreground">flex_user relationship: </span>
+                              <code className="bg-muted px-1 py-0.5 rounded text-xs">{test.flexUserRelationship}</code>
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <span className="text-xs text-muted-foreground">Relationships:</span>
+                            {test.sampleRelationships.map((k: string) => (
+                              <Badge key={k} variant="secondary" className="text-xs">{k}</Badge>
+                            ))}
+                          </div>
+
+                          {test.rawFirstRecord && (
+                            <Collapsible>
+                              <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground cursor-pointer">
+                                <ChevronDown className="h-3 w-3" />
+                                Ruwe response — {test.name}
+                              </CollapsibleTrigger>
+                              <CollapsibleContent className="mt-1">
+                                <pre className="text-xs bg-muted p-2 rounded-lg overflow-auto max-h-[300px]">
+                                  {JSON.stringify(test.rawFirstRecord, null, 2)}
+                                </pre>
+                              </CollapsibleContent>
+                            </Collapsible>
+                          )}
+                        </div>
+                      ))}
+
+                      {/* Samenvatting */}
+                      <div className="border-t border-border pt-3 space-y-2">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <span className="text-xs font-medium">Alle unieke relationship keys:</span>
+                          {userTestResult.allRelationshipKeys.map((k: string) => (
+                            <Badge key={k} variant="info" className="text-xs">{k}</Badge>
+                          ))}
+                        </div>
+                        {userTestResult.flexCompanyIds.length > 0 && (
+                          <div className="text-xs">
+                            <span className="font-medium">flex_user_company IDs (eerste 5): </span>
+                            <span className="font-mono">{userTestResult.flexCompanyIds.join(', ')}</span>
+                          </div>
+                        )}
+                        <div className="text-xs text-muted-foreground">
+                          Totaal records getest: {userTestResult.totalRecordsTested}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </>
             )}
