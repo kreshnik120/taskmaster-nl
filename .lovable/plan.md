@@ -1,37 +1,31 @@
 
 
-# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
+# BENDY-REQ-2: Assigned User Koppeling Test — Sectie G
 
-## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
+## Wat
 
-### 1. Nieuwe state variabelen (na regel 193)
-- `showAddDocDialog` (boolean)
-- `addDocLoading` (boolean)
-- `addDocForm` object: `{ name, category, type, expiryDate, file }`
+Sectie G toevoegen binnen het bestaande "Bendy Requisitions Verkenning" Card, na Sectie F (Ruwe JSON, regel 1461), maar vóór de `</>` op regel 1462.
 
-### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
-- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
-- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
-- Haal `user` op via `supabase.auth.getUser()`
-- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
+## Wijzigingen — `src/pages/BendySync.tsx`
 
-### 3. `handleUploadForManualDoc` functie
-- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
-- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
-- Update lokale `documents` state
+### 1. State (bij regel 149)
+Twee nieuwe states: `userTestLoading` en `userTestResult`.
 
-### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
-- Plus icoon, variant outline, opent dialog
+### 2. Functie `fetchAssignedUserTest` (na `fetchRequisitionSample`)
+Exact zoals opgegeven: 3 API calls via bendy-proxy met `include=user`, `include=flex_user`, en `include=client,user,flex_user`. Analyseert included types, relationship keys, en flex_user_company IDs. Resultaten opgeslagen in `userTestResult`.
 
-### 5. UI: Dialog component (onder de TabsContent of aan het eind)
-- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
-- Na file selectie: toon bestandsnaam + grootte
-- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
+### 3. Separator import
+`Separator` component toevoegen aan imports.
 
-### 6. Scenario C Upload knop activeren (regel ~1447)
-- Verwijder `disabled` van de Upload knop
-- onClick: trigger hidden file input → `handleUploadForManualDoc`
+### 4. UI — Sectie G (invoegen na regel 1461, vóór `</>`)
+Binnen het bestaande Card, na Sectie F:
 
-### Bestanden die NIET worden aangepast
-- Edge functions, storage config, andere tabs, bendy-sync
+- `<Separator />` scheidingslijn
+- Sub-titel "Assigned User Koppeling Test" + beschrijving
+- "User Koppeling Testen" button (outline variant, spinner)
+- Per test (3 stuks): titel, status badge (groen/rood/grijs), included types als badges, user relationship waarde, alle relationship keys
+- Samenvatting: alle unieke relationship keys + flex_user_company IDs
+- Per test met rawFirstRecord: Collapsible `<pre>` JSON
+
+Geen bestaande code wordt gewijzigd.
 
