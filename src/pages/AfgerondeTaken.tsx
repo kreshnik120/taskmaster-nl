@@ -143,8 +143,14 @@ const AfgerondeTaken = () => {
     return completedDate <= dueDate;
   };
 
-  const onTimeTasks = tasks.filter(isTaskOnTime);
-  const lateTasks = tasks.filter(task => !isTaskOnTime(task));
+  const searchFilteredTasks = tasks.filter(task => {
+    if (!debouncedSearch) return true;
+    const q = debouncedSearch.toLowerCase();
+    return task.title.toLowerCase().includes(q) || task.organizations?.name?.toLowerCase().includes(q);
+  });
+
+  const onTimeTasks = searchFilteredTasks.filter(isTaskOnTime);
+  const lateTasks = searchFilteredTasks.filter(task => !isTaskOnTime(task));
 
   const renderTasksTable = (tasksToRender: CompletedTask[], showLateIndicator: boolean = false) => (
     <Table>
