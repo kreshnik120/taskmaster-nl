@@ -1,37 +1,30 @@
 
 
-# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
+# BENDY-REQ-4: Client ID → Sublocation Matching — Sectie I
 
-## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
+## Wat
 
-### 1. Nieuwe state variabelen (na regel 193)
-- `showAddDocDialog` (boolean)
-- `addDocLoading` (boolean)
-- `addDocForm` object: `{ name, category, type, expiryDate, file }`
+Sectie I toevoegen binnen het bestaande "Bendy Requisitions Verkenning" Card, na Sectie H (regel 1819), vóór `</CardContent>` op regel 1821.
 
-### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
-- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
-- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
-- Haal `user` op via `supabase.auth.getUser()`
-- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
+## Wijzigingen — `src/pages/BendySync.tsx`
 
-### 3. `handleUploadForManualDoc` functie
-- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
-- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
-- Update lokale `documents` state
+### 1. State (bij regel 154)
+Twee nieuwe states: `clientMatchLoading` en `clientMatchResult`.
 
-### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
-- Plus icoon, variant outline, opent dialog
+### 2. Functie `fetchClientMatchTest` (na `fetchCompanyMatchTest`)
+Exact zoals opgegeven: haalt open + assigned requisitions op, verzamelt client IDs, queryt `client_sublocations` (met joins naar organizations) en `bendy_id_mapping` voor pending status, matcht, en berekent samenvatting + requisition dekking.
 
-### 5. UI: Dialog component (onder de TabsContent of aan het eind)
-- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
-- Na file selectie: toon bestandsnaam + grootte
-- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
+### 3. UI — Sectie I (invoegen na regel 1819, vóór `</CardContent>`)
+Binnen het bestaande Card, conditioneel op `reqAnalysisResult`:
 
-### 6. Scenario C Upload knop activeren (regel ~1447)
-- Verwijder `disabled` van de Upload knop
-- onClick: trigger hidden file input → `handleUploadForManualDoc`
+- `<Separator />` scheidingslijn
+- Sub-titel "Client ID → Sublocation Matching" + beschrijving
+- "Client Matching Testen" button (outline, spinner)
+- Samenvatting: 3 badges (gematcht/pending/niet gematcht) + requisition dekking badge met kleurcodering
+- Stats rij: open reqs, assigned reqs, sublocations met bendy_id
+- Resultaten tabel: Client ID, Status badge, Requisition naam, Sublocation info, Open, Assigned, Totaal
+- Niet-gematchte rijen krijgen `bg-red-50` achtergrond
+- Gesorteerd op totaal (hoogste eerst)
 
-### Bestanden die NIET worden aangepast
-- Edge functions, storage config, andere tabs, bendy-sync
+Geen bestaande code wordt gewijzigd — alleen toevoegingen.
 
