@@ -152,6 +152,8 @@ export default function BendySync() {
   const [userTestResult, setUserTestResult] = useState<any>(null);
   const [companyMatchLoading, setCompanyMatchLoading] = useState(false);
   const [companyMatchResult, setCompanyMatchResult] = useState<any>(null);
+  const [clientMatchLoading, setClientMatchLoading] = useState(false);
+  const [clientMatchResult, setClientMatchResult] = useState<any>(null);
 
   const fetchUnusedFieldsAnalysis = async () => {
     setAnalysisLoading(true);
@@ -461,6 +463,110 @@ export default function BendySync() {
       toast.error('Matching test mislukt: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setCompanyMatchLoading(false);
+    }
+  };
+
+  const fetchClientMatchTest = async () => {
+    setClientMatchLoading(true);
+    try {
+      const { data: openData } = await supabase.functions.invoke('bendy-proxy', {
+        body: { endpoint: '/api/v2/requisitions/open', method: 'GET', params: {} }
+      });
+      const { data: assignedData } = await supabase.functions.invoke('bendy-proxy', {
+        body: { endpoint: '/api/v2/requisitions/assigned', method: 'GET', params: {} }
+      });
+
+      const openNested = openData?.data;
+      const openRecords = Array.isArray(openNested?.data) ? openNested.data : (Array.isArray(openNested) ? openNested : []);
+      const assignedNested = assignedData?.data;
+      const assignedRecords = Array.isArray(assignedNested?.data) ? assignedNested.data : (Array.isArray(assignedNested) ? assignedNested : []);
+      const allRecords = [...openRecords, ...assignedRecords];
+
+      const clientIdCounts: Record<string, { open: number; assigned: number; name: string }> = {};
+      openRecords.forEach((r: any) => {
+        const id = r.relationships?.client?.data?.id;
+        if (id) {
+          if (!clientIdCounts[id]) clientIdCounts[id] = { open: 0, assigned: 0, name: '' };
+          clientIdCounts[id].open++;
+          if (!clientIdCounts[id].name) clientIdCounts[id].name = r.attributes?.name || '';
+        }
+      });
+      assignedRecords.forEach((r: any) => {
+        const id = r.relationships?.client?.data?.id;
+        if (id) {
+          if (!clientIdCounts[id]) clientIdCounts[id] = { open: 0, assigned: 0, name: '' };
+          clientIdCounts[id].assigned++;
+          if (!clientIdCounts[id].name) clientIdCounts[id].name = r.attributes?.name || '';
+        }
+      });
+
+      const uniqueClientIds = Object.keys(clientIdCounts);
+
+      const { data: sublocations, error: subError } = await supabase
+        .from('client_sublocations')
+        .select('id, bendy_id, naam, plaats, client_locations!inner(client_organizations!inner(name))')
+        .not('bendy_id', 'is', null);
+
+      if (subError) throw new Error('Sublocations ophalen mislukt: ' + subError.message);
+
+      const subMap: Record<string, any> = {};
+      (sublocations || []).forEach((s: any) => {
+        subMap[s.bendy_id] = {
+          id: s.id,
+          naam: s.naam,
+          plaats: s.plaats,
+          organisatie: s.client_locations?.client_organizations?.name || '—',
+        };
+      });
+
+      const matchResults: any[] = uniqueClientIds.map(clientId => {
+        const sub = subMap[clientId];
+        const counts = clientIdCounts[clientId];
+        return {
+          clientId,
+          matched: !!sub,
+          sublocation: sub || null,
+          reqName: counts.name,
+          openCount: counts.open,
+          assignedCount: counts.assigned,
+          totalCount: counts.open + counts.assigned,
+          isPending: false,
+        };
+      }).sort((a, b) => b.totalCount - a.totalCount);
+
+      const { data: pendingMappings } = await supabase
+        .from('bendy_id_mapping')
+        .select('bendy_id, conflict_data')
+        .eq('entity_type', 'sublocation')
+        .eq('sync_status', 'pending');
+
+      const pendingBendyIds = new Set((pendingMappings || []).map((p: any) => p.bendy_id));
+      matchResults.forEach(m => {
+        m.isPending = pendingBendyIds.has(m.clientId);
+      });
+
+      const matched = matchResults.filter(m => m.matched).length;
+      const unmatched = matchResults.filter(m => !m.matched && !m.isPending).length;
+      const pending = matchResults.filter(m => m.isPending).length;
+      const matchedReqs = matchResults.filter(m => m.matched).reduce((sum: number, m: any) => sum + m.totalCount, 0);
+      const unmatchedReqs = matchResults.filter(m => !m.matched).reduce((sum: number, m: any) => sum + m.totalCount, 0);
+
+      setClientMatchResult({
+        totalUniqueClients: uniqueClientIds.length,
+        totalOpenReqs: openRecords.length,
+        totalAssignedReqs: assignedRecords.length,
+        totalSublocations: (sublocations || []).length,
+        summary: { matched, unmatched, pending },
+        reqCoverage: { matched: matchedReqs, unmatched: unmatchedReqs, total: allRecords.length },
+        matches: matchResults,
+      });
+
+      toast.success(`Client matching klaar: ${matched} gematcht, ${unmatched} niet gematcht, ${pending} pending`);
+    } catch (err) {
+      console.error('Client match test error:', err);
+      toast.error('Client matching mislukt: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setClientMatchLoading(false);
     }
   };
 
@@ -1816,6 +1922,94 @@ export default function BendySync() {
                     </div>
                   )}
                 </div>
+              {/* ===== Sectie I: Client ID → Sublocation Matching ===== */}
+              {reqAnalysisResult && (
+                <div className="space-y-4">
+                  <Separator />
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-semibold">I. Client ID → Sublocation Matching</h4>
+                      <p className="text-xs text-muted-foreground">Test of requisition client_ids matchen met onze client_sublocations.bendy_id</p>
+                    </div>
+                    <Button onClick={fetchClientMatchTest} disabled={clientMatchLoading} variant="outline" size="sm">
+                      {clientMatchLoading ? <><RefreshCw className="h-4 w-4 animate-spin mr-2" /> Testen...</> : 'Client Matching Testen'}
+                    </Button>
+                  </div>
+
+                  {clientMatchResult && (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="success">{clientMatchResult.summary.matched} gematcht</Badge>
+                        <Badge variant="warning">{clientMatchResult.summary.pending} pending review</Badge>
+                        <Badge variant="destructive">{clientMatchResult.summary.unmatched} niet gematcht</Badge>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {(() => {
+                          const pct = clientMatchResult.reqCoverage.total > 0
+                            ? Math.round((clientMatchResult.reqCoverage.matched / clientMatchResult.reqCoverage.total) * 100)
+                            : 0;
+                          const variant = pct > 90 ? 'success' : pct > 70 ? 'warning' : 'destructive';
+                          return (
+                            <Badge variant={variant as any}>
+                              Requisition dekking: {clientMatchResult.reqCoverage.matched}/{clientMatchResult.reqCoverage.total} ({pct}%)
+                            </Badge>
+                          );
+                        })()}
+                      </div>
+
+                      <div className="flex gap-4 text-xs text-muted-foreground">
+                        <span>Open requisitions: {clientMatchResult.totalOpenReqs}</span>
+                        <span>Assigned requisitions: {clientMatchResult.totalAssignedReqs}</span>
+                        <span>Sublocations met bendy_id: {clientMatchResult.totalSublocations}</span>
+                      </div>
+
+                      {clientMatchResult.matches.length > 0 && (
+                        <div className="border rounded-lg overflow-auto max-h-96">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Client ID</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Requisition naam</TableHead>
+                                <TableHead>Sublocation</TableHead>
+                                <TableHead>Open</TableHead>
+                                <TableHead>Assigned</TableHead>
+                                <TableHead>Totaal</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {clientMatchResult.matches.map((m: any, i: number) => (
+                                <TableRow key={i} className={!m.matched && !m.isPending ? 'bg-red-50 dark:bg-red-950/20' : ''}>
+                                  <TableCell className="font-mono text-xs">{m.clientId}</TableCell>
+                                  <TableCell>
+                                    {m.matched ? (
+                                      <Badge variant="success">Gematcht</Badge>
+                                    ) : m.isPending ? (
+                                      <Badge variant="warning">Pending</Badge>
+                                    ) : (
+                                      <Badge variant="destructive">Niet gevonden</Badge>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-xs max-w-48 truncate">{m.reqName || '—'}</TableCell>
+                                  <TableCell className="text-xs">
+                                    {m.sublocation ? (
+                                      <span>{m.sublocation.naam}, {m.sublocation.plaats} <span className="text-muted-foreground">({m.sublocation.organisatie})</span></span>
+                                    ) : '—'}
+                                  </TableCell>
+                                  <TableCell>{m.openCount}</TableCell>
+                                  <TableCell>{m.assignedCount}</TableCell>
+                                  <TableCell className="font-medium">{m.totalCount}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               </>
             )}
           </CardContent>
