@@ -821,7 +821,7 @@ const Professionals = () => {
 
       {/* Paginering */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between px-1 py-3">
+        <div className="flex items-center justify-between px-1 pt-2 pb-1">
           <p className="text-sm text-muted-foreground">
             Pagina {currentPage} van {totalPages} — {filteredProfessionals.length} professionals
           </p>
