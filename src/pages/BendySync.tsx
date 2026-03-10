@@ -664,6 +664,7 @@ export default function BendySync() {
       if (pollingAction === 'sync_clients') setSyncing(false);
       if (pollingAction === 'sync_users') setSyncingUsers(false);
       if (pollingAction === 'sync_documents') setSyncingDocs(false);
+      if (pollingAction === 'sync_requisitions') setSyncingReqs(false);
       toast.error('Sync timeout — check de logs voor de status');
       fetchStatus();
     }, 5 * 60 * 1000);
