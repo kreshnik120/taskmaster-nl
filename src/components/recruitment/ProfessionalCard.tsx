@@ -127,8 +127,25 @@ export function ProfessionalCard({ professional, isSelected, onSelect, onClick }
                 </Avatar>
                 <span
                   className={cn("absolute rounded-full ring-2 ring-background h-2.5 w-2.5 -bottom-0.5 -right-0.5", getStatusColor(professional.status))}
-                  title={professional.status}
                 />
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                {/* Name + Status + Org */}
+                <div className="flex items-center gap-2 mb-0.5">
+                  <h3 className="font-semibold text-[14px] leading-tight text-foreground truncate">
+                    {professional.full_name}
+                  </h3>
+                  <span className={cn("text-[10px] font-medium whitespace-nowrap", {
+                    "text-green-600 dark:text-green-400": professional.status?.toLowerCase() === 'actief' || professional.status?.toLowerCase() === 'beschikbaar',
+                    "text-amber-600 dark:text-amber-400": professional.status?.toLowerCase() === 'bezet' || professional.status?.toLowerCase() === 'in_behandeling',
+                    "text-red-500 dark:text-red-400": professional.status?.toLowerCase() === 'inactief',
+                    "text-orange-500 dark:text-orange-400": professional.status?.toLowerCase() === 'pauze' || professional.status?.toLowerCase() === 'op_pauze',
+                    "text-muted-foreground/50": !['actief','beschikbaar','bezet','in_behandeling','inactief','pauze','op_pauze'].includes(professional.status?.toLowerCase() || ''),
+                  })}>
+                    {professional.status === 'op_pauze' ? 'Pauze' : professional.status?.charAt(0).toUpperCase() + professional.status?.slice(1)}
+                  </span>
               </div>
 
               {/* Content */}
