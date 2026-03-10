@@ -1,79 +1,37 @@
 
 
-# BENDY-REQ-5A: syncRequisitions() — Diensten Importeren
+# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
 
-## Overzicht
+## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
 
-Nieuwe `syncRequisitions()` functie in de edge function + bijbehorende sync knop in de frontend. Volgt exact het bestaande patroon van syncUsers/syncDocuments.
+### 1. Nieuwe state variabelen (na regel 193)
+- `showAddDocDialog` (boolean)
+- `addDocLoading` (boolean)
+- `addDocForm` object: `{ name, category, type, expiryDate, file }`
 
-## Wijzigingen
+### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
+- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
+- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
+- Haal `user` op via `supabase.auth.getUser()`
+- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
 
-### 1. Edge Function — `supabase/functions/bendy-sync/index.ts`
+### 3. `handleUploadForManualDoc` functie
+- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
+- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
+- Update lokale `documents` state
 
-**A. Action type uitbreiden (regel 1637)**
-```
-'sync_clients' | 'sync_users' | 'sync_requisitions' | 'update_config'
-```
-Opmerking: `sync_documents` ontbreekt in het huidige type maar wordt wel gebruikt — voegen we ook toe.
+### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
+- Plus icoon, variant outline, opent dialog
 
-**B. Action validatie (regel 2195)**
-`sync_requisitions` toevoegen aan de allowed actions check.
+### 5. UI: Dialog component (onder de TabsContent of aan het eind)
+- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
+- Na file selectie: toon bestandsnaam + grootte
+- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
 
-**C. Entity type voor sync_log (regel 2233)**
-Case toevoegen: `capturedAction === 'sync_requisitions' ? 'requisitions_open'`
+### 6. Scenario C Upload knop activeren (regel ~1447)
+- Verwijder `disabled` van de Upload knop
+- onClick: trigger hidden file input → `handleUploadForManualDoc`
 
-**D. Action routing (regel 2254-2261)**
-```
-if (capturedAction === 'sync_requisitions') {
-  result = await syncRequisitions(bgAdminClient, tenant, orgId, syncType);
-}
-```
-
-**E. `syncRequisitions()` functie (na `syncDocuments`, vóór REQUEST TYPES)**
-Exact zoals opgegeven in het verzoek:
-- Haalt open + assigned requisitions op via `fetchAllBendyRecords`
-- Pre-fetcht bestaande diensten met bendy_id en sublocations met bendy_id
-- In-memory verwerking: cache writes, dienst inserts/updates, mapping writes
-- Client ID → sublocation_id mapping; skips als sublocation niet gevonden (pending mapping)
-- Tijd extractie uit datetime strings, pauze berekening, status mapping, dienst_type afleiding
-- Updates alleen als velden gewijzigd EN status niet geannuleerd/voltooid
-- Batch DB writes: cache upsert, parallel updates, batch insert, mapping upsert
-- Na insert: local_ids in mappings bijwerken met echte IDs
-
-### 2. Frontend — `src/pages/BendySync.tsx`
-
-**A. State (bij regel 139)**
-```tsx
-const [syncingReqs, setSyncingReqs] = useState(false);
-const [reqSyncResult, setReqSyncResult] = useState<SyncResult | null>(null);
-```
-
-**B. Polling handler (regel 637-641)**
-Extra case:
-```tsx
-} else if (pollingAction === 'sync_requisitions') {
-  setReqSyncResult(result);
-  setSyncingReqs(false);
-  toast.success(`Requisition sync voltooid: ${log.records_fetched} diensten opgehaald`);
-}
-```
-
-En bij timeout cleanup (regel 660):
-```tsx
-if (pollingAction === 'sync_requisitions') setSyncingReqs(false);
-```
-
-**C. UI — Nieuwe Card na Document Sync Card (na regel 1272)**
-Requisition Sync Card met dezelfde structuur als Document Sync:
-- Titel "Requisition Sync" met Calendar/Play icoon
-- "Requisition Sync Starten" knop → stuurt `{ action: 'sync_requisitions' }`
-- Resultaat grid (opgehaald/aangemaakt/bijgewerkt/overgeslagen/mislukt)
-
-## Velden die NIET worden gezet
-- `aangemaakt_door` — geen user context in sync
-- `tarief_per_uur`, `werkvorm`, `kleur` — niet beschikbaar uit Bendy
-- `vereiste_certificeringen` — apart veld, niet uit requisitions
-
-## Geen database wijzigingen nodig
-De `diensten` tabel heeft al `bendy_id`, `bron`, en alle benodigde kolommen.
+### Bestanden die NIET worden aangepast
+- Edge functions, storage config, andere tabs, bendy-sync
 

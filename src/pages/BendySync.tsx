@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { RefreshCw, Power, Play, Database, Clock, AlertTriangle, CheckCircle2, MinusCircle, Users, FileText, Shield, ChevronDown } from "lucide-react";
+import { RefreshCw, Power, Play, Database, Clock, AlertTriangle, CheckCircle2, MinusCircle, Users, FileText, Shield, ChevronDown, Calendar } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { PageContainer } from "@/components/ui/page-container";
 import { PageHero } from "@/components/ui/page-hero";
@@ -154,6 +154,8 @@ export default function BendySync() {
   const [companyMatchResult, setCompanyMatchResult] = useState<any>(null);
   const [clientMatchLoading, setClientMatchLoading] = useState(false);
   const [clientMatchResult, setClientMatchResult] = useState<any>(null);
+  const [syncingReqs, setSyncingReqs] = useState(false);
+  const [reqSyncResult, setReqSyncResult] = useState<SyncResult | null>(null);
 
   const fetchUnusedFieldsAnalysis = async () => {
     setAnalysisLoading(true);
@@ -638,6 +640,10 @@ export default function BendySync() {
             setDocSyncResult(result);
             setSyncingDocs(false);
             toast.success(`Document sync voltooid: ${log.records_fetched} documenten opgehaald`);
+          } else if (pollingAction === 'sync_requisitions') {
+            setReqSyncResult(result);
+            setSyncingReqs(false);
+            toast.success(`Requisition sync voltooid: ${log.records_fetched} diensten opgehaald`);
           }
 
           setPollingSyncLogId(null);
@@ -658,6 +664,7 @@ export default function BendySync() {
       if (pollingAction === 'sync_clients') setSyncing(false);
       if (pollingAction === 'sync_users') setSyncingUsers(false);
       if (pollingAction === 'sync_documents') setSyncingDocs(false);
+      if (pollingAction === 'sync_requisitions') setSyncingReqs(false);
       toast.error('Sync timeout — check de logs voor de status');
       fetchStatus();
     }, 5 * 60 * 1000);
@@ -1266,6 +1273,64 @@ export default function BendySync() {
                 <div><span className="text-xs text-muted-foreground">Bijgewerkt</span><p className="font-semibold">{docSyncResult.records_updated}</p></div>
                 <div><span className="text-xs text-muted-foreground">Overgeslagen</span><p className="font-semibold">{docSyncResult.records_skipped}</p></div>
                 <div><span className="text-xs text-muted-foreground">Mislukt</span><p className="font-semibold text-destructive">{docSyncResult.records_failed}</p></div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Requisition Sync */}
+        <Card className="glass-layer-1">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-primary" />
+              Requisition Sync (Diensten)
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">Importeer open en assigned requisitions als diensten</p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button
+              onClick={async () => {
+                setSyncingReqs(true);
+                setReqSyncResult(null);
+                try {
+                  const { data, error } = await supabase.functions.invoke('bendy-sync', {
+                    body: { action: 'sync_requisitions' },
+                  });
+                  if (error) throw error;
+                  if (data?.success) {
+                    if (data.data?.sync_log_id) {
+                      setPollingSyncLogId(data.data.sync_log_id);
+                      setPollingAction('sync_requisitions');
+                      toast.info('Requisition sync gestart op achtergrond...');
+                    } else {
+                      setReqSyncResult(data.data);
+                      setSyncingReqs(false);
+                      toast.success(`Requisition sync voltooid: ${data.data.records_fetched} diensten opgehaald`);
+                      fetchStatus();
+                    }
+                  } else {
+                    toast.error(data?.error || "Requisition sync mislukt");
+                    setSyncingReqs(false);
+                  }
+                } catch (err: any) {
+                  toast.error(`Fout: ${err.message}`);
+                  setSyncingReqs(false);
+                }
+              }}
+              disabled={syncingReqs}
+              variant="outline"
+              className="w-full sm:w-auto"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${syncingReqs ? "animate-spin" : ""}`} />
+              {syncingReqs ? (pollingAction === 'sync_requisitions' ? "Sync draait op achtergrond..." : "Verbinden...") : "Requisition Sync Starten"}
+            </Button>
+            {reqSyncResult && (
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-3 rounded-lg bg-muted/50">
+                <div><span className="text-xs text-muted-foreground">Opgehaald</span><p className="font-semibold">{reqSyncResult.records_fetched}</p></div>
+                <div><span className="text-xs text-muted-foreground">Aangemaakt</span><p className="font-semibold text-emerald-600 dark:text-emerald-400">{reqSyncResult.records_created}</p></div>
+                <div><span className="text-xs text-muted-foreground">Bijgewerkt</span><p className="font-semibold">{reqSyncResult.records_updated}</p></div>
+                <div><span className="text-xs text-muted-foreground">Overgeslagen</span><p className="font-semibold">{reqSyncResult.records_skipped}</p></div>
+                <div><span className="text-xs text-muted-foreground">Mislukt</span><p className="font-semibold text-destructive">{reqSyncResult.records_failed}</p></div>
               </div>
             )}
           </CardContent>
