@@ -1922,6 +1922,94 @@ export default function BendySync() {
                     </div>
                   )}
                 </div>
+              {/* ===== Sectie I: Client ID → Sublocation Matching ===== */}
+              {reqAnalysisResult && (
+                <div className="space-y-4">
+                  <Separator />
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-semibold">I. Client ID → Sublocation Matching</h4>
+                      <p className="text-xs text-muted-foreground">Test of requisition client_ids matchen met onze client_sublocations.bendy_id</p>
+                    </div>
+                    <Button onClick={fetchClientMatchTest} disabled={clientMatchLoading} variant="outline" size="sm">
+                      {clientMatchLoading ? <><RefreshCw className="h-4 w-4 animate-spin mr-2" /> Testen...</> : 'Client Matching Testen'}
+                    </Button>
+                  </div>
+
+                  {clientMatchResult && (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="success">{clientMatchResult.summary.matched} gematcht</Badge>
+                        <Badge variant="warning">{clientMatchResult.summary.pending} pending review</Badge>
+                        <Badge variant="destructive">{clientMatchResult.summary.unmatched} niet gematcht</Badge>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {(() => {
+                          const pct = clientMatchResult.reqCoverage.total > 0
+                            ? Math.round((clientMatchResult.reqCoverage.matched / clientMatchResult.reqCoverage.total) * 100)
+                            : 0;
+                          const variant = pct > 90 ? 'success' : pct > 70 ? 'warning' : 'destructive';
+                          return (
+                            <Badge variant={variant as any}>
+                              Requisition dekking: {clientMatchResult.reqCoverage.matched}/{clientMatchResult.reqCoverage.total} ({pct}%)
+                            </Badge>
+                          );
+                        })()}
+                      </div>
+
+                      <div className="flex gap-4 text-xs text-muted-foreground">
+                        <span>Open requisitions: {clientMatchResult.totalOpenReqs}</span>
+                        <span>Assigned requisitions: {clientMatchResult.totalAssignedReqs}</span>
+                        <span>Sublocations met bendy_id: {clientMatchResult.totalSublocations}</span>
+                      </div>
+
+                      {clientMatchResult.matches.length > 0 && (
+                        <div className="border rounded-lg overflow-auto max-h-96">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Client ID</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Requisition naam</TableHead>
+                                <TableHead>Sublocation</TableHead>
+                                <TableHead>Open</TableHead>
+                                <TableHead>Assigned</TableHead>
+                                <TableHead>Totaal</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {clientMatchResult.matches.map((m: any, i: number) => (
+                                <TableRow key={i} className={!m.matched && !m.isPending ? 'bg-red-50 dark:bg-red-950/20' : ''}>
+                                  <TableCell className="font-mono text-xs">{m.clientId}</TableCell>
+                                  <TableCell>
+                                    {m.matched ? (
+                                      <Badge variant="success">Gematcht</Badge>
+                                    ) : m.isPending ? (
+                                      <Badge variant="warning">Pending</Badge>
+                                    ) : (
+                                      <Badge variant="destructive">Niet gevonden</Badge>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-xs max-w-48 truncate">{m.reqName || '—'}</TableCell>
+                                  <TableCell className="text-xs">
+                                    {m.sublocation ? (
+                                      <span>{m.sublocation.naam}, {m.sublocation.plaats} <span className="text-muted-foreground">({m.sublocation.organisatie})</span></span>
+                                    ) : '—'}
+                                  </TableCell>
+                                  <TableCell>{m.openCount}</TableCell>
+                                  <TableCell>{m.assignedCount}</TableCell>
+                                  <TableCell className="font-medium">{m.totalCount}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               </>
             )}
           </CardContent>
