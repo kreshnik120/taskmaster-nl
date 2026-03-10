@@ -129,6 +129,7 @@ const Professionals = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortOption, setSortOption] = useState<string>("naam_az");
   const [linkedProfessionalIds, setLinkedProfessionalIds] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const { toast } = useToast();
   const { canEdit } = useUserRole();
   const navigate = useNavigate();
