@@ -12,7 +12,7 @@ import { ProfessionalBulkActionBar } from "@/components/recruitment/Professional
 import { ProfessionalCard } from "@/components/recruitment/ProfessionalCard";
 import { ProfessionalListView } from "@/components/recruitment/ProfessionalListView";
 import { ProfessionalDetailModal } from "@/components/ProfessionalDetailModal";
-import { motion } from "framer-motion";
+
 import { useUserRole } from "@/hooks/useUserRole";
 import { Badge } from "@/components/ui/badge";
 import { KPICard } from "@/components/ui/kpi-card";
@@ -515,11 +515,12 @@ const Professionals = () => {
   }
 
   return (
-    <PageContainer contextColor="rose" className="space-y-6">
+    <PageContainer contextColor="rose" className="space-y-4">
       {/* Hero Section - Unified PageHero */}
       <PageHero
         title="Professionals"
         subtitle={filteredProfessionals.length !== professionals.length ? `${filteredProfessionals.length} van ${professionals.length} professionals` : `${professionals.length} professionals in je netwerk`}
+        className="mb-2"
       >
         {canEdit() && (
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -639,7 +640,7 @@ const Professionals = () => {
       </div>
 
       {/* Sticky Filter Toolbar */}
-      <div className="sticky top-0 z-30 -mx-4 px-4 py-3 bg-background/90 backdrop-blur-md border-b border-border/20 space-y-2">
+      <div className="sticky top-0 z-30 py-2.5 bg-background/90 backdrop-blur-md border-b border-border/20 space-y-2">
         {/* Row 1: Search + Result count + View toggle */}
         <div className="flex items-center gap-3">
           <div className="relative flex-1 max-w-lg">
@@ -734,6 +735,9 @@ const Professionals = () => {
             </SelectContent>
           </Select>
 
+          {/* Visual separator between filters and sort */}
+          <div className="hidden sm:block w-px h-5 bg-border/40 mx-1" />
+
           <Select value={sortOption} onValueChange={setSortOption}>
             <SelectTrigger className="w-auto min-w-[120px] h-8 text-xs">
               <SelectValue placeholder="Sorteer op..." />
@@ -791,13 +795,8 @@ const Professionals = () => {
       {viewMode === 'grid' ? (
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {paginatedProfessionals.map((professional) => (
-            <motion.div
-              key={professional.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.15 }}
-            >
               <ProfessionalCard
+                key={professional.id}
                 professional={professional}
                 isSelected={selectedProfessionalIds.has(professional.id)}
                 onSelect={handleSelectProfessional}
@@ -806,7 +805,6 @@ const Professionals = () => {
                   setDetailModalOpen(true);
                 }}
               />
-            </motion.div>
           ))}
         </div>
       ) : (
@@ -823,7 +821,7 @@ const Professionals = () => {
 
       {/* Paginering */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between px-1 py-3">
+        <div className="flex items-center justify-between px-1 pt-2 pb-1">
           <p className="text-sm text-muted-foreground">
             Pagina {currentPage} van {totalPages} — {filteredProfessionals.length} professionals
           </p>
