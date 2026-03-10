@@ -6,16 +6,18 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, ChevronDown, ChevronLeft, ChevronRight, X, Users, CheckCircle, UserPlus, TrendingUp, FileWarning } from "lucide-react";
+import { Plus, Search, ChevronLeft, ChevronRight, X, Users, CheckCircle, UserPlus, TrendingUp, FileWarning, LayoutGrid, List } from "lucide-react";
 import { ProfessionalBulkActionBar } from "@/components/recruitment/ProfessionalBulkActionBar";
 import { ProfessionalCard } from "@/components/recruitment/ProfessionalCard";
+import { ProfessionalListView } from "@/components/recruitment/ProfessionalListView";
 import { ProfessionalDetailModal } from "@/components/ProfessionalDetailModal";
 import { motion } from "framer-motion";
 import { useUserRole } from "@/hooks/useUserRole";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Badge } from "@/components/ui/badge";
 import { KPICard } from "@/components/ui/kpi-card";
 import { PageHero } from "@/components/ui/page-hero";
 import { PageContainer } from "@/components/ui/page-container";
+import { cn } from "@/lib/utils";
 
 import {
   Dialog,
@@ -127,6 +129,7 @@ const Professionals = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortOption, setSortOption] = useState<string>("naam_az");
   const [linkedProfessionalIds, setLinkedProfessionalIds] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const { toast } = useToast();
   const { canEdit } = useUserRole();
   const navigate = useNavigate();
@@ -505,7 +508,7 @@ const Professionals = () => {
       {/* Hero Section - Unified PageHero */}
       <PageHero
         title="Professionals"
-        subtitle={`${professionals.length} professionals in je netwerk`}
+        subtitle={filteredProfessionals.length !== professionals.length ? `${filteredProfessionals.length} van ${professionals.length} professionals` : `${professionals.length} professionals in je netwerk`}
       >
         {canEdit() && (
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -615,52 +618,18 @@ const Professionals = () => {
         )}
       </PageHero>
 
-      {/* KPI Cards met Icons */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <KPICard
-          icon={Users}
-          title="Totaal"
-          value={totalCount}
-          variant="violet"
-          isActive={activeKpi === "all"}
-          onClick={() => handleKpiClick("all")}
-        />
-        <KPICard
-          icon={CheckCircle}
-          title="Beschikbaar"
-          value={availableCount}
-          variant="violet"
-          isActive={activeKpi === "beschikbaar"}
-          onClick={() => handleKpiClick("beschikbaar")}
-        />
-            <KPICard
-              icon={TrendingUp}
-              title="Gekoppeld"
-              value={withActivePlacementCount}
-              variant="violet"
-              onClick={() => handleKpiClick("gekoppeld")}
-            />
-        <KPICard
-          icon={UserPlus}
-          title="Nieuw (7d)"
-          value={newInLast7Days}
-          variant="violet"
-          isActive={activeKpi === "nieuw"}
-          onClick={() => handleKpiClick("nieuw")}
-        />
-        <KPICard
-          icon={FileWarning}
-          title="Doc. verlopen"
-          value={docsExpiredCount}
-          variant="rose"
-          isActive={activeKpi === "docs_verlopen"}
-          onClick={() => handleKpiClick("docs_verlopen")}
-        />
+        <KPICard icon={Users} title="Totaal" value={totalCount} variant="rose" isActive={activeKpi === "all"} onClick={() => handleKpiClick("all")} />
+        <KPICard icon={CheckCircle} title="Beschikbaar" value={availableCount} variant="rose" isActive={activeKpi === "beschikbaar"} onClick={() => handleKpiClick("beschikbaar")} />
+        <KPICard icon={TrendingUp} title="Gekoppeld" value={withActivePlacementCount} variant="rose" onClick={() => handleKpiClick("gekoppeld")} />
+        <KPICard icon={UserPlus} title="Nieuw (7d)" value={newInLast7Days} variant="rose" isActive={activeKpi === "nieuw"} onClick={() => handleKpiClick("nieuw")} />
+        <KPICard icon={FileWarning} title="Doc. verlopen" value={docsExpiredCount} variant="amber" isActive={activeKpi === "docs_verlopen"} onClick={() => handleKpiClick("docs_verlopen")} />
       </div>
 
-      {/* Filter Bar - Inline */}
-      <div className="flex items-center gap-3 relative">
-        <div className="relative flex-1 max-w-sm">
+      {/* Filter Bar — inline chips + view toggle */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             type="text"
@@ -671,8 +640,61 @@ const Professionals = () => {
           />
         </div>
 
+        {/* Inline filter selects */}
+        <Select value={filterFunctie} onValueChange={setFilterFunctie}>
+          <SelectTrigger className={cn("w-auto min-w-[130px] h-9 text-xs", filterFunctie !== "all" && "border-rose-300 bg-rose-50/50 dark:border-rose-700 dark:bg-rose-950/30")}>
+            <SelectValue placeholder="Functie" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Alle functies</SelectItem>
+            <SelectItem value="VIG">VIG</SelectItem>
+            <SelectItem value="HBO-V">HBO-V</SelectItem>
+            <SelectItem value="Verpleegkundige MBO">Verpleegkundige MBO</SelectItem>
+            <SelectItem value="Helpende">Helpende</SelectItem>
+            <SelectItem value="Begeleider">Begeleider</SelectItem>
+            <SelectItem value="Persoonlijk begeleider">Persoonlijk begeleider</SelectItem>
+            <SelectItem value="GGZ-agoog">GGZ-agoog</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={filterWerkvorm} onValueChange={setFilterWerkvorm}>
+          <SelectTrigger className={cn("w-auto min-w-[120px] h-9 text-xs", filterWerkvorm !== "all" && "border-rose-300 bg-rose-50/50 dark:border-rose-700 dark:bg-rose-950/30")}>
+            <SelectValue placeholder="Werkvorm" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Alle werkvormen</SelectItem>
+            <SelectItem value="ZZP">ZZP</SelectItem>
+            <SelectItem value="Uitzendkracht">Uitzendkracht</SelectItem>
+            <SelectItem value="ABCito constructie">ABCito constructie</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={filterStatus} onValueChange={setFilterStatus}>
+          <SelectTrigger className={cn("w-auto min-w-[110px] h-9 text-xs", filterStatus !== "all" && "border-rose-300 bg-rose-50/50 dark:border-rose-700 dark:bg-rose-950/30")}>
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Alle statussen</SelectItem>
+            <SelectItem value="actief">Actief</SelectItem>
+            <SelectItem value="inactief">Inactief</SelectItem>
+            <SelectItem value="op_pauze">Op pauze</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={filterDocuments} onValueChange={setFilterDocuments}>
+          <SelectTrigger className={cn("w-auto min-w-[120px] h-9 text-xs", filterDocuments !== "all" && "border-rose-300 bg-rose-50/50 dark:border-rose-700 dark:bg-rose-950/30")}>
+            <SelectValue placeholder="Documenten" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Alle docs</SelectItem>
+            <SelectItem value="verlopen">Verlopen</SelectItem>
+            <SelectItem value="ok">Docs OK</SelectItem>
+            <SelectItem value="geen">Geen docs</SelectItem>
+          </SelectContent>
+        </Select>
+
         <Select value={sortOption} onValueChange={setSortOption}>
-          <SelectTrigger className="w-[180px] h-9">
+          <SelectTrigger className="w-auto min-w-[130px] h-9 text-xs">
             <SelectValue placeholder="Sorteer op..." />
           </SelectTrigger>
           <SelectContent>
@@ -684,123 +706,101 @@ const Professionals = () => {
           </SelectContent>
         </Select>
 
-        <Collapsible>
-          <CollapsibleTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2">
-              <span className="text-sm">Filters</span>
-              <ChevronDown className="h-4 w-4" />
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="absolute right-0 mt-2 z-10">
-            <Card className="w-[400px] p-4 shadow-lg">
-              <div className="space-y-3">
-                <Select value={filterFunctie} onValueChange={setFilterFunctie}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Functieniveau" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Alle functies</SelectItem>
-                    <SelectItem value="VIG">VIG</SelectItem>
-                    <SelectItem value="HBO-V">HBO-V</SelectItem>
-                    <SelectItem value="Verpleegkundige MBO">Verpleegkundige MBO</SelectItem>
-                    <SelectItem value="Helpende">Helpende</SelectItem>
-                    <SelectItem value="Begeleider">Begeleider</SelectItem>
-                    <SelectItem value="Persoonlijk begeleider">Persoonlijk begeleider</SelectItem>
-                    <SelectItem value="GGZ-agoog">GGZ-agoog</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Select value={filterWerkvorm} onValueChange={setFilterWerkvorm}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Werkvorm" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Alle werkvormen</SelectItem>
-                    <SelectItem value="ZZP">ZZP</SelectItem>
-                    <SelectItem value="Uitzendkracht">Uitzendkracht</SelectItem>
-                    <SelectItem value="ABCito constructie">ABCito constructie</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Select value={filterStatus} onValueChange={setFilterStatus}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Alle statussen</SelectItem>
-                    <SelectItem value="actief">Actief</SelectItem>
-                    <SelectItem value="inactief">Inactief</SelectItem>
-                    <SelectItem value="op_pauze">Op pauze</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Input
-                  type="text"
-                  placeholder="Filter op regio..."
-                  value={filterRegio}
-                  onChange={(e) => setFilterRegio(e.target.value)}
-                />
-
-                <Select value={filterDocuments} onValueChange={setFilterDocuments}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Documenten" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Alle documenten</SelectItem>
-                    <SelectItem value="verlopen">Verlopen docs</SelectItem>
-                    <SelectItem value="ok">Docs OK</SelectItem>
-                    <SelectItem value="geen">Geen docs</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </Card>
-          </CollapsibleContent>
-        </Collapsible>
-
         {hasActiveFilters && (
+          <Button variant="ghost" size="sm" onClick={resetFilters} className="h-9 gap-1 text-xs text-muted-foreground hover:text-foreground">
+            <X className="h-3.5 w-3.5" /> Reset
+          </Button>
+        )}
+
+        {/* Spacer */}
+        <span className="flex-1" />
+
+        {/* View toggle */}
+        <div className="flex items-center rounded-lg border border-border/50 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm p-0.5 gap-0.5">
           <Button
             variant="ghost"
             size="sm"
-            onClick={resetFilters}
-            className="gap-2"
+            className={cn("h-7 w-7 p-0", viewMode === 'grid' && "bg-rose-100/60 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300")}
+            onClick={() => setViewMode('grid')}
           >
-            <X className="h-4 w-4" />
-            Reset
+            <LayoutGrid className="h-4 w-4" />
           </Button>
-        )}
-      </div>
-
-      {/* Resultaten Teller – inline */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          {filteredProfessionals.length === professionals.length
-            ? `${professionals.length} professionals`
-            : `${filteredProfessionals.length} van ${professionals.length} professionals`
-          }
-        </p>
-      </div>
-
-      {/* Professionals Grid - Minimal Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {paginatedProfessionals.map((professional) => (
-          <motion.div
-            key={professional.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.15 }}
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn("h-7 w-7 p-0", viewMode === 'list' && "bg-rose-100/60 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300")}
+            onClick={() => setViewMode('list')}
           >
-            <ProfessionalCard
-              professional={professional}
-              isSelected={selectedProfessionalIds.has(professional.id)}
-              onSelect={handleSelectProfessional}
-              onClick={() => {
-                setSelectedProfessional(professional);
-                setDetailModalOpen(true);
-              }}
-            />
-          </motion.div>
-        ))}
+            <List className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
+
+      {/* Active filter badges */}
+      {hasActiveFilters && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs text-muted-foreground/60">Actief:</span>
+          {filterFunctie !== "all" && (
+            <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-rose-50/50 border-rose-200 text-rose-700 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-300">
+              {filterFunctie} <X className="h-2.5 w-2.5 cursor-pointer" onClick={() => setFilterFunctie("all")} />
+            </Badge>
+          )}
+          {filterWerkvorm !== "all" && (
+            <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-rose-50/50 border-rose-200 text-rose-700 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-300">
+              {filterWerkvorm} <X className="h-2.5 w-2.5 cursor-pointer" onClick={() => setFilterWerkvorm("all")} />
+            </Badge>
+          )}
+          {filterStatus !== "all" && (
+            <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-rose-50/50 border-rose-200 text-rose-700 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-300">
+              {filterStatus} <X className="h-2.5 w-2.5 cursor-pointer" onClick={() => setFilterStatus("all")} />
+            </Badge>
+          )}
+          {filterDocuments !== "all" && (
+            <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-rose-50/50 border-rose-200 text-rose-700 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-300">
+              {filterDocuments} <X className="h-2.5 w-2.5 cursor-pointer" onClick={() => setFilterDocuments("all")} />
+            </Badge>
+          )}
+          {filterRegio && (
+            <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-rose-50/50 border-rose-200 text-rose-700 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-300">
+              Regio: {filterRegio} <X className="h-2.5 w-2.5 cursor-pointer" onClick={() => setFilterRegio("")} />
+            </Badge>
+          )}
+        </div>
+      )}
+
+      {/* Professionals Grid or List */}
+      {viewMode === 'grid' ? (
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {paginatedProfessionals.map((professional) => (
+            <motion.div
+              key={professional.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.15 }}
+            >
+              <ProfessionalCard
+                professional={professional}
+                isSelected={selectedProfessionalIds.has(professional.id)}
+                onSelect={handleSelectProfessional}
+                onClick={() => {
+                  setSelectedProfessional(professional);
+                  setDetailModalOpen(true);
+                }}
+              />
+            </motion.div>
+          ))}
+        </div>
+      ) : (
+        <ProfessionalListView
+          professionals={paginatedProfessionals}
+          selectedIds={selectedProfessionalIds}
+          onSelect={handleSelectProfessional}
+          onClick={(p) => {
+            setSelectedProfessional(p as any);
+            setDetailModalOpen(true);
+          }}
+        />
+      )}
 
       {/* Paginering */}
       {totalPages > 1 && (
