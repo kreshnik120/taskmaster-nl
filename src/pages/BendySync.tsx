@@ -200,7 +200,77 @@ export default function BendySync() {
     }
   };
 
-  const fetchStatus = useCallback(async () => {
+  const fetchRequisitionSample = async () => {
+    setReqAnalysisLoading(true);
+    try {
+      const results: any = { open: [], assigned: [] };
+
+      const { data: openData, error: openError } = await supabase.functions.invoke('bendy-proxy', {
+        body: { endpoint: '/api/v2/requisitions/open', method: 'GET', params: {} }
+      });
+      if (!openError && openData?.data) {
+        const nested = openData.data;
+        results.open = Array.isArray(nested?.data) ? nested.data.slice(0, 50) : (Array.isArray(nested) ? nested.slice(0, 50) : []);
+        results.openIncluded = nested?.included || openData?.included || [];
+        results.openMeta = nested?.meta || openData?.meta || null;
+      }
+
+      const { data: assignedData, error: assignedError } = await supabase.functions.invoke('bendy-proxy', {
+        body: { endpoint: '/api/v2/requisitions/assigned', method: 'GET', params: {} }
+      });
+      if (!assignedError && assignedData?.data) {
+        const nested = assignedData.data;
+        results.assigned = Array.isArray(nested?.data) ? nested.data.slice(0, 50) : (Array.isArray(nested) ? nested.slice(0, 50) : []);
+        results.assignedIncluded = nested?.included || assignedData?.included || [];
+        results.assignedMeta = nested?.meta || assignedData?.meta || null;
+      }
+
+      const analyzeFields = (records: any[]) => {
+        if (records.length === 0) return [];
+        const allFields = new Set<string>();
+        records.forEach(r => { Object.keys(r.attributes || {}).forEach(k => allFields.add(k)); });
+        return Array.from(allFields).map(field => {
+          const values = records.map(r => (r.attributes || {})[field]).filter(v => v !== null && v !== undefined && v !== '');
+          const examples = [...new Set(values.map(v => typeof v === 'object' ? JSON.stringify(v) : String(v)))].slice(0, 3);
+          return { field, filled: values.length, total: records.length, percentage: Math.round((values.length / records.length) * 100), examples };
+        }).sort((a, b) => b.percentage - a.percentage);
+      };
+
+      const analyzeRelationships = (records: any[]) => {
+        if (records.length === 0) return [];
+        const allRels = new Set<string>();
+        records.forEach(r => { Object.keys(r.relationships || {}).forEach(k => allRels.add(k)); });
+        return Array.from(allRels).map(rel => {
+          const samples = records.map(r => r.relationships?.[rel]?.data).filter(v => v !== null && v !== undefined).slice(0, 3).map(v => JSON.stringify(v));
+          return { name: rel, present: records.filter(r => r.relationships?.[rel]?.data).length, total: records.length, samples };
+        });
+      };
+
+      setReqAnalysisResult({
+        openCount: results.open.length,
+        assignedCount: results.assigned.length,
+        openFields: analyzeFields(results.open),
+        assignedFields: analyzeFields(results.assigned),
+        openRelationships: analyzeRelationships(results.open),
+        assignedRelationships: analyzeRelationships(results.assigned),
+        openIncluded: results.openIncluded,
+        assignedIncluded: results.assignedIncluded,
+        openMeta: results.openMeta,
+        assignedMeta: results.assignedMeta,
+        openRaw: results.open.slice(0, 2),
+        assignedRaw: results.assigned.slice(0, 2),
+      });
+
+      toast.success(`Requisitions opgehaald: ${results.open.length} open, ${results.assigned.length} assigned`);
+    } catch (err) {
+      console.error('Requisition analyse error:', err);
+      toast.error('Requisition analyse mislukt: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setReqAnalysisLoading(false);
+    }
+  };
+
+
     try {
       const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bendy-sync`;
       const response = await fetch(url, { method: "GET" });
