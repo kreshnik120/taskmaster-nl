@@ -1,37 +1,62 @@
 
 
-# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
+# UI Audit: Professionals pagina — Verbeterplan
 
-## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
+## Huidige observaties
 
-### 1. Nieuwe state variabelen (na regel 193)
-- `showAddDocDialog` (boolean)
-- `addDocLoading` (boolean)
-- `addDocForm` object: `{ name, category, type, expiryDate, file }`
+Na analyse van de live pagina en code identificeer ik de volgende UI-problemen:
 
-### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
-- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
-- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
-- Haal `user` op via `supabase.auth.getUser()`
-- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
+### 1. Kaarten zijn te hoog — slechte informatiedichtheid
+Elke kaart heeft 6 verticale secties: checkbox+avatar+naam, functie/werkvorm, regio, document status, timestamp, en een volledige actie-footer. Bij 1000 professionals en 3 kolommen zie je slechts ~9 kaarten per scherm. De actie-footer (telefoon, email, locatie, plaatsen) neemt ~25% van de kaarthoogte in voor acties die zelden vanuit de lijst worden gebruikt.
 
-### 3. `handleUploadForManualDoc` functie
-- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
-- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
-- Update lokale `documents` state
+### 2. Dubbele informatie
+"1000 professionals" staat zowel in de hero-subtitle als in de resultatenteller eronder.
 
-### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
-- Plus icoon, variant outline, opent dialog
+### 3. KPI-kleuren inconsistent met paginacontext
+De pagina heeft `contextColor="rose"` maar 4 van 5 KPI's gebruiken `variant="violet"`. Alleen "Doc. verlopen" is rose.
 
-### 5. UI: Dialog component (onder de TabsContent of aan het eind)
-- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
-- Na file selectie: toon bestandsnaam + grootte
-- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
+### 4. Geen lijst/tabel-weergave
+Met 1000 professionals is een compacte tabelweergave essentieel voor snel scannen. Alleen grid-view is beschikbaar.
 
-### 6. Scenario C Upload knop activeren (regel ~1447)
-- Verwijder `disabled` van de Upload knop
-- onClick: trigger hidden file input → `handleUploadForManualDoc`
+### 5. Filterpaneel voelt los
+De Collapsible dropt als absolute-positioned Card — voelt niet geïntegreerd.
 
-### Bestanden die NIET worden aangepast
-- Edge functions, storage config, andere tabs, bendy-sync
+---
+
+## Voorgestelde wijzigingen
+
+### A. Compactere kaartlayout (ProfessionalCard.tsx)
+- **Actie-footer verwijderen** van de kaart — verplaats telefoon/email/locatie naar de hover-card en detail-modal waar ze thuishoren
+- **Document status + timestamp samenvoegen** in één compacte regel
+- Resultaat: ~35% minder kaarthoogte, meer professionals zichtbaar per scherm
+
+### B. Lijst-/tabelweergave toevoegen (Professionals.tsx)
+- Toggle knop (Grid | Lijst) toevoegen naast de zoekbalk
+- Lijstweergave: compacte rijen met avatar, naam, functie, regio, status, doc-status
+- Gebruiker kan kiezen op basis van voorkeur
+
+### C. KPI-kleuren harmoniseren (Professionals.tsx)
+- Alle KPI's naar `variant="rose"` (past bij de paginacontext)
+- "Doc. verlopen" eventueel `variant="amber"` als waarschuwingskleur
+
+### D. Dubbele teller opruimen (Professionals.tsx)
+- Hero-subtitle dynamisch maken: toon alleen bij actieve filters het gefilterde aantal
+- Verwijder de losse resultatenteller-div
+
+### E. Filters inline tonen (Professionals.tsx)
+- Vervang Collapsible door inline filter-chips/pills op één regel
+- Actieve filters zichtbaar als badges met X-knop
+
+---
+
+## Bestanden
+
+| Bestand | Wijziging |
+|---|---|
+| `src/components/recruitment/ProfessionalCard.tsx` | Actie-footer verwijderen, compactere doc-status/timestamp |
+| `src/pages/Professionals.tsx` | KPI-kleuren, view-toggle, inline filters, dubbele teller |
+
+## Prioriteit
+
+Wijzigingen A (compactere kaart) en B (lijst-weergave) hebben het meeste impact op dagelijks gebruik met 1000+ professionals.
 
