@@ -293,8 +293,17 @@ const Professionals = () => {
     });
   };
 
+  const debouncedSearchTerm = useDebouncedValue(searchTerm, 300);
+
+  // Smart default: list view for large datasets
+  useEffect(() => {
+    if (!viewModeManuallySet && professionals.length > 100) {
+      setViewMode('list');
+    }
+  }, [professionals.length, viewModeManuallySet]);
+
   const filteredProfessionals = sortProfessionals(professionals.filter((p) => {
-    const term = searchTerm.toLowerCase();
+    const term = debouncedSearchTerm.toLowerCase();
     const matchesSearch = !term ||
       p.full_name.toLowerCase().includes(term) ||
       (p.email?.toLowerCase().includes(term) ?? false) ||
