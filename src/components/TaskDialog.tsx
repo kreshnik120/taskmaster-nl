@@ -291,7 +291,7 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, de
           due_at: dueAtISO,
           next_action: values.next_action || null,
           org_id: defaultOrgId,
-          column_id: columnId || defaultBacklogColumnId,
+          ...(columnId ? { column_id: columnId } : {}),
           recurrence_rule: values.recurrence_rule || null,
           recurrence_assignee_id: values.recurrence_assignee_id && values.recurrence_assignee_id !== "same" ? values.recurrence_assignee_id : null,
           recurrence_end_at: values.recurrence_end_at ? new Date(values.recurrence_end_at).toISOString() : null,
