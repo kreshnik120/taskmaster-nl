@@ -515,7 +515,7 @@ const Professionals = () => {
   }
 
   return (
-    <PageContainer contextColor="rose" className="space-y-6">
+    <PageContainer contextColor="rose" className="space-y-4">
       {/* Hero Section - Unified PageHero */}
       <PageHero
         title="Professionals"
