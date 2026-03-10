@@ -735,6 +735,9 @@ const Professionals = () => {
             </SelectContent>
           </Select>
 
+          {/* Visual separator between filters and sort */}
+          <div className="hidden sm:block w-px h-5 bg-border/40 mx-1" />
+
           <Select value={sortOption} onValueChange={setSortOption}>
             <SelectTrigger className="w-auto min-w-[120px] h-8 text-xs">
               <SelectValue placeholder="Sorteer op..." />
