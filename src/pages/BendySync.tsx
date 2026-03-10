@@ -1242,6 +1242,227 @@ export default function BendySync() {
             )}
           </CardContent>
         </Card>
+
+        {/* ===== BENDY REQUISITIONS VERKENNING ===== */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Bendy Requisitions Verkenning
+            </CardTitle>
+            <CardDescription>
+              Verken open en toegewezen diensten uit Bendy voordat we de sync bouwen
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <Button onClick={fetchRequisitionSample} disabled={reqAnalysisLoading} variant="outline">
+              {reqAnalysisLoading ? <><RefreshCw className="h-4 w-4 animate-spin mr-2" /> Ophalen...</> : 'Requisitions Ophalen'}
+            </Button>
+
+            {reqAnalysisResult && (
+              <>
+                {/* Sectie A: Overzicht */}
+                <div className="flex gap-3">
+                  <Badge variant="info">{reqAnalysisResult.openCount} open requisitions</Badge>
+                  <Badge variant="success">{reqAnalysisResult.assignedCount} assigned requisitions</Badge>
+                </div>
+
+                {/* Sectie B: Open Requisitions Velden */}
+                {reqAnalysisResult.openFields.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-2 text-sm">Open Requisitions — Velden</h4>
+                    <div className="border rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Veld</TableHead>
+                            <TableHead>Gevuld</TableHead>
+                            <TableHead>%</TableHead>
+                            <TableHead>Voorbeelden</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {reqAnalysisResult.openFields.map((f: any) => (
+                            <TableRow key={f.field}>
+                              <TableCell className="font-mono text-xs">{f.field}</TableCell>
+                              <TableCell className="text-xs">{f.filled}/{f.total}</TableCell>
+                              <TableCell>
+                                <Badge variant={f.percentage > 50 ? 'success' : f.percentage >= 10 ? 'warning' : 'secondary'}>
+                                  {f.percentage}%
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-wrap gap-1">
+                                  {f.examples.length > 0 ? f.examples.map((ex: string, i: number) => (
+                                    <Badge key={i} variant="outline" className="text-xs max-w-[200px] truncate">{ex}</Badge>
+                                  )) : <span className="text-muted-foreground text-xs italic">geen data</span>}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sectie C: Assigned Requisitions Velden */}
+                {reqAnalysisResult.assignedFields.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-2 text-sm">Assigned Requisitions — Velden</h4>
+                    <div className="border rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Veld</TableHead>
+                            <TableHead>Gevuld</TableHead>
+                            <TableHead>%</TableHead>
+                            <TableHead>Voorbeelden</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {reqAnalysisResult.assignedFields.map((f: any) => (
+                            <TableRow key={f.field}>
+                              <TableCell className="font-mono text-xs">{f.field}</TableCell>
+                              <TableCell className="text-xs">{f.filled}/{f.total}</TableCell>
+                              <TableCell>
+                                <Badge variant={f.percentage > 50 ? 'success' : f.percentage >= 10 ? 'warning' : 'secondary'}>
+                                  {f.percentage}%
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-wrap gap-1">
+                                  {f.examples.length > 0 ? f.examples.map((ex: string, i: number) => (
+                                    <Badge key={i} variant="outline" className="text-xs max-w-[200px] truncate">{ex}</Badge>
+                                  )) : <span className="text-muted-foreground text-xs italic">geen data</span>}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sectie D: Relationships */}
+                {(reqAnalysisResult.openRelationships.length > 0 || reqAnalysisResult.assignedRelationships.length > 0) && (
+                  <div>
+                    <h4 className="font-semibold mb-2 text-sm">Relationships</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {reqAnalysisResult.openRelationships.length > 0 && (
+                        <div className="border rounded-lg overflow-hidden">
+                          <div className="p-2 bg-muted/50 text-xs font-semibold">Open</div>
+                          <Table>
+                            <TableHeader><TableRow><TableHead>Relatie</TableHead><TableHead>Aanwezig</TableHead><TableHead>Voorbeelden</TableHead></TableRow></TableHeader>
+                            <TableBody>
+                              {reqAnalysisResult.openRelationships.map((r: any) => (
+                                <TableRow key={r.name}>
+                                  <TableCell className="font-mono text-xs">{r.name}</TableCell>
+                                  <TableCell className="text-xs">{r.present}/{r.total}</TableCell>
+                                  <TableCell><div className="flex flex-col gap-1">{r.samples.slice(0, 2).map((s: string, i: number) => (
+                                    <code key={i} className="text-xs bg-muted p-1 rounded block max-w-[250px] truncate">{s}</code>
+                                  ))}</div></TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                      {reqAnalysisResult.assignedRelationships.length > 0 && (
+                        <div className="border rounded-lg overflow-hidden">
+                          <div className="p-2 bg-muted/50 text-xs font-semibold">Assigned</div>
+                          <Table>
+                            <TableHeader><TableRow><TableHead>Relatie</TableHead><TableHead>Aanwezig</TableHead><TableHead>Voorbeelden</TableHead></TableRow></TableHeader>
+                            <TableBody>
+                              {reqAnalysisResult.assignedRelationships.map((r: any) => (
+                                <TableRow key={r.name}>
+                                  <TableCell className="font-mono text-xs">{r.name}</TableCell>
+                                  <TableCell className="text-xs">{r.present}/{r.total}</TableCell>
+                                  <TableCell><div className="flex flex-col gap-1">{r.samples.slice(0, 2).map((s: string, i: number) => (
+                                    <code key={i} className="text-xs bg-muted p-1 rounded block max-w-[250px] truncate">{s}</code>
+                                  ))}</div></TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sectie E: Included data */}
+                {(reqAnalysisResult.openIncluded?.length > 0 || reqAnalysisResult.assignedIncluded?.length > 0) && (
+                  <div>
+                    <h4 className="font-semibold mb-2 text-sm">Included Data (JSON:API sideloading)</h4>
+                    <div className="flex gap-4">
+                      {reqAnalysisResult.openIncluded?.length > 0 && (
+                        <div>
+                          <span className="text-xs font-medium">Open: </span>
+                          {Object.entries(
+                            (reqAnalysisResult.openIncluded as any[]).reduce((acc: Record<string, number>, item: any) => {
+                              const t = item.type || 'unknown';
+                              acc[t] = (acc[t] || 0) + 1;
+                              return acc;
+                            }, {})
+                          ).map(([type, count]) => (
+                            <Badge key={type} variant="outline" className="mr-1 text-xs">{count as number}x {type}</Badge>
+                          ))}
+                        </div>
+                      )}
+                      {reqAnalysisResult.assignedIncluded?.length > 0 && (
+                        <div>
+                          <span className="text-xs font-medium">Assigned: </span>
+                          {Object.entries(
+                            (reqAnalysisResult.assignedIncluded as any[]).reduce((acc: Record<string, number>, item: any) => {
+                              const t = item.type || 'unknown';
+                              acc[t] = (acc[t] || 0) + 1;
+                              return acc;
+                            }, {})
+                          ).map(([type, count]) => (
+                            <Badge key={type} variant="outline" className="mr-1 text-xs">{count as number}x {type}</Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {reqAnalysisResult.openIncluded?.length === 0 && reqAnalysisResult.assignedIncluded?.length === 0 && (
+                      <p className="text-xs text-muted-foreground italic">Geen included data — include= parameters werken mogelijk niet</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Sectie F: Ruwe JSON */}
+                <div>
+                  <Collapsible>
+                    <CollapsibleTrigger className="flex items-center gap-2 text-sm font-semibold hover:underline">
+                      <ChevronDown className="h-4 w-4" />
+                      Ruwe JSON (eerste 2 records)
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="mt-2 space-y-3">
+                      {reqAnalysisResult.openRaw?.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium mb-1">Open Requisitions:</p>
+                          <pre className="text-xs bg-muted p-3 rounded-lg overflow-auto max-h-[400px]">
+                            {JSON.stringify(reqAnalysisResult.openRaw, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                      {reqAnalysisResult.assignedRaw?.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium mb-1">Assigned Requisitions:</p>
+                          <pre className="text-xs bg-muted p-3 rounded-lg overflow-auto max-h-[400px]">
+                            {JSON.stringify(reqAnalysisResult.assignedRaw, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                    </CollapsibleContent>
+                  </Collapsible>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </PageContainer>
   );
