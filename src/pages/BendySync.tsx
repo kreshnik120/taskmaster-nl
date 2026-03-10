@@ -640,6 +640,10 @@ export default function BendySync() {
             setDocSyncResult(result);
             setSyncingDocs(false);
             toast.success(`Document sync voltooid: ${log.records_fetched} documenten opgehaald`);
+          } else if (pollingAction === 'sync_requisitions') {
+            setReqSyncResult(result);
+            setSyncingReqs(false);
+            toast.success(`Requisition sync voltooid: ${log.records_fetched} diensten opgehaald`);
           }
 
           setPollingSyncLogId(null);
