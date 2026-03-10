@@ -7,7 +7,9 @@ import { PageContainer } from "@/components/ui/page-container";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Undo2, Trash2, CheckCircle2, AlertTriangle, Clock } from "lucide-react";
+import { Undo2, Trash2, CheckCircle2, AlertTriangle, Clock, Search } from "lucide-react";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { KPICard } from "@/components/ui/kpi-card";
 import { getPrioritySolidClass, getPriorityLabel } from "@/hooks/usePriorityConfig";
@@ -55,6 +57,8 @@ const VerwijderdeTaken = () => {
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [filterPriority, setFilterPriority] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebouncedValue(searchQuery, 300);
   const navigate = useNavigate();
    const isMobile = useIsMobile();
 
@@ -178,6 +182,17 @@ const VerwijderdeTaken = () => {
         </p>
       </div>
 
+      {/* Zoekbalk */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Zoek op taaknaam of organisatie..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
       {/* Stats Bar */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KPICard
@@ -232,35 +247,12 @@ const VerwijderdeTaken = () => {
                 <div className="text-center py-8 px-6 rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] text-muted-foreground">
                   Geen verwijderde taken gevonden
                 </div>
-               ) : isMobile ? (
+              ) : isMobile ? (
                  <VerwijderdeTakenCards
-                   tasks={tasks.filter(task => {
-                     if (filterPriority === "all") return true;
-                     if (filterPriority === "CRITICAL") return task.priority === "CRITICAL";
-                     if (filterPriority === "RECENT") {
-                       const deletedDate = new Date(task.deleted_at);
-                       const threeDaysAgo = new Date();
-                       threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-                       return deletedDate >= threeDaysAgo;
-                     }
-                     return true;
-                   })}
-                   onRestore={handleRestore}
-                   onDelete={openDeleteDialog}
-                 />
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Taak</TableHead>
-                      <TableHead>Organisatie</TableHead>
-                      <TableHead>Prioriteit</TableHead>
-                      <TableHead>Verwijderd op</TableHead>
-                      <TableHead className="text-right">Acties</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {tasks.filter(task => {
+                    tasks={tasks.filter(task => {
+                      const q = debouncedSearch.toLowerCase();
+                      const matchesSearch = !debouncedSearch || task.title.toLowerCase().includes(q) || task.organizations?.name?.toLowerCase().includes(q);
+                      if (!matchesSearch) return false;
                       if (filterPriority === "all") return true;
                       if (filterPriority === "CRITICAL") return task.priority === "CRITICAL";
                       if (filterPriority === "RECENT") {
@@ -270,7 +262,36 @@ const VerwijderdeTaken = () => {
                         return deletedDate >= threeDaysAgo;
                       }
                       return true;
-                    }).map((task) => (
+                    })}
+                    onRestore={handleRestore}
+                    onDelete={openDeleteDialog}
+                  />
+              ) : (
+                 <Table>
+                   <TableHeader>
+                     <TableRow>
+                       <TableHead>Taak</TableHead>
+                       <TableHead>Organisatie</TableHead>
+                       <TableHead>Prioriteit</TableHead>
+                       <TableHead>Verwijderd op</TableHead>
+                       <TableHead className="text-right">Acties</TableHead>
+                     </TableRow>
+                   </TableHeader>
+                   <TableBody>
+                    {tasks.filter(task => {
+                       const q = debouncedSearch.toLowerCase();
+                       const matchesSearch = !debouncedSearch || task.title.toLowerCase().includes(q) || task.organizations?.name?.toLowerCase().includes(q);
+                       if (!matchesSearch) return false;
+                       if (filterPriority === "all") return true;
+                       if (filterPriority === "CRITICAL") return task.priority === "CRITICAL";
+                       if (filterPriority === "RECENT") {
+                         const deletedDate = new Date(task.deleted_at);
+                         const threeDaysAgo = new Date();
+                         threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+                         return deletedDate >= threeDaysAgo;
+                       }
+                       return true;
+                     }).map((task) => (
                       <TableRow key={task.id} className="table-row-hover-slate">
                         <TableCell className="font-medium">{task.title}</TableCell>
                         <TableCell>{task.organizations?.name || "-"}</TableCell>

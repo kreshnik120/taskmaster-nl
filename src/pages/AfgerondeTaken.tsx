@@ -7,10 +7,12 @@ import { PageContainer } from "@/components/ui/page-container";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Undo2, Clock, CheckCircle2, AlertCircle, TrendingUp } from "lucide-react";
+import { Undo2, Clock, CheckCircle2, AlertCircle, TrendingUp, Search } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { KPICard } from "@/components/ui/kpi-card";
 import { getPrioritySolidClass, getPriorityLabel } from "@/hooks/usePriorityConfig";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { Input } from "@/components/ui/input";
 import { nl } from "date-fns/locale";
 import {
   Table,
@@ -45,6 +47,8 @@ const AfgerondeTaken = () => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebouncedValue(searchQuery, 300);
   const navigate = useNavigate();
 
   // Get personalized greeting
@@ -139,8 +143,14 @@ const AfgerondeTaken = () => {
     return completedDate <= dueDate;
   };
 
-  const onTimeTasks = tasks.filter(isTaskOnTime);
-  const lateTasks = tasks.filter(task => !isTaskOnTime(task));
+  const searchFilteredTasks = tasks.filter(task => {
+    if (!debouncedSearch) return true;
+    const q = debouncedSearch.toLowerCase();
+    return task.title.toLowerCase().includes(q) || task.organizations?.name?.toLowerCase().includes(q);
+  });
+
+  const onTimeTasks = searchFilteredTasks.filter(isTaskOnTime);
+  const lateTasks = searchFilteredTasks.filter(task => !isTaskOnTime(task));
 
   const renderTasksTable = (tasksToRender: CompletedTask[], showLateIndicator: boolean = false) => (
     <Table>
@@ -214,12 +224,23 @@ const AfgerondeTaken = () => {
         </p>
       </div>
 
+      {/* Zoekbalk */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Zoek op taaknaam of organisatie..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
       {/* Stats Bar */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KPICard
           icon={CheckCircle2}
           title="Totaal"
-          value={tasks.length}
+          value={searchFilteredTasks.length}
           variant="count"
           onClick={() => setActiveTab(activeTab === "all" ? "all" : "all")}
           isActive={activeTab === "all"}
@@ -243,7 +264,7 @@ const AfgerondeTaken = () => {
         <KPICard
           icon={TrendingUp}
           title="Success Rate"
-          value={tasks.length > 0 ? Math.round(onTimeTasks.length / tasks.length * 100) : 0}
+          value={searchFilteredTasks.length > 0 ? Math.round(onTimeTasks.length / searchFilteredTasks.length * 100) : 0}
           suffix="%"
           variant="time"
           onClick={() => toast.info("Dit is je totale succes percentage")}
@@ -254,13 +275,13 @@ const AfgerondeTaken = () => {
         <CardHeader>
               <CardTitle className="text-lg">Alle afgeronde taken</CardTitle>
               <CardDescription>
-                {tasks.length > 0 ? `${tasks.length} taken voltooid` : 'Geen taken voltooid'}
+                {searchFilteredTasks.length > 0 ? `${searchFilteredTasks.length} taken voltooid` : 'Geen taken voltooid'}
               </CardDescription>
             </CardHeader>
             <CardContent>
               {loading ? (
                 <div className="text-center py-8 text-muted-foreground">Laden...</div>
-              ) : tasks.length === 0 ? (
+              ) : searchFilteredTasks.length === 0 ? (
                 <div className="text-center py-8 px-6 rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/30 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] text-muted-foreground">
                   Geen afgeronde taken gevonden
                 </div>
@@ -268,7 +289,7 @@ const AfgerondeTaken = () => {
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                   <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="all">
-                      Alle ({tasks.length})
+                      Alle ({searchFilteredTasks.length})
                     </TabsTrigger>
                     <TabsTrigger value="ontime" className="data-[state=active]:text-green-600">
                       <CheckCircle2 className="h-4 w-4 mr-2" />
@@ -281,7 +302,7 @@ const AfgerondeTaken = () => {
                   </TabsList>
                   
                   <TabsContent value="all" className="mt-4">
-                    {renderTasksTable(tasks)}
+                    {renderTasksTable(searchFilteredTasks)}
                   </TabsContent>
                   
                   <TabsContent value="ontime" className="mt-4">
