@@ -1,37 +1,37 @@
 
 
-# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
+# Bendy Requisitions Verkenning — Diagnostisch Paneel
 
-## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
+## Wat
 
-### 1. Nieuwe state variabelen (na regel 193)
-- `showAddDocDialog` (boolean)
-- `addDocLoading` (boolean)
-- `addDocForm` object: `{ name, category, type, expiryDate, file }`
+Nieuw diagnostisch Card onderaan BendySync.tsx (na het "Ongebruikte velden" paneel, vóór de sluitende `</div></PageContainer>`) dat via de bendy-proxy edge function open en assigned requisitions ophaalt en de veldstructuur, relationships, included data en ruwe JSON toont.
 
-### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
-- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
-- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
-- Haal `user` op via `supabase.auth.getUser()`
-- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
+## Wijzigingen
 
-### 3. `handleUploadForManualDoc` functie
-- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
-- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
-- Update lokale `documents` state
+**Bestand:** `src/pages/BendySync.tsx`
 
-### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
-- Plus icoon, variant outline, opent dialog
+### 1. Imports toevoegen
+- `CardDescription` uit card component
+- `Collapsible, CollapsibleTrigger, CollapsibleContent` uit collapsible component
+- `ChevronDown` icoon uit lucide-react
 
-### 5. UI: Dialog component (onder de TabsContent of aan het eind)
-- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
-- Na file selectie: toon bestandsnaam + grootte
-- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
+### 2. State toevoegen (bij bestaande state, ~regel 146)
+```ts
+const [reqAnalysisLoading, setReqAnalysisLoading] = useState(false);
+const [reqAnalysisResult, setReqAnalysisResult] = useState<any>(null);
+```
 
-### 6. Scenario C Upload knop activeren (regel ~1447)
-- Verwijder `disabled` van de Upload knop
-- onClick: trigger hidden file input → `handleUploadForManualDoc`
+### 3. Functie toevoegen (~na fetchUnusedFieldsAnalysis)
+`fetchRequisitionSample` — exact zoals opgegeven in de prompt: haalt open + assigned requisitions op via bendy-proxy, analyseert attributes (fill-rate + voorbeelden) en relationships, slaat alles op in `reqAnalysisResult`.
 
-### Bestanden die NIET worden aangepast
-- Edge functions, storage config, andere tabs, bendy-sync
+### 4. Card toevoegen (na regel 1171, vóór `</div></PageContainer>`)
+6 secties in het Card:
+- **A: Overzicht** — twee badges met open/assigned counts
+- **B: Open Requisitions Velden** — Table (Veld, Gevuld, %, Voorbeelden) met kleur-badges
+- **C: Assigned Requisitions Velden** — zelfde tabel-structuur
+- **D: Relationships** — voor open en assigned: naam, present/total, voorbeeldwaarden
+- **E: Included data** — type-telling van JSON:API sideloaded records
+- **F: Ruwe JSON** — Collapsible met `<pre>` voor eerste 2 records van beide
+
+Alle bestaande code blijft ongewijzigd — alleen toevoegingen.
 
