@@ -1564,6 +1564,98 @@ export default function BendySync() {
                     </CollapsibleContent>
                   </Collapsible>
                 </div>
+
+                {/* Sectie G: Assigned User Koppeling Test */}
+                <Separator className="my-6" />
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="text-sm font-semibold">Assigned User Koppeling Test</h4>
+                    <p className="text-xs text-muted-foreground">Test welke include= parameter de toegewezen professional oplevert</p>
+                  </div>
+                  <Button onClick={fetchAssignedUserTest} disabled={userTestLoading} variant="outline" size="sm">
+                    {userTestLoading ? <><RefreshCw className="h-4 w-4 animate-spin mr-2" /> Testen...</> : 'User Koppeling Testen'}
+                  </Button>
+
+                  {userTestResult && (
+                    <div className="space-y-4">
+                      {userTestResult.tests.map((test: any, idx: number) => (
+                        <div key={idx} className="border border-border rounded-lg p-3 space-y-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-bold font-mono">{test.name}</span>
+                            {test.error ? (
+                              <Badge variant="secondary">Fout</Badge>
+                            ) : test.includedUsers > 0 ? (
+                              <Badge variant="success">Users gevonden: {test.includedUsers}</Badge>
+                            ) : (
+                              <Badge variant="destructive">Geen users</Badge>
+                            )}
+                            <span className="text-xs text-muted-foreground">{test.recordCount} records</span>
+                          </div>
+
+                          {Object.keys(test.includedTypes).length > 0 && (
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <span className="text-xs text-muted-foreground">Included:</span>
+                              {Object.entries(test.includedTypes).map(([type, count]) => (
+                                <Badge key={type} variant="outline" className="text-xs">{String(count)}x {type}</Badge>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="text-xs">
+                            <span className="text-muted-foreground">user relationship: </span>
+                            <code className="bg-muted px-1 py-0.5 rounded text-xs">{test.userRelationship}</code>
+                          </div>
+                          {test.flexUserRelationship && (
+                            <div className="text-xs">
+                              <span className="text-muted-foreground">flex_user relationship: </span>
+                              <code className="bg-muted px-1 py-0.5 rounded text-xs">{test.flexUserRelationship}</code>
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <span className="text-xs text-muted-foreground">Relationships:</span>
+                            {test.sampleRelationships.map((k: string) => (
+                              <Badge key={k} variant="secondary" className="text-xs">{k}</Badge>
+                            ))}
+                          </div>
+
+                          {test.rawFirstRecord && (
+                            <Collapsible>
+                              <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground cursor-pointer">
+                                <ChevronDown className="h-3 w-3" />
+                                Ruwe response — {test.name}
+                              </CollapsibleTrigger>
+                              <CollapsibleContent className="mt-1">
+                                <pre className="text-xs bg-muted p-2 rounded-lg overflow-auto max-h-[300px]">
+                                  {JSON.stringify(test.rawFirstRecord, null, 2)}
+                                </pre>
+                              </CollapsibleContent>
+                            </Collapsible>
+                          )}
+                        </div>
+                      ))}
+
+                      {/* Samenvatting */}
+                      <div className="border-t border-border pt-3 space-y-2">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <span className="text-xs font-medium">Alle unieke relationship keys:</span>
+                          {userTestResult.allRelationshipKeys.map((k: string) => (
+                            <Badge key={k} variant="info" className="text-xs">{k}</Badge>
+                          ))}
+                        </div>
+                        {userTestResult.flexCompanyIds.length > 0 && (
+                          <div className="text-xs">
+                            <span className="font-medium">flex_user_company IDs (eerste 5): </span>
+                            <span className="font-mono">{userTestResult.flexCompanyIds.join(', ')}</span>
+                          </div>
+                        )}
+                        <div className="text-xs text-muted-foreground">
+                          Totaal records getest: {userTestResult.totalRecordsTested}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </CardContent>
