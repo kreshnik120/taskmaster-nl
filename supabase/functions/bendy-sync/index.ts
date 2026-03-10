@@ -2414,8 +2414,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (body.action !== 'sync_clients' && body.action !== 'sync_users' && body.action !== 'sync_documents') {
-      return errorResponse(`Onbekende actie: ${body.action}. Beschikbaar: sync_clients, sync_users, sync_documents, update_config, reset_lock`, 400);
+    if (body.action !== 'sync_clients' && body.action !== 'sync_users' && body.action !== 'sync_documents' && body.action !== 'sync_requisitions') {
+      return errorResponse(`Onbekende actie: ${body.action}. Beschikbaar: sync_clients, sync_users, sync_documents, sync_requisitions, update_config, reset_lock`, 400);
     }
 
     const tenant = body.tenant || 'citozorg';
