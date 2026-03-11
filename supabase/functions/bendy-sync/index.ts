@@ -1641,9 +1641,13 @@ async function syncRequisitions(
 ): Promise<SyncResult> {
   const result: SyncResult = { fetched: 0, created: 0, updated: 0, skipped: 0, failed: 0, errors: [] };
 
-  // ═══ STAP 1: Haal data op ═══
-  const { records: openRecords } = await fetchAllBendyRecords(tenant, '/api/v2/requisitions/open');
-  const { records: assignedRecords } = await fetchAllBendyRecords(tenant, '/api/v2/requisitions/assigned');
+  // ═══ STAP 1: Haal data op (PARALLEL voor snelheid) ═══
+  const [openResult, assignedResult] = await Promise.all([
+    fetchAllBendyRecords(tenant, '/api/v2/requisitions/open'),
+    fetchAllBendyRecords(tenant, '/api/v2/requisitions/assigned'),
+  ]);
+  const openRecords = openResult.records;
+  const assignedRecords = assignedResult.records;
   const allRecords = [...openRecords, ...assignedRecords];
   result.fetched = allRecords.length;
   if (allRecords.length === 0) return result;
