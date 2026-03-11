@@ -1,37 +1,19 @@
 
 
-# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
+# BENDY-REQ-5A-FIX: Requisition Sync Timeout Fix
 
-## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
+Three targeted changes in `supabase/functions/bendy-sync/index.ts`, no frontend changes.
 
-### 1. Nieuwe state variabelen (na regel 193)
-- `showAddDocDialog` (boolean)
-- `addDocLoading` (boolean)
-- `addDocForm` object: `{ name, category, type, expiryDate, file }`
+## Changes
 
-### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
-- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
-- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
-- Haal `user` op via `supabase.auth.getUser()`
-- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
+### 1. Reduce API timeout (line 36)
+`BENDY_REQUEST_TIMEOUT_MS`: `60_000` → `25_000`
 
-### 3. `handleUploadForManualDoc` functie
-- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
-- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
-- Update lokale `documents` state
+### 2. Parallel fetch in syncRequisitions (lines 1644-1648)
+Replace sequential `fetchAllBendyRecords` calls with `Promise.all` to run open + assigned fetches concurrently.
 
-### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
-- Plus icoon, variant outline, opent dialog
+### 3. Stuck sync auto-cleanup in handleStatusCheck (after line 1881)
+After `recentLogs` is fetched, scan for any logs with `status === 'running'` older than 10 minutes and auto-mark them as `failed`. This prevents syncs from getting permanently stuck.
 
-### 5. UI: Dialog component (onder de TabsContent of aan het eind)
-- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
-- Na file selectie: toon bestandsnaam + grootte
-- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
-
-### 6. Scenario C Upload knop activeren (regel ~1447)
-- Verwijder `disabled` van de Upload knop
-- onClick: trigger hidden file input → `handleUploadForManualDoc`
-
-### Bestanden die NIET worden aangepast
-- Edge functions, storage config, andere tabs, bendy-sync
+No database changes. No frontend changes. No other sync functions touched.
 
