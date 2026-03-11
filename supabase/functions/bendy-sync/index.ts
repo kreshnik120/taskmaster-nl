@@ -33,7 +33,7 @@ import {
 
 const FUNCTION_NAME = 'bendy-sync';
 const FUNCTION_VERSION = '1.0.0';
-const BENDY_REQUEST_TIMEOUT_MS = 60_000;
+const BENDY_REQUEST_TIMEOUT_MS = 25_000;
 const TOKEN_EXPIRY_MARGIN_MS = 5 * 60 * 1000;
 const MAX_PAGES = 50;
 const PAGE_SIZE = 100;
@@ -1641,9 +1641,13 @@ async function syncRequisitions(
 ): Promise<SyncResult> {
   const result: SyncResult = { fetched: 0, created: 0, updated: 0, skipped: 0, failed: 0, errors: [] };
 
-  // ═══ STAP 1: Haal data op ═══
-  const { records: openRecords } = await fetchAllBendyRecords(tenant, '/api/v2/requisitions/open');
-  const { records: assignedRecords } = await fetchAllBendyRecords(tenant, '/api/v2/requisitions/assigned');
+  // ═══ STAP 1: Haal data op (PARALLEL voor snelheid) ═══
+  const [openResult, assignedResult] = await Promise.all([
+    fetchAllBendyRecords(tenant, '/api/v2/requisitions/open'),
+    fetchAllBendyRecords(tenant, '/api/v2/requisitions/assigned'),
+  ]);
+  const openRecords = openResult.records;
+  const assignedRecords = assignedResult.records;
   const allRecords = [...openRecords, ...assignedRecords];
   result.fetched = allRecords.length;
   if (allRecords.length === 0) return result;
@@ -1879,6 +1883,26 @@ async function handleStatusCheck(): Promise<Response> {
       .select('id, tenant, sync_type, entity_type, started_at, completed_at, records_fetched, records_created, records_updated, records_skipped, records_failed, status, duration_ms')
       .order('started_at', { ascending: false })
       .limit(20);
+
+    // Auto-cleanup: markeer vastgelopen syncs als failed (running > 10 min)
+    const TEN_MINUTES_MS = 10 * 60 * 1000;
+    const stuckLogs = (recentLogs || []).filter((log: any) =>
+      log.status === 'running' &&
+      log.started_at &&
+      (Date.now() - new Date(log.started_at).getTime()) > TEN_MINUTES_MS
+    );
+    if (stuckLogs.length > 0) {
+      for (const stuck of stuckLogs) {
+        await adminClient
+          .from('bendy_sync_log')
+          .update({
+            status: 'failed',
+            completed_at: new Date().toISOString(),
+            errors: ['Auto-cleanup: sync langer dan 10 minuten zonder resultaat'],
+          })
+          .eq('id', stuck.id);
+      }
+    }
 
     const { count: pendingCount } = await adminClient
       .from('bendy_id_mapping')
