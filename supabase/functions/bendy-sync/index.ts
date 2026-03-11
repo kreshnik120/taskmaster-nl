@@ -33,7 +33,7 @@ import {
 
 const FUNCTION_NAME = 'bendy-sync';
 const FUNCTION_VERSION = '1.0.0';
-const BENDY_REQUEST_TIMEOUT_MS = 60_000;
+const BENDY_REQUEST_TIMEOUT_MS = 25_000;
 const TOKEN_EXPIRY_MARGIN_MS = 5 * 60 * 1000;
 const MAX_PAGES = 50;
 const PAGE_SIZE = 100;
