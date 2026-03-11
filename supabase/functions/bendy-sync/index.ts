@@ -1884,6 +1884,26 @@ async function handleStatusCheck(): Promise<Response> {
       .order('started_at', { ascending: false })
       .limit(20);
 
+    // Auto-cleanup: markeer vastgelopen syncs als failed (running > 10 min)
+    const TEN_MINUTES_MS = 10 * 60 * 1000;
+    const stuckLogs = (recentLogs || []).filter((log: any) =>
+      log.status === 'running' &&
+      log.started_at &&
+      (Date.now() - new Date(log.started_at).getTime()) > TEN_MINUTES_MS
+    );
+    if (stuckLogs.length > 0) {
+      for (const stuck of stuckLogs) {
+        await adminClient
+          .from('bendy_sync_log')
+          .update({
+            status: 'failed',
+            completed_at: new Date().toISOString(),
+            errors: ['Auto-cleanup: sync langer dan 10 minuten zonder resultaat'],
+          })
+          .eq('id', stuck.id);
+      }
+    }
+
     const { count: pendingCount } = await adminClient
       .from('bendy_id_mapping')
       .select('id', { count: 'exact', head: true })
