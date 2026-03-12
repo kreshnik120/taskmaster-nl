@@ -2542,7 +2542,7 @@ Deno.serve(async (req) => {
         } else if (capturedAction === 'sync_documents') {
           result = await syncDocuments(bgAdminClient, tenant, orgId, syncType);
         } else if (capturedAction === 'sync_requisitions') {
-          result = await syncRequisitions(bgAdminClient, tenant, orgId, syncType);
+          result = await syncRequisitions(bgAdminClient, tenant, orgId, syncType, capturedSyncLogId);
         } else {
           result = await syncClients(bgAdminClient, tenant, orgId, syncType);
         }
