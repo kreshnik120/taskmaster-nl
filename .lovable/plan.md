@@ -1,23 +1,37 @@
 
 
-# BENDY-REQ-CLEANUP: Duplicate diensten fix + preventie
+# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
 
-## Wat wordt opgelost
-~900 duplicate diensten verwijderen en permanent voorkomen via 3 samenhangende fixes.
+## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
 
-## Implementatie
+### 1. Nieuwe state variabelen (na regel 193)
+- `showAddDocDialog` (boolean)
+- `addDocLoading` (boolean)
+- `addDocForm` object: `{ name, category, type, expiryDate, file }`
 
-### 1. Database migratie
-SQL migratie die:
-- Duplicaten verwijdert (behoudt oudste per `org_id` + `bendy_id`, cascade ruimt `dienst_toewijzingen` op)
-- UNIQUE index aanmaakt op `(org_id, bendy_id)` — NULLs worden niet geblokkeerd
+### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
+- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
+- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
+- Haal `user` op via `supabase.auth.getUser()`
+- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
 
-### 2. Edge function fixes (`supabase/functions/bendy-sync/index.ts`)
+### 3. `handleUploadForManualDoc` functie
+- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
+- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
+- Update lokale `documents` state
 
-**A. `.limit(5000)` toevoegen** aan beide pre-fetch queries (regels 1677-1681 en 1686-1689) zodat alle bestaande diensten gevonden worden.
+### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
+- Plus icoon, variant outline, opent dialog
 
-**B. `batchInsert` → chunked `upsert`** (regels 1872-1883): Vervangt `batchInsert` door een `upsert` loop in chunks van 200, met `onConflict: 'org_id,bendy_id'`. Mapping local_ids worden bijgewerkt vanuit de upsert response.
+### 5. UI: Dialog component (onder de TabsContent of aan het eind)
+- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
+- Na file selectie: toon bestandsnaam + grootte
+- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
 
-### Niet aangeraakt
-- Frontend, andere sync functies, logProgress debug code, helper functies, andere tabellen.
+### 6. Scenario C Upload knop activeren (regel ~1447)
+- Verwijder `disabled` van de Upload knop
+- onClick: trigger hidden file input → `handleUploadForManualDoc`
+
+### Bestanden die NIET worden aangepast
+- Edge functions, storage config, andere tabs, bendy-sync
 

@@ -1678,7 +1678,8 @@ async function syncRequisitions(
     .from('diensten')
     .select('id, bendy_id, status, datum, start_tijd, eind_tijd, sublocation_id')
     .eq('org_id', orgId)
-    .not('bendy_id', 'is', null);
+    .not('bendy_id', 'is', null)
+    .limit(5000);
 
   const dienstMap = new Map<string, any>();
   (existingDiensten || []).forEach((d: any) => dienstMap.set(d.bendy_id, d));
@@ -1686,7 +1687,8 @@ async function syncRequisitions(
   const { data: sublocations } = await adminClient
     .from('client_sublocations')
     .select('id, bendy_id')
-    .not('bendy_id', 'is', null);
+    .not('bendy_id', 'is', null)
+    .limit(5000);
 
   const subMap = new Map<string, string>();
   (sublocations || []).forEach((s: any) => subMap.set(String(s.bendy_id), s.id));
@@ -1870,15 +1872,28 @@ async function syncRequisitions(
     await parallelUpdates(adminClient, 'diensten', dienstUpdates);
   }
   if (dienstInserts.length > 0) {
-    const inserted = await batchInsert(adminClient, 'diensten', dienstInserts);
-    if (inserted && inserted.length > 0) {
-      inserted.forEach((row: any, idx: number) => {
-        const bendyId = dienstInserts[idx]?.bendy_id;
-        const mapping = mappingWrites.find((m: any) => m.bendy_id === bendyId && m.sync_status === 'synced');
-        if (mapping && row.id) {
-          mapping.local_id = row.id;
+    // Upsert i.p.v. insert: voorkomt duplicaten bij herhaalde syncs
+    // UNIQUE index op (org_id, bendy_id) vangt conflicten op
+    const CHUNK = 200;
+    for (let i = 0; i < dienstInserts.length; i += CHUNK) {
+      const chunk = dienstInserts.slice(i, i + CHUNK);
+      const { data: upserted, error } = await adminClient
+        .from('diensten')
+        .upsert(chunk, { onConflict: 'org_id,bendy_id' })
+        .select('id, bendy_id');
+      if (error) {
+        logWarning(FUNCTION_NAME, `Diensten upsert chunk ${i}/${dienstInserts.length} fout: ${error.message}`);
+      }
+      if (upserted) {
+        for (const row of upserted) {
+          const mapping = mappingWrites.find(
+            (m: any) => m.bendy_id === row.bendy_id && m.sync_status === 'synced'
+          );
+          if (mapping && row.id) {
+            mapping.local_id = row.id;
+          }
         }
-      });
+      }
     }
   }
   if (mappingWrites.length > 0) {
