@@ -1658,7 +1658,7 @@ async function syncRequisitions(
   // ═══ STAP 1: Haal data op (PARALLEL voor snelheid) ═══
   const [openResult, assignedResult] = await Promise.all([
     fetchAllBendyRecords(tenant, '/api/v2/requisitions/open'),
-    fetchAllBendyRecords(tenant, '/api/v2/requisitions/assigned', { include: 'flex_user_company' }),
+    fetchAllBendyRecords(tenant, '/api/v2/requisitions/assigned'),
   ]);
   const openRecords = openResult.records;
   const assignedRecords = assignedResult.records;
