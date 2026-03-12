@@ -1946,6 +1946,7 @@ async function syncRequisitions(
 
   // 5A: flex_user_company → user bendy_id map (APART ophalen uit API)
   const fucMap = new Map<string, string>();
+  let debugFucData: any = {};
 
   // Stap 1: Verzamel alle unieke flex_user_company IDs uit assigned requisitions
   const fucIds = new Set<string>();
@@ -1978,6 +1979,53 @@ async function syncRequisitions(
       for (const fuc of fucRecords) {
         const fucId = String(fuc.id);
         if (!fucIds.has(fucId)) continue; // alleen relevante records
+
+        const userId = fuc.relationships?.user?.data?.id
+                    || fuc.relationships?.flex_user?.data?.id;
+        if (userId) {
+          fucMap.set(fucId, String(userId));
+        }
+      }
+
+      // === DEBUG SAMPLE LOGGING ===
+      const sampleFucIds = [...fucIds].slice(0, 3);
+      const debugApiSample = fucRecords.slice(0, 3).map((fuc: any) => ({
+        id: fuc.id,
+        type: fuc.type,
+        relationship_keys: Object.keys(fuc.relationships || {}),
+        user_rel: fuc.relationships?.user?.data || null,
+        flex_user_rel: fuc.relationships?.flex_user?.data || null,
+        company_rel: fuc.relationships?.company?.data || null,
+        all_rels: Object.fromEntries(
+          Object.entries(fuc.relationships || {}).map(([k, v]: [string, any]) => [k, v?.data || null])
+        ),
+      }));
+      const includedTypes = new Map<string, number>();
+      (fucIncluded || []).forEach((item: any) => {
+        includedTypes.set(item.type, (includedTypes.get(item.type) || 0) + 1);
+      });
+      debugFucData = {
+        debug_sample_fuc_ids: sampleFucIds,
+        debug_api_total_records: fucRecords.length,
+        debug_api_sample: debugApiSample,
+        debug_api_included_types: Object.fromEntries(includedTypes),
+      };
+      // === END DEBUG ===
+
+      // Optie A: user zit in included data
+      const userFromIncluded = new Map<string, string>();
+      if (fucIncluded) {
+        for (const item of fucIncluded) {
+          if (item.type === 'users' || item.type === 'flex_users') {
+            userFromIncluded.set(String(item.id), String(item.id));
+          }
+        }
+      }
+
+      // Optie B: user zit in relationships van de flex_user_company zelf
+      for (const fuc of fucRecords) {
+        const fucId = String(fuc.id);
+        if (!fucIds.has(fucId)) continue;
 
         const userId = fuc.relationships?.user?.data?.id
                     || fuc.relationships?.flex_user?.data?.id;
@@ -2021,13 +2069,22 @@ async function syncRequisitions(
     method: fucMap.size > 0 ? 'api_fetch' : 'none',
   });
 
-  // 5B: professionals bendy_id → professional_id map
-  const { data: profsWithBendy } = await adminClient
-    .from('professionals')
-    .select('id, bendy_id, full_name')
-    .eq('org_id', orgId)
-    .not('bendy_id', 'is', null)
-    .limit(50000);
+  // 5B: professionals bendy_id → professional_id map (chunked fetch)
+  let profsWithBendy: any[] = [];
+  let profOffset = 0;
+  const PROF_PAGE = 1000;
+  while (true) {
+    const { data: chunk } = await adminClient
+      .from('professionals')
+      .select('id, bendy_id, full_name')
+      .eq('org_id', orgId)
+      .not('bendy_id', 'is', null)
+      .range(profOffset, profOffset + PROF_PAGE - 1);
+    if (!chunk || chunk.length === 0) break;
+    profsWithBendy.push(...chunk);
+    if (chunk.length < PROF_PAGE) break;
+    profOffset += PROF_PAGE;
+  }
   const profMap = new Map<string, { id: string; name: string }>();
   (profsWithBendy || []).forEach((p: any) => {
     profMap.set(String(p.bendy_id), { id: p.id, name: p.full_name });
@@ -2129,6 +2186,7 @@ async function syncRequisitions(
             debug_prof_map_size: profMap.size,
             debug_existing_tw: existingToewijzingen.size,
             debug_method: fucMap.size > 0 ? 'api_fetch' : 'fallback_or_none',
+            ...debugFucData,
           },
         })
         .eq('id', syncLogId);

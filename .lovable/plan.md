@@ -1,40 +1,37 @@
 
 
-# BENDY-REQ-5B-FIX-2: Debug API response + profMap limit fix
+# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
 
-## Twee problemen
+## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
 
-1. **fucMap = 0**: De `/api/v2/flex_user_companies` API fetch levert geen bruikbare mappings — we weten niet waarom (geen records? andere relationship keys? IDs matchen niet?)
-2. **profMap = 1000**: Supabase default limit kapt af bij 1000 rijen, mist 427 professionals
+### 1. Nieuwe state variabelen (na regel 193)
+- `showAddDocDialog` (boolean)
+- `addDocLoading` (boolean)
+- `addDocForm` object: `{ name, category, type, expiryDate, file }`
 
-## Wijzigingen
+### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
+- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
+- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
+- Haal `user` op via `supabase.auth.getUser()`
+- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
 
-### 1. Sample logging toevoegen (`supabase/functions/bendy-sync/index.ts`, regels 1958-1993)
+### 3. `handleUploadForManualDoc` functie
+- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
+- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
+- Update lokale `documents` state
 
-Na de `flex_user_companies` API fetch, vóór het bouwen van fucMap, sample data vastleggen:
-- `sampleFucIds`: eerste 3 flex_user_company IDs uit requisitions
-- `debugApiTotalRecords`: hoeveel records de API teruggaf
-- `debugApiSample`: eerste 3 records met alle relationship keys en waarden
-- `debugApiIncludedTypes`: telling per type in de included array
+### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
+- Plus icoon, variant outline, opent dialog
 
-Alle debug data wordt opgeslagen in het metadata object van de sync log (wijziging 3).
+### 5. UI: Dialog component (onder de TabsContent of aan het eind)
+- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
+- Na file selectie: toon bestandsnaam + grootte
+- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
 
-### 2. profMap chunked fetch (`supabase/functions/bendy-sync/index.ts`, regels 2024-2035)
+### 6. Scenario C Upload knop activeren (regel ~1447)
+- Verwijder `disabled` van de Upload knop
+- onClick: trigger hidden file input → `handleUploadForManualDoc`
 
-Vervang de `.limit(50000)` query door een chunked fetch met `.range()`:
-- Fetch in blokken van 1000 records
-- Combineer alle chunks in één array
-- Stop als een chunk kleiner is dan 1000 of leeg
-- Dit omzeilt de Supabase default limit
-
-### 3. Metadata update uitbreiden (regels 2122-2131)
-
-Voeg 4 debug velden toe aan het bestaande metadata object:
-- `debug_sample_fuc_ids`
-- `debug_api_total_records`
-- `debug_api_sample`
-- `debug_api_included_types`
-
-### Niet aanraken
-- Overlap trigger, cleanup, frontend, database schema, andere syncs
+### Bestanden die NIET worden aangepast
+- Edge functions, storage config, andere tabs, bendy-sync
 
