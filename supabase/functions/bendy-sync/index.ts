@@ -1678,7 +1678,8 @@ async function syncRequisitions(
     .from('diensten')
     .select('id, bendy_id, status, datum, start_tijd, eind_tijd, sublocation_id')
     .eq('org_id', orgId)
-    .not('bendy_id', 'is', null);
+    .not('bendy_id', 'is', null)
+    .limit(5000);
 
   const dienstMap = new Map<string, any>();
   (existingDiensten || []).forEach((d: any) => dienstMap.set(d.bendy_id, d));
