@@ -157,7 +157,7 @@ export default function BendySync() {
   const [syncingReqs, setSyncingReqs] = useState(false);
   const [reqSyncResult, setReqSyncResult] = useState<SyncResult | null>(null);
   const [cleaningUp, setCleaningUp] = useState(false);
-  const [cleanupResult, setCleanupResult] = useState<{ total_deleted: number; duplicates_remaining: number; unique_index_created: boolean } | null>(null);
+  const [cleanupResult, setCleanupResult] = useState<{ total_deleted: number; duplicates_remaining: number; unique_index_created: boolean; index_error: string | null } | null>(null);
 
   const fetchUnusedFieldsAnalysis = async () => {
     setAnalysisLoading(true);
