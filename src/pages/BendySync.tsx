@@ -1298,7 +1298,7 @@ export default function BendySync() {
                 disabled={cleaningUp || (!!cleanupResult && cleanupResult.unique_index_created)}
                 onClick={async () => {
                   setCleaningUp(true);
-                  let totalDeleted = 0;
+                  let totalDeleted = cleanupResult?.total_deleted || 0;
                   let iterations = 0;
                   const MAX_ITERATIONS = 1000;
                   try {
@@ -1316,26 +1316,33 @@ export default function BendySync() {
                       setCleanupResult({
                         total_deleted: totalDeleted,
                         duplicates_remaining: hasMore ? -1 : 0,
-                        unique_index_created: result.unique_index_created,
+                        unique_index_created: result.unique_index_created || false,
+                        index_error: result.index_error || null,
                       });
                       if (hasMore) await new Promise(r => setTimeout(r, 100));
                     }
                     if (!hasMore) {
-                      toast.success(`✅ ${totalDeleted} duplicaten verwijderd, UNIQUE index aangemaakt`);
+                      const indexMsg = cleanupResult?.index_error 
+                        ? ` (index waarschuwing: ${cleanupResult.index_error})` 
+                        : ', UNIQUE index aangemaakt';
+                      toast.success(`✅ ${totalDeleted} duplicaten verwijderd${indexMsg}`);
                     } else {
                       toast.info(`⏸️ ${totalDeleted} verwijderd na ${MAX_ITERATIONS} batches — klik opnieuw om door te gaan`);
                     }
                   } catch (err: any) {
-                    toast.error(`❌ Cleanup fout: ${err.message} (${totalDeleted} al verwijderd — klik opnieuw om door te gaan)`);
+                    toast.error(`❌ Cleanup fout: ${err.message}`);
+                    setCleanupResult(prev => prev ? { ...prev, total_deleted: totalDeleted } : { total_deleted: totalDeleted, duplicates_remaining: -1, unique_index_created: false, index_error: null });
                   } finally {
                     setCleaningUp(false);
                   }
                 }}
               >
                 {cleaningUp ? (
-                  <><RefreshCw className="h-4 w-4 animate-spin" /> ⏳ Cleanup... {cleanupResult ? `${cleanupResult.total_deleted} verwijderd, ${cleanupResult.duplicates_remaining} resterend` : 'starten...'}</>
+                  <><RefreshCw className="h-4 w-4 animate-spin" /> ⏳ Cleanup... {cleanupResult ? `${cleanupResult.total_deleted} verwijderd` : 'starten...'}</>
                 ) : cleanupResult?.unique_index_created ? (
                   <><CheckCircle2 className="h-4 w-4 text-emerald-500" /> ✅ {cleanupResult.total_deleted} duplicaten verwijderd, index aangemaakt</>
+                ) : cleanupResult?.index_error ? (
+                  <>⚠️ Cleanup klaar ({cleanupResult.total_deleted} verwijderd) — index fout: {cleanupResult.index_error}</>
                 ) : cleanupResult ? (
                   <>⚠️ {cleanupResult.total_deleted} verwijderd (onderbroken — klik opnieuw)</>
                 ) : (

@@ -2497,11 +2497,14 @@ Deno.serve(async (req) => {
       const rpcStart = Date.now();
       const { data, error } = await adminClient.rpc('cleanup_diensten_duplicates', { batch_size: 200 });
       const rpcDuration = Date.now() - rpcStart;
-      console.log(`[cleanup_diensten] RPC duration: ${rpcDuration}ms, result:`, JSON.stringify(data), error?.message || '');
+      logInfo(FUNCTION_NAME, `[cleanup_diensten] RPC duration: ${rpcDuration}ms, result: ${JSON.stringify(data)}, error: ${error?.message || 'none'}`);
+      if (error) {
+        logError(FUNCTION_NAME, `[cleanup_diensten] RPC failed after ${rpcDuration}ms: ${error.message}`);
+        return jsonResponse({ success: false, error: error.message, metadata: { action: 'cleanup_diensten', rpc_duration_ms: rpcDuration } });
+      }
       return jsonResponse({
-        success: !error,
+        success: true,
         result: data,
-        error: error?.message,
         metadata: { action: 'cleanup_diensten', version: FUNCTION_VERSION, rpc_duration_ms: rpcDuration },
       });
     }
