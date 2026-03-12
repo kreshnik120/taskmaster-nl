@@ -626,12 +626,17 @@ export default function BendySync() {
         );
 
         if (log && log.status !== 'running') {
+          const meta = log.metadata || {};
           const result: SyncResult = {
             records_fetched: log.records_fetched,
             records_created: log.records_created,
             records_updated: log.records_updated,
             records_skipped: log.records_skipped,
             records_failed: log.records_failed,
+            toewijzingen_created: meta.toewijzingen_created,
+            toewijzingen_skipped: meta.toewijzingen_skipped,
+            toewijzingen_no_match: meta.toewijzingen_no_match,
+            toewijzingen_overlap: meta.toewijzingen_overlap,
           };
 
           if (pollingAction === 'sync_clients') {
