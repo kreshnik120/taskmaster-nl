@@ -1658,7 +1658,7 @@ async function syncRequisitions(
   // ═══ STAP 1: Haal data op (PARALLEL voor snelheid) ═══
   const [openResult, assignedResult] = await Promise.all([
     fetchAllBendyRecords(tenant, '/api/v2/requisitions/open'),
-    fetchAllBendyRecords(tenant, '/api/v2/requisitions/assigned'),
+    fetchAllBendyRecords(tenant, '/api/v2/requisitions/assigned', { include: 'flex_user_company' }),
   ]);
   const openRecords = openResult.records;
   const assignedRecords = assignedResult.records;
@@ -1919,7 +1919,168 @@ async function syncRequisitions(
     updated: result.updated
   });
 
-  logInfo(FUNCTION_NAME, `Requisition sync voltooid: ${result.fetched} opgehaald, ${result.created} nieuw, ${result.updated} bijgewerkt, ${result.failed} gefaald`);
+  // ═══ STAP 4B: dienstMap bijwerken met nieuw-aangemaakte diensten ═══
+  // Na upsert: haal alle diensten opnieuw op zodat we IDs hebben voor toewijzingen
+  if (dienstInserts.length > 0) {
+    const { data: refreshedDiensten } = await adminClient
+      .from('diensten')
+      .select('id, bendy_id')
+      .eq('org_id', orgId)
+      .not('bendy_id', 'is', null)
+      .limit(50000);
+    (refreshedDiensten || []).forEach((d: any) => {
+      if (!dienstMap.has(d.bendy_id)) {
+        dienstMap.set(d.bendy_id, d);
+      } else {
+        // Update existing entry with actual ID
+        const existing = dienstMap.get(d.bendy_id);
+        if (existing && !existing.id) {
+          existing.id = d.id;
+        }
+      }
+    });
+  }
+
+  // ═══ STAP 5: Toewijzingen aanmaken voor bezette diensten ═══
+  const twStats = { created: 0, skipped: 0, noMatch: 0, overlapError: 0 };
+
+  // 5A: flex_user_company → user bendy_id map
+  const fucMap = new Map<string, string>();
+  const assignedIncluded = assignedResult.included || [];
+  for (const item of assignedIncluded) {
+    if (item.type === 'flex_user_companies') {
+      const userId = item.relationships?.user?.data?.id;
+      if (userId) {
+        fucMap.set(String(item.id), String(userId));
+      }
+    }
+  }
+  await logProgress('2B-FUC-MAP', { fucMapSize: fucMap.size });
+
+  // Fallback: als include niet werkte, vul vanuit bendy_raw_cache
+  if (fucMap.size === 0) {
+    logWarning(FUNCTION_NAME, 'Geen flex_user_company in included data, fallback naar cache');
+    const { data: cachedUsers } = await adminClient
+      .from('bendy_raw_cache')
+      .select('bendy_id, raw_data')
+      .eq('org_id', orgId)
+      .eq('entity_type', 'users')
+      .limit(50000);
+    for (const cu of (cachedUsers || [])) {
+      const raw = cu.raw_data as any;
+      const fucs = raw?.relationships?.flex_user_companies?.data;
+      if (Array.isArray(fucs)) {
+        for (const fuc of fucs) {
+          if (fuc.id) {
+            fucMap.set(String(fuc.id), String(cu.bendy_id));
+          }
+        }
+      }
+    }
+    await logProgress('2B-FUC-MAP-FALLBACK', { fucMapSize: fucMap.size });
+  }
+
+  // 5B: professionals bendy_id → professional_id map
+  const { data: profsWithBendy } = await adminClient
+    .from('professionals')
+    .select('id, bendy_id, full_name')
+    .eq('org_id', orgId)
+    .not('bendy_id', 'is', null)
+    .limit(50000);
+  const profMap = new Map<string, { id: string; name: string }>();
+  (profsWithBendy || []).forEach((p: any) => {
+    profMap.set(String(p.bendy_id), { id: p.id, name: p.full_name });
+  });
+  await logProgress('2C-PROF-MAP', { profMapSize: profMap.size });
+
+  // 5C: bestaande toewijzingen pre-fetch (idempotentie)
+  const allDienstIds = [...dienstMap.values()]
+    .filter((d: any) => d.id)
+    .map((d: any) => d.id);
+  const existingToewijzingen = new Set<string>();
+  const TW_CHUNK = 500;
+  for (let i = 0; i < allDienstIds.length; i += TW_CHUNK) {
+    const chunk = allDienstIds.slice(i, i + TW_CHUNK);
+    const { data: twData } = await adminClient
+      .from('dienst_toewijzingen')
+      .select('dienst_id, professional_id')
+      .in('dienst_id', chunk);
+    (twData || []).forEach((tw: any) => {
+      existingToewijzingen.add(`${tw.dienst_id}|${tw.professional_id}`);
+    });
+  }
+  await logProgress('2D-EXISTING-TW', { existingCount: existingToewijzingen.size });
+
+  // 5D: Loop door alle records en maak toewijzingen aan
+  for (const req of allRecords) {
+    const bendyId = String(req.id);
+    const dienst = dienstMap.get(bendyId);
+    if (!dienst?.id) continue;
+
+    const fucId = req.relationships?.flex_user_company?.data?.id;
+    if (!fucId) continue; // open requisition, geen toewijzing nodig
+
+    // flex_user_company → user bendy_id
+    const userBendyId = fucMap.get(String(fucId));
+    if (!userBendyId) {
+      twStats.noMatch++;
+      continue;
+    }
+
+    // user bendy_id → professional
+    const prof = profMap.get(userBendyId);
+    if (!prof) {
+      twStats.noMatch++;
+      continue;
+    }
+
+    // check of toewijzing al bestaat (idempotentie)
+    const key = `${dienst.id}|${prof.id}`;
+    if (existingToewijzingen.has(key)) {
+      twStats.skipped++;
+      continue;
+    }
+
+    // toewijzing aanmaken
+    const { error: twError } = await adminClient
+      .from('dienst_toewijzingen')
+      .insert({
+        dienst_id: dienst.id,
+        professional_id: prof.id,
+        status: 'bevestigd',
+        positie_nr: 1,
+        toewijzing_notities: `Bendy sync: flex_user_company ${fucId}`,
+      });
+
+    if (twError) {
+      twStats.overlapError++;
+      logWarning(FUNCTION_NAME, `Toewijzing fout voor ${prof.name} op dienst ${dienst.id}: ${twError.message}`);
+    } else {
+      twStats.created++;
+      existingToewijzingen.add(key);
+    }
+  }
+
+  await logProgress('5-TOEWIJZINGEN', twStats);
+
+  // Sla toewijzing stats op in sync_log metadata
+  if (syncLogId) {
+    try {
+      await adminClient
+        .from('bendy_sync_log')
+        .update({
+          metadata: {
+            toewijzingen_created: twStats.created,
+            toewijzingen_skipped: twStats.skipped,
+            toewijzingen_no_match: twStats.noMatch,
+            toewijzingen_overlap: twStats.overlapError,
+          },
+        })
+        .eq('id', syncLogId);
+    } catch (_e) { /* ignore */ }
+  }
+
+  logInfo(FUNCTION_NAME, `Requisition sync voltooid: ${result.fetched} opgehaald, ${result.created} nieuw, ${result.updated} bijgewerkt, ${result.failed} gefaald, toewijzingen: ${twStats.created} aangemaakt`);
   return result;
 }
 
@@ -1948,7 +2109,7 @@ async function handleStatusCheck(): Promise<Response> {
 
     const { data: recentLogs } = await adminClient
       .from('bendy_sync_log')
-      .select('id, tenant, sync_type, entity_type, started_at, completed_at, records_fetched, records_created, records_updated, records_skipped, records_failed, status, duration_ms')
+      .select('id, tenant, sync_type, entity_type, started_at, completed_at, records_fetched, records_created, records_updated, records_skipped, records_failed, status, duration_ms, metadata')
       .order('started_at', { ascending: false })
       .limit(20);
 

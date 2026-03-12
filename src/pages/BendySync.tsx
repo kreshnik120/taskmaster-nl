@@ -118,6 +118,10 @@ interface SyncResult {
   records_updated: number;
   records_skipped: number;
   records_failed: number;
+  toewijzingen_created?: number;
+  toewijzingen_skipped?: number;
+  toewijzingen_no_match?: number;
+  toewijzingen_overlap?: number;
 }
 
 const statusBadgeVariant: Record<string, string> = {
@@ -622,12 +626,17 @@ export default function BendySync() {
         );
 
         if (log && log.status !== 'running') {
+          const meta = log.metadata || {};
           const result: SyncResult = {
             records_fetched: log.records_fetched,
             records_created: log.records_created,
             records_updated: log.records_updated,
             records_skipped: log.records_skipped,
             records_failed: log.records_failed,
+            toewijzingen_created: meta.toewijzingen_created,
+            toewijzingen_skipped: meta.toewijzingen_skipped,
+            toewijzingen_no_match: meta.toewijzingen_no_match,
+            toewijzingen_overlap: meta.toewijzingen_overlap,
           };
 
           if (pollingAction === 'sync_clients') {
@@ -1387,12 +1396,22 @@ export default function BendySync() {
               {syncingReqs ? (pollingAction === 'sync_requisitions' ? "Sync draait op achtergrond..." : "Verbinden...") : "Requisition Sync Starten"}
             </Button>
             {reqSyncResult && (
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-3 rounded-lg bg-muted/50">
-                <div><span className="text-xs text-muted-foreground">Opgehaald</span><p className="font-semibold">{reqSyncResult.records_fetched}</p></div>
-                <div><span className="text-xs text-muted-foreground">Aangemaakt</span><p className="font-semibold text-emerald-600 dark:text-emerald-400">{reqSyncResult.records_created}</p></div>
-                <div><span className="text-xs text-muted-foreground">Bijgewerkt</span><p className="font-semibold">{reqSyncResult.records_updated}</p></div>
-                <div><span className="text-xs text-muted-foreground">Overgeslagen</span><p className="font-semibold">{reqSyncResult.records_skipped}</p></div>
-                <div><span className="text-xs text-muted-foreground">Mislukt</span><p className="font-semibold text-destructive">{reqSyncResult.records_failed}</p></div>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-3 rounded-lg bg-muted/50">
+                  <div><span className="text-xs text-muted-foreground">Opgehaald</span><p className="font-semibold">{reqSyncResult.records_fetched}</p></div>
+                  <div><span className="text-xs text-muted-foreground">Aangemaakt</span><p className="font-semibold text-emerald-600 dark:text-emerald-400">{reqSyncResult.records_created}</p></div>
+                  <div><span className="text-xs text-muted-foreground">Bijgewerkt</span><p className="font-semibold">{reqSyncResult.records_updated}</p></div>
+                  <div><span className="text-xs text-muted-foreground">Overgeslagen</span><p className="font-semibold">{reqSyncResult.records_skipped}</p></div>
+                  <div><span className="text-xs text-muted-foreground">Mislukt</span><p className="font-semibold text-destructive">{reqSyncResult.records_failed}</p></div>
+                </div>
+                {(reqSyncResult.toewijzingen_created || reqSyncResult.toewijzingen_skipped || reqSyncResult.toewijzingen_no_match || reqSyncResult.toewijzingen_overlap) ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 rounded-lg bg-muted/50">
+                    <div><span className="text-xs text-muted-foreground">Toewijzingen aangemaakt</span><p className="font-semibold text-emerald-600 dark:text-emerald-400">{reqSyncResult.toewijzingen_created ?? 0}</p></div>
+                    <div><span className="text-xs text-muted-foreground">Toewijzingen overgeslagen</span><p className="font-semibold text-muted-foreground">{reqSyncResult.toewijzingen_skipped ?? 0}</p></div>
+                    <div><span className="text-xs text-muted-foreground">Toewijzingen geen match</span><p className="font-semibold text-amber-600 dark:text-amber-400">{reqSyncResult.toewijzingen_no_match ?? 0}</p></div>
+                    <div><span className="text-xs text-muted-foreground">Toewijzingen overlap</span><p className="font-semibold text-destructive">{reqSyncResult.toewijzingen_overlap ?? 0}</p></div>
+                  </div>
+                ) : null}
               </div>
             )}
           </CardContent>
