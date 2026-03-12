@@ -1,37 +1,30 @@
 
 
-# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
+# BENDY-REQ-5B-FIX-1: Fix toewijzing matching — flex_user_companies apart ophalen
 
-## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
+## Wijzigingen
 
-### 1. Nieuwe state variabelen (na regel 193)
-- `showAddDocDialog` (boolean)
-- `addDocLoading` (boolean)
-- `addDocForm` object: `{ name, category, type, expiryDate, file }`
+### 1. Edge function (`supabase/functions/bendy-sync/index.ts`)
 
-### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
-- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
-- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
-- Haal `user` op via `supabase.auth.getUser()`
-- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
+**A. Remove useless include on assigned fetch (regel 1661)**
+```
+fetchAllBendyRecords(tenant, '/api/v2/requisitions/assigned')
+```
 
-### 3. `handleUploadForManualDoc` functie
-- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
-- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
-- Update lokale `documents` state
+**B. Replace STAP 5A fucMap logic (regels 1947-1981) with new approach:**
 
-### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
-- Plus icoon, variant outline, opent dialog
+1. Collect unique flex_user_company IDs from allRecords
+2. Fetch `/api/v2/flex_user_companies` with `include: 'user'` via `fetchAllBendyRecords`
+3. Build fucMap from the fetched records' `relationships.user.data.id` or `relationships.flex_user.data.id`
+4. Fallback: if fucMap still empty, try company matching via `bendy_raw_cache` users (company→user map)
+5. Log with checkpoint `2B-FUC-MAP` including `fucIdsFromReqs`, `fucMapSize`, `method`
 
-### 5. UI: Dialog component (onder de TabsContent of aan het eind)
-- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
-- Na file selectie: toon bestandsnaam + grootte
-- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
+**C. Add no-match diagnostic sampling (in 5D loop, regels 2024-2034)**
+- Track first 3 no-match cases with details (fucId, userBendyId, prof found?) and log them
 
-### 6. Scenario C Upload knop activeren (regel ~1447)
-- Verwijder `disabled` van de Upload knop
-- onClick: trigger hidden file input → `handleUploadForManualDoc`
+**D. Expand metadata update (regels 2066-2081)**
+- Add debug fields: `debug_fuc_ids_from_reqs`, `debug_fuc_map_size`, `debug_prof_map_size`, `debug_existing_tw`, `debug_method`
 
-### Bestanden die NIET worden aangepast
-- Edge functions, storage config, andere tabs, bendy-sync
+### Niet aanraken
+- Overlap trigger, cleanup, frontend, database schema, other syncs
 
