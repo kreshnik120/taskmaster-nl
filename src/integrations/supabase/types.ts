@@ -8649,6 +8649,10 @@ export type Database = {
         }[]
       }
       check_emrex_reminders: { Args: never; Returns: undefined }
+      cleanup_diensten_duplicates: {
+        Args: { batch_size?: number }
+        Returns: Json
+      }
       cleanup_old_logs: { Args: never; Returns: undefined }
       complete_human_review: {
         Args: {
