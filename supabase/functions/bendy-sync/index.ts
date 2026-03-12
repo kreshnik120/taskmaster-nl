@@ -1944,22 +1944,57 @@ async function syncRequisitions(
   // ═══ STAP 5: Toewijzingen aanmaken voor bezette diensten ═══
   const twStats = { created: 0, skipped: 0, noMatch: 0, overlapError: 0 };
 
-  // 5A: flex_user_company → user bendy_id map
+  // 5A: flex_user_company → user bendy_id map (APART ophalen uit API)
   const fucMap = new Map<string, string>();
-  const assignedIncluded = assignedResult.included || [];
-  for (const item of assignedIncluded) {
-    if (item.type === 'flex_user_companies') {
-      const userId = item.relationships?.user?.data?.id;
-      if (userId) {
-        fucMap.set(String(item.id), String(userId));
+
+  // Stap 1: Verzamel alle unieke flex_user_company IDs uit assigned requisitions
+  const fucIds = new Set<string>();
+  for (const req of allRecords) {
+    const fucId = req.relationships?.flex_user_company?.data?.id;
+    if (fucId) fucIds.add(String(fucId));
+  }
+  logInfo(FUNCTION_NAME, `${fucIds.size} unieke flex_user_company IDs gevonden in requisitions`);
+
+  // Stap 2: Haal flex_user_companies op uit Bendy API met user include
+  if (fucIds.size > 0) {
+    try {
+      const { records: fucRecords, included: fucIncluded } = await fetchAllBendyRecords(
+        tenant,
+        '/api/v2/flex_user_companies',
+        { include: 'user' }
+      );
+
+      // Optie A: user zit in included data
+      const userFromIncluded = new Map<string, string>();
+      if (fucIncluded) {
+        for (const item of fucIncluded) {
+          if (item.type === 'users' || item.type === 'flex_users') {
+            userFromIncluded.set(String(item.id), String(item.id));
+          }
+        }
       }
+
+      // Optie B: user zit in relationships van de flex_user_company zelf
+      for (const fuc of fucRecords) {
+        const fucId = String(fuc.id);
+        if (!fucIds.has(fucId)) continue; // alleen relevante records
+
+        const userId = fuc.relationships?.user?.data?.id
+                    || fuc.relationships?.flex_user?.data?.id;
+        if (userId) {
+          fucMap.set(fucId, String(userId));
+        }
+      }
+
+      logInfo(FUNCTION_NAME, `flex_user_companies API: ${fucRecords.length} records, fucMap: ${fucMap.size} mappings`);
+    } catch (err: any) {
+      logWarning(FUNCTION_NAME, `Fout bij ophalen flex_user_companies: ${err.message}`);
     }
   }
-  await logProgress('2B-FUC-MAP', { fucMapSize: fucMap.size });
 
-  // Fallback: als include niet werkte, vul vanuit bendy_raw_cache
-  if (fucMap.size === 0) {
-    logWarning(FUNCTION_NAME, 'Geen flex_user_company in included data, fallback naar cache');
+  // Stap 3: Fallback via bendy_raw_cache company matching
+  if (fucMap.size === 0 && fucIds.size > 0) {
+    logWarning(FUNCTION_NAME, 'flex_user_companies API leverde geen user mappings, probeer cache fallback');
     const { data: cachedUsers } = await adminClient
       .from('bendy_raw_cache')
       .select('bendy_id, raw_data')
@@ -1977,8 +2012,14 @@ async function syncRequisitions(
         }
       }
     }
-    await logProgress('2B-FUC-MAP-FALLBACK', { fucMapSize: fucMap.size });
+    logInfo(FUNCTION_NAME, `Cache fallback: fucMap ${fucMap.size} mappings`);
   }
+
+  await logProgress('2B-FUC-MAP', {
+    fucIdsFromReqs: fucIds.size,
+    fucMapSize: fucMap.size,
+    method: fucMap.size > 0 ? 'api_fetch' : 'none',
+  });
 
   // 5B: professionals bendy_id → professional_id map
   const { data: profsWithBendy } = await adminClient
