@@ -1885,6 +1885,11 @@ async function syncRequisitions(
     await batchUpsert(adminClient, 'bendy_id_mapping', mappingWrites, 'tenant,entity_type,bendy_id');
   }
 
+  await logProgress('4-GESCHREVEN', {
+    created: result.created,
+    updated: result.updated
+  });
+
   logInfo(FUNCTION_NAME, `Requisition sync voltooid: ${result.fetched} opgehaald, ${result.created} nieuw, ${result.updated} bijgewerkt, ${result.failed} gefaald`);
   return result;
 }
