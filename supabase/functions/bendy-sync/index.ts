@@ -2113,7 +2113,7 @@ async function syncRequisitions(
 
   await logProgress('5-TOEWIJZINGEN', twStats);
 
-  // Sla toewijzing stats op in sync_log metadata
+  // Sla toewijzing stats + debug info op in sync_log metadata
   if (syncLogId) {
     try {
       await adminClient
@@ -2124,6 +2124,11 @@ async function syncRequisitions(
             toewijzingen_skipped: twStats.skipped,
             toewijzingen_no_match: twStats.noMatch,
             toewijzingen_overlap: twStats.overlapError,
+            debug_fuc_ids_from_reqs: fucIds.size,
+            debug_fuc_map_size: fucMap.size,
+            debug_prof_map_size: profMap.size,
+            debug_existing_tw: existingToewijzingen.size,
+            debug_method: fucMap.size > 0 ? 'api_fetch' : 'fallback_or_none',
           },
         })
         .eq('id', syncLogId);
