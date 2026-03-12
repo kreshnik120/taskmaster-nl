@@ -1638,8 +1638,22 @@ async function syncRequisitions(
   tenant: string,
   orgId: string,
   _syncType: string,
+  syncLogId?: string,
 ): Promise<SyncResult> {
   const result: SyncResult = { fetched: 0, created: 0, updated: 0, skipped: 0, failed: 0, errors: [] };
+
+  // Helper: tussentijdse voortgang loggen naar sync_log
+  const logProgress = async (step: string, data: Record<string, any> = {}) => {
+    if (!syncLogId) return;
+    try {
+      await adminClient
+        .from('bendy_sync_log')
+        .update({
+          errors: [`STAP: ${step}`, JSON.stringify(data).substring(0, 500)],
+        })
+        .eq('id', syncLogId);
+    } catch (_e) { /* ignore logging errors */ }
+  };
 
   // ═══ STAP 1: Haal data op (PARALLEL voor snelheid) ═══
   const [openResult, assignedResult] = await Promise.all([
