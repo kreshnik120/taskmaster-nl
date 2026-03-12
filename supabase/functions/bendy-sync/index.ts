@@ -1946,6 +1946,7 @@ async function syncRequisitions(
 
   // 5A: flex_user_company → user bendy_id map (APART ophalen uit API)
   const fucMap = new Map<string, string>();
+  let debugFucData: any = {};
 
   // Stap 1: Verzamel alle unieke flex_user_company IDs uit assigned requisitions
   const fucIds = new Set<string>();
