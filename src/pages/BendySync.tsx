@@ -1299,9 +1299,12 @@ export default function BendySync() {
                 onClick={async () => {
                   setCleaningUp(true);
                   let totalDeleted = 0;
-                  let remaining = 1;
+                  let iterations = 0;
+                  const MAX_ITERATIONS = 1000;
                   try {
-                    while (remaining > 0) {
+                    let hasMore = true;
+                    while (hasMore && iterations < MAX_ITERATIONS) {
+                      iterations++;
                       const { data, error } = await supabase.functions.invoke('bendy-sync', {
                         body: { action: 'cleanup_diensten' },
                       });
@@ -1309,16 +1312,21 @@ export default function BendySync() {
                       if (!data?.success) throw new Error(data?.error || 'Onbekende fout');
                       const result = data.result;
                       totalDeleted += result.deleted_this_batch;
-                      remaining = result.duplicates_remaining;
+                      hasMore = result.has_more;
                       setCleanupResult({
                         total_deleted: totalDeleted,
-                        duplicates_remaining: remaining,
+                        duplicates_remaining: hasMore ? -1 : 0,
                         unique_index_created: result.unique_index_created,
                       });
+                      if (hasMore) await new Promise(r => setTimeout(r, 100));
                     }
-                    toast.success(`✅ ${totalDeleted} duplicaten verwijderd, UNIQUE index aangemaakt`);
+                    if (!hasMore) {
+                      toast.success(`✅ ${totalDeleted} duplicaten verwijderd, UNIQUE index aangemaakt`);
+                    } else {
+                      toast.info(`⏸️ ${totalDeleted} verwijderd na ${MAX_ITERATIONS} batches — klik opnieuw om door te gaan`);
+                    }
                   } catch (err: any) {
-                    toast.error(`❌ Cleanup fout: ${err.message} (${totalDeleted} al verwijderd)`);
+                    toast.error(`❌ Cleanup fout: ${err.message} (${totalDeleted} al verwijderd — klik opnieuw om door te gaan)`);
                   } finally {
                     setCleaningUp(false);
                   }

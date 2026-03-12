@@ -2494,12 +2494,15 @@ Deno.serve(async (req) => {
 
     // ═══ CLEANUP DIENSTEN DUPLICATEN ═══
     if (body.action === 'cleanup_diensten') {
-      const { data, error } = await adminClient.rpc('cleanup_diensten_duplicates', { batch_size: 500 });
+      const rpcStart = Date.now();
+      const { data, error } = await adminClient.rpc('cleanup_diensten_duplicates', { batch_size: 200 });
+      const rpcDuration = Date.now() - rpcStart;
+      console.log(`[cleanup_diensten] RPC duration: ${rpcDuration}ms, result:`, JSON.stringify(data), error?.message || '');
       return jsonResponse({
         success: !error,
         result: data,
         error: error?.message,
-        metadata: { action: 'cleanup_diensten', version: FUNCTION_VERSION },
+        metadata: { action: 'cleanup_diensten', version: FUNCTION_VERSION, rpc_duration_ms: rpcDuration },
       });
     }
 

@@ -1,63 +1,37 @@
 
-Ik heb de fout herleid en weet nu waar het misgaat.
 
-Do I know what the issue is? Ja.
+# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
 
-Wat ik heb vastgesteld:
-- De foutmelding is: `canceling statement due to statement timeout`.
-- In de database staan nog heel veel duplicaten (`~70k` te verwijderen).
-- De huidige cleanup-functie doet per call meerdere zware full-table scans (`COUNT ... EXISTS`) vóór én ná de delete.
-- Er is nog geen `UNIQUE` index op `(org_id, bendy_id)`.
-- Er zijn ook timestamp-ties (gelijke `created_at`) in duplicate groepen; met alleen `<` mis je een deel duplicaten.
+## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
 
-Plan (BENDY-REQ-CLEANUP-v3):
+### 1. Nieuwe state variabelen (na regel 193)
+- `showAddDocDialog` (boolean)
+- `addDocLoading` (boolean)
+- `addDocForm` object: `{ name, category, type, expiryDate, file }`
 
-1) Nieuwe migratie: functie vervangen door “delete-first” batch functie
-- Bestand: nieuwe migratie in `supabase/migrations/...sql`
-- `CREATE OR REPLACE FUNCTION public.cleanup_diensten_duplicates(batch_size int default 200)`
-- Belangrijk:
-  - Eerst direct 1 batch deleten (geen voorafgaande totale count).
-  - Duplicate-detectie met tie-breaker:
-    - `d2.created_at < d1.created_at`
-    - OF bij gelijke timestamp: `d2.id < d1.id`
-  - Daarna:
-    - als `deleted_this_batch > 0` => `has_more = true` (zonder zware recount)
-    - als `deleted_this_batch = 0` => pas dan 1 lichte controle of nog duplicates bestaan.
-  - Alleen als echt 0 duplicates: poging tot unique index aanmaken.
-  - Return payload: `{ deleted_this_batch, has_more, unique_index_created, message }`.
+### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
+- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
+- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
+- Haal `user` op via `supabase.auth.getUser()`
+- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
 
-2) Nieuwe migratie: helper index toevoegen voor snelle duplicate lookup
-- In dezelfde migratie:
-  - `CREATE INDEX IF NOT EXISTS idx_diensten_org_bendy_created_id ON public.diensten (org_id, bendy_id, created_at, id) WHERE bendy_id IS NOT NULL;`
-- Doel: EXISTS-lookup versnellen zodat batch-calls onder timeout blijven.
+### 3. `handleUploadForManualDoc` functie
+- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
+- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
+- Update lokale `documents` state
 
-3) Edge function klein aanpassen
-- Bestand: `supabase/functions/bendy-sync/index.ts`
-- `cleanup_diensten` action:
-  - batch_size verlagen naar `200` (veiligere runtime).
-  - response ongewijzigd doorgeven.
-  - extra logging toevoegen rond RPC-duration + fouttekst (voor snelle diagnose bij volgende issues).
+### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
+- Plus icoon, variant outline, opent dialog
 
-4) Frontend-loop robuust maken
-- Bestand: `src/pages/BendySync.tsx`
-- Cleanup handler:
-  - loop op `result.has_more` i.p.v. exacte `duplicates_remaining`.
-  - max-iteratie guard (bijv. 1000) + korte delay (50–100ms) tussen calls.
-  - als onderbroken: duidelijke toast met “klik opnieuw om door te gaan”.
-- Button tekst:
-  - tijdens run: totaal verwijderd tonen.
-  - bij success: index-status tonen.
-  - bij onderbreking: hervat-status tonen.
+### 5. UI: Dialog component (onder de TabsContent of aan het eind)
+- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
+- Na file selectie: toon bestandsnaam + grootte
+- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
 
-Technische details (kort):
-- Kernfix is: zware `COUNT` niet meer op elke batch-call.
-- Tie-breaker op `(created_at, id)` voorkomt dat duplicates met gelijke timestamp blijven hangen.
-- Helper index voorkomt dure scans op 70k+ records.
-- Frontend stuurt gecontroleerde batch-loop; backend-call blijft kort en timeout-safe.
+### 6. Scenario C Upload knop activeren (regel ~1447)
+- Verwijder `disabled` van de Upload knop
+- onClick: trigger hidden file input → `handleUploadForManualDoc`
 
-Verificatie na implementatie:
-1. Klik “Cleanup Diensten Duplicaten”.
-2. Verwacht: batches lopen door zonder timeout, teller loopt op.
-3. Eindsituatie: `deleted_this_batch = 0`, `has_more = false`, `unique_index_created = true`.
-4. Daarna Requisition Sync draaien: geen nieuwe duplicate inserts op `(org_id, bendy_id)`.
+### Bestanden die NIET worden aangepast
+- Edge functions, storage config, andere tabs, bendy-sync
 
