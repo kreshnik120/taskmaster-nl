@@ -118,6 +118,10 @@ interface SyncResult {
   records_updated: number;
   records_skipped: number;
   records_failed: number;
+  toewijzingen_created?: number;
+  toewijzingen_skipped?: number;
+  toewijzingen_no_match?: number;
+  toewijzingen_overlap?: number;
 }
 
 const statusBadgeVariant: Record<string, string> = {
