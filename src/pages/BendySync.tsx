@@ -1325,8 +1325,7 @@ export default function BendySync() {
                 )}
               </Button>
             </div>
-
-
+            <Button
               onClick={async () => {
                 setSyncingReqs(true);
                 setReqSyncResult(null);
