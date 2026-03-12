@@ -1,52 +1,37 @@
 
-Do I know what the issue is? Ja.
 
-Probleem (bevestigd):
-- De cleanup zelf werkt: er zijn al ~70k duplicaten verwijderd.
-- De fout ontstaat pas bij de afronding: `CREATE UNIQUE INDEX ...` in `cleanup_diensten_duplicates`.
-- Die functie draait nu als **SECURITY INVOKER** (default), dus met rechten van de aanroeper (`service_role`) en niet van de eigenaar van `diensten`.
-- Daarom krijg je: `must be owner of table diensten`.
+# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
 
-Bestanden die dit raken:
-- `supabase/migrations/20260312142111_e213bb79-7071-4910-a45c-5a1ab97dc7b6.sql` (huidige functie)
-- `supabase/functions/bendy-sync/index.ts` (RPC-aanroep/response)
-- `src/pages/BendySync.tsx` (status/voortgangstekst)
+## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
 
-Plan van aanpak:
-1) Database-functie veilig en uitvoerbaar maken
-- Nieuwe migratie met `CREATE OR REPLACE FUNCTION public.cleanup_diensten_duplicates(...)`
-- Zelfde batch-delete logica behouden (tie-breaker op `created_at` + `id`)
-- Functie aanpassen naar:
-  - `SECURITY DEFINER`
-  - `SET search_path = public`
-- Rechten aanscherpen:
-  - `REVOKE ALL ... FROM PUBLIC, anon, authenticated`
-  - `GRANT EXECUTE ... TO service_role`
-- Index-aanmaak in `BEGIN ... EXCEPTION ... END` zetten zodat bij index-probleem geen harde crash meer komt maar een nette return (`index_error`) i.p.v. volledig falen.
+### 1. Nieuwe state variabelen (na regel 193)
+- `showAddDocDialog` (boolean)
+- `addDocLoading` (boolean)
+- `addDocForm` object: `{ name, category, type, expiryDate, file }`
 
-2) Edge function response robuuster maken
-- In `bendy-sync` cleanup-actie:
-  - bestaande RPC-call houden
-  - als RPC faalt: duidelijke `error` teruggeven
-  - als RPC slaagt maar `result.index_error` bestaat: dit expliciet teruggeven zodat frontend juiste melding toont.
+### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
+- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
+- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
+- Haal `user` op via `supabase.auth.getUser()`
+- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
 
-3) Frontend UX corrigeren (zodat status klopt en niet “vast” lijkt)
-- In `BendySync.tsx`:
-  - cumulatief tellen vanaf bestaande `cleanupResult.total_deleted` (niet steeds vanaf 0 bij hervatten)
-  - “-1 resterend” vervangen door nette tekst (“bezig met batches…”)
-  - status onderscheid:
-    - Cleanup klaar + index aangemaakt → groen voltooid
-    - Cleanup klaar + index nog niet aangemaakt → waarschuwing met retry mogelijk
-    - Onderbroken door timeout/andere fout → hervatbaar
+### 3. `handleUploadForManualDoc` functie
+- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
+- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
+- Update lokale `documents` state
 
-4) Verificatie na implementatie
-- Klik op “🧹 Cleanup Diensten Duplicaten” vanuit huidige onderbroken status.
-- Verwacht:
-  - geen `must be owner` meer
-  - afronding met index-aanmaak of duidelijke, niet-crashende index-foutmelding
-- Daarna “Requisition Sync Starten” draaien en controleren dat upsert op `onConflict: org_id,bendy_id` normaal doorloopt.
+### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
+- Plus icoon, variant outline, opent dialog
 
-Technische details:
-- Kernoorzaak is permissiecontext in Postgres (invoker vs definer), niet meer primair query-performance.
-- `CREATE OR REPLACE FUNCTION` behoudt bestaande functie-identiteit; daarom zetten we expliciet security + grants opnieuw in migratie.
-- Met restricted execute op alleen `service_role` voorkomen we dat een definer-functie per ongeluk publiek aanroepbaar wordt.
+### 5. UI: Dialog component (onder de TabsContent of aan het eind)
+- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
+- Na file selectie: toon bestandsnaam + grootte
+- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
+
+### 6. Scenario C Upload knop activeren (regel ~1447)
+- Verwijder `disabled` van de Upload knop
+- onClick: trigger hidden file input → `handleUploadForManualDoc`
+
+### Bestanden die NIET worden aangepast
+- Edge functions, storage config, andere tabs, bendy-sync
+
