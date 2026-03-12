@@ -2069,13 +2069,22 @@ async function syncRequisitions(
     method: fucMap.size > 0 ? 'api_fetch' : 'none',
   });
 
-  // 5B: professionals bendy_id → professional_id map
-  const { data: profsWithBendy } = await adminClient
-    .from('professionals')
-    .select('id, bendy_id, full_name')
-    .eq('org_id', orgId)
-    .not('bendy_id', 'is', null)
-    .limit(50000);
+  // 5B: professionals bendy_id → professional_id map (chunked fetch)
+  let profsWithBendy: any[] = [];
+  let profOffset = 0;
+  const PROF_PAGE = 1000;
+  while (true) {
+    const { data: chunk } = await adminClient
+      .from('professionals')
+      .select('id, bendy_id, full_name')
+      .eq('org_id', orgId)
+      .not('bendy_id', 'is', null)
+      .range(profOffset, profOffset + PROF_PAGE - 1);
+    if (!chunk || chunk.length === 0) break;
+    profsWithBendy.push(...chunk);
+    if (chunk.length < PROF_PAGE) break;
+    profOffset += PROF_PAGE;
+  }
   const profMap = new Map<string, { id: string; name: string }>();
   (profsWithBendy || []).forEach((p: any) => {
     profMap.set(String(p.bendy_id), { id: p.id, name: p.full_name });
