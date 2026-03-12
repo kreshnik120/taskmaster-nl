@@ -1691,6 +1691,11 @@ async function syncRequisitions(
   const subMap = new Map<string, string>();
   (sublocations || []).forEach((s: any) => subMap.set(String(s.bendy_id), s.id));
 
+  await logProgress('2-PREFETCH', {
+    existingDiensten: dienstMap.size,
+    sublocations: subMap.size
+  });
+
   // ═══ STAP 3: FASE 1 — Verwerk in-memory ═══
   const cacheWrites: any[] = [];
   const dienstInserts: any[] = [];
