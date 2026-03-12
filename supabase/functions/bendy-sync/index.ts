@@ -1986,6 +1986,53 @@ async function syncRequisitions(
         }
       }
 
+      // === DEBUG SAMPLE LOGGING ===
+      const sampleFucIds = [...fucIds].slice(0, 3);
+      const debugApiSample = fucRecords.slice(0, 3).map((fuc: any) => ({
+        id: fuc.id,
+        type: fuc.type,
+        relationship_keys: Object.keys(fuc.relationships || {}),
+        user_rel: fuc.relationships?.user?.data || null,
+        flex_user_rel: fuc.relationships?.flex_user?.data || null,
+        company_rel: fuc.relationships?.company?.data || null,
+        all_rels: Object.fromEntries(
+          Object.entries(fuc.relationships || {}).map(([k, v]: [string, any]) => [k, v?.data || null])
+        ),
+      }));
+      const includedTypes = new Map<string, number>();
+      (fucIncluded || []).forEach((item: any) => {
+        includedTypes.set(item.type, (includedTypes.get(item.type) || 0) + 1);
+      });
+      debugFucData = {
+        debug_sample_fuc_ids: sampleFucIds,
+        debug_api_total_records: fucRecords.length,
+        debug_api_sample: debugApiSample,
+        debug_api_included_types: Object.fromEntries(includedTypes),
+      };
+      // === END DEBUG ===
+
+      // Optie A: user zit in included data
+      const userFromIncluded = new Map<string, string>();
+      if (fucIncluded) {
+        for (const item of fucIncluded) {
+          if (item.type === 'users' || item.type === 'flex_users') {
+            userFromIncluded.set(String(item.id), String(item.id));
+          }
+        }
+      }
+
+      // Optie B: user zit in relationships van de flex_user_company zelf
+      for (const fuc of fucRecords) {
+        const fucId = String(fuc.id);
+        if (!fucIds.has(fucId)) continue;
+
+        const userId = fuc.relationships?.user?.data?.id
+                    || fuc.relationships?.flex_user?.data?.id;
+        if (userId) {
+          fucMap.set(fucId, String(userId));
+        }
+      }
+
       logInfo(FUNCTION_NAME, `flex_user_companies API: ${fucRecords.length} records, fucMap: ${fucMap.size} mappings`);
     } catch (err: any) {
       logWarning(FUNCTION_NAME, `Fout bij ophalen flex_user_companies: ${err.message}`);
