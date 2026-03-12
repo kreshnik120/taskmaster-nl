@@ -1856,6 +1856,20 @@ async function syncRequisitions(
     }
   }
 
+  // Diagnostische logging
+  const nullBendyCount = dienstInserts.filter((d: any) => !d.bendy_id).length;
+  const nullOrgCount = dienstInserts.filter((d: any) => !d.org_id).length;
+  await logProgress('3B-NULL-CHECK', {
+    msg: `Inserts met bendy_id=NULL: ${nullBendyCount}, org_id=NULL: ${nullOrgCount}, totaal inserts: ${dienstInserts.length}`,
+  });
+  if (dienstInserts.length > 0) {
+    await logProgress('3C-SAMPLE', {
+      sample: dienstInserts.slice(0, 5).map((d: any) => ({
+        bendy_id: d.bendy_id, org_id: d.org_id, datum: d.datum, locatie: d.sublocation_id,
+      })),
+    });
+  }
+
   await logProgress('3-VERWERKT', {
     inserts: dienstInserts.length,
     updates: dienstUpdates.length,
