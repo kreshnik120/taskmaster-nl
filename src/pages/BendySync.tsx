@@ -156,6 +156,8 @@ export default function BendySync() {
   const [clientMatchResult, setClientMatchResult] = useState<any>(null);
   const [syncingReqs, setSyncingReqs] = useState(false);
   const [reqSyncResult, setReqSyncResult] = useState<SyncResult | null>(null);
+  const [cleaningUp, setCleaningUp] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState<{ total_duplicates_found: number; total_deleted: number; unique_index_created: boolean } | null>(null);
 
   const fetchUnusedFieldsAnalysis = async () => {
     setAnalysisLoading(true);
@@ -1288,6 +1290,41 @@ export default function BendySync() {
             <p className="text-xs text-muted-foreground">Importeer open en assigned requisitions als diensten</p>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Cleanup Diensten Duplicaten */}
+            <div className="space-y-2">
+              <Button
+                variant="outline"
+                className="w-full border-amber-500/50 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+                disabled={cleaningUp || !!cleanupResult}
+                onClick={async () => {
+                  setCleaningUp(true);
+                  try {
+                    const { data, error } = await supabase.functions.invoke('bendy-sync', {
+                      body: { action: 'cleanup_diensten' },
+                    });
+                    if (error) throw error;
+                    if (data?.success && data.result) {
+                      setCleanupResult(data.result);
+                      toast.success(`✅ ${data.result.total_deleted} duplicaten verwijderd, UNIQUE index aangemaakt`);
+                    } else {
+                      toast.error(`❌ Cleanup fout: ${data?.error || 'Onbekende fout'}`);
+                    }
+                  } catch (err: any) {
+                    toast.error(`❌ Cleanup fout: ${err.message}`);
+                  } finally {
+                    setCleaningUp(false);
+                  }
+                }}
+              >
+                {cleaningUp ? (
+                  <><RefreshCw className="h-4 w-4 animate-spin" /> Bezig met cleanup...</>
+                ) : cleanupResult ? (
+                  <><CheckCircle2 className="h-4 w-4 text-emerald-500" /> ✅ {cleanupResult.total_deleted} duplicaten verwijderd</>
+                ) : (
+                  <>🧹 Cleanup Diensten Duplicaten</>
+                )}
+              </Button>
+            </div>
             <Button
               onClick={async () => {
                 setSyncingReqs(true);

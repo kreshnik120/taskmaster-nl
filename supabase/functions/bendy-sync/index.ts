@@ -2492,8 +2492,19 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ═══ CLEANUP DIENSTEN DUPLICATEN ═══
+    if (body.action === 'cleanup_diensten') {
+      const { data, error } = await adminClient.rpc('cleanup_diensten_duplicates', { batch_size: 5000 });
+      return jsonResponse({
+        success: !error,
+        result: data,
+        error: error?.message,
+        metadata: { action: 'cleanup_diensten', version: FUNCTION_VERSION },
+      });
+    }
+
     if (body.action !== 'sync_clients' && body.action !== 'sync_users' && body.action !== 'sync_documents' && body.action !== 'sync_requisitions') {
-      return errorResponse(`Onbekende actie: ${body.action}. Beschikbaar: sync_clients, sync_users, sync_documents, sync_requisitions, update_config, reset_lock`, 400);
+      return errorResponse(`Onbekende actie: ${body.action}. Beschikbaar: sync_clients, sync_users, sync_documents, sync_requisitions, update_config, reset_lock, cleanup_diensten`, 400);
     }
 
     const tenant = body.tenant || 'citozorg';
