@@ -1638,8 +1638,22 @@ async function syncRequisitions(
   tenant: string,
   orgId: string,
   _syncType: string,
+  syncLogId?: string,
 ): Promise<SyncResult> {
   const result: SyncResult = { fetched: 0, created: 0, updated: 0, skipped: 0, failed: 0, errors: [] };
+
+  // Helper: tussentijdse voortgang loggen naar sync_log
+  const logProgress = async (step: string, data: Record<string, any> = {}) => {
+    if (!syncLogId) return;
+    try {
+      await adminClient
+        .from('bendy_sync_log')
+        .update({
+          errors: [`STAP: ${step}`, JSON.stringify(data).substring(0, 500)],
+        })
+        .eq('id', syncLogId);
+    } catch (_e) { /* ignore logging errors */ }
+  };
 
   // ═══ STAP 1: Haal data op (PARALLEL voor snelheid) ═══
   const [openResult, assignedResult] = await Promise.all([
@@ -1650,6 +1664,13 @@ async function syncRequisitions(
   const assignedRecords = assignedResult.records;
   const allRecords = [...openRecords, ...assignedRecords];
   result.fetched = allRecords.length;
+
+  await logProgress('1-FETCH', {
+    open: openRecords.length,
+    assigned: assignedRecords.length,
+    total: allRecords.length
+  });
+
   if (allRecords.length === 0) return result;
 
   // ═══ STAP 2: Pre-fetch lokale data ═══
@@ -1669,6 +1690,11 @@ async function syncRequisitions(
 
   const subMap = new Map<string, string>();
   (sublocations || []).forEach((s: any) => subMap.set(String(s.bendy_id), s.id));
+
+  await logProgress('2-PREFETCH', {
+    existingDiensten: dienstMap.size,
+    sublocations: subMap.size
+  });
 
   // ═══ STAP 3: FASE 1 — Verwerk in-memory ═══
   const cacheWrites: any[] = [];
@@ -1828,6 +1854,14 @@ async function syncRequisitions(
     }
   }
 
+  await logProgress('3-VERWERKT', {
+    inserts: dienstInserts.length,
+    updates: dienstUpdates.length,
+    skipped: result.skipped,
+    failed: result.failed,
+    cache: cacheWrites.length,
+  });
+
   // ═══ STAP 4: FASE 2 — Batch DB writes ═══
   if (cacheWrites.length > 0) {
     await batchUpsert(adminClient, 'bendy_raw_cache', cacheWrites, 'tenant,entity_type,bendy_id');
@@ -1850,6 +1884,11 @@ async function syncRequisitions(
   if (mappingWrites.length > 0) {
     await batchUpsert(adminClient, 'bendy_id_mapping', mappingWrites, 'tenant,entity_type,bendy_id');
   }
+
+  await logProgress('4-GESCHREVEN', {
+    created: result.created,
+    updated: result.updated
+  });
 
   logInfo(FUNCTION_NAME, `Requisition sync voltooid: ${result.fetched} opgehaald, ${result.created} nieuw, ${result.updated} bijgewerkt, ${result.failed} gefaald`);
   return result;
@@ -2503,7 +2542,7 @@ Deno.serve(async (req) => {
         } else if (capturedAction === 'sync_documents') {
           result = await syncDocuments(bgAdminClient, tenant, orgId, syncType);
         } else if (capturedAction === 'sync_requisitions') {
-          result = await syncRequisitions(bgAdminClient, tenant, orgId, syncType);
+          result = await syncRequisitions(bgAdminClient, tenant, orgId, syncType, capturedSyncLogId);
         } else {
           result = await syncClients(bgAdminClient, tenant, orgId, syncType);
         }

@@ -1,47 +1,37 @@
 
-Doel: gerichte debug-instrumentatie toevoegen voor `sync_requisitions` zodat je in `bendy_sync_log.errors` exact ziet tot welke stap de sync kwam vóór een crash/timeout.
 
-Wat ik heb geverifieerd in de code:
-- `syncRequisitions()` bestaat al met parallel fetch en 25s timeout.
-- `syncRequisitions()` accepteert nu nog géén `syncLogId`.
-- De aanroep in `EdgeRuntime.waitUntil` geeft nu nog géén `capturedSyncLogId` door.
-- `handleStatusCheck()` en frontend blijven buiten scope (zoals gevraagd).
+# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
 
-Implementatieplan (alleen `supabase/functions/bendy-sync/index.ts`):
-1. `syncRequisitions` signature uitbreiden  
-   - Van: `(adminClient, tenant, orgId, _syncType)`  
-   - Naar: `(adminClient, tenant, orgId, _syncType, syncLogId?)`
+## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
 
-2. Lokale helper `logProgress(step, data)` toevoegen binnen `syncRequisitions`  
-   - Update op `bendy_sync_log` met:
-     - `errors: ["STAP: ...", "<json data max 500 chars>"]`
-   - Guard:
-     - direct return als `!syncLogId`
-     - `try/catch` rondom update zodat logging zelf nooit de sync kan breken
+### 1. Nieuwe state variabelen (na regel 193)
+- `showAddDocDialog` (boolean)
+- `addDocLoading` (boolean)
+- `addDocForm` object: `{ name, category, type, expiryDate, file }`
 
-3. 4 checkpoint-logs toevoegen in `syncRequisitions`
-   - Na fetch van open+assigned:
-     - `1-FETCH` met `{ open, assigned, total }`
-   - Na lokale prefetch (`dienstMap` + `subMap`):
-     - `2-PREFETCH` met `{ existingDiensten, sublocations }`
-   - Na in-memory verwerkingsloop:
-     - `3-VERWERKT` met `{ inserts, updates, skipped, failed, cache }`
-   - Na batch writes (vóór eind `logInfo`/`return`):
-     - `4-GESCHREVEN` met `{ created, updated }`
+### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
+- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
+- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
+- Haal `user` op via `supabase.auth.getUser()`
+- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
 
-4. Aanroep aanpassen in background routing
-   - In `capturedAction === 'sync_requisitions'`:
-     - Van: `syncRequisitions(bgAdminClient, tenant, orgId, syncType)`
-     - Naar: `syncRequisitions(bgAdminClient, tenant, orgId, syncType, capturedSyncLogId)`
+### 3. `handleUploadForManualDoc` functie
+- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
+- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
+- Update lokale `documents` state
 
-Niet aanpassen:
-- Geen frontend wijzigingen (`BendySync.tsx`)
-- Geen schema/migraties
-- Geen wijzigingen aan andere sync functies
+### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
+- Plus icoon, variant outline, opent dialog
 
-Verificatie na implementatie:
-1. Reset Lock op `/bendy-sync`
-2. Start “Requisition Sync”
-3. Bij falen: inspecteer `bendy_sync_log.errors` van die run
-   - Laatste `STAP:*` toont exact waar het stopte
-   - Geen stap aanwezig => falen vóór eerste checkpoint (bijv. token/API init)
+### 5. UI: Dialog component (onder de TabsContent of aan het eind)
+- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
+- Na file selectie: toon bestandsnaam + grootte
+- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
+
+### 6. Scenario C Upload knop activeren (regel ~1447)
+- Verwijder `disabled` van de Upload knop
+- onClick: trigger hidden file input → `handleUploadForManualDoc`
+
+### Bestanden die NIET worden aangepast
+- Edge functions, storage config, andere tabs, bendy-sync
+
