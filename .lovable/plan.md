@@ -1,37 +1,38 @@
 
 
-# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
+# Diagnose + Fix: Requisition Sync maakt steeds 4850 diensten aan
 
-## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
+## Root cause gevonden — geen diagnostiek nodig
 
-### 1. Nieuwe state variabelen (na regel 193)
-- `showAddDocDialog` (boolean)
-- `addDocLoading` (boolean)
-- `addDocForm` object: `{ name, category, type, expiryDate, file }`
+Uit de edge function logs is het probleem al duidelijk. **Elke** diensten upsert chunk faalt met:
 
-### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
-- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
-- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
-- Haal `user` op via `supabase.auth.getUser()`
-- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
+> `there is no unique or exclusion constraint matching the ON CONFLICT specification`
 
-### 3. `handleUploadForManualDoc` functie
-- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
-- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
-- Update lokale `documents` state
+Dit komt doordat de UNIQUE index een **partial index** is (`WHERE bendy_id IS NOT NULL`). PostgREST/Supabase JS `upsert()` herkent partial indexes niet als conflict target. Daarom doet elke upsert een **INSERT** in plaats van een echte upsert, en worden er 4850 duplicaten aangemaakt per sync-run.
 
-### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
-- Plus icoon, variant outline, opent dialog
+**Tweede probleem**: de pre-fetch van bestaande diensten gebruikt `.limit(5000)`. Bij de eerste sync matcht de `dienstMap` sommige records, maar na meerdere runs kunnen er meer dan 5000 records zijn waardoor de map incompleet is.
 
-### 5. UI: Dialog component (onder de TabsContent of aan het eind)
-- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
-- Na file selectie: toon bestandsnaam + grootte
-- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
+**Huidige stand**: er zijn nu slechts 848 diensten in de tabel (de cleanup heeft goed gewerkt), waarvan 846 met `bendy_id`.
 
-### 6. Scenario C Upload knop activeren (regel ~1447)
-- Verwijder `disabled` van de Upload knop
-- onClick: trigger hidden file input → `handleUploadForManualDoc`
+## Plan van aanpak
 
-### Bestanden die NIET worden aangepast
-- Edge functions, storage config, andere tabs, bendy-sync
+### 1. Database migratie — echte UNIQUE constraint
+- Drop de partial unique index `idx_diensten_org_bendy_id_unique`
+- Maak een echte `UNIQUE` constraint op `(org_id, bendy_id)` (niet partial) aan via `ALTER TABLE ... ADD CONSTRAINT`
+- PostgREST herkent constraints wél als conflict target
+- `bendy_id` mag NULL zijn — Postgres staat meerdere NULLs toe bij unique constraints
+
+### 2. Edge function — pre-fetch limiet verhogen + diagnostiek
+- `.limit(5000)` verhogen naar `.limit(50000)` voor existingDiensten
+- Diagnostische logging toevoegen zoals gevraagd (`3B-NULL-CHECK` en `3C-SAMPLE`) zodat we bij toekomstige issues snel de root cause zien
+- Herdeployen
+
+### 3. Niet aanraken
+- Cleanup functie, frontend, andere syncs
+
+### Verificatie
+1. Deploy
+2. Draai Requisition Sync
+3. Verwacht: `created=4850` (eerste keer), daarna bij opnieuw draaien: `created=0, updated=0, skipped=~43100`
+4. Check sync log voor `3B-NULL-CHECK` en `3C-SAMPLE` entries
 
