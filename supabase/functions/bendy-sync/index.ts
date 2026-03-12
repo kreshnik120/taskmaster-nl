@@ -2186,6 +2186,7 @@ async function syncRequisitions(
             debug_prof_map_size: profMap.size,
             debug_existing_tw: existingToewijzingen.size,
             debug_method: fucMap.size > 0 ? 'api_fetch' : 'fallback_or_none',
+            ...debugFucData,
           },
         })
         .eq('id', syncLogId);
