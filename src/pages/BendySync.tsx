@@ -40,6 +40,8 @@ interface SyncLog {
   records_failed: number;
   status: string;
   duration_ms: number | null;
+  errors?: any[];
+  metadata?: any;
 }
 
 interface PendingMapping {
