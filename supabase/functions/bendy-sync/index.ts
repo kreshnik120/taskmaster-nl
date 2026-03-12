@@ -2109,7 +2109,7 @@ async function handleStatusCheck(): Promise<Response> {
 
     const { data: recentLogs } = await adminClient
       .from('bendy_sync_log')
-      .select('id, tenant, sync_type, entity_type, started_at, completed_at, records_fetched, records_created, records_updated, records_skipped, records_failed, status, duration_ms, metadata')
+      .select('id, tenant, sync_type, entity_type, started_at, completed_at, records_fetched, records_created, records_updated, records_skipped, records_failed, status, duration_ms, metadata, errors')
       .order('started_at', { ascending: false })
       .limit(20);
 

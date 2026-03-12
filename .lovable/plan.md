@@ -1,22 +1,37 @@
 
 
-# BENDY-REQ-5B-DIAG-1: Sync log checkpoints zichtbaar maken
+# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
 
-## Wijzigingen
+## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
 
-### 1. Edge function query — `errors` toevoegen (`supabase/functions/bendy-sync/index.ts`, ~regel 2112)
-- Voeg `errors` toe aan de select string van `recentLogs` (naast bestaande `metadata`)
+### 1. Nieuwe state variabelen (na regel 193)
+- `showAddDocDialog` (boolean)
+- `addDocLoading` (boolean)
+- `addDocForm` object: `{ name, category, type, expiryDate, file }`
 
-### 2. Frontend SyncLog interface (`src/pages/BendySync.tsx`, regel 29-43)
-- Voeg `errors?: any[]` en `metadata?: any` toe aan de interface
+### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
+- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
+- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
+- Haal `user` op via `supabase.auth.getUser()`
+- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
 
-### 3. Sync logs tabel uitklapbaar maken (~regel 1544-1565)
-- Voeg `expandedLogId` state toe (string | null)
-- Maak elke `TableRow` klikbaar (`onClick` → toggle expandedLogId)
-- Na elke rij: als expanded, toon een extra `TableRow` met `colSpan={9}` die `errors` en `metadata` toont als geformateerde JSON in een `<pre>` blok
-- Styling: `bg-gray-50 dark:bg-gray-900`, monospace, max-h-[400px] overflow-y-auto, p-4
-- Cursor pointer op rijen, subtiele hover indicator
+### 3. `handleUploadForManualDoc` functie
+- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
+- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
+- Update lokale `documents` state
 
-### Niet aanraken
-- Edge function sync logica, cleanup, database schema
+### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
+- Plus icoon, variant outline, opent dialog
+
+### 5. UI: Dialog component (onder de TabsContent of aan het eind)
+- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
+- Na file selectie: toon bestandsnaam + grootte
+- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
+
+### 6. Scenario C Upload knop activeren (regel ~1447)
+- Verwijder `disabled` van de Upload knop
+- onClick: trigger hidden file input → `handleUploadForManualDoc`
+
+### Bestanden die NIET worden aangepast
+- Edge functions, storage config, andere tabs, bendy-sync
 

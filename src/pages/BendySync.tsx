@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { RefreshCw, Power, Play, Database, Clock, AlertTriangle, CheckCircle2, MinusCircle, Users, FileText, Shield, ChevronDown, Calendar } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { PageContainer } from "@/components/ui/page-container";
@@ -40,6 +40,8 @@ interface SyncLog {
   records_failed: number;
   status: string;
   duration_ms: number | null;
+  errors?: any[];
+  metadata?: any;
 }
 
 interface PendingMapping {
@@ -162,6 +164,7 @@ export default function BendySync() {
   const [reqSyncResult, setReqSyncResult] = useState<SyncResult | null>(null);
   const [cleaningUp, setCleaningUp] = useState(false);
   const [cleanupResult, setCleanupResult] = useState<{ total_deleted: number; duplicates_remaining: number; unique_index_created: boolean; index_error: string | null } | null>(null);
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
   const fetchUnusedFieldsAnalysis = async () => {
     setAnalysisLoading(true);
@@ -1542,26 +1545,54 @@ export default function BendySync() {
                     </TableRow>
                   ) : (
                     statusData.recent_logs.map((log) => (
-                      <TableRow key={log.id}>
-                        <TableCell className="text-sm whitespace-nowrap">{formatDate(log.started_at)}</TableCell>
-                        <TableCell className="capitalize">{log.sync_type}</TableCell>
-                        <TableCell className="capitalize">{log.entity_type}</TableCell>
-                        <TableCell>
-                          <Badge className={statusBadgeVariant[log.status] || "bg-muted text-muted-foreground"}>
-                            {log.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">{log.records_fetched}</TableCell>
-                        <TableCell className="text-right">{log.records_updated}</TableCell>
-                        <TableCell className="text-right">{log.records_skipped}</TableCell>
-                        <TableCell className="text-right">
-                          {log.records_failed > 0
-                            ? <span className="text-destructive font-medium">{log.records_failed}</span>
-                            : <span>{log.records_failed}</span>
-                          }
-                        </TableCell>
-                        <TableCell className="text-right whitespace-nowrap">{formatDuration(log.duration_ms)}</TableCell>
-                      </TableRow>
+                      <React.Fragment key={log.id}>
+                        <TableRow 
+                          className="cursor-pointer hover:bg-muted/60"
+                          onClick={() => setExpandedLogId(expandedLogId === log.id ? null : log.id)}
+                        >
+                          <TableCell className="text-sm whitespace-nowrap">{formatDate(log.started_at)}</TableCell>
+                          <TableCell className="capitalize">{log.sync_type}</TableCell>
+                          <TableCell className="capitalize">{log.entity_type}</TableCell>
+                          <TableCell>
+                            <Badge className={statusBadgeVariant[log.status] || "bg-muted text-muted-foreground"}>
+                              {log.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">{log.records_fetched}</TableCell>
+                          <TableCell className="text-right">{log.records_updated}</TableCell>
+                          <TableCell className="text-right">{log.records_skipped}</TableCell>
+                          <TableCell className="text-right">
+                            {log.records_failed > 0
+                              ? <span className="text-destructive font-medium">{log.records_failed}</span>
+                              : <span>{log.records_failed}</span>
+                            }
+                          </TableCell>
+                          <TableCell className="text-right whitespace-nowrap">{formatDuration(log.duration_ms)}</TableCell>
+                        </TableRow>
+                        {expandedLogId === log.id && (
+                          <TableRow>
+                            <TableCell colSpan={9} className="p-0">
+                              <div className="bg-muted/30 dark:bg-muted/10 p-4 max-h-[400px] overflow-y-auto">
+                                {log.errors && log.errors.length > 0 && (
+                                  <div className="mb-3">
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Checkpoints / Errors</p>
+                                    <pre className="text-xs font-mono whitespace-pre-wrap break-all">{JSON.stringify(log.errors, null, 2)}</pre>
+                                  </div>
+                                )}
+                                {log.metadata && (
+                                  <div>
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Metadata</p>
+                                    <pre className="text-xs font-mono whitespace-pre-wrap break-all">{JSON.stringify(log.metadata, null, 2)}</pre>
+                                  </div>
+                                )}
+                                {(!log.errors || log.errors.length === 0) && !log.metadata && (
+                                  <p className="text-xs text-muted-foreground italic">Geen extra data beschikbaar</p>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </React.Fragment>
                     ))
                   )}
                 </TableBody>
