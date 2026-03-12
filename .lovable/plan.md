@@ -1,37 +1,26 @@
 
 
-# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
+# BENDY-REQ-CLEANUP-v2: Batch-per-call cleanup
 
-## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
+## Probleem
+De PL/pgSQL functie verwijdert alle ~70k duplicaten in één RPC call → edge function timeout.
 
-### 1. Nieuwe state variabelen (na regel 193)
-- `showAddDocDialog` (boolean)
-- `addDocLoading` (boolean)
-- `addDocForm` object: `{ name, category, type, expiryDate, file }`
+## Oplossing: 3 wijzigingen
 
-### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
-- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
-- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
-- Haal `user` op via `supabase.auth.getUser()`
-- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
+### 1. Database migratie (nieuw)
+`CREATE OR REPLACE FUNCTION cleanup_diensten_duplicates` — verwijdert slechts **1 batch** per aanroep (geen LOOP), default batch_size=2000. Maakt UNIQUE index alleen aan als er 0 duplicaten resteren.
 
-### 3. `handleUploadForManualDoc` functie
-- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
-- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
-- Update lokale `documents` state
+### 2. Edge function (`supabase/functions/bendy-sync/index.ts`)
+Regel 2497: `batch_size` verlagen van 5000 naar 2000 (match met DB functie default).
 
-### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
-- Plus icoon, variant outline, opent dialog
+### 3. Frontend (`src/pages/BendySync.tsx`)
+**onClick handler** (regels 1299-1316): Vervangen door een `while (remaining > 0)` loop die herhaaldelijk de edge function aanroept. Elke iteratie update `cleanupResult` met voortgang (`total_deleted`, `duplicates_remaining`).
 
-### 5. UI: Dialog component (onder de TabsContent of aan het eind)
-- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
-- Na file selectie: toon bestandsnaam + grootte
-- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
+**Button tekst** (regels 1319-1325): Toont live voortgang tijdens cleanup ("2000 verwijderd, 68000 resterend"), succes-status, of "onderbroken — klik opnieuw" als de loop faalde.
 
-### 6. Scenario C Upload knop activeren (regel ~1447)
-- Verwijder `disabled` van de Upload knop
-- onClick: trigger hidden file input → `handleUploadForManualDoc`
+**disabled conditie** (regel 1298): Aanpassen zodat de knop opnieuw klikbaar is als cleanup onderbroken werd (`cleanupResult` bestaat maar `unique_index_created` is false).
 
-### Bestanden die NIET worden aangepast
-- Edge functions, storage config, andere tabs, bendy-sync
+### Niet aangeraakt
+- Edge function action routing (blijft identiek)
+- Andere sync functies, logProgress, andere pagina's
 
