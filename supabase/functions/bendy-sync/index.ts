@@ -2053,6 +2053,7 @@ async function syncRequisitions(
   await logProgress('2D-EXISTING-TW', { existingCount: existingToewijzingen.size });
 
   // 5D: Loop door alle records en maak toewijzingen aan
+  let noMatchSamples = 0;
   for (const req of allRecords) {
     const bendyId = String(req.id);
     const dienst = dienstMap.get(bendyId);
@@ -2065,6 +2066,10 @@ async function syncRequisitions(
     const userBendyId = fucMap.get(String(fucId));
     if (!userBendyId) {
       twStats.noMatch++;
+      if (noMatchSamples < 3) {
+        logInfo(FUNCTION_NAME, `No-match sample: fucId=${fucId}, userBendyId=undefined (niet in fucMap)`);
+        noMatchSamples++;
+      }
       continue;
     }
 
@@ -2072,6 +2077,10 @@ async function syncRequisitions(
     const prof = profMap.get(userBendyId);
     if (!prof) {
       twStats.noMatch++;
+      if (noMatchSamples < 3) {
+        logInfo(FUNCTION_NAME, `No-match sample: fucId=${fucId}, userBendyId=${userBendyId}, prof niet gevonden in profMap`);
+        noMatchSamples++;
+      }
       continue;
     }
 
