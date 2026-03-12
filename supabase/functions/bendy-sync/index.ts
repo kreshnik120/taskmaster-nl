@@ -1679,7 +1679,7 @@ async function syncRequisitions(
     .select('id, bendy_id, status, datum, start_tijd, eind_tijd, sublocation_id')
     .eq('org_id', orgId)
     .not('bendy_id', 'is', null)
-    .limit(5000);
+    .limit(50000);
 
   const dienstMap = new Map<string, any>();
   (existingDiensten || []).forEach((d: any) => dienstMap.set(d.bendy_id, d));
@@ -1854,6 +1854,20 @@ async function syncRequisitions(
       result.errors.push(`Req ${record.id}: ${msg.substring(0, 200)}`);
       if (result.errors.length > 20) break;
     }
+  }
+
+  // Diagnostische logging
+  const nullBendyCount = dienstInserts.filter((d: any) => !d.bendy_id).length;
+  const nullOrgCount = dienstInserts.filter((d: any) => !d.org_id).length;
+  await logProgress('3B-NULL-CHECK', {
+    msg: `Inserts met bendy_id=NULL: ${nullBendyCount}, org_id=NULL: ${nullOrgCount}, totaal inserts: ${dienstInserts.length}`,
+  });
+  if (dienstInserts.length > 0) {
+    await logProgress('3C-SAMPLE', {
+      sample: dienstInserts.slice(0, 5).map((d: any) => ({
+        bendy_id: d.bendy_id, org_id: d.org_id, datum: d.datum, locatie: d.sublocation_id,
+      })),
+    });
   }
 
   await logProgress('3-VERWERKT', {
