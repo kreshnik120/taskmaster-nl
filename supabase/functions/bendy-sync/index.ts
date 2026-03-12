@@ -2494,7 +2494,7 @@ Deno.serve(async (req) => {
 
     // ═══ CLEANUP DIENSTEN DUPLICATEN ═══
     if (body.action === 'cleanup_diensten') {
-      const { data, error } = await adminClient.rpc('cleanup_diensten_duplicates', { batch_size: 5000 });
+      const { data, error } = await adminClient.rpc('cleanup_diensten_duplicates', { batch_size: 2000 });
       return jsonResponse({
         success: !error,
         result: data,
