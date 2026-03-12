@@ -1854,6 +1854,14 @@ async function syncRequisitions(
     }
   }
 
+  await logProgress('3-VERWERKT', {
+    inserts: dienstInserts.length,
+    updates: dienstUpdates.length,
+    skipped: result.skipped,
+    failed: result.failed,
+    cache: cacheWrites.length,
+  });
+
   // ═══ STAP 4: FASE 2 — Batch DB writes ═══
   if (cacheWrites.length > 0) {
     await batchUpsert(adminClient, 'bendy_raw_cache', cacheWrites, 'tenant,entity_type,bendy_id');
