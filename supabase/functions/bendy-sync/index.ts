@@ -1664,6 +1664,13 @@ async function syncRequisitions(
   const assignedRecords = assignedResult.records;
   const allRecords = [...openRecords, ...assignedRecords];
   result.fetched = allRecords.length;
+
+  await logProgress('1-FETCH', {
+    open: openRecords.length,
+    assigned: assignedRecords.length,
+    total: allRecords.length
+  });
+
   if (allRecords.length === 0) return result;
 
   // ═══ STAP 2: Pre-fetch lokale data ═══
