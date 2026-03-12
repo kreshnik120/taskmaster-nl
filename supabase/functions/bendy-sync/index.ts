@@ -1687,7 +1687,8 @@ async function syncRequisitions(
   const { data: sublocations } = await adminClient
     .from('client_sublocations')
     .select('id, bendy_id')
-    .not('bendy_id', 'is', null);
+    .not('bendy_id', 'is', null)
+    .limit(5000);
 
   const subMap = new Map<string, string>();
   (sublocations || []).forEach((s: any) => subMap.set(String(s.bendy_id), s.id));
