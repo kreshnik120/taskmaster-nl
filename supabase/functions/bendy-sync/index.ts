@@ -1872,15 +1872,28 @@ async function syncRequisitions(
     await parallelUpdates(adminClient, 'diensten', dienstUpdates);
   }
   if (dienstInserts.length > 0) {
-    const inserted = await batchInsert(adminClient, 'diensten', dienstInserts);
-    if (inserted && inserted.length > 0) {
-      inserted.forEach((row: any, idx: number) => {
-        const bendyId = dienstInserts[idx]?.bendy_id;
-        const mapping = mappingWrites.find((m: any) => m.bendy_id === bendyId && m.sync_status === 'synced');
-        if (mapping && row.id) {
-          mapping.local_id = row.id;
+    // Upsert i.p.v. insert: voorkomt duplicaten bij herhaalde syncs
+    // UNIQUE index op (org_id, bendy_id) vangt conflicten op
+    const CHUNK = 200;
+    for (let i = 0; i < dienstInserts.length; i += CHUNK) {
+      const chunk = dienstInserts.slice(i, i + CHUNK);
+      const { data: upserted, error } = await adminClient
+        .from('diensten')
+        .upsert(chunk, { onConflict: 'org_id,bendy_id' })
+        .select('id, bendy_id');
+      if (error) {
+        logWarning(FUNCTION_NAME, `Diensten upsert chunk ${i}/${dienstInserts.length} fout: ${error.message}`);
+      }
+      if (upserted) {
+        for (const row of upserted) {
+          const mapping = mappingWrites.find(
+            (m: any) => m.bendy_id === row.bendy_id && m.sync_status === 'synced'
+          );
+          if (mapping && row.id) {
+            mapping.local_id = row.id;
+          }
         }
-      });
+      }
     }
   }
   if (mappingWrites.length > 0) {
