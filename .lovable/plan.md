@@ -1,37 +1,38 @@
 
 
-# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
+# BENDY-REQ-CLEANUP: Diensten Duplicaten Cleanup
 
-## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
+## 3 onderdelen
 
-### 1. Nieuwe state variabelen (na regel 193)
-- `showAddDocDialog` (boolean)
-- `addDocLoading` (boolean)
-- `addDocForm` object: `{ name, category, type, expiryDate, file }`
+### 1. Database migratie
+Nieuwe migratie met PL/pgSQL functie `cleanup_diensten_duplicates(batch_size)`:
+- Telt duplicaten via `ROW_NUMBER() OVER (PARTITION BY org_id, bendy_id)`
+- Verwijdert in batches (loop met `LIMIT batch_size`)
+- Maakt `UNIQUE INDEX` aan op `(org_id, bendy_id) WHERE bendy_id IS NOT NULL`
+- Retourneert JSON met stats
+- **Alleen CREATE FUNCTION** — wordt niet aangeroepen in de migratie
 
-### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
-- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
-- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
-- Haal `user` op via `supabase.auth.getUser()`
-- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
+### 2. Edge function action (`supabase/functions/bendy-sync/index.ts`)
+Nieuwe `cleanup_diensten` action toevoegen na het `reset_lock` blok (regel 2493), vóór de onbekende-actie check (regel 2495):
+```
+if (body.action === 'cleanup_diensten') {
+  const { data, error } = await adminClient.rpc('cleanup_diensten_duplicates', { batch_size: 5000 });
+  return jsonResponse({ success: !error, result: data, error: error?.message });
+}
+```
+Ook `cleanup_diensten` toevoegen aan de action type en de foutmelding op regel 2495-2496.
 
-### 3. `handleUploadForManualDoc` functie
-- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
-- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
-- Update lokale `documents` state
+### 3. Frontend knop (`src/pages/BendySync.tsx`)
+Nieuwe state: `cleaningUp` (boolean), `cleanupResult` (object|null).
 
-### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
-- Plus icoon, variant outline, opent dialog
+Knop boven de "Requisition Sync Starten" knop in de Requisition Sync card (regel ~1290):
+- Label: "🧹 Cleanup Diensten Duplicaten"
+- Amber/oranje variant (outline met amber styling)
+- Roept `supabase.functions.invoke('bendy-sync', { body: { action: 'cleanup_diensten' } })` aan
+- Toast bij succes/fout
+- Disabled tijdens uitvoering met spinner
+- Na succes: toont resultaat ("X duplicaten verwijderd, index aangemaakt")
 
-### 5. UI: Dialog component (onder de TabsContent of aan het eind)
-- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
-- Na file selectie: toon bestandsnaam + grootte
-- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
-
-### 6. Scenario C Upload knop activeren (regel ~1447)
-- Verwijder `disabled` van de Upload knop
-- onClick: trigger hidden file input → `handleUploadForManualDoc`
-
-### Bestanden die NIET worden aangepast
-- Edge functions, storage config, andere tabs, bendy-sync
+### Niet aangeraakt
+- Andere sync functies, logProgress debug code, andere pagina's, database schema buiten de nieuwe functie
 
