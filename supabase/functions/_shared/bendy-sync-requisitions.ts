@@ -355,6 +355,8 @@ export async function syncRequisitions(
 
   // 5D: Verzamel toewijzingen
   const toewijzingenToInsert: any[] = [];
+  const noMatchDiagSamples: any[] = [];
+  const noMatchUniqueUsers = new Set<string>();
   let noMatchSamples = 0;
   for (const req of allRecords) {
     const bendyId = String(req.id);
@@ -367,6 +369,10 @@ export async function syncRequisitions(
     const userBendyId = fucMap.get(String(fucId));
     if (!userBendyId) {
       twStats.noMatch++;
+      noMatchUniqueUsers.add(String(fucId));
+      if (noMatchDiagSamples.length < 20) {
+        noMatchDiagSamples.push({ bendy_user_id: String(fucId), requisition_id: bendyId, reason: 'fucMap_missing' });
+      }
       if (noMatchSamples < 3) {
         logInfo(FUNCTION_NAME, `No-match sample: fucId=${fucId}, userBendyId=undefined (niet in fucMap)`);
         noMatchSamples++;
@@ -377,6 +383,10 @@ export async function syncRequisitions(
     const prof = profMap.get(userBendyId);
     if (!prof) {
       twStats.noMatch++;
+      noMatchUniqueUsers.add(String(fucId));
+      if (noMatchDiagSamples.length < 20) {
+        noMatchDiagSamples.push({ bendy_user_id: String(fucId), requisition_id: bendyId, reason: 'profMap_missing', user_bendy_id: userBendyId });
+      }
       if (noMatchSamples < 3) {
         logInfo(FUNCTION_NAME, `No-match sample: fucId=${fucId}, userBendyId=${userBendyId}, prof niet gevonden in profMap`);
         noMatchSamples++;
@@ -466,6 +476,9 @@ export async function syncRequisitions(
             debug_stale_skipped_old: staleStats.skipped_old,
             debug_stale_skipped_status: staleStats.skipped_status,
             ...metadata_fuc,
+            debug_no_match_sample: noMatchDiagSamples,
+            debug_no_match_unique_users: noMatchUniqueUsers.size,
+            debug_no_match_user_ids: [...noMatchUniqueUsers].slice(0, 50),
           },
         })
         .eq('id', syncLogId);
