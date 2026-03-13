@@ -1,22 +1,37 @@
 
 
-# BENDY-REQ-6: Stale cleanup + sublocations filter
+# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
 
-## Wijzigingen
+## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
 
-### 1. Sublocations filter (regel 68-72)
-Voeg `.eq('is_active', true)` toe aan de sublocations query, vóór de `.not('bendy_id', 'is', null)`.
+### 1. Nieuwe state variabelen (na regel 193)
+- `showAddDocDialog` (boolean)
+- `addDocLoading` (boolean)
+- `addDocForm` object: `{ name, category, type, expiryDate, file }`
 
-### 2. Stale diensten cleanup (na regel 430)
-Nieuw blok na de toewijzingen batch insert: itereer over `dienstMap`, vergelijk met `seenBendyIds` (alle bendy IDs uit `allRecords`). Markeer diensten als 'geannuleerd' als:
-- Niet meer in Bendy (niet in `seenBendyIds`)
-- Datum >= gisteren (geen historische cleanup)
-- Status niet al 'geannuleerd' of 'voltooid'
+### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
+- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
+- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
+- Haal `user` op via `supabase.auth.getUser()`
+- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
 
-### 3. Metadata uitbreiden (regel 440-451)
-Voeg `debug_stale_marked`, `debug_stale_skipped_old`, `debug_stale_skipped_status` toe aan de metadata.
+### 3. `handleUploadForManualDoc` functie
+- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
+- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
+- Update lokale `documents` state
 
-Pre-fetch select (regel 60) bevat al `status` en `datum` — geen wijziging nodig.
+### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
+- Plus icoon, variant outline, opent dialog
 
-Deploy edge function na implementatie.
+### 5. UI: Dialog component (onder de TabsContent of aan het eind)
+- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
+- Na file selectie: toon bestandsnaam + grootte
+- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
+
+### 6. Scenario C Upload knop activeren (regel ~1447)
+- Verwijder `disabled` van de Upload knop
+- onClick: trigger hidden file input → `handleUploadForManualDoc`
+
+### Bestanden die NIET worden aangepast
+- Edge functions, storage config, andere tabs, bendy-sync
 
