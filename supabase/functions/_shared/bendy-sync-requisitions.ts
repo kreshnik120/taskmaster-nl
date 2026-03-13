@@ -68,6 +68,7 @@ export async function syncRequisitions(
   const { data: sublocations } = await adminClient
     .from('client_sublocations')
     .select('id, bendy_id')
+    .eq('is_active', true)
     .not('bendy_id', 'is', null)
     .limit(5000);
 
