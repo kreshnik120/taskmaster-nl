@@ -476,6 +476,9 @@ export async function syncRequisitions(
             debug_stale_skipped_old: staleStats.skipped_old,
             debug_stale_skipped_status: staleStats.skipped_status,
             ...metadata_fuc,
+            debug_no_match_sample: noMatchDiagSamples,
+            debug_no_match_unique_users: noMatchUniqueUsers.size,
+            debug_no_match_user_ids: [...noMatchUniqueUsers].slice(0, 50),
           },
         })
         .eq('id', syncLogId);
