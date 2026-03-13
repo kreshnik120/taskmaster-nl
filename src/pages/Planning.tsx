@@ -230,6 +230,14 @@ const Planning = () => {
               Ingepland
             </Button>
             <Button
+              variant={showGeannuleerd ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-[11px]"
+              onClick={() => setShowGeannuleerd(!showGeannuleerd)}
+            >
+              Geannuleerd
+            </Button>
+            <Button
               variant={compact ? "default" : "outline"}
               size="sm"
               className="h-7 text-[11px]"
