@@ -59,10 +59,11 @@ export function PlanningMaandKalender({
         {days.map((day) => {
           const dateKey = format(day, "yyyy-MM-dd");
           const dagDiensten = dienstenPerDag.get(dateKey) || [];
-          const { open, ingepland } = splitByStatus(dagDiensten);
+          const { open, ingepland, geannuleerd } = splitByStatus(dagDiensten);
           const visibleDiensten = [
             ...(showOpen ? open : []),
             ...(showIngepland ? ingepland : []),
+            ...(showGeannuleerd ? geannuleerd : []),
           ].sort((a, b) => a.start_tijd.localeCompare(b.start_tijd));
           const inMonth = isSameMonth(day, currentMonth);
           const today = isToday(day);

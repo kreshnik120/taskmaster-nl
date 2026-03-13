@@ -153,6 +153,29 @@ export function PlanningWeekKalender({
           </div>
         </section>
       )}
+
+      {showGeannuleerd && (
+        <section>
+          <h3 className="text-sm font-semibold text-foreground mb-2">
+            Geannuleerde diensten{" "}
+            <span className="text-muted-foreground font-normal">({geannuleerd.length})</span>
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 opacity-60">
+            {dagen.map((dag) => (
+              <DagKolom
+                key={dag.toISOString()}
+                dag={dag}
+                diensten={geannuleerd}
+                compact={compact}
+                onDienstClick={onDienstClick}
+                onEdit={onEdit}
+                onCopy={onCopy}
+                onDelete={onDelete}
+              />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
