@@ -25,6 +25,7 @@ export function PlanningMaandKalender({
   weekStart,
   showOpen,
   showIngepland,
+  showGeannuleerd,
   onDienstClick,
 }: PlanningMaandKalenderProps) {
   const currentMonth = startOfMonth(parseISO(weekStart));
