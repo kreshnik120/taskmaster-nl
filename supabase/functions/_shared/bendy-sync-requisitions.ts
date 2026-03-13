@@ -414,12 +414,14 @@ export async function syncRequisitions(
     const chunk = toewijzingenToInsert.slice(i, i + TW_INSERT_CHUNK);
     const { error } = await adminClient.from('dienst_toewijzingen').insert(chunk);
     if (error) {
-      for (const tw of chunk) {
-        const { error: singleError } = await adminClient.from('dienst_toewijzingen').insert(tw);
-        if (singleError) {
-          twStats.overlapError++;
-        } else {
+      const results = await Promise.allSettled(
+        chunk.map(tw => adminClient.from('dienst_toewijzingen').insert(tw))
+      );
+      for (const r of results) {
+        if (r.status === 'fulfilled' && !r.value.error) {
           twStats.created++;
+        } else {
+          twStats.overlapError++;
         }
       }
     } else {
