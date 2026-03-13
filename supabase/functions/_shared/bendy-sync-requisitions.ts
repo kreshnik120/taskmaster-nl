@@ -355,6 +355,8 @@ export async function syncRequisitions(
 
   // 5D: Verzamel toewijzingen
   const toewijzingenToInsert: any[] = [];
+  const noMatchDiagSamples: any[] = [];
+  const noMatchUniqueUsers = new Set<string>();
   let noMatchSamples = 0;
   for (const req of allRecords) {
     const bendyId = String(req.id);
