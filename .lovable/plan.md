@@ -1,37 +1,36 @@
 
 
-# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
+# BENDY-REQ-8A: No-match diagnostiek toevoegen
 
-## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
+## Wijzigingen
 
-### 1. Nieuwe state variabelen (na regel 193)
-- `showAddDocDialog` (boolean)
-- `addDocLoading` (boolean)
-- `addDocForm` object: `{ name, category, type, expiryDate, file }`
+**Bestand:** `supabase/functions/_shared/bendy-sync-requisitions.ts`
 
-### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
-- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
-- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
-- Haal `user` op via `supabase.auth.getUser()`
-- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
+### 1. Diagnostiek collectors initialiseren (voor de 5D loop, ~regel 357)
 
-### 3. `handleUploadForManualDoc` functie
-- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
-- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
-- Update lokale `documents` state
+```typescript
+const noMatchSamples: any[] = [];
+const noMatchUniqueUsers = new Set<string>();
+```
 
-### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
-- Plus icoon, variant outline, opent dialog
+### 2. No-match data verzamelen (regels 368-384)
 
-### 5. UI: Dialog component (onder de TabsContent of aan het eind)
-- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
-- Na file selectie: toon bestandsnaam + grootte
-- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
+Bij beide no-match paden (`userBendyId` niet gevonden in fucMap, en `prof` niet gevonden in profMap):
+- Voeg de unieke user ID toe aan `noMatchUniqueUsers`
+- Voeg een sample toe aan `noMatchSamples` (max 20) met:
+  - `bendy_user_id`: het fucId
+  - `requisition_id`: bendyId
+  - `reason`: welk pad faalde (fucMap of profMap)
+  - `user_bendy_id`: indien beschikbaar
 
-### 6. Scenario C Upload knop activeren (regel ~1447)
-- Verwijder `disabled` van de Upload knop
-- onClick: trigger hidden file input → `handleUploadForManualDoc`
+### 3. Metadata uitbreiden (regels 456-468)
 
-### Bestanden die NIET worden aangepast
-- Edge functions, storage config, andere tabs, bendy-sync
+Voeg toe aan het metadata object:
+- `debug_no_match_sample`: `noMatchSamples` (max 20)
+- `debug_no_match_unique_users`: `noMatchUniqueUsers.size`
+- `debug_no_match_user_ids`: `[...noMatchUniqueUsers].slice(0, 50)`
+
+### 4. Deploy edge function
+
+Geen wijzigingen aan matching-logica. Puur diagnostiek.
 
