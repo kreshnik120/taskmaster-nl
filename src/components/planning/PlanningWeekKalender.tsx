@@ -11,6 +11,7 @@ interface PlanningWeekKalenderProps {
   weekStart: string;
   showOpen: boolean;
   showIngepland: boolean;
+  showGeannuleerd: boolean;
   compact: boolean;
   onDienstClick?: (dienst: DienstData) => void;
   onEdit?: (dienst: DienstData) => void;
