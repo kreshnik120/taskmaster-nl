@@ -10,6 +10,7 @@ interface PlanningMaandKalenderProps {
   weekStart: string;
   showOpen: boolean;
   showIngepland: boolean;
+  showGeannuleerd: boolean;
   compact: boolean;
   onDienstClick: (dienst: DienstData) => void;
   onEdit?: (dienst: DienstData) => void;
@@ -24,6 +25,7 @@ export function PlanningMaandKalender({
   weekStart,
   showOpen,
   showIngepland,
+  showGeannuleerd,
   onDienstClick,
 }: PlanningMaandKalenderProps) {
   const currentMonth = startOfMonth(parseISO(weekStart));
@@ -57,10 +59,11 @@ export function PlanningMaandKalender({
         {days.map((day) => {
           const dateKey = format(day, "yyyy-MM-dd");
           const dagDiensten = dienstenPerDag.get(dateKey) || [];
-          const { open, ingepland } = splitByStatus(dagDiensten);
+          const { open, ingepland, geannuleerd } = splitByStatus(dagDiensten);
           const visibleDiensten = [
             ...(showOpen ? open : []),
             ...(showIngepland ? ingepland : []),
+            ...(showGeannuleerd ? geannuleerd : []),
           ].sort((a, b) => a.start_tijd.localeCompare(b.start_tijd));
           const inMonth = isSameMonth(day, currentMonth);
           const today = isToday(day);
@@ -102,6 +105,7 @@ export function PlanningMaandKalender({
                       dienst.status === "deels_bezet" && "bg-orange-50/60 dark:bg-orange-900/20 text-orange-800 dark:text-orange-300",
                       dienst.status === "volledig_bezet" && "bg-emerald-50/60 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-300",
                       dienst.status === "voltooid" && "bg-blue-50/60 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300",
+                      dienst.status === "geannuleerd" && "bg-gray-100/60 dark:bg-gray-800/40 text-muted-foreground line-through",
                       dienst.kleur && "border-l-2"
                     )}
                     style={dienst.kleur ? { borderLeftColor: dienst.kleur } : undefined}

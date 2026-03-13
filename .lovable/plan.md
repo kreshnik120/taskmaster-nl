@@ -1,51 +1,37 @@
 
 
-# BENDY-REQ-7C: Fix geannuleerde diensten niet zichtbaar
+# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
 
-## Oorzaak
+## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
 
-De functie `splitByStatus()` in `useDienstenPlanning.ts` splitst diensten in twee groepen:
-- **open**: `["open", "deels_bezet", "concept"]`
-- **ingepland**: `["volledig_bezet", "voltooid"]`
+### 1. Nieuwe state variabelen (na regel 193)
+- `showAddDocDialog` (boolean)
+- `addDocLoading` (boolean)
+- `addDocForm` object: `{ name, category, type, expiryDate, file }`
 
-Status `geannuleerd` valt in **geen van beide** groepen. De kalenderviews (week + maand) renderen alleen `open` en `ingepland`, dus geannuleerde diensten verdwijnen volledig.
+### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
+- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
+- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
+- Haal `user` op via `supabase.auth.getUser()`
+- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
 
-## Wijzigingen
+### 3. `handleUploadForManualDoc` functie
+- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
+- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
+- Update lokale `documents` state
 
-### 1. `splitByStatus` uitbreiden (`useDienstenPlanning.ts`, regels 104-112)
+### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
+- Plus icoon, variant outline, opent dialog
 
-Voeg een derde categorie `geannuleerd` toe:
+### 5. UI: Dialog component (onder de TabsContent of aan het eind)
+- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
+- Na file selectie: toon bestandsnaam + grootte
+- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
 
-```typescript
-export function splitByStatus(diensten: DienstData[]) {
-  return {
-    open: diensten.filter((d) =>
-      ["open", "deels_bezet", "concept"].includes(d.status)
-    ),
-    ingepland: diensten.filter((d) =>
-      ["volledig_bezet", "voltooid"].includes(d.status)
-    ),
-    geannuleerd: diensten.filter((d) => d.status === "geannuleerd"),
-  };
-}
-```
+### 6. Scenario C Upload knop activeren (regel ~1447)
+- Verwijder `disabled` van de Upload knop
+- onClick: trigger hidden file input → `handleUploadForManualDoc`
 
-### 2. `PlanningWeekKalender.tsx` — geannuleerde diensten tonen
-
-- Destructure `geannuleerd` uit `splitByStatus`
-- Voeg een derde sectie toe (na ingepland) die alleen toont als het statusfilter op `geannuleerd` staat
-- Diensten tonen met visuele indicator (doorgestreept of grijze stijl)
-
-### 3. `PlanningMaandKalender.tsx` — geannuleerde diensten tonen
-
-- Voeg `geannuleerd` toe aan `visibleDiensten` wanneer het statusfilter actief is
-- Gebruik dezelfde visuele stijl als weekview
-
-### 4. Props doorvoeren
-
-Check welke parent component `showOpen` / `showIngepland` doorgeeft en voeg `showGeannuleerd` toe, gebaseerd op `filters.status === 'geannuleerd'`.
-
-### Verificatie
-- Filter op "Geannuleerd" → 109 diensten zichtbaar
-- Zonder filter → geannuleerde diensten verborgen (correct gedrag)
+### Bestanden die NIET worden aangepast
+- Edge functions, storage config, andere tabs, bendy-sync
 

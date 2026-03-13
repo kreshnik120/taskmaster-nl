@@ -11,6 +11,7 @@ interface PlanningWeekKalenderProps {
   weekStart: string;
   showOpen: boolean;
   showIngepland: boolean;
+  showGeannuleerd: boolean;
   compact: boolean;
   onDienstClick?: (dienst: DienstData) => void;
   onEdit?: (dienst: DienstData) => void;
@@ -86,6 +87,7 @@ export function PlanningWeekKalender({
   weekStart,
   showOpen,
   showIngepland,
+  showGeannuleerd,
   compact,
   onDienstClick,
   onEdit,
@@ -95,7 +97,7 @@ export function PlanningWeekKalender({
   const start = parseISO(weekStart);
   const dagen = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(start, i)), [weekStart]);
 
-  const { open, ingepland } = useMemo(() => splitByStatus(diensten), [diensten]);
+  const { open, ingepland, geannuleerd } = useMemo(() => splitByStatus(diensten), [diensten]);
 
   const ingeplandUren = useMemo(
     () => ingepland.reduce((s, d) => s + (d.netto_uren || 0), 0),
@@ -141,6 +143,29 @@ export function PlanningWeekKalender({
                 key={dag.toISOString()}
                 dag={dag}
                 diensten={ingepland}
+                compact={compact}
+                onDienstClick={onDienstClick}
+                onEdit={onEdit}
+                onCopy={onCopy}
+                onDelete={onDelete}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {showGeannuleerd && (
+        <section>
+          <h3 className="text-sm font-semibold text-foreground mb-2">
+            Geannuleerde diensten{" "}
+            <span className="text-muted-foreground font-normal">({geannuleerd.length})</span>
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 opacity-60">
+            {dagen.map((dag) => (
+              <DagKolom
+                key={dag.toISOString()}
+                dag={dag}
+                diensten={geannuleerd}
                 compact={compact}
                 onDienstClick={onDienstClick}
                 onEdit={onEdit}

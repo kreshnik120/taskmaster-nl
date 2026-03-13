@@ -48,6 +48,7 @@ const Planning = () => {
 
   const [showOpen, setShowOpen] = useState(true);
   const [showIngepland, setShowIngepland] = useState(true);
+  const [showGeannuleerd, setShowGeannuleerd] = useState(false);
   const [compact, setCompact] = useState(true);
   const [nieuweDienstOpen, setNieuweDienstOpen] = useState(false);
   const [selectedDienst, setSelectedDienst] = useState<DienstData | null>(null);
@@ -229,6 +230,14 @@ const Planning = () => {
               Ingepland
             </Button>
             <Button
+              variant={showGeannuleerd ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-[11px]"
+              onClick={() => setShowGeannuleerd(!showGeannuleerd)}
+            >
+              Geannuleerd
+            </Button>
+            <Button
               variant={compact ? "default" : "outline"}
               size="sm"
               className="h-7 text-[11px]"
@@ -268,6 +277,7 @@ const Planning = () => {
               weekStart={weekStart}
               showOpen={showOpen}
               showIngepland={showIngepland}
+              showGeannuleerd={showGeannuleerd}
               compact={compact}
               onDienstClick={handleDienstClick}
               onEdit={handleEditDienst}
@@ -280,6 +290,7 @@ const Planning = () => {
               weekStart={weekStart}
               showOpen={showOpen}
               showIngepland={showIngepland}
+              showGeannuleerd={showGeannuleerd}
               compact={compact}
               onDienstClick={handleDienstClick}
               onEdit={handleEditDienst}
