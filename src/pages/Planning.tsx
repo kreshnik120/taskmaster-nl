@@ -48,6 +48,7 @@ const Planning = () => {
 
   const [showOpen, setShowOpen] = useState(true);
   const [showIngepland, setShowIngepland] = useState(true);
+  const [showGeannuleerd, setShowGeannuleerd] = useState(false);
   const [compact, setCompact] = useState(true);
   const [nieuweDienstOpen, setNieuweDienstOpen] = useState(false);
   const [selectedDienst, setSelectedDienst] = useState<DienstData | null>(null);

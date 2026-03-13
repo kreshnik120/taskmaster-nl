@@ -109,6 +109,7 @@ export function splitByStatus(diensten: DienstData[]) {
     ingepland: diensten.filter((d) =>
       ["volledig_bezet", "voltooid"].includes(d.status)
     ),
+    geannuleerd: diensten.filter((d) => d.status === "geannuleerd"),
   };
 }
 
