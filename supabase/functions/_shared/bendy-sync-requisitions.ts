@@ -42,15 +42,6 @@ export async function syncRequisitions(
 
   await logProgress('1-FETCH', { open: openRecords.length, assigned: assignedRecords.length, total: allRecords.length });
 
-  // ══ DIAGNOSTIC data (behouden in metadata, geen logging meer) ══
-  const diagData: Record<string, any> = {};
-  diagData.debug_diag_included_count = (assignedResult.included || []).length;
-  diagData.debug_diag_included_types = [...new Set((assignedResult.included || []).map((i: any) => i.type))];
-  const sampleAssigned = assignedRecords[0];
-  if (sampleAssigned) {
-    diagData.debug_diag_assigned_rel_keys = Object.keys(sampleAssigned.relationships || {});
-    diagData.debug_diag_fuc_data_sample = sampleAssigned.relationships?.flex_user_company?.data;
-  }
 
   if (allRecords.length === 0) return result;
 
@@ -475,7 +466,6 @@ export async function syncRequisitions(
             debug_stale_skipped_old: staleStats.skipped_old,
             debug_stale_skipped_status: staleStats.skipped_status,
             ...metadata_fuc,
-            ...diagData,
           },
         })
         .eq('id', syncLogId);
