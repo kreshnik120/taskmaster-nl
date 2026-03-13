@@ -1,37 +1,69 @@
 
 
-# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
+# BENDY-REQ-5B-FIX-3: flex_user_companies endpoint bestaat niet (404)
 
-## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
+## Root Cause Gevonden
 
-### 1. Nieuwe state variabelen (na regel 193)
-- `showAddDocDialog` (boolean)
-- `addDocLoading` (boolean)
-- `addDocForm` object: `{ name, category, type, expiryDate, file }`
+De edge function logs tonen het probleem:
 
-### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
-- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
-- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
-- Haal `user` op via `supabase.auth.getUser()`
-- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
+```text
+WARNING: Bendy API 404: {"status":404,"error":"Not Found"}
+```
 
-### 3. `handleUploadForManualDoc` functie
-- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
-- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
-- Update lokale `documents` state
+**`/api/v2/flex_user_companies` bestaat niet als Bendy API endpoint.** Daarom is fucMap altijd 0.
 
-### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
-- Plus icoon, variant outline, opent dialog
+De fallback via `bendy_raw_cache` werkt ook niet omdat users geen `flex_user_companies` relatie-data in hun raw_data hebben.
 
-### 5. UI: Dialog component (onder de TabsContent of aan het eind)
-- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
-- Na file selectie: toon bestandsnaam + grootte
-- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
+## Analyse: Wat we WEL weten
 
-### 6. Scenario C Upload knop activeren (regel ~1447)
-- Verwijder `disabled` van de Upload knop
-- onClick: trigger hidden file input → `handleUploadForManualDoc`
+- Assigned requisitions hebben een `flex_user_company` relationship met een ID (60 unieke IDs)
+- No-match samples tonen: `fucId=362965`, `fucId=387130`, `fucId=349577`
+- De Bendy API heeft `/api/v2/users` (die werkt) met `include=company`
+- Users worden gesynchroniseerd naar `professionals` met `bendy_id`
 
-### Bestanden die NIET worden aangepast
-- Edge functions, storage config, andere tabs, bendy-sync
+## Nieuwe Strategie: Reverse lookup via users
+
+In plaats van flex_user_companies apart op te halen, bouwen we de mapping **omgekeerd**:
+
+1. Users in Bendy hebben een `company` relatie (we fetchen al `include=company`)
+2. Een flex_user_company koppelt een user aan een company
+3. We kunnen de mapping bouwen vanuit de `bendy_raw_cache` users die WEL `company` data hebben
+
+**Maar**: de flex_user_company ID ≠ company ID. Het is een koppeltabel-record.
+
+## Alternatief: Fetch individuele flex_user_company records
+
+De Bendy API heeft mogelijk wel `/api/v2/flex_user_companies/{id}` (individueel). We kunnen de 60 unieke IDs individueel ophalen.
+
+## Aanbevolen aanpak
+
+### Wijziging 1: Probeer individuele FUC fetch (`bendy-sync/index.ts`)
+
+Vervang de bulk `/api/v2/flex_user_companies` fetch door individuele fetches voor de 60 unieke IDs:
+
+```text
+for each fucId in fucIds (max 60):
+  GET /api/v2/flex_user_companies/{fucId}?include=user
+  → extract user relationship → fucMap.set(fucId, userId)
+```
+
+Met rate limiting (max 5 parallel) en error handling per request.
+
+### Wijziging 2: Fallback — voeg `include=flex_user_company` terug op assigned
+
+Als individuele fetch ook faalt, probeer de assigned fetch opnieuw MET `include=flex_user_company` en log de volledige included array structuur voor diagnose.
+
+### Wijziging 3: Verwijder duplicate code blokken
+
+De FIX-2 edit heeft duplicate "Optie A" en "Optie B" blokken achtergelaten (regels 1968-1988 EN 2015-2035). Opruimen.
+
+### Wijziging 4: Debug metadata uitbreiden
+
+Voeg toe aan metadata:
+- `debug_fuc_api_error`: de 404 error message
+- `debug_fuc_individual_success`: hoeveel individuele fetches slaagden
+- `debug_fuc_individual_failed`: hoeveel faalden
+
+### Niet aanraken
+- Overlap trigger, cleanup, frontend, database schema, andere syncs
 
