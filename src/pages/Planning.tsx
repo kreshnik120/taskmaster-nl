@@ -290,6 +290,7 @@ const Planning = () => {
               weekStart={weekStart}
               showOpen={showOpen}
               showIngepland={showIngepland}
+              showGeannuleerd={showGeannuleerd}
               compact={compact}
               onDienstClick={handleDienstClick}
               onEdit={handleEditDienst}
