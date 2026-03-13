@@ -288,12 +288,21 @@ export async function syncRequisitions(
 
   // Build fucMap: company ID → user bendy_id
   if (fucIds.size > 0) {
-    const { data: cachedUsers } = await adminClient
-      .from('bendy_raw_cache')
-      .select('bendy_id, raw_data')
-      .eq('org_id', orgId)
-      .eq('entity_type', 'users')
-      .limit(50000);
+    const cachedUsers: any[] = [];
+    let cacheOffset = 0;
+    const CACHE_PAGE = 1000;
+    while (true) {
+      const { data: chunk } = await adminClient
+        .from('bendy_raw_cache')
+        .select('bendy_id, raw_data')
+        .eq('org_id', orgId)
+        .eq('entity_type', 'users')
+        .range(cacheOffset, cacheOffset + CACHE_PAGE - 1);
+      if (!chunk || chunk.length === 0) break;
+      cachedUsers.push(...chunk);
+      if (chunk.length < CACHE_PAGE) break;
+      cacheOffset += CACHE_PAGE;
+    }
 
     let cacheChecked = 0, cacheWithCompany = 0, duplicateCompanies = 0;
     for (const cu of (cachedUsers || [])) {
