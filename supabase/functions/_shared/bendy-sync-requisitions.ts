@@ -42,45 +42,15 @@ export async function syncRequisitions(
 
   await logProgress('1-FETCH', { open: openRecords.length, assigned: assignedRecords.length, total: allRecords.length });
 
-  // ══ DIAGNOSTIC: Wat zit er in de assigned response? ══
+  // ══ DIAGNOSTIC data (behouden in metadata, geen logging meer) ══
   const diagData: Record<string, any> = {};
-
-  const includedTypes = [...new Set((assignedResult.included || []).map((i: any) => i.type))];
   diagData.debug_diag_included_count = (assignedResult.included || []).length;
-  diagData.debug_diag_included_types = includedTypes;
-  logInfo(FUNCTION_NAME, `DIAG: assigned included count=${diagData.debug_diag_included_count}, types=${JSON.stringify(includedTypes)}`);
-
-  if (assignedResult.included && assignedResult.included.length > 0) {
-    const sample = assignedResult.included[0];
-    logInfo(FUNCTION_NAME, `DIAG: included sample type=${sample.type}, id=${sample.id}, rel_keys=${JSON.stringify(Object.keys(sample.relationships || {}))}, attr_keys=${JSON.stringify(Object.keys(sample.attributes || {}))}`);
-  }
-
+  diagData.debug_diag_included_types = [...new Set((assignedResult.included || []).map((i: any) => i.type))];
   const sampleAssigned = assignedRecords[0];
   if (sampleAssigned) {
-    const relKeys = Object.keys(sampleAssigned.relationships || {});
-    const fucData = sampleAssigned.relationships?.flex_user_company?.data;
-    diagData.debug_diag_assigned_rel_keys = relKeys;
-    diagData.debug_diag_fuc_data_sample = fucData;
-    logInfo(FUNCTION_NAME, `DIAG: assigned req relationship_keys=${JSON.stringify(relKeys)}, fuc_data=${JSON.stringify(fucData)}`);
-    logInfo(FUNCTION_NAME, `DIAG: assigned req attribute_keys=${JSON.stringify(Object.keys(sampleAssigned.attributes || {}))}`);
+    diagData.debug_diag_assigned_rel_keys = Object.keys(sampleAssigned.relationships || {});
+    diagData.debug_diag_fuc_data_sample = sampleAssigned.relationships?.flex_user_company?.data;
   }
-
-  {
-    const { data: sampleUsers } = await adminClient
-      .from('bendy_raw_cache')
-      .select('bendy_id, raw_data')
-      .eq('org_id', orgId)
-      .eq('entity_type', 'users')
-      .limit(1);
-    if (sampleUsers?.[0]) {
-      const userRaw = sampleUsers[0].raw_data as any;
-      const userRelKeys = Object.keys(userRaw?.relationships || {});
-      diagData.debug_diag_user_rel_keys = userRelKeys;
-      logInfo(FUNCTION_NAME, `DIAG: cached user bendy_id=${sampleUsers[0].bendy_id}, relationship_keys=${JSON.stringify(userRelKeys)}`);
-    }
-  }
-
-  await logProgress('1B-DIAG', diagData);
 
   if (allRecords.length === 0) return result;
 
@@ -307,7 +277,7 @@ export async function syncRequisitions(
 
   // 5A: flex_user_company → user bendy_id map (via cache)
   const fucMap = new Map<string, string>();
-  const metadata_fuc: any = { debug_fuc_map_source: 'none', debug_cache_users_checked: 0, debug_cache_users_with_fuc: 0 };
+  const metadata_fuc: any = { debug_fuc_map_source: 'none', debug_cache_users_checked: 0, debug_cache_users_with_company: 0, debug_duplicate_companies: 0 };
 
   const fucIds = new Set<string>();
   for (const req of allRecords) {
@@ -316,7 +286,7 @@ export async function syncRequisitions(
   }
   logInfo(FUNCTION_NAME, `${fucIds.size} unieke flex_user_company IDs gevonden in requisitions`);
 
-  // Build fucMap from cached user data (users synced with flex_user_companies include)
+  // Build fucMap: company ID → user bendy_id
   if (fucIds.size > 0) {
     const { data: cachedUsers } = await adminClient
       .from('bendy_raw_cache')
@@ -325,22 +295,21 @@ export async function syncRequisitions(
       .eq('entity_type', 'users')
       .limit(50000);
 
-    let cacheChecked = 0;
-    let cacheWithFuc = 0;
+    let cacheChecked = 0, cacheWithCompany = 0, duplicateCompanies = 0;
     for (const cu of (cachedUsers || [])) {
       cacheChecked++;
-      const fucs = (cu.raw_data as any)?.relationships?.flex_user_companies?.data;
-      if (Array.isArray(fucs) && fucs.length > 0) {
-        cacheWithFuc++;
-        for (const fuc of fucs) {
-          if (fuc.id) fucMap.set(String(fuc.id), String(cu.bendy_id));
-        }
+      const companyId = (cu.raw_data as any)?.relationships?.company?.data?.id;
+      if (companyId) {
+        cacheWithCompany++;
+        if (fucMap.has(String(companyId))) duplicateCompanies++;
+        fucMap.set(String(companyId), String(cu.bendy_id));
       }
     }
-    metadata_fuc.debug_fuc_map_source = fucMap.size > 0 ? 'cache' : 'none';
+    metadata_fuc.debug_fuc_map_source = fucMap.size > 0 ? 'company_match' : 'none';
     metadata_fuc.debug_cache_users_checked = cacheChecked;
-    metadata_fuc.debug_cache_users_with_fuc = cacheWithFuc;
-    logInfo(FUNCTION_NAME, `FUC cache lookup: ${cacheChecked} users checked, ${cacheWithFuc} with FUC data, fucMap: ${fucMap.size}`);
+    metadata_fuc.debug_cache_users_with_company = cacheWithCompany;
+    metadata_fuc.debug_duplicate_companies = duplicateCompanies;
+    logInfo(FUNCTION_NAME, `Company match: ${cacheChecked} users checked, ${cacheWithCompany} with company, fucMap: ${fucMap.size}`);
   }
 
   await logProgress('2B-FUC-MAP', { fucIdsFromReqs: fucIds.size, fucMapSize: fucMap.size, ...metadata_fuc });
