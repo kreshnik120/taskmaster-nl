@@ -27,7 +27,7 @@ export async function syncUsers(
   const result: SyncResult = { fetched: 0, created: 0, updated: 0, skipped: 0, failed: 0, errors: [] };
   logInfo(FUNCTION_NAME, `Professional sync gestart voor ${tenant}`);
 
-  const { records: bendyUsers, included: bendyIncluded } = await fetchAllBendyRecords(tenant, '/api/v2/users', { include: 'groups,company,flex_user_companies' });
+  const { records: bendyUsers, included: bendyIncluded } = await fetchAllBendyRecords(tenant, '/api/v2/users', { include: 'groups,company' });
   result.fetched = bendyUsers.length;
   logInfo(FUNCTION_NAME, `${bendyUsers.length} Bendy users opgehaald`);
   if (bendyUsers.length === 0) return result;
