@@ -42,45 +42,15 @@ export async function syncRequisitions(
 
   await logProgress('1-FETCH', { open: openRecords.length, assigned: assignedRecords.length, total: allRecords.length });
 
-  // ══ DIAGNOSTIC: Wat zit er in de assigned response? ══
+  // ══ DIAGNOSTIC data (behouden in metadata, geen logging meer) ══
   const diagData: Record<string, any> = {};
-
-  const includedTypes = [...new Set((assignedResult.included || []).map((i: any) => i.type))];
   diagData.debug_diag_included_count = (assignedResult.included || []).length;
-  diagData.debug_diag_included_types = includedTypes;
-  logInfo(FUNCTION_NAME, `DIAG: assigned included count=${diagData.debug_diag_included_count}, types=${JSON.stringify(includedTypes)}`);
-
-  if (assignedResult.included && assignedResult.included.length > 0) {
-    const sample = assignedResult.included[0];
-    logInfo(FUNCTION_NAME, `DIAG: included sample type=${sample.type}, id=${sample.id}, rel_keys=${JSON.stringify(Object.keys(sample.relationships || {}))}, attr_keys=${JSON.stringify(Object.keys(sample.attributes || {}))}`);
-  }
-
+  diagData.debug_diag_included_types = [...new Set((assignedResult.included || []).map((i: any) => i.type))];
   const sampleAssigned = assignedRecords[0];
   if (sampleAssigned) {
-    const relKeys = Object.keys(sampleAssigned.relationships || {});
-    const fucData = sampleAssigned.relationships?.flex_user_company?.data;
-    diagData.debug_diag_assigned_rel_keys = relKeys;
-    diagData.debug_diag_fuc_data_sample = fucData;
-    logInfo(FUNCTION_NAME, `DIAG: assigned req relationship_keys=${JSON.stringify(relKeys)}, fuc_data=${JSON.stringify(fucData)}`);
-    logInfo(FUNCTION_NAME, `DIAG: assigned req attribute_keys=${JSON.stringify(Object.keys(sampleAssigned.attributes || {}))}`);
+    diagData.debug_diag_assigned_rel_keys = Object.keys(sampleAssigned.relationships || {});
+    diagData.debug_diag_fuc_data_sample = sampleAssigned.relationships?.flex_user_company?.data;
   }
-
-  {
-    const { data: sampleUsers } = await adminClient
-      .from('bendy_raw_cache')
-      .select('bendy_id, raw_data')
-      .eq('org_id', orgId)
-      .eq('entity_type', 'users')
-      .limit(1);
-    if (sampleUsers?.[0]) {
-      const userRaw = sampleUsers[0].raw_data as any;
-      const userRelKeys = Object.keys(userRaw?.relationships || {});
-      diagData.debug_diag_user_rel_keys = userRelKeys;
-      logInfo(FUNCTION_NAME, `DIAG: cached user bendy_id=${sampleUsers[0].bendy_id}, relationship_keys=${JSON.stringify(userRelKeys)}`);
-    }
-  }
-
-  await logProgress('1B-DIAG', diagData);
 
   if (allRecords.length === 0) return result;
 
