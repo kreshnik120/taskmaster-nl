@@ -361,7 +361,8 @@ export async function syncRequisitions(
   }
   await logProgress('2D-EXISTING-TW', { existingCount: existingToewijzingen.size });
 
-  // 5D: Loop door records en maak toewijzingen
+  // 5D: Verzamel toewijzingen
+  const toewijzingenToInsert: any[] = [];
   let noMatchSamples = 0;
   for (const req of allRecords) {
     const bendyId = String(req.id);
@@ -396,23 +397,35 @@ export async function syncRequisitions(
       twStats.skipped++;
       continue;
     }
+    existingToewijzingen.add(key);
+    toewijzingenToInsert.push({
+      dienst_id: dienst.id,
+      professional_id: prof.id,
+      status: 'bevestigd',
+      positie_nr: 1,
+      toewijzing_notities: `Bendy sync: flex_user_company ${fucId}`,
+    });
+  }
 
-    const { error: twError } = await adminClient
-      .from('dienst_toewijzingen')
-      .insert({
-        dienst_id: dienst.id,
-        professional_id: prof.id,
-        status: 'bevestigd',
-        positie_nr: 1,
-        toewijzing_notities: `Bendy sync: flex_user_company ${fucId}`,
-      });
-
-    if (twError) {
-      twStats.overlapError++;
-      logWarning(FUNCTION_NAME, `Toewijzing fout voor ${prof.name} op dienst ${dienst.id}: ${twError.message}`);
+  // 5E: Batch insert in chunks van 50
+  const TW_INSERT_CHUNK = 50;
+  for (let i = 0; i < toewijzingenToInsert.length; i += TW_INSERT_CHUNK) {
+    const chunk = toewijzingenToInsert.slice(i, i + TW_INSERT_CHUNK);
+    const { error } = await adminClient.from('dienst_toewijzingen').insert(chunk);
+    if (error) {
+      for (const tw of chunk) {
+        const { error: singleError } = await adminClient.from('dienst_toewijzingen').insert(tw);
+        if (singleError) {
+          twStats.overlapError++;
+        } else {
+          twStats.created++;
+        }
+      }
     } else {
-      twStats.created++;
-      existingToewijzingen.add(key);
+      twStats.created += chunk.length;
+    }
+    if (twStats.created > 0 && twStats.created % 500 < TW_INSERT_CHUNK) {
+      await logProgress('5-TW-PROGRESS', { created: twStats.created, total: toewijzingenToInsert.length });
     }
   }
 
