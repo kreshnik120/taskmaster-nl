@@ -466,7 +466,6 @@ export async function syncRequisitions(
             debug_stale_skipped_old: staleStats.skipped_old,
             debug_stale_skipped_status: staleStats.skipped_status,
             ...metadata_fuc,
-            ...diagData,
           },
         })
         .eq('id', syncLogId);
