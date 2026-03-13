@@ -456,6 +456,7 @@ export async function syncRequisitions(
             debug_prof_map_size: profMap.size,
             debug_existing_tw: existingToewijzingen.size,
             ...metadata_fuc,
+            ...diagData,
           },
         })
         .eq('id', syncLogId);
