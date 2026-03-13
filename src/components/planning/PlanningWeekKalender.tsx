@@ -87,6 +87,7 @@ export function PlanningWeekKalender({
   weekStart,
   showOpen,
   showIngepland,
+  showGeannuleerd,
   compact,
   onDienstClick,
   onEdit,
@@ -96,7 +97,7 @@ export function PlanningWeekKalender({
   const start = parseISO(weekStart);
   const dagen = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(start, i)), [weekStart]);
 
-  const { open, ingepland } = useMemo(() => splitByStatus(diensten), [diensten]);
+  const { open, ingepland, geannuleerd } = useMemo(() => splitByStatus(diensten), [diensten]);
 
   const ingeplandUren = useMemo(
     () => ingepland.reduce((s, d) => s + (d.netto_uren || 0), 0),
