@@ -6,7 +6,6 @@ import { logInfo, logWarning } from './core.ts';
 import {
   FUNCTION_NAME,
   fetchAllBendyRecords,
-  fetchBendyApi,
   batchUpsert,
   parallelUpdates,
   type SyncResult,
@@ -266,9 +265,9 @@ export async function syncRequisitions(
   // ═══ STAP 5: Toewijzingen ═══
   const twStats = { created: 0, skipped: 0, noMatch: 0, overlapError: 0 };
 
-  // 5A: flex_user_company → user bendy_id map (individuele fetches)
+  // 5A: flex_user_company → user bendy_id map (via cache)
   const fucMap = new Map<string, string>();
-  let debugFucData: any = {};
+  const metadata_fuc: any = { debug_fuc_map_source: 'none', debug_cache_users_checked: 0, debug_cache_users_with_fuc: 0 };
 
   const fucIds = new Set<string>();
   for (const req of allRecords) {
@@ -277,74 +276,34 @@ export async function syncRequisitions(
   }
   logInfo(FUNCTION_NAME, `${fucIds.size} unieke flex_user_company IDs gevonden in requisitions`);
 
+  // Build fucMap from cached user data (users synced with flex_user_companies include)
   if (fucIds.size > 0) {
-    let fucSuccess = 0;
-    let fucFailed = 0;
-    let fucApiError = '';
-    const fucIdArray = [...fucIds];
-    const BATCH_SIZE = 5;
-
-    for (let i = 0; i < fucIdArray.length; i += BATCH_SIZE) {
-      const batch = fucIdArray.slice(i, i + BATCH_SIZE);
-      const results = await Promise.allSettled(
-        batch.map(async (fucId) => {
-          try {
-            const response = await fetchBendyApi(tenant, `/api/v2/flex_user_companies/${fucId}`, { include: 'user' });
-            const record = response?.data;
-            if (record) {
-              const userId = record.relationships?.user?.data?.id
-                          || record.relationships?.flex_user?.data?.id;
-              if (userId) {
-                fucMap.set(String(fucId), String(userId));
-                return { fucId, userId, status: 'ok' };
-              }
-              return { fucId, status: 'no_user_rel', keys: Object.keys(record.relationships || {}) };
-            }
-            return { fucId, status: 'no_data' };
-          } catch (err: any) {
-            if (!fucApiError) fucApiError = err.message;
-            throw err;
-          }
-        })
-      );
-
-      for (const r of results) {
-        if (r.status === 'fulfilled') fucSuccess++;
-        else fucFailed++;
-      }
-    }
-
-    debugFucData = {
-      debug_fuc_individual_success: fucSuccess,
-      debug_fuc_individual_failed: fucFailed,
-      debug_fuc_api_error: fucApiError || null,
-      debug_fuc_map_size_after_individual: fucMap.size,
-    };
-    logInfo(FUNCTION_NAME, `Individuele FUC fetch: ${fucSuccess} succes, ${fucFailed} gefaald, fucMap: ${fucMap.size}`);
-  }
-
-  // Fallback via bendy_raw_cache
-  if (fucMap.size === 0 && fucIds.size > 0) {
-    logWarning(FUNCTION_NAME, 'flex_user_companies API leverde geen user mappings, probeer cache fallback');
     const { data: cachedUsers } = await adminClient
       .from('bendy_raw_cache')
       .select('bendy_id, raw_data')
       .eq('org_id', orgId)
       .eq('entity_type', 'users')
       .limit(50000);
+
+    let cacheChecked = 0;
+    let cacheWithFuc = 0;
     for (const cu of (cachedUsers || [])) {
-      const raw = cu.raw_data as any;
-      const fucs = raw?.relationships?.flex_user_companies?.data;
-      if (Array.isArray(fucs)) {
+      cacheChecked++;
+      const fucs = (cu.raw_data as any)?.relationships?.flex_user_companies?.data;
+      if (Array.isArray(fucs) && fucs.length > 0) {
+        cacheWithFuc++;
         for (const fuc of fucs) {
           if (fuc.id) fucMap.set(String(fuc.id), String(cu.bendy_id));
         }
       }
     }
-    logInfo(FUNCTION_NAME, `Cache fallback: fucMap ${fucMap.size} mappings`);
+    metadata_fuc.debug_fuc_map_source = fucMap.size > 0 ? 'cache' : 'none';
+    metadata_fuc.debug_cache_users_checked = cacheChecked;
+    metadata_fuc.debug_cache_users_with_fuc = cacheWithFuc;
+    logInfo(FUNCTION_NAME, `FUC cache lookup: ${cacheChecked} users checked, ${cacheWithFuc} with FUC data, fucMap: ${fucMap.size}`);
   }
 
-  await logProgress('2B-FUC-MAP', { fucIdsFromReqs: fucIds.size, fucMapSize: fucMap.size, method: fucMap.size > 0 ? 'api_fetch' : 'none' });
+  await logProgress('2B-FUC-MAP', { fucIdsFromReqs: fucIds.size, fucMapSize: fucMap.size, ...metadata_fuc });
 
   // 5B: professionals bendy_id → professional_id map (chunked fetch)
   let profsWithBendy: any[] = [];
@@ -456,8 +415,7 @@ export async function syncRequisitions(
             debug_fuc_map_size: fucMap.size,
             debug_prof_map_size: profMap.size,
             debug_existing_tw: existingToewijzingen.size,
-            debug_method: fucMap.size > 0 ? 'api_fetch' : 'fallback_or_none',
-            ...debugFucData,
+            ...metadata_fuc,
           },
         })
         .eq('id', syncLogId);
