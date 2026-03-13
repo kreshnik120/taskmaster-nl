@@ -1,31 +1,37 @@
 
 
-# BENDY-REQ-5B-DIAG-2: Diagnostic logging voor assigned requisitions
+# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
 
-## Wijzigingen in `bendy-sync-requisitions.ts`
+## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
 
-### 1. Assigned fetch met include parameter (regel 36)
-Voeg `include: 'flex_user_company'` toe aan de assigned fetch zodat de API eventueel included data meestuurt.
+### 1. Nieuwe state variabelen (na regel 193)
+- `showAddDocDialog` (boolean)
+- `addDocLoading` (boolean)
+- `addDocForm` object: `{ name, category, type, expiryDate, file }`
 
-### 2. Diagnostic logging toevoegen (na regel 43, voor de `if (allRecords.length === 0)` check)
-Voeg een diagnostisch blok toe dat logt:
-- Aantal en types in `assignedResult.included`
-- Sample included item (type, id, relationship keys, attribute keys)
-- Alle relationship keys + fuc_data van eerste assigned requisition
-- Alle attribute keys van eerste assigned requisition
-- Relationship keys van één cached user uit `bendy_raw_cache`
+### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
+- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
+- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
+- Haal `user` op via `supabase.auth.getUser()`
+- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
 
-Sla diagnostische variabelen op in een `diagData` object.
+### 3. `handleUploadForManualDoc` functie
+- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
+- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
+- Update lokale `documents` state
 
-### 3. Metadata uitbreiden (regels 408-419)
-Voeg de diagnostische velden toe aan de metadata write:
-- `debug_diag_included_count`
-- `debug_diag_included_types`
-- `debug_diag_assigned_rel_keys`
-- `debug_diag_user_rel_keys`
-- `debug_diag_fuc_data_sample`
+### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
+- Plus icoon, variant outline, opent dialog
 
-### 4. Deploy edge function
+### 5. UI: Dialog component (onder de TabsContent of aan het eind)
+- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
+- Na file selectie: toon bestandsnaam + grootte
+- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
 
-Geen andere code wordt gewijzigd.
+### 6. Scenario C Upload knop activeren (regel ~1447)
+- Verwijder `disabled` van de Upload knop
+- onClick: trigger hidden file input → `handleUploadForManualDoc`
+
+### Bestanden die NIET worden aangepast
+- Edge functions, storage config, andere tabs, bendy-sync
 
