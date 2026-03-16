@@ -1,34 +1,37 @@
 
 
-# CORS Hardening: openclaw-proxy
+# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
 
-## Wijzigingen in `supabase/functions/openclaw-proxy/index.ts`
+## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
 
-### 1. Vervang `corsHeaders` constante (regels 3-6)
-Vervang door `ALLOWED_ORIGINS` array + `getCorsHeaders(req)` functie die origin valideert en terugvalt op `abcito.io`.
+### 1. Nieuwe state variabelen (na regel 193)
+- `showAddDocDialog` (boolean)
+- `addDocLoading` (boolean)
+- `addDocForm` object: `{ name, category, type, expiryDate, file }`
 
-### 2. Update `jsonResponse` (regels 74-79)
-Voeg optionele `req` parameter toe, gebruik `getCorsHeaders(req)` voor CORS headers.
+### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
+- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
+- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
+- Haal `user` op via `supabase.auth.getUser()`
+- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
 
-### 3. Update OPTIONS handler (regels 82-83)
-Gebruik `getCorsHeaders(req)` in plaats van `corsHeaders`.
+### 3. `handleUploadForManualDoc` functie
+- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
+- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
+- Update lokale `documents` state
 
-### 4. Alle ~50+ `jsonResponse(...)` calls: voeg `req` toe
-Elke handler ontvangt `req` niet direct — ze worden aangeroepen vanuit de `switch` in `Deno.serve`. Twee opties:
+### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
+- Plus icoon, variant outline, opent dialog
 
-**Gekozen aanpak**: Maak `req` beschikbaar voor `jsonResponse` zonder elke call aan te passen — sla `req` op in een closure-variabele zodat `jsonResponse` het automatisch kan gebruiken. Dit voorkomt 50+ individuele wijzigingen.
+### 5. UI: Dialog component (onder de TabsContent of aan het eind)
+- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
+- Na file selectie: toon bestandsnaam + grootte
+- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
 
-Concreet:
-- Verwijder `req` parameter uit `jsonResponse`
-- Gebruik een module-level `let currentRequest: Request` die aan het begin van `Deno.serve` wordt gezet
-- `getCorsHeaders()` leest `currentRequest` automatisch
+### 6. Scenario C Upload knop activeren (regel ~1447)
+- Verwijder `disabled` van de Upload knop
+- onClick: trigger hidden file input → `handleUploadForManualDoc`
 
-Dit is veilig omdat Deno edge functions single-request zijn (geen concurrency binnen één invocation).
-
-### Samenvatting wijzigingen
-1. Regels 3-6: `corsHeaders` → `ALLOWED_ORIGINS` + `getCorsHeaders()`
-2. Regel 74-79: `jsonResponse` gebruikt `getCorsHeaders()` intern
-3. Regel 82-83: OPTIONS handler gebruikt `getCorsHeaders()`
-4. Regel 81: `currentRequest = req` toevoegen aan begin van handler
-5. Geen wijzigingen aan individuele handler functies of jsonResponse calls
+### Bestanden die NIET worden aangepast
+- Edge functions, storage config, andere tabs, bendy-sync
 
