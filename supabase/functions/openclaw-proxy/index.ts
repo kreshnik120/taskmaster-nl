@@ -234,7 +234,7 @@ async function handleLookupSender(supabase: ReturnType<typeof createClient>, bod
     .maybeSingle();
 
   if (contact) {
-    const org = contact.client_organizations as { id: string; name: string } | null;
+    const org = contact.client_organizations as { id: string; name: string; org_id: string } | null;
     return jsonResponse({
       role: "client_contact",
       id: contact.id,
@@ -242,6 +242,7 @@ async function handleLookupSender(supabase: ReturnType<typeof createClient>, bod
       functie: contact.functie,
       organization_id: contact.organization_id,
       organization_name: org?.name ?? null,
+      org_id: org?.org_id ?? null,
     });
   }
 
