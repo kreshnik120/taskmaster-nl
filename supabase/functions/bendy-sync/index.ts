@@ -571,7 +571,7 @@ Deno.serve(async (req) => {
         const bgAdminClient = createAdminClient();
         let result: SyncResult;
         if (capturedAction === 'sync_users') {
-          result = await syncUsers(bgAdminClient, tenant, orgId, syncType);
+          result = await syncUsers(bgAdminClient, tenant, orgId, syncType, capturedLastSyncAt);
         } else if (capturedAction === 'sync_documents') {
           result = await syncDocuments(bgAdminClient, tenant, orgId, syncType);
         } else if (capturedAction === 'sync_requisitions') {
