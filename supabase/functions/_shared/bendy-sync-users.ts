@@ -32,13 +32,31 @@ export async function syncUsers(
   logInfo(FUNCTION_NAME, `${bendyUsers.length} Bendy users opgehaald`);
   if (bendyUsers.length === 0) return result;
 
-  const { data: existingProfessionals } = await adminClient
-    .from('professionals')
-    .select('id, full_name, email, bendy_id, telefoonnummer, status, org_id, voorletters, geboorteplaats, geslacht, bendy_external_id, certificaten, bedrijfsnaam, kvk_nummer, btw_nummer, iban, big_nummer, agb_code, skj_registratie, iban_tenaamstelling, boekhouding_email, bedrijfstelefoon, bendy_username, bendy_mediator_id, bendy_function_type, bendy_created_at, werkvorm, bendy_groepen')
-    .eq('org_id', orgId)
-    .is('deleted_at', null)
-    .limit(5000);
-  const professionals = existingProfessionals || [];
+  const professionals: any[] = [];
+  {
+    const PRO_PAGE = 1000;
+    let offset = 0;
+    while (true) {
+      const { data: chunk } = await adminClient
+        .from('professionals')
+        .select('id, full_name, email, bendy_id, telefoonnummer, status, org_id, voorletters, geboorteplaats, geslacht, geboortedatum, profile_photo_url, bendy_external_id, certificaten, bedrijfsnaam, kvk_nummer, btw_nummer, iban, big_nummer, agb_code, skj_registratie, iban_tenaamstelling, boekhouding_email, bedrijfstelefoon, bendy_username, bendy_mediator_id, bendy_function_type, bendy_created_at, werkvorm, bendy_groepen, functie_niveau')
+        .eq('org_id', orgId)
+        .is('deleted_at', null)
+        .range(offset, offset + PRO_PAGE - 1);
+      if (!chunk || chunk.length === 0) break;
+      professionals.push(...chunk);
+      if (chunk.length < PRO_PAGE) break;
+      offset += PRO_PAGE;
+    }
+    logInfo(FUNCTION_NAME, `${professionals.length} professionals opgehaald via paginatie`);
+  }
+
+  const bendyIdMap = new Map<string, any>();
+  const emailMap = new Map<string, any>();
+  for (const p of professionals) {
+    if (p.bendy_id) bendyIdMap.set(String(p.bendy_id), p);
+    if (p.email) emailMap.set(p.email.trim().toLowerCase(), p);
+  }
 
   const { records: bendyGroups } = await fetchAllBendyRecords(tenant, '/api/v2/groups');
   const groupMap = new Map<string, string>();
@@ -107,19 +125,15 @@ export async function syncUsers(
 
       let matchedPro: any = null;
       let emailSkipped = false;
-      matchedPro = professionals.find((p: any) => p.bendy_id === bendyId);
+      matchedPro = bendyIdMap.get(bendyId) || null;
       if (!matchedPro && attrs.email) {
         const bendyEmail = attrs.email.trim().toLowerCase();
-        const emailPro = professionals.find((p: any) =>
-          p.email && p.email.trim().toLowerCase() === bendyEmail
-        );
+        const emailPro = emailMap.get(bendyEmail) || null;
         if (emailPro) {
           if (!emailPro.bendy_id) {
-            // Stap 2a: email match, geen bendy_id → koppel
             matchedPro = emailPro;
             emailMatchCount++;
           } else {
-            // Stap 2b: email match, ander bendy_id → skip
             emailSkipped = true;
             emailSkippedCount++;
             result.skipped++;
@@ -203,6 +217,7 @@ export async function syncUsers(
         }
 
         matchedPro.bendy_id = bendyId;
+        bendyIdMap.set(bendyId, matchedPro);
         mappingWrites.push({
           org_id: orgId, tenant, entity_type: 'professional',
           bendy_id: bendyId, local_id: matchedPro.id,
