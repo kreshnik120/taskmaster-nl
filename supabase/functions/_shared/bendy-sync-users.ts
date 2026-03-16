@@ -105,8 +105,6 @@ export async function syncUsers(
   const proInserts: Array<{ insertData: Record<string, any>; bendyId: string; bsn: string | null }> = [];
   const bsnWrites: any[] = [];
   const mappingWrites: any[] = [];
-  let emailMatchCount = 0;
-  let emailSkippedCount = 0;
 
   for (const bendyUser of bendyUsers) {
     try {
@@ -132,10 +130,10 @@ export async function syncUsers(
         if (emailPro) {
           if (!emailPro.bendy_id) {
             matchedPro = emailPro;
-            emailMatchCount++;
+            
           } else {
             emailSkipped = true;
-            emailSkippedCount++;
+            
             result.skipped++;
             logWarning(FUNCTION_NAME, `User ${bendyId}: email match maar ander bendy_id (${emailPro.bendy_id})`);
           }
@@ -391,8 +389,6 @@ export async function syncUsers(
     await batchUpsert(adminClient, 'bendy_id_mapping', mappingWrites, 'tenant,entity_type,bendy_id');
   }
 
-  (result as any).email_matched = emailMatchCount;
-  (result as any).email_skipped_other_bendy = emailSkippedCount;
 
   logInfo(FUNCTION_NAME, `Professional sync voltooid: ${result.fetched} opgehaald, ${result.created} aangemaakt, ${result.updated} bijgewerkt, ${result.skipped} overgeslagen, ${result.failed} gefaald`);
   return result;
