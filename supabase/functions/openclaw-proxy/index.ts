@@ -210,7 +210,7 @@ async function handleLookupSender(supabase: ReturnType<typeof createClient>, bod
 
   const { data: prof } = await supabase
     .from("professionals")
-    .select("id, full_name, functie_niveau, status, telefoonnummer")
+    .select("id, full_name, functie_niveau, status, telefoonnummer, org_id")
     .ilike("telefoonnummer", pattern)
     .limit(1)
     .maybeSingle();
@@ -222,18 +222,19 @@ async function handleLookupSender(supabase: ReturnType<typeof createClient>, bod
       full_name: prof.full_name,
       functie_niveau: prof.functie_niveau,
       status: prof.status,
+      org_id: prof.org_id,
     });
   }
 
   const { data: contact } = await supabase
     .from("client_contacts")
-    .select("id, naam, functie, organization_id, client_organizations(id, name)")
+    .select("id, naam, functie, organization_id, client_organizations(id, name, org_id)")
     .ilike("telefoon", pattern)
     .limit(1)
     .maybeSingle();
 
   if (contact) {
-    const org = contact.client_organizations as { id: string; name: string } | null;
+    const org = contact.client_organizations as { id: string; name: string; org_id: string } | null;
     return jsonResponse({
       role: "client_contact",
       id: contact.id,
@@ -241,6 +242,7 @@ async function handleLookupSender(supabase: ReturnType<typeof createClient>, bod
       functie: contact.functie,
       organization_id: contact.organization_id,
       organization_name: org?.name ?? null,
+      org_id: org?.org_id ?? null,
     });
   }
 
