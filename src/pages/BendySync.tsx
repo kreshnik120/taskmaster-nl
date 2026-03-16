@@ -765,7 +765,7 @@ export default function BendySync() {
     setUserSyncResult(null);
     try {
       const { data, error } = await supabase.functions.invoke("bendy-sync", {
-        body: { action: "sync_users", tenant: "citozorg", sync_type: "full" },
+        body: { action: "sync_users", tenant: "citozorg", sync_type: "incremental" },
       });
       if (error) throw error;
       if (data?.success) {
