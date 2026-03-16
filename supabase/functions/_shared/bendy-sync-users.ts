@@ -268,10 +268,6 @@ export async function syncUsers(
   await parallelUpdates(adminClient, 'professionals', proUpdates);
 
   if (proInserts.length > 0) {
-    let profBatchOk = 0;
-    let profFallbackUsed = 0;
-    let profFallbackCreated = 0;
-    const profFallbackFailed: any[] = [];
 
     const processNewPro = (newPro: any, original: typeof proInserts[0]) => {
       if (original.bsn) {
