@@ -212,7 +212,7 @@ export async function syncUsers(
         });
 
         result.updated++;
-      } else {
+      } else if (!emailSkipped) {
         const fullName = buildFullName(attrs);
         const userGroupIds = (bendyUser.relationships?.groups?.data || []).map((g: any) => String(g.id));
         const userGroupNames = userGroupIds.map((id: string) => groupMap.get(id)).filter(Boolean) as string[];
