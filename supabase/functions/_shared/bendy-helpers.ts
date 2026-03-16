@@ -187,6 +187,71 @@ export async function fetchAllBendyRecords(tenant: string, endpoint: string, ext
   return { records: allRecords, included: allIncluded };
 }
 
+/**
+ * Delta fetch: haalt records op gesorteerd op -updated_at (JSON:API sort),
+ * stopt zodra een hele pagina ouder is dan cutoffDate.
+ * De caller trekt 60 seconden af van last_sync als overlap window (clock skew).
+ */
+export async function fetchDeltaBendyRecords(
+  tenant: string,
+  endpoint: string,
+  cutoffDate: string,
+  extraParams?: Record<string, string>,
+): Promise<FetchResult & { earlyStop: boolean; pagesScanned: number }> {
+  const allRecords: any[] = [];
+  const allIncluded: any[] = [];
+  let page = 1;
+  let earlyStop = false;
+  const cutoffMs = new Date(cutoffDate).getTime();
+
+  while (page <= MAX_PAGES) {
+    const offset = (page - 1) * PAGE_SIZE;
+    const response = await fetchBendyApi(tenant, endpoint, {
+      ...(extraParams || {}),
+      'limit': String(PAGE_SIZE),
+      'offset': String(offset),
+      'sort': '-updated_at',
+    });
+
+    const records = response?.data || [];
+    const included = response?.included || [];
+
+    if (page === 1) {
+      const totalFromMeta = response?.meta?.record_count || response?.meta?.total || null;
+      if (totalFromMeta) {
+        logInfo(FUNCTION_NAME, `Delta ${endpoint}: ${totalFromMeta} totaal in Bendy, cutoff: ${cutoffDate}`);
+      }
+    }
+
+    // Tel records op deze pagina die nieuwer zijn dan cutoff
+    let newOnPage = 0;
+    for (const record of records) {
+      const updatedAt = record.attributes?.updated_at;
+      if (!updatedAt || new Date(updatedAt).getTime() >= cutoffMs) {
+        newOnPage++; // Geen updated_at = behandel als nieuw (veilig)
+      }
+    }
+
+    allRecords.push(...records);
+    allIncluded.push(...included);
+
+    logInfo(FUNCTION_NAME, `Delta pagina ${page}: ${records.length} records, ${newOnPage} nieuw/gewijzigd`);
+
+    // Stop als GEEN records op deze pagina nieuwer zijn dan cutoff
+    if (newOnPage === 0 && records.length > 0) {
+      earlyStop = true;
+      logInfo(FUNCTION_NAME, `Delta early stop na pagina ${page}: alle records ouder dan cutoff`);
+      break;
+    }
+
+    if (records.length < PAGE_SIZE) break;
+    page++;
+  }
+
+  logInfo(FUNCTION_NAME, `fetchDeltaBendyRecords ${endpoint}: ${allRecords.length} in ${page} pagina('s), earlyStop: ${earlyStop}`);
+  return { records: allRecords, included: allIncluded, earlyStop, pagesScanned: page };
+}
+
 // ============================================
 // BATCH HELPERS
 // ============================================
@@ -263,21 +328,21 @@ export async function acquireSyncLock(
   adminClient: any,
   tenant: string,
   _entityType: string
-): Promise<{ locked: boolean; configId: string; orgId: string }> {
+): Promise<{ locked: boolean; configId: string; orgId: string; lastIncrementalSyncAt: string | null }> {
   const { data: config } = await adminClient
     .from('bendy_sync_config')
-    .select('id, org_id, sync_status, enabled, updated_at')
+    .select('id, org_id, sync_status, enabled, updated_at, last_incremental_sync_at')
     .eq('tenant', tenant)
     .single();
 
-  if (!config) return { locked: false, configId: '', orgId: '' };
-  if (!config.enabled) return { locked: false, configId: '', orgId: '' };
+  if (!config) return { locked: false, configId: '', orgId: '', lastIncrementalSyncAt: null };
+  if (!config.enabled) return { locked: false, configId: '', orgId: '', lastIncrementalSyncAt: null };
 
   if (config.sync_status === 'running') {
     const updatedAt = new Date(config.updated_at).getTime();
     const staleDuration = Date.now() - updatedAt;
     if (staleDuration < STALE_LOCK_TIMEOUT_MS) {
-      return { locked: false, configId: '', orgId: '' };
+      return { locked: false, configId: '', orgId: '', lastIncrementalSyncAt: null };
     }
     logWarning(FUNCTION_NAME, `Stale lock gedetecteerd voor ${tenant} (${Math.round(staleDuration / 1000)}s oud) — automatisch gereset`);
   }
@@ -287,7 +352,7 @@ export async function acquireSyncLock(
     .update({ sync_status: 'running', error_message: null, updated_at: new Date().toISOString() })
     .eq('id', config.id);
 
-  return { locked: true, configId: config.id, orgId: config.org_id };
+  return { locked: true, configId: config.id, orgId: config.org_id, lastIncrementalSyncAt: config.last_incremental_sync_at || null };
 }
 
 export async function releaseSyncLock(

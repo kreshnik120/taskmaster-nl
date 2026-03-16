@@ -6,17 +6,20 @@ import { logInfo, logWarning } from './core.ts';
 import {
   FUNCTION_NAME,
   fetchAllBendyRecords,
+  fetchDeltaBendyRecords,
   batchUpsert,
   parallelUpdates,
   type SyncResult,
+  type FetchResult,
 } from './bendy-helpers.ts';
 
 export async function syncRequisitions(
   adminClient: any,
   tenant: string,
   orgId: string,
-  _syncType: string,
+  syncType: string,
   syncLogId?: string,
+  lastSyncAt?: string | null,
 ): Promise<SyncResult> {
   const result: SyncResult = { fetched: 0, created: 0, updated: 0, skipped: 0, failed: 0, errors: [] };
 
@@ -31,10 +34,33 @@ export async function syncRequisitions(
   };
 
   // ═══ STAP 1: Haal data op (PARALLEL) ═══
-  const [openResult, assignedResult] = await Promise.all([
-    fetchAllBendyRecords(tenant, '/api/v2/requisitions/open'),
-    fetchAllBendyRecords(tenant, '/api/v2/requisitions/assigned', { include: 'flex_user_company' }),
-  ]);
+  // Delta mode: sort=-updated_at, stop bij records ouder dan cutoff (60s overlap window)
+  const isDelta = syncType === 'incremental' && lastSyncAt;
+  const cutoffDate = isDelta
+    ? new Date(new Date(lastSyncAt).getTime() - 60_000).toISOString()
+    : null;
+
+  let openResult: FetchResult;
+  let assignedResult: FetchResult;
+
+  if (isDelta && cutoffDate) {
+    logInfo(FUNCTION_NAME, `Delta requisition sync: cutoff=${cutoffDate}`);
+    const [deltaOpen, deltaAssigned] = await Promise.all([
+      fetchDeltaBendyRecords(tenant, '/api/v2/requisitions/open', cutoffDate),
+      fetchDeltaBendyRecords(tenant, '/api/v2/requisitions/assigned', cutoffDate, { include: 'flex_user_company' }),
+    ]);
+    openResult = deltaOpen;
+    assignedResult = deltaAssigned;
+  } else {
+    logInfo(FUNCTION_NAME, 'Full requisition sync (geen delta cutoff)');
+    const [fullOpen, fullAssigned] = await Promise.all([
+      fetchAllBendyRecords(tenant, '/api/v2/requisitions/open'),
+      fetchAllBendyRecords(tenant, '/api/v2/requisitions/assigned', { include: 'flex_user_company' }),
+    ]);
+    openResult = fullOpen;
+    assignedResult = fullAssigned;
+  }
+
   const openRecords = openResult.records;
   const assignedRecords = assignedResult.records;
   const allRecords = [...openRecords, ...assignedRecords];
