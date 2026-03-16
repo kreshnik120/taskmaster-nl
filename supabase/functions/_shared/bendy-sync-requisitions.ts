@@ -366,14 +366,6 @@ export async function syncRequisitions(
     const userBendyId = fucMap.get(String(fucId));
     if (!userBendyId) {
       twStats.noMatch++;
-      noMatchUniqueUsers.add(String(fucId));
-      if (noMatchDiagSamples.length < 20) {
-        noMatchDiagSamples.push({ bendy_user_id: String(fucId), requisition_id: bendyId, reason: 'fucMap_missing' });
-      }
-      if (noMatchSamples < 3) {
-        logInfo(FUNCTION_NAME, `No-match sample: fucId=${fucId}, userBendyId=undefined (niet in fucMap)`);
-        noMatchSamples++;
-      }
       continue;
     }
 
