@@ -462,8 +462,9 @@ Deno.serve(async (req) => {
   }
 
   if (body.trigger === 'scheduler') {
-    logInfo(FUNCTION_NAME, 'Cron trigger ontvangen');
-    return handleCronSync();
+    const cronSyncType = body.sync_type || 'incremental';
+    logInfo(FUNCTION_NAME, `Cron trigger ontvangen: ${cronSyncType}`);
+    return handleCronSync(cronSyncType);
   }
 
   const startTime = Date.now();
