@@ -376,6 +376,9 @@ export async function syncUsers(
     await batchUpsert(adminClient, 'bendy_id_mapping', mappingWrites, 'tenant,entity_type,bendy_id');
   }
 
-  logInfo(FUNCTION_NAME, `Professional sync voltooid: ${result.fetched} opgehaald, ${result.created} aangemaakt, ${result.updated} bijgewerkt, ${result.failed} gefaald`);
+  (result as any).email_matched = emailMatchCount;
+  (result as any).email_skipped_other_bendy = emailSkippedCount;
+
+  logInfo(FUNCTION_NAME, `Professional sync voltooid: ${result.fetched} opgehaald, ${result.created} aangemaakt, ${result.updated} bijgewerkt, ${result.skipped} overgeslagen, ${result.failed} gefaald`);
   return result;
 }
