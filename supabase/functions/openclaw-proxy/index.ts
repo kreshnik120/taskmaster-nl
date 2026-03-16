@@ -222,6 +222,7 @@ async function handleLookupSender(supabase: ReturnType<typeof createClient>, bod
       full_name: prof.full_name,
       functie_niveau: prof.functie_niveau,
       status: prof.status,
+      org_id: prof.org_id,
     });
   }
 
