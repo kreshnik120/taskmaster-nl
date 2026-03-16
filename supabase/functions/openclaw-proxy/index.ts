@@ -228,7 +228,7 @@ async function handleLookupSender(supabase: ReturnType<typeof createClient>, bod
 
   const { data: contact } = await supabase
     .from("client_contacts")
-    .select("id, naam, functie, organization_id, client_organizations(id, name)")
+    .select("id, naam, functie, organization_id, client_organizations(id, name, org_id)")
     .ilike("telefoon", pattern)
     .limit(1)
     .maybeSingle();
