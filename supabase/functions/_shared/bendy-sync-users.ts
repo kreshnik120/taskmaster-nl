@@ -217,6 +217,7 @@ export async function syncUsers(
         }
 
         matchedPro.bendy_id = bendyId;
+        bendyIdMap.set(bendyId, matchedPro);
         mappingWrites.push({
           org_id: orgId, tenant, entity_type: 'professional',
           bendy_id: bendyId, local_id: matchedPro.id,
