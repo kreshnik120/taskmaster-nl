@@ -1,37 +1,46 @@
 
+Doel: de 495 `professionals_email_unique_active` failures weghalen in Professional Sync.
 
-# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
+Wat ik heb onderzocht:
+- De email-fallback staat al in `supabase/functions/_shared/bendy-sync-users.ts`.
+- In de laatste runs blijft patroon gelijk: `updated=999`, `failed=495`, `skipped=0`.
+- In function logs staat expliciet: `professionals met documenten pre-fetched (1000 totaal)`.
+- In database zijn er `1495` professionals (niet verwijderd), dus de sync werkt nu met een onvolledige professionals set in memory.
 
-## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
+Conclusie (root cause):
+- De query gebruikt `.limit(5000)`, maar de backend API cap levert effectief maar 1000 records terug.
+- Daardoor “ziet” de email-match fallback die overige ~495 professionals niet, laat die users door naar INSERT, en die falen op unieke email constraint.
 
-### 1. Nieuwe state variabelen (na regel 193)
-- `showAddDocDialog` (boolean)
-- `addDocLoading` (boolean)
-- `addDocForm` object: `{ name, category, type, expiryDate, file }`
+Implementatieplan:
+1. Vervang in `bendy-sync-users.ts` de eenmalige professionals query met paginatie via `.range(...)` in lussen van 1000 records, tot er geen chunk meer terugkomt.
+2. Laat exact dezelfde kolommen ophalen als nu (geen functioneel verlies).
+3. Bouw na ophalen twee snelle lookup-structuren:
+   - `bendyIdMap` voor match stap 1.
+   - `emailMap` op `LOWER(TRIM(email))` voor match stap 2.
+4. Houd de bestaande 3-staps matching-cascade intact:
+   - bendy_id match → update
+   - email match + leeg bendy_id → update + koppel
+   - email match + ander bendy_id → skip + warning
+   - geen match → insert
+5. Zorg dat map-state tijdens de run wordt bijgewerkt na koppeling/insert (`matchedPro.bendy_id = bendyId` en map update), zodat binnen dezelfde run geen dubbele insert-pogingen ontstaan.
+6. Geen DB migraties nodig; dit is pure sync-logica fix.
+7. Deploy functie en verifieer met 1 handmatige Professional Sync.
 
-### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
-- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
-- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
-- Haal `user` op via `supabase.auth.getUser()`
-- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
+Verificatiecriteria na fix:
+- Logs tonen bij prefetch geen `1000 totaal` meer, maar volledige set (~1495).
+- `Mislukt` daalt van 495 naar 0 (of zeer laag bij echte dataconflicten buiten dit patroon).
+- `Bijgewerkt` stijgt naar ~1494.
+- `Aangemaakt` blijft 0.
+- `Status` wordt `success` (niet `partial`) als `failed=0`.
+- Eventuele echte email-conflicten met ander bendy_id verschijnen als `overgeslagen` + warning, niet als `mislukt`.
 
-### 3. `handleUploadForManualDoc` functie
-- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
-- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
-- Update lokale `documents` state
-
-### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
-- Plus icoon, variant outline, opent dialog
-
-### 5. UI: Dialog component (onder de TabsContent of aan het eind)
-- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
-- Na file selectie: toon bestandsnaam + grootte
-- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
-
-### 6. Scenario C Upload knop activeren (regel ~1447)
-- Verwijder `disabled` van de Upload knop
-- onClick: trigger hidden file input → `handleUploadForManualDoc`
-
-### Bestanden die NIET worden aangepast
-- Edge functions, storage config, andere tabs, bendy-sync
-
+Technische noot (compact):
+```text
+while (true):
+  chunk = professionals.range(offset, offset+999)
+  if chunk leeg: break
+  push chunk
+  if chunk < 1000: break
+  offset += 1000
+```
+Daarna matching op maps in plaats van `professionals.find(...)` per user.
