@@ -6,6 +6,7 @@ import { logInfo, logWarning } from './core.ts';
 import {
   FUNCTION_NAME,
   fetchAllBendyRecords,
+  fetchDeltaBendyRecords,
   fetchBendyApi,
   batchUpsert,
   batchInsert,
@@ -22,12 +23,32 @@ export async function syncUsers(
   adminClient: any,
   tenant: string,
   orgId: string,
-  _syncType: string,
+  syncType: string,
+  lastSyncAt?: string | null,
 ): Promise<SyncResult> {
   const result: SyncResult = { fetched: 0, created: 0, updated: 0, skipped: 0, failed: 0, errors: [] };
   logInfo(FUNCTION_NAME, `Professional sync gestart voor ${tenant}`);
 
-  const { records: bendyUsers, included: bendyIncluded } = await fetchAllBendyRecords(tenant, '/api/v2/users', { include: 'groups,company' });
+  // Delta mode: sort=-updated_at, stop bij records ouder dan cutoff (60s overlap)
+  const isDelta = syncType === 'incremental' && lastSyncAt;
+  const cutoffDate = isDelta
+    ? new Date(new Date(lastSyncAt).getTime() - 60_000).toISOString()
+    : null;
+
+  let bendyUsers: any[];
+  let bendyIncluded: any[];
+
+  if (isDelta && cutoffDate) {
+    logInfo(FUNCTION_NAME, `Delta professional sync: cutoff=${cutoffDate}`);
+    const deltaResult = await fetchDeltaBendyRecords(tenant, '/api/v2/users', cutoffDate, { include: 'groups,company' });
+    bendyUsers = deltaResult.records;
+    bendyIncluded = deltaResult.included;
+  } else {
+    logInfo(FUNCTION_NAME, 'Full professional sync (geen delta cutoff)');
+    const fullResult = await fetchAllBendyRecords(tenant, '/api/v2/users', { include: 'groups,company' });
+    bendyUsers = fullResult.records;
+    bendyIncluded = fullResult.included;
+  }
   result.fetched = bendyUsers.length;
   logInfo(FUNCTION_NAME, `${bendyUsers.length} Bendy users opgehaald`);
   if (bendyUsers.length === 0) return result;
