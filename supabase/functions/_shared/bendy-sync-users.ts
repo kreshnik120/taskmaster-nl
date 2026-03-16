@@ -87,6 +87,8 @@ export async function syncUsers(
   const proInserts: Array<{ insertData: Record<string, any>; bendyId: string; bsn: string | null }> = [];
   const bsnWrites: any[] = [];
   const mappingWrites: any[] = [];
+  let emailMatchCount = 0;
+  let emailSkippedCount = 0;
 
   for (const bendyUser of bendyUsers) {
     try {
@@ -104,12 +106,26 @@ export async function syncUsers(
       });
 
       let matchedPro: any = null;
+      let emailSkipped = false;
       matchedPro = professionals.find((p: any) => p.bendy_id === bendyId);
       if (!matchedPro && attrs.email) {
         const bendyEmail = attrs.email.trim().toLowerCase();
-        matchedPro = professionals.find((p: any) =>
-          !p.bendy_id && p.email && p.email.trim().toLowerCase() === bendyEmail
+        const emailPro = professionals.find((p: any) =>
+          p.email && p.email.trim().toLowerCase() === bendyEmail
         );
+        if (emailPro) {
+          if (!emailPro.bendy_id) {
+            // Stap 2a: email match, geen bendy_id → koppel
+            matchedPro = emailPro;
+            emailMatchCount++;
+          } else {
+            // Stap 2b: email match, ander bendy_id → skip
+            emailSkipped = true;
+            emailSkippedCount++;
+            result.skipped++;
+            logWarning(FUNCTION_NAME, `User ${bendyId}: email match maar ander bendy_id (${emailPro.bendy_id})`);
+          }
+        }
       }
 
       if (matchedPro) {
@@ -196,7 +212,7 @@ export async function syncUsers(
         });
 
         result.updated++;
-      } else {
+      } else if (!emailSkipped) {
         const fullName = buildFullName(attrs);
         const userGroupIds = (bendyUser.relationships?.groups?.data || []).map((g: any) => String(g.id));
         const userGroupNames = userGroupIds.map((id: string) => groupMap.get(id)).filter(Boolean) as string[];
@@ -360,6 +376,9 @@ export async function syncUsers(
     await batchUpsert(adminClient, 'bendy_id_mapping', mappingWrites, 'tenant,entity_type,bendy_id');
   }
 
-  logInfo(FUNCTION_NAME, `Professional sync voltooid: ${result.fetched} opgehaald, ${result.created} aangemaakt, ${result.updated} bijgewerkt, ${result.failed} gefaald`);
+  (result as any).email_matched = emailMatchCount;
+  (result as any).email_skipped_other_bendy = emailSkippedCount;
+
+  logInfo(FUNCTION_NAME, `Professional sync voltooid: ${result.fetched} opgehaald, ${result.created} aangemaakt, ${result.updated} bijgewerkt, ${result.skipped} overgeslagen, ${result.failed} gefaald`);
   return result;
 }
