@@ -329,9 +329,10 @@ async function handleStatusCheck(): Promise<Response> {
 // CRON SYNC
 // ============================================
 
-async function handleCronSync(): Promise<Response> {
+async function handleCronSync(syncType: string = 'incremental'): Promise<Response> {
   const startTime = Date.now();
-  logInfo(FUNCTION_NAME, '🔄 Cron sync gestart');
+  const isFull = syncType === 'full';
+  logInfo(FUNCTION_NAME, `🔄 Cron sync gestart (${syncType})`);
 
   try {
     const adminClient = createAdminClient();
@@ -347,7 +348,7 @@ async function handleCronSync(): Promise<Response> {
       return jsonResponse({
         success: true,
         data: { message: 'Geen enabled tenants', tenants_processed: 0 },
-        metadata: { trigger: 'cron', duration_ms: Date.now() - startTime },
+        metadata: { trigger: 'cron', sync_type: syncType, duration_ms: Date.now() - startTime },
       });
     }
 
@@ -356,84 +357,132 @@ async function handleCronSync(): Promise<Response> {
       const tenantConfig = TENANT_CONFIG[tenant];
 
       if (!tenantConfig) {
-        logWarning(FUNCTION_NAME, `Tenant ${tenant} niet in TENANT_CONFIG — skip`);
         results[tenant] = { status: 'skipped', reason: 'tenant_not_configured' };
         continue;
       }
 
       if (config.sync_status === 'running') {
-        logWarning(FUNCTION_NAME, `Tenant ${tenant} al bezig — skip`);
         results[tenant] = { status: 'skipped', reason: 'already_running' };
         continue;
       }
 
       const circuitCheck = await canExecute(adminClient, tenantConfig.circuitBreakerName);
       if (!circuitCheck.allowed) {
-        logWarning(FUNCTION_NAME, `Circuit breaker OPEN voor ${tenant} — skip`);
         results[tenant] = { status: 'skipped', reason: 'circuit_breaker_open' };
         continue;
       }
 
-      const lock = await acquireSyncLock(adminClient, tenant, 'sync_clients');
+      const lock = await acquireSyncLock(adminClient, tenant, 'cron');
       if (!lock.locked) {
         results[tenant] = { status: 'skipped', reason: 'lock_failed' };
         continue;
       }
 
-      const { data: syncLog } = await adminClient
-        .from('bendy_sync_log')
-        .insert({ org_id: lock.orgId, tenant, sync_type: 'incremental', entity_type: 'clients', status: 'running' })
-        .select('id')
-        .single();
+      const tenantResults: Record<string, any> = {};
 
-      const logId = syncLog?.id || '';
+      // Helper: sync entity met eigen log entry
+      const runSync = async (
+        entityType: string,
+        syncFn: () => Promise<SyncResult>
+      ) => {
+        const entityStart = Date.now();
+        const { data: syncLog } = await adminClient
+          .from('bendy_sync_log')
+          .insert({
+            org_id: lock.orgId,
+            tenant,
+            sync_type: syncType,
+            entity_type: entityType,
+            status: 'running',
+          })
+          .select('id')
+          .single();
+
+        try {
+          const syncResult = await syncFn();
+          const duration = Date.now() - entityStart;
+
+          if (syncLog?.id) {
+            await adminClient
+              .from('bendy_sync_log')
+              .update({
+                completed_at: new Date().toISOString(),
+                records_fetched: syncResult.fetched,
+                records_created: syncResult.created,
+                records_updated: syncResult.updated,
+                records_skipped: syncResult.skipped,
+                records_failed: syncResult.failed,
+                errors: syncResult.errors,
+                status: syncResult.failed > 0 ? 'partial' : 'success',
+                duration_ms: duration,
+              })
+              .eq('id', syncLog.id);
+          }
+
+          tenantResults[entityType] = {
+            status: 'success',
+            fetched: syncResult.fetched,
+            updated: syncResult.updated,
+            duration_ms: duration,
+          };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logError(FUNCTION_NAME, `Cron ${entityType} ${tenant} gefaald: ${msg}`);
+
+          if (syncLog?.id) {
+            await adminClient
+              .from('bendy_sync_log')
+              .update({
+                completed_at: new Date().toISOString(),
+                status: 'failed',
+                errors: [msg],
+                duration_ms: Date.now() - entityStart,
+              })
+              .eq('id', syncLog.id);
+          }
+
+          tenantResults[entityType] = { status: 'failed', error: msg };
+        }
+      };
 
       try {
-        const syncResult = await syncClients(adminClient, tenant, lock.orgId, 'incremental');
-        const duration = Date.now() - startTime;
-        if (logId) {
-          await adminClient
-            .from('bendy_sync_log')
-            .update({
-              completed_at: new Date().toISOString(),
-              records_fetched: syncResult.fetched, records_created: syncResult.created,
-              records_updated: syncResult.updated, records_skipped: syncResult.skipped,
-              records_failed: syncResult.failed, errors: syncResult.errors,
-              status: syncResult.failed > 0 ? 'partial' : 'success', duration_ms: duration,
-            })
-            .eq('id', logId);
+        if (isFull) {
+          // Nachtelijke full sync: alle 4 entities
+          await runSync('clients', () => syncClients(adminClient, tenant, lock.orgId, 'full'));
+          await runSync('users', () => syncUsers(adminClient, tenant, lock.orgId, 'full'));
+          await runSync('documents', () => syncDocuments(adminClient, tenant, lock.orgId, 'full'));
+          await runSync('requisitions_open', () => syncRequisitions(adminClient, tenant, lock.orgId, 'full'));
+        } else {
+          // Delta sync: alleen requisitions + users (snel)
+          await runSync('requisitions_open', () =>
+            syncRequisitions(adminClient, tenant, lock.orgId, 'incremental', undefined, lock.lastIncrementalSyncAt)
+          );
+          await runSync('users', () =>
+            syncUsers(adminClient, tenant, lock.orgId, 'incremental', lock.lastIncrementalSyncAt)
+          );
         }
 
         await releaseSyncLock(adminClient, lock.configId, 'idle');
         await recordSuccess(adminClient, tenantConfig.circuitBreakerName);
-
-        results[tenant] = {
-          status: 'success', fetched: syncResult.fetched,
-          updated: syncResult.updated, skipped: syncResult.skipped, failed: syncResult.failed,
-        };
-        logSuccess(FUNCTION_NAME, `Cron sync ${tenant} voltooid`, results[tenant]);
-      } catch (syncError) {
-        const msg = syncError instanceof Error ? syncError.message : String(syncError);
-        logError(FUNCTION_NAME, `Cron sync ${tenant} gefaald: ${msg}`);
+        results[tenant] = { status: 'success', entities: tenantResults };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
         await releaseSyncLock(adminClient, lock.configId, 'error', msg);
-        if (logId) {
-          await adminClient
-            .from('bendy_sync_log')
-            .update({ completed_at: new Date().toISOString(), status: 'failed', errors: [msg], duration_ms: Date.now() - startTime })
-            .eq('id', logId);
-        }
         await recordFailure(adminClient, tenantConfig.circuitBreakerName, msg);
-        results[tenant] = { status: 'failed', error: msg };
+        results[tenant] = { status: 'failed', error: msg, entities: tenantResults };
       }
     }
 
     const totalDuration = Date.now() - startTime;
-    logSuccess(FUNCTION_NAME, `Cron sync voltooid`, { duration_ms: totalDuration, tenants: Object.keys(results) });
+    logSuccess(FUNCTION_NAME, `Cron sync voltooid (${syncType})`, {
+      duration_ms: totalDuration,
+      tenants: Object.keys(results),
+    });
 
     return jsonResponse({
       success: true,
       data: { tenants: results, tenants_processed: Object.keys(results).length },
-      metadata: { trigger: 'cron', duration_ms: totalDuration, version: FUNCTION_VERSION },
+      metadata: { trigger: 'cron', sync_type: syncType, duration_ms: totalDuration, version: FUNCTION_VERSION },
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
