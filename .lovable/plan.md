@@ -1,20 +1,17 @@
 
 
-# DELTA-SYNC-4: pg_cron scheduler
+# BENDY-M1-LOOKUP-BUREAU-FIX
 
-## Aanpak
+## Wijzigingen in `supabase/functions/openclaw-proxy/index.ts`
 
-SQL migratie aanmaken (via insert tool, niet migration tool — bevat project-specifieke URL en key).
+### Fix 1 — Professional lookup (regels 211-226)
+- Voeg `org_id` toe aan de `.select()` query
+- Voeg `org_id: prof.org_id` toe aan de response
 
-Patroon volgt bestaande cron jobs: hardcoded URL + anon key in headers.
+### Fix 2 — Client contact lookup (regels 228-245)
+- Voeg `org_id` toe aan de `client_organizations` join: `client_organizations(id, name, org_id)`
+- Cast aanpassen naar `{ id: string; name: string; org_id: string }`
+- Voeg `org_id: org?.org_id ?? null` toe aan de response
 
-### SQL
-
-1. Verwijder bestaande jobs (indien aanwezig) via `cron.unschedule`
-2. **bendy-delta-sync-10min** (`*/10 * * * *`): POST naar `/functions/v1/bendy-sync` met `{"trigger": "scheduler", "sync_type": "incremental"}`
-3. **bendy-full-sync-nightly** (`0 3 * * *`): POST naar `/functions/v1/bendy-sync` met `{"trigger": "scheduler", "sync_type": "full"}`
-
-Headers: hardcoded URL `https://oelmsmcgryeoryhonexw.supabase.co` + anon key (zoals alle bestaande cron jobs in dit project).
-
-Geen UI wijzigingen, geen edge function wijzigingen.
+Geen andere wijzigingen. Admin lookup blijft ongewijzigd.
 
