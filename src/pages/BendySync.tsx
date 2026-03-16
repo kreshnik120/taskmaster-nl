@@ -736,7 +736,7 @@ export default function BendySync() {
     setSyncResult(null);
     try {
       const { data, error } = await supabase.functions.invoke("bendy-sync", {
-        body: { action: "sync_clients", tenant: "citozorg", sync_type: "full" },
+        body: { action: "sync_clients", tenant: "citozorg", sync_type: "incremental" },
       });
       if (error) throw error;
       if (data?.success) {
@@ -765,7 +765,7 @@ export default function BendySync() {
     setUserSyncResult(null);
     try {
       const { data, error } = await supabase.functions.invoke("bendy-sync", {
-        body: { action: "sync_users", tenant: "citozorg", sync_type: "full" },
+        body: { action: "sync_users", tenant: "citozorg", sync_type: "incremental" },
       });
       if (error) throw error;
       if (data?.success) {
@@ -1250,7 +1250,7 @@ export default function BendySync() {
                 setDocSyncResult(null);
                 try {
                   const { data, error } = await supabase.functions.invoke("bendy-sync", {
-                    body: { action: "sync_documents", tenant: "citozorg", sync_type: "full" },
+                    body: { action: "sync_documents", tenant: "citozorg", sync_type: "incremental" },
                   });
                   if (error) throw error;
                   if (data?.success) {
@@ -1368,7 +1368,7 @@ export default function BendySync() {
                 setReqSyncResult(null);
                 try {
                   const { data, error } = await supabase.functions.invoke('bendy-sync', {
-                    body: { action: 'sync_requisitions' },
+                    body: { action: 'sync_requisitions', tenant: 'citozorg', sync_type: 'incremental' },
                   });
                   if (error) throw error;
                   if (data?.success) {
