@@ -317,10 +317,6 @@ export async function syncUsers(
       }
     }
 
-    (result as any).debug_prof_batch_ok = profBatchOk;
-    (result as any).debug_prof_fallback_used = profFallbackUsed;
-    (result as any).debug_prof_fallback_created = profFallbackCreated;
-    (result as any).debug_prof_fallback_failed = profFallbackFailed.slice(0, 20);
   }
 
   if (bsnWrites.length > 0) {
