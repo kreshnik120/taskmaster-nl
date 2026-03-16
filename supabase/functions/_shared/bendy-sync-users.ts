@@ -130,7 +130,7 @@ export async function syncUsers(
         if (emailPro) {
           if (!emailPro.bendy_id) {
             matchedPro = emailPro;
-            emailMatchCount++;
+            
           } else {
             emailSkipped = true;
             emailSkippedCount++;
