@@ -268,35 +268,67 @@ export async function syncUsers(
   await parallelUpdates(adminClient, 'professionals', proUpdates);
 
   if (proInserts.length > 0) {
-    const insertDataArray = proInserts.map(p => p.insertData);
-    const newPros = await batchInsert(adminClient, 'professionals', insertDataArray);
+    let profBatchOk = 0;
+    let profFallbackUsed = 0;
+    let profFallbackCreated = 0;
+    const profFallbackFailed: any[] = [];
 
-    for (let idx = 0; idx < newPros.length; idx++) {
-      const newPro = newPros[idx];
-      const original = proInserts[idx];
+    const processNewPro = (newPro: any, original: typeof proInserts[0]) => {
+      if (original.bsn) {
+        bsnWrites.push({ professional_id: newPro.id, bsn_plaintext: original.bsn, updated_at: new Date().toISOString() });
+      }
+      mappingWrites.push({
+        org_id: orgId, tenant, entity_type: 'professional',
+        bendy_id: original.bendyId, local_id: newPro.id,
+        last_synced_at: new Date().toISOString(), sync_status: 'synced', conflict_data: null,
+      });
+      result.created++;
+    };
 
-      if (newPro && newPro.id) {
-        if (original.bsn) {
-          bsnWrites.push({
-            professional_id: newPro.id,
-            bsn_plaintext: original.bsn,
-            updated_at: new Date().toISOString(),
-          });
+    const CHUNK_SIZE = 200;
+    for (let i = 0; i < proInserts.length; i += CHUNK_SIZE) {
+      const chunk = proInserts.slice(i, i + CHUNK_SIZE);
+      const insertDataChunk = chunk.map(p => p.insertData);
+
+      const { data, error } = await adminClient
+        .from('professionals')
+        .insert(insertDataChunk)
+        .select('id');
+
+      if (!error && data) {
+        profBatchOk++;
+        for (let idx = 0; idx < data.length; idx++) {
+          processNewPro(data[idx], chunk[idx]);
         }
-
-        mappingWrites.push({
-          org_id: orgId, tenant, entity_type: 'professional',
-          bendy_id: original.bendyId, local_id: newPro.id,
-          last_synced_at: new Date().toISOString(),
-          sync_status: 'synced', conflict_data: null,
-        });
-
-        result.created++;
       } else {
-        result.failed++;
-        result.errors.push(`User ${original.bendyId}: Aanmaken mislukt (geen ID terug)`);
+        profFallbackUsed++;
+        logWarning(FUNCTION_NAME, `Prof chunk ${i} failed: ${error?.message} — fallback per record`);
+
+        const results = await Promise.allSettled(
+          chunk.map(item =>
+            adminClient.from('professionals').insert(item.insertData).select('id').single()
+          )
+        );
+
+        for (let idx = 0; idx < results.length; idx++) {
+          const r = results[idx];
+          if (r.status === 'fulfilled' && r.value.data?.id) {
+            profFallbackCreated++;
+            processNewPro(r.value.data, chunk[idx]);
+          } else {
+            const errMsg = r.status === 'rejected' ? String(r.reason) : (r.value as any).error?.message;
+            profFallbackFailed.push({ bendy_id: chunk[idx].bendyId, error: errMsg });
+            result.failed++;
+            result.errors.push(`User ${chunk[idx].bendyId}: ${(errMsg || 'onbekend').substring(0, 200)}`);
+          }
+        }
       }
     }
+
+    (result as any).debug_prof_batch_ok = profBatchOk;
+    (result as any).debug_prof_fallback_used = profFallbackUsed;
+    (result as any).debug_prof_fallback_created = profFallbackCreated;
+    (result as any).debug_prof_fallback_failed = profFallbackFailed.slice(0, 20);
   }
 
   if (bsnWrites.length > 0) {
