@@ -125,19 +125,15 @@ export async function syncUsers(
 
       let matchedPro: any = null;
       let emailSkipped = false;
-      matchedPro = professionals.find((p: any) => p.bendy_id === bendyId);
+      matchedPro = bendyIdMap.get(bendyId) || null;
       if (!matchedPro && attrs.email) {
         const bendyEmail = attrs.email.trim().toLowerCase();
-        const emailPro = professionals.find((p: any) =>
-          p.email && p.email.trim().toLowerCase() === bendyEmail
-        );
+        const emailPro = emailMap.get(bendyEmail) || null;
         if (emailPro) {
           if (!emailPro.bendy_id) {
-            // Stap 2a: email match, geen bendy_id → koppel
             matchedPro = emailPro;
             emailMatchCount++;
           } else {
-            // Stap 2b: email match, ander bendy_id → skip
             emailSkipped = true;
             emailSkippedCount++;
             result.skipped++;
