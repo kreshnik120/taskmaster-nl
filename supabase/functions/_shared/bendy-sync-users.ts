@@ -133,7 +133,7 @@ export async function syncUsers(
             
           } else {
             emailSkipped = true;
-            emailSkippedCount++;
+            
             result.skipped++;
             logWarning(FUNCTION_NAME, `User ${bendyId}: email match maar ander bendy_id (${emailPro.bendy_id})`);
           }
