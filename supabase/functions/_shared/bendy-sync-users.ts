@@ -268,10 +268,6 @@ export async function syncUsers(
   await parallelUpdates(adminClient, 'professionals', proUpdates);
 
   if (proInserts.length > 0) {
-    let profBatchOk = 0;
-    let profFallbackUsed = 0;
-    let profFallbackCreated = 0;
-    const profFallbackFailed: any[] = [];
 
     const processNewPro = (newPro: any, original: typeof proInserts[0]) => {
       if (original.bsn) {
@@ -296,12 +292,10 @@ export async function syncUsers(
         .select('id');
 
       if (!error && data) {
-        profBatchOk++;
         for (let idx = 0; idx < data.length; idx++) {
           processNewPro(data[idx], chunk[idx]);
         }
       } else {
-        profFallbackUsed++;
         logWarning(FUNCTION_NAME, `Prof chunk ${i} failed: ${error?.message} — fallback per record`);
 
         const results = await Promise.allSettled(
@@ -313,11 +307,9 @@ export async function syncUsers(
         for (let idx = 0; idx < results.length; idx++) {
           const r = results[idx];
           if (r.status === 'fulfilled' && r.value.data?.id) {
-            profFallbackCreated++;
             processNewPro(r.value.data, chunk[idx]);
           } else {
             const errMsg = r.status === 'rejected' ? String(r.reason) : (r.value as any).error?.message;
-            profFallbackFailed.push({ bendy_id: chunk[idx].bendyId, error: errMsg });
             result.failed++;
             result.errors.push(`User ${chunk[idx].bendyId}: ${(errMsg || 'onbekend').substring(0, 200)}`);
           }
@@ -325,10 +317,6 @@ export async function syncUsers(
       }
     }
 
-    (result as any).debug_prof_batch_ok = profBatchOk;
-    (result as any).debug_prof_fallback_used = profFallbackUsed;
-    (result as any).debug_prof_fallback_created = profFallbackCreated;
-    (result as any).debug_prof_fallback_failed = profFallbackFailed.slice(0, 20);
   }
 
   if (bsnWrites.length > 0) {
