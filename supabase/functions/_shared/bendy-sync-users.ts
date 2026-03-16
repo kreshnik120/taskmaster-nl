@@ -292,7 +292,6 @@ export async function syncUsers(
         .select('id');
 
       if (!error && data) {
-        profBatchOk++;
         for (let idx = 0; idx < data.length; idx++) {
           processNewPro(data[idx], chunk[idx]);
         }
