@@ -6,6 +6,7 @@ import { logInfo, logWarning } from './core.ts';
 import {
   FUNCTION_NAME,
   fetchAllBendyRecords,
+  fetchDeltaBendyRecords,
   fetchBendyApi,
   batchUpsert,
   batchInsert,
