@@ -87,6 +87,8 @@ export async function syncUsers(
   const proInserts: Array<{ insertData: Record<string, any>; bendyId: string; bsn: string | null }> = [];
   const bsnWrites: any[] = [];
   const mappingWrites: any[] = [];
+  let emailMatchCount = 0;
+  let emailSkippedCount = 0;
 
   for (const bendyUser of bendyUsers) {
     try {
