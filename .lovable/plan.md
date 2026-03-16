@@ -1,37 +1,42 @@
 
 
-# S41-B3: Document Toevoegen Dialog — Handmatig Uploaden
+# DELTA-SYNC-1: Delta fetch voor requisition sync
 
-## Wijzigingen in `src/components/ProfessionalDetailModal.tsx`
+## Overzicht
+Bij `sync_type: 'incremental'` alleen recent gewijzigde requisitions ophalen via `sort=-updated_at` met early-stop. Full sync blijft ongewijzigd.
 
-### 1. Nieuwe state variabelen (na regel 193)
-- `showAddDocDialog` (boolean)
-- `addDocLoading` (boolean)
-- `addDocForm` object: `{ name, category, type, expiryDate, file }`
+## Wijzigingen
 
-### 2. `handleAddDocument` functie (na `handleDownloadDocument`)
-- Als file geselecteerd: upload naar `professional-documents` bucket met pad `{org_id}/{professional.id}/manual_{timestamp}.{ext}`
-- Insert in `professional_documents` met `is_manual: true`, `bendy_document_id: null`
-- Haal `user` op via `supabase.auth.getUser()`
-- Refresh documenten lijst, sluit dialog, reset form, toon groene toast
+### 1. `_shared/bendy-helpers.ts`
 
-### 3. `handleUploadForManualDoc` functie
-- Voor bestaande `is_manual` documenten zonder `file_path` (Scenario C knop)
-- Opent file input, upload naar storage, update record met `file_path`/`file_name`/`content_type`
-- Update lokale `documents` state
+**A. Nieuwe export `fetchDeltaBendyRecords`** (na `fetchAllBendyRecords`, ~regel 195)
+- Paginatie met `sort: '-updated_at'`
+- Telt per pagina hoeveel records nieuwer zijn dan `cutoffDate`
+- Als 0 nieuwe records op een pagina → early stop
+- Records zonder `updated_at` = behandeld als nieuw (veilig)
+- Return type: `FetchResult & { earlyStop: boolean; pagesScanned: number }`
 
-### 4. UI: "+ Document toevoegen" knop (naast "Alle documenten ophalen", regel ~1276)
-- Plus icoon, variant outline, opent dialog
+**B. `acquireSyncLock` uitbreiden**
+- Select ook `last_incremental_sync_at`
+- Return type krijgt `lastIncrementalSyncAt: string | null`
+- Alle 4 return paden bijwerken
 
-### 5. UI: Dialog component (onder de TabsContent of aan het eind)
-- Velden: Documentnaam (verplicht), Categorie (select), Document type (optioneel), Verloopdatum (date input), Bestand (file input, max 10MB)
-- Na file selectie: toon bestandsnaam + grootte
-- Knoppen: Annuleren + Opslaan (disabled als naam leeg of loading)
+### 2. `_shared/bendy-sync-requisitions.ts`
 
-### 6. Scenario C Upload knop activeren (regel ~1447)
-- Verwijder `disabled` van de Upload knop
-- onClick: trigger hidden file input → `handleUploadForManualDoc`
+**Signature + STAP 1 fetch**
+- Voeg `syncType` en `lastSyncAt` parameters toe
+- Import `fetchDeltaBendyRecords` uit helpers
+- Als `syncType === 'incremental' && lastSyncAt`: gebruik delta fetch met cutoff = `lastSyncAt - 60s`
+- Anders: bestaande full fetch (ongewijzigd)
 
-### Bestanden die NIET worden aangepast
-- Edge functions, storage config, andere tabs, bendy-sync
+### 3. `bendy-sync/index.ts`
+
+**Caller code** (~regel 561-577)
+- Capture `lock.lastIncrementalSyncAt`
+- Geef door aan `syncRequisitions(..., capturedLastSyncAt)`
+
+## Verwacht resultaat
+- Eerste sync (geen `last_incremental_sync_at`): full sync (~42k records, ~70s)
+- Volgende incrementals: ~100-500 records, ~3-8s
+- `sync_type: 'full'` negeert delta altijd
 
