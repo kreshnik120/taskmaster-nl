@@ -307,11 +307,9 @@ export async function syncUsers(
         for (let idx = 0; idx < results.length; idx++) {
           const r = results[idx];
           if (r.status === 'fulfilled' && r.value.data?.id) {
-            profFallbackCreated++;
             processNewPro(r.value.data, chunk[idx]);
           } else {
             const errMsg = r.status === 'rejected' ? String(r.reason) : (r.value as any).error?.message;
-            profFallbackFailed.push({ bendy_id: chunk[idx].bendyId, error: errMsg });
             result.failed++;
             result.errors.push(`User ${chunk[idx].bendyId}: ${(errMsg || 'onbekend').substring(0, 200)}`);
           }
