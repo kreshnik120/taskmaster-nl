@@ -296,7 +296,6 @@ export async function syncUsers(
           processNewPro(data[idx], chunk[idx]);
         }
       } else {
-        profFallbackUsed++;
         logWarning(FUNCTION_NAME, `Prof chunk ${i} failed: ${error?.message} — fallback per record`);
 
         const results = await Promise.allSettled(
