@@ -328,21 +328,21 @@ export async function acquireSyncLock(
   adminClient: any,
   tenant: string,
   _entityType: string
-): Promise<{ locked: boolean; configId: string; orgId: string }> {
+): Promise<{ locked: boolean; configId: string; orgId: string; lastIncrementalSyncAt: string | null }> {
   const { data: config } = await adminClient
     .from('bendy_sync_config')
-    .select('id, org_id, sync_status, enabled, updated_at')
+    .select('id, org_id, sync_status, enabled, updated_at, last_incremental_sync_at')
     .eq('tenant', tenant)
     .single();
 
-  if (!config) return { locked: false, configId: '', orgId: '' };
-  if (!config.enabled) return { locked: false, configId: '', orgId: '' };
+  if (!config) return { locked: false, configId: '', orgId: '', lastIncrementalSyncAt: null };
+  if (!config.enabled) return { locked: false, configId: '', orgId: '', lastIncrementalSyncAt: null };
 
   if (config.sync_status === 'running') {
     const updatedAt = new Date(config.updated_at).getTime();
     const staleDuration = Date.now() - updatedAt;
     if (staleDuration < STALE_LOCK_TIMEOUT_MS) {
-      return { locked: false, configId: '', orgId: '' };
+      return { locked: false, configId: '', orgId: '', lastIncrementalSyncAt: null };
     }
     logWarning(FUNCTION_NAME, `Stale lock gedetecteerd voor ${tenant} (${Math.round(staleDuration / 1000)}s oud) — automatisch gereset`);
   }
@@ -352,7 +352,7 @@ export async function acquireSyncLock(
     .update({ sync_status: 'running', error_message: null, updated_at: new Date().toISOString() })
     .eq('id', config.id);
 
-  return { locked: true, configId: config.id, orgId: config.org_id };
+  return { locked: true, configId: config.id, orgId: config.org_id, lastIncrementalSyncAt: config.last_incremental_sync_at || null };
 }
 
 export async function releaseSyncLock(
