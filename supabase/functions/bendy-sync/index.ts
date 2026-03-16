@@ -563,6 +563,7 @@ Deno.serve(async (req) => {
     const capturedSyncLogId = syncLogId;
     const capturedCircuitBreakerName = circuitBreakerName;
     const capturedStartTime = startTime;
+    const capturedLastSyncAt = lock.lastIncrementalSyncAt;
 
     // @ts-ignore — EdgeRuntime.waitUntil is Supabase-specifiek
     EdgeRuntime.waitUntil((async () => {
