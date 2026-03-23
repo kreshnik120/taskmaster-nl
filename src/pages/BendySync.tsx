@@ -114,6 +114,14 @@ interface StatusData {
   pending_mappings?: PendingMapping[];
 }
 
+interface SkipDiag {
+  sublocation_miss: number;
+  datum_ontbreekt: number;
+  tijd_ontbreekt: number;
+  missing_client_ids: string[];
+  bendy_status_verdeling: Record<string, number>;
+}
+
 interface SyncResult {
   records_fetched: number;
   records_created: number;
@@ -124,6 +132,7 @@ interface SyncResult {
   toewijzingen_skipped?: number;
   toewijzingen_no_match?: number;
   toewijzingen_overlap?: number;
+  skip_diag?: SkipDiag;
 }
 
 const statusBadgeVariant: Record<string, string> = {
