@@ -129,16 +129,20 @@ export async function syncRequisitions(
       const sublocationId = clientBendyId ? subMap.get(clientBendyId) : null;
 
       if (!sublocationId) {
-        result.skipped++;
-        mappingWrites.push({
-          org_id: orgId, tenant, entity_type: 'dienst',
-          bendy_id: bendyId, local_id: '00000000-0000-0000-0000-000000000000',
-          sync_status: 'pending',
-          conflict_data: { reason: 'sublocation_not_found', client_bendy_id: clientBendyId, name: attrs.name, date: attrs.date },
-          last_synced_at: new Date().toISOString(),
-        });
-        continue;
-      }
+          result.skipped++;
+          skipDiag.sublocation_miss++;
+          if (clientBendyId && skipDiag.missing_client_ids.length < 50) {
+            skipDiag.missing_client_ids.push(`${clientBendyId}|${attrs.name || ''}|${attrs.date || ''}`);
+          }
+          mappingWrites.push({
+            org_id: orgId, tenant, entity_type: 'dienst',
+            bendy_id: bendyId, local_id: '00000000-0000-0000-0000-000000000000',
+            sync_status: 'pending',
+            conflict_data: { reason: 'sublocation_not_found', client_bendy_id: clientBendyId, name: attrs.name, date: attrs.date },
+            last_synced_at: new Date().toISOString(),
+          });
+          continue;
+        }
 
       const extractTime = (dt: string | null): string | null => {
         if (!dt) return null;
