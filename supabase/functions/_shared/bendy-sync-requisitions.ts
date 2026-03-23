@@ -100,11 +100,24 @@ export async function syncRequisitions(
   const dienstUpdates: any[] = [];
   const mappingWrites: any[] = [];
 
+  // Diagnostiek: waarom worden diensten overgeslagen?
+  const skipDiag = {
+    sublocation_miss: 0,
+    datum_ontbreekt: 0,
+    tijd_ontbreekt: 0,
+    missing_client_ids: [] as string[],
+    bendy_status_verdeling: {} as Record<string, number>,
+  };
+
   for (const record of allRecords) {
     try {
-      const bendyId = String(record.id);
-      const attrs = record.attributes || {};
-      const rels = record.relationships || {};
+        const bendyId = String(record.id);
+        const attrs = record.attributes || {};
+        const rels = record.relationships || {};
+
+        // Tel Bendy status verdeling
+        const rawStatus = String(attrs.status || 'unknown');
+        skipDiag.bendy_status_verdeling[rawStatus] = (skipDiag.bendy_status_verdeling[rawStatus] || 0) + 1;
 
       cacheWrites.push({
         org_id: orgId, tenant, entity_type: 'requisitions',
@@ -116,16 +129,20 @@ export async function syncRequisitions(
       const sublocationId = clientBendyId ? subMap.get(clientBendyId) : null;
 
       if (!sublocationId) {
-        result.skipped++;
-        mappingWrites.push({
-          org_id: orgId, tenant, entity_type: 'dienst',
-          bendy_id: bendyId, local_id: '00000000-0000-0000-0000-000000000000',
-          sync_status: 'pending',
-          conflict_data: { reason: 'sublocation_not_found', client_bendy_id: clientBendyId, name: attrs.name, date: attrs.date },
-          last_synced_at: new Date().toISOString(),
-        });
-        continue;
-      }
+          result.skipped++;
+          skipDiag.sublocation_miss++;
+          if (clientBendyId && skipDiag.missing_client_ids.length < 50) {
+            skipDiag.missing_client_ids.push(`${clientBendyId}|${attrs.name || ''}|${attrs.date || ''}`);
+          }
+          mappingWrites.push({
+            org_id: orgId, tenant, entity_type: 'dienst',
+            bendy_id: bendyId, local_id: '00000000-0000-0000-0000-000000000000',
+            sync_status: 'pending',
+            conflict_data: { reason: 'sublocation_not_found', client_bendy_id: clientBendyId, name: attrs.name, date: attrs.date },
+            last_synced_at: new Date().toISOString(),
+          });
+          continue;
+        }
 
       const extractTime = (dt: string | null): string | null => {
         if (!dt) return null;
@@ -170,10 +187,12 @@ export async function syncRequisitions(
       const eindTijd = extractTime(attrs.end_time);
 
       if (!attrs.date || !startTijd || !eindTijd) {
-        result.failed++;
-        result.errors.push(`Req ${bendyId}: datum/tijd ontbreekt`);
-        continue;
-      }
+          result.failed++;
+          if (!attrs.date) skipDiag.datum_ontbreekt++;
+          if (!startTijd || !eindTijd) skipDiag.tijd_ontbreekt++;
+          result.errors.push(`Req ${bendyId}: datum/tijd ontbreekt (date=${attrs.date}, start=${attrs.start_time}, end=${attrs.end_time})`);
+          continue;
+        }
 
       const existingDienst = dienstMap.get(bendyId);
 
@@ -465,6 +484,9 @@ export async function syncRequisitions(
   await logProgress('6-STALE-CLEANUP', staleStats);
 
   // Metadata opslaan
+  // Diagnostiek als SKIP_DIAG entry in errors (zodat frontend het kan tonen)
+  result.errors.push(`SKIP_DIAG:${JSON.stringify(skipDiag)}`);
+
   if (syncLogId) {
     try {
       await adminClient
@@ -482,6 +504,7 @@ export async function syncRequisitions(
             debug_stale_marked: staleStats.marked,
             debug_stale_skipped_old: staleStats.skipped_old,
             debug_stale_skipped_status: staleStats.skipped_status,
+            skip_diagnostiek: skipDiag,
             ...metadata_fuc,
           },
         })
