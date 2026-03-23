@@ -215,8 +215,7 @@ export async function syncRequisitions(
       if (existingDienst) {
         const updateData: Record<string, any> = {};
         const newStatus = mapStatus(attrs.status);
-        if (existingDienst.status !== newStatus &&
-            existingDienst.status !== 'geannuleerd' &&
+          if (existingDienst.status !== newStatus &&
             existingDienst.status !== 'voltooid') {
           updateData.status = newStatus;
         }
@@ -477,25 +476,30 @@ export async function syncRequisitions(
 
   await logProgress('5-TOEWIJZINGEN', twStats);
 
-  // ═══ STAP 6: Stale requisitions cleanup ═══
-  const seenBendyIds = new Set<string>();
-  for (const record of allRecords) {
-    seenBendyIds.add(String(record.id));
-  }
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const cutoffDateStr = yesterday.toISOString().split('T')[0];
+  // ═══ STAP 6: Stale requisitions cleanup (alleen bij full sync) ═══
   const staleStats = { marked: 0, skipped_old: 0, skipped_status: 0 };
 
-  for (const [bendyId, dienst] of dienstMap.entries()) {
-    if (seenBendyIds.has(bendyId)) continue;
-    if (dienst.datum < cutoffDateStr) { staleStats.skipped_old++; continue; }
-    if (['geannuleerd', 'voltooid'].includes(dienst.status)) { staleStats.skipped_status++; continue; }
-    const { error } = await adminClient
-      .from('diensten')
-      .update({ status: 'geannuleerd', updated_at: new Date().toISOString() })
-      .eq('id', dienst.id);
-    if (!error) staleStats.marked++;
+  if (!isDelta) {
+    const seenBendyIds = new Set<string>();
+    for (const record of allRecords) {
+      seenBendyIds.add(String(record.id));
+    }
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const cutoffDateStr = yesterday.toISOString().split('T')[0];
+
+    for (const [bendyId, dienst] of dienstMap.entries()) {
+      if (seenBendyIds.has(bendyId)) continue;
+      if (dienst.datum < cutoffDateStr) { staleStats.skipped_old++; continue; }
+      if (['geannuleerd', 'voltooid'].includes(dienst.status)) { staleStats.skipped_status++; continue; }
+      const { error } = await adminClient
+        .from('diensten')
+        .update({ status: 'geannuleerd', updated_at: new Date().toISOString() })
+        .eq('id', dienst.id);
+      if (!error) staleStats.marked++;
+    }
+  } else {
+    logInfo(FUNCTION_NAME, 'Stale cleanup overgeslagen (delta sync)');
   }
   await logProgress('6-STALE-CLEANUP', staleStats);
 
