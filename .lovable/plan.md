@@ -1,40 +1,30 @@
 
 
-# 90-dagen fallback filter voor full requisition sync
+# FIX-STALE-1: Stale cleanup + status herstel
 
-## Huidige situatie
-Wijzigingen 1-3 zijn **al geïmplementeerd** — `capturedLastSyncAt` wordt al vastgelegd (regel 616) en meegegeven aan `syncRequisitions` (regel 628) en `syncUsers` (regel 624). Delta mode werkt dus al.
+## Wijzigingen
 
-## Enige ontbrekende wijziging: Wijziging 4
+### 1. Stale cleanup alleen bij full sync (regels 480-499)
+Wrap de stale cleanup logica in `if (!isDelta) { ... }`. De `staleStats` variabele staat al buiten de loop (regel 488), dus die blijft beschikbaar voor logProgress.
 
-### `supabase/functions/_shared/bendy-sync-requisitions.ts`
+### 2. Verwijder `geannuleerd` guard bij status update (regel 219)
+Verwijder `existingDienst.status !== 'geannuleerd'` uit de conditie zodat diensten die in Bendy actief zijn maar lokaal op geannuleerd staan, worden hersteld. Alleen `voltooid` blijft beschermd.
 
-**Na regel 41**: Voeg `fullSyncCutoff` berekening toe (90 dagen terug) wanneer het geen delta sync is.
-
-**Regels 64-66 aanpassen**: Verander `const` naar `let`, filter records ouder dan 90 dagen bij full sync, en log hoeveel records gefilterd zijn.
-
-```text
-WAS:
-  const openRecords = openResult.records;
-  const assignedRecords = assignedResult.records;
-  const allRecords = [...openRecords, ...assignedRecords];
-
-WORDT:
-  let openRecords = openResult.records;
-  let assignedRecords = assignedResult.records;
-  if (fullSyncCutoff) {
-    const cutoff = fullSyncCutoff.split('T')[0];
-    openRecords = openRecords.filter(r => !r.attributes?.date || r.attributes.date >= cutoff);
-    assignedRecords = assignedRecords.filter(r => !r.attributes?.date || r.attributes.date >= cutoff);
-    logInfo(...);
-  }
-  const allRecords = [...openRecords, ...assignedRecords];
+### 3. SQL migratie: herstel 64 onterecht geannuleerde diensten
+```sql
+UPDATE diensten
+SET status = 'volledig_bezet', updated_at = NOW()
+WHERE datum BETWEEN '2026-03-23' AND '2026-03-29'
+  AND status = 'geannuleerd'
+  AND bendy_id IS NOT NULL
+  AND bendy_id IN (
+    SELECT bendy_id FROM bendy_raw_cache
+    WHERE entity_type = 'requisitions'
+  );
 ```
 
-### Deploy
-Deploy `bendy-sync` edge function na de wijziging.
+### 4. Deploy edge function
 
 ## Niet aanraken
-- `bendy-sync/index.ts` (al correct)
-- Delta fetch functies, mapStatus, toewijzingen, diagnostiek
+Diagnostiek, delta fetch, toewijzingen, 90-dagen filter.
 
