@@ -1,49 +1,40 @@
 
 
-# Skip-diagnostiek voor requisition sync
+# 90-dagen fallback filter voor full requisition sync
 
-## Backend: `supabase/functions/_shared/bendy-sync-requisitions.ts`
+## Huidige situatie
+Wijzigingen 1-3 zijn **al geïmplementeerd** — `capturedLastSyncAt` wordt al vastgelegd (regel 616) en meegegeven aan `syncRequisitions` (regel 628) en `syncUsers` (regel 624). Delta mode werkt dus al.
 
-### 1. `skipDiag` object toevoegen (na regel 101)
-Tracking object met tellers voor sublocation_miss, datum_ontbreekt, tijd_ontbreekt, missing_client_ids array, en bendy_status_verdeling.
+## Enige ontbrekende wijziging: Wijziging 4
 
-### 2. Status-verdeling tellen (na regel 107)
-Tel `attrs.status` per record in `skipDiag.bendy_status_verdeling`.
+### `supabase/functions/_shared/bendy-sync-requisitions.ts`
 
-### 3. Sublocation-skip verrijken (regel 118-128)
-Verhoog `skipDiag.sublocation_miss` en verzamel `clientBendyId|name|date` in `missing_client_ids` (max 50).
+**Na regel 41**: Voeg `fullSyncCutoff` berekening toe (90 dagen terug) wanneer het geen delta sync is.
 
-### 4. Datum/tijd-skip verrijken (regel 172-176)
-Tel `datum_ontbreekt` en `tijd_ontbreekt` apart, voeg waarden toe aan error message.
+**Regels 64-66 aanpassen**: Verander `const` naar `let`, filter records ouder dan 90 dagen bij full sync, en log hoeveel records gefilterd zijn.
 
-### 5. Diagnostiek opslaan (regel 467-490)
-- Voeg `SKIP_DIAG:${JSON.stringify(skipDiag)}` toe aan `result.errors`
-- Voeg `skip_diagnostiek: skipDiag` toe aan metadata object
+```text
+WAS:
+  const openRecords = openResult.records;
+  const assignedRecords = assignedResult.records;
+  const allRecords = [...openRecords, ...assignedRecords];
 
-### 6. Deploy edge function
-
-## Frontend: `src/pages/BendySync.tsx`
-
-### 7. Interface uitbreiden (regel 117-127)
-Voeg `SkipDiag` interface toe en `skip_diag?: SkipDiag` aan `SyncResult`.
-
-### 8. Polling: skip_diag uit errors array lezen (regel 636-648)
-Lees uit `log.errors` array, zelfde patroon als `TOEWIJZINGEN_STATS:`:
-```typescript
-const diagEntry = log.errors?.find((e: string) => typeof e === 'string' && e.startsWith('SKIP_DIAG:'));
-if (diagEntry) {
-  try {
-    result.skip_diag = JSON.parse(diagEntry.replace('SKIP_DIAG:', ''));
-  } catch { /* ignore */ }
-}
+WORDT:
+  let openRecords = openResult.records;
+  let assignedRecords = assignedResult.records;
+  if (fullSyncCutoff) {
+    const cutoff = fullSyncCutoff.split('T')[0];
+    openRecords = openRecords.filter(r => !r.attributes?.date || r.attributes.date >= cutoff);
+    assignedRecords = assignedRecords.filter(r => !r.attributes?.date || r.attributes.date >= cutoff);
+    logInfo(...);
+  }
+  const allRecords = [...openRecords, ...assignedRecords];
 ```
 
-### 9. UI: diagnostiek-blok tonen (na toewijzingen stats)
-Amber-styled blok met:
-- Grid: sublocation_miss, datum_ontbreekt, tijd_ontbreekt
-- Badges: bendy_status_verdeling
-- Collapsible: missing_client_ids lijst
+### Deploy
+Deploy `bendy-sync` edge function na de wijziging.
 
 ## Niet aanraken
-- mapStatus, sublocation matching, toewijzingen-sync, bestaande sync flows
+- `bendy-sync/index.ts` (al correct)
+- Delta fetch functies, mapStatus, toewijzingen, diagnostiek
 
