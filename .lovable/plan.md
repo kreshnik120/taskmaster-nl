@@ -1,30 +1,14 @@
 
 
-# FIX-STALE-1: Stale cleanup + status herstel
+# DATA-FIX-1: Reset diensten status op basis van Bendy data
 
-## Wijzigingen
+## Actie
+Vier SQL queries uitvoeren in volgorde via database tooling. Geen codewijzigingen.
 
-### 1. Stale cleanup alleen bij full sync (regels 480-499)
-Wrap de stale cleanup logica in `if (!isDelta) { ... }`. De `staleStats` variabele staat al buiten de loop (regel 488), dus die blijft beschikbaar voor logProgress.
+1. **Query 1** — Reset status van alle diensten deze week op basis van actuele Bendy raw_data (open → open, closed → volledig_bezet). Beschermt `voltooid`.
+2. **Query 2** — Markeer diensten die niet meer in Bendy staan als `geannuleerd`.
+3. **Query 3** — Verificatie: status-verdeling deze week ophalen.
+4. **Query 4** — Reset `last_incremental_sync_at` naar NOW() zodat volgende sync correct werkt.
 
-### 2. Verwijder `geannuleerd` guard bij status update (regel 219)
-Verwijder `existingDienst.status !== 'geannuleerd'` uit de conditie zodat diensten die in Bendy actief zijn maar lokaal op geannuleerd staan, worden hersteld. Alleen `voltooid` blijft beschermd.
-
-### 3. SQL migratie: herstel 64 onterecht geannuleerde diensten
-```sql
-UPDATE diensten
-SET status = 'volledig_bezet', updated_at = NOW()
-WHERE datum BETWEEN '2026-03-23' AND '2026-03-29'
-  AND status = 'geannuleerd'
-  AND bendy_id IS NOT NULL
-  AND bendy_id IN (
-    SELECT bendy_id FROM bendy_raw_cache
-    WHERE entity_type = 'requisitions'
-  );
-```
-
-### 4. Deploy edge function
-
-## Niet aanraken
-Diagnostiek, delta fetch, toewijzingen, 90-dagen filter.
+Verwacht resultaat Query 3: ~146 volledig_bezet, ~8 open, rest geannuleerd.
 
