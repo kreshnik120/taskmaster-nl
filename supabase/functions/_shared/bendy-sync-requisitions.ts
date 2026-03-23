@@ -40,6 +40,11 @@ export async function syncRequisitions(
     ? new Date(new Date(lastSyncAt).getTime() - 60_000).toISOString()
     : null;
 
+  // Fallback: bij full sync, beperk tot records van laatste 90 dagen
+  const fullSyncCutoff = !isDelta
+    ? new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+    : null;
+
   let openResult: FetchResult;
   let assignedResult: FetchResult;
 
