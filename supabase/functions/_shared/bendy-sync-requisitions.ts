@@ -111,9 +111,13 @@ export async function syncRequisitions(
 
   for (const record of allRecords) {
     try {
-      const bendyId = String(record.id);
-      const attrs = record.attributes || {};
-      const rels = record.relationships || {};
+        const bendyId = String(record.id);
+        const attrs = record.attributes || {};
+        const rels = record.relationships || {};
+
+        // Tel Bendy status verdeling
+        const rawStatus = String(attrs.status || 'unknown');
+        skipDiag.bendy_status_verdeling[rawStatus] = (skipDiag.bendy_status_verdeling[rawStatus] || 0) + 1;
 
       cacheWrites.push({
         org_id: orgId, tenant, entity_type: 'requisitions',
