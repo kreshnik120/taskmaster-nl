@@ -215,8 +215,7 @@ export async function syncRequisitions(
       if (existingDienst) {
         const updateData: Record<string, any> = {};
         const newStatus = mapStatus(attrs.status);
-        if (existingDienst.status !== newStatus &&
-            existingDienst.status !== 'geannuleerd' &&
+          if (existingDienst.status !== newStatus &&
             existingDienst.status !== 'voltooid') {
           updateData.status = newStatus;
         }
