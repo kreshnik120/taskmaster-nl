@@ -100,6 +100,15 @@ export async function syncRequisitions(
   const dienstUpdates: any[] = [];
   const mappingWrites: any[] = [];
 
+  // Diagnostiek: waarom worden diensten overgeslagen?
+  const skipDiag = {
+    sublocation_miss: 0,
+    datum_ontbreekt: 0,
+    tijd_ontbreekt: 0,
+    missing_client_ids: [] as string[],
+    bendy_status_verdeling: {} as Record<string, number>,
+  };
+
   for (const record of allRecords) {
     try {
       const bendyId = String(record.id);
