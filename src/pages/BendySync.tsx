@@ -651,6 +651,16 @@ export default function BendySync() {
             toewijzingen_overlap: meta.toewijzingen_overlap,
           };
 
+          // Extract skip diagnostiek from errors array
+          if (log.errors && Array.isArray(log.errors)) {
+            const diagEntry = log.errors.find((e: string) => typeof e === 'string' && e.startsWith('SKIP_DIAG:'));
+            if (diagEntry) {
+              try {
+                result.skip_diag = JSON.parse(diagEntry.replace('SKIP_DIAG:', ''));
+              } catch { /* ignore parse errors */ }
+            }
+          }
+
           if (pollingAction === 'sync_clients') {
             setSyncResult(result);
             setSyncing(false);
