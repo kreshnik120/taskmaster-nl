@@ -1434,6 +1434,39 @@ export default function BendySync() {
                     <div><span className="text-xs text-muted-foreground">Toewijzingen overlap</span><p className="font-semibold text-destructive">{reqSyncResult.toewijzingen_overlap ?? 0}</p></div>
                   </div>
                 ) : null}
+                {reqSyncResult?.skip_diag && (
+                  <div className="space-y-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
+                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Diagnostiek: Overgeslagen diensten</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      <div><span className="text-xs text-muted-foreground">Sublocation niet gevonden</span><p className="font-semibold text-amber-600">{reqSyncResult.skip_diag.sublocation_miss}</p></div>
+                      <div><span className="text-xs text-muted-foreground">Datum ontbreekt</span><p className="font-semibold text-amber-600">{reqSyncResult.skip_diag.datum_ontbreekt}</p></div>
+                      <div><span className="text-xs text-muted-foreground">Tijd ontbreekt</span><p className="font-semibold text-amber-600">{reqSyncResult.skip_diag.tijd_ontbreekt}</p></div>
+                    </div>
+                    {Object.keys(reqSyncResult.skip_diag.bendy_status_verdeling).length > 0 && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Bendy status verdeling:</p>
+                        <div className="flex flex-wrap gap-2">
+                          {Object.entries(reqSyncResult.skip_diag.bendy_status_verdeling).map(([status, count]) => (
+                            <Badge key={status} variant="outline" className="text-xs">{status}: {count as number}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {reqSyncResult.skip_diag.missing_client_ids.length > 0 && (
+                      <details className="text-xs">
+                        <summary className="cursor-pointer text-amber-700 dark:text-amber-400 font-medium">
+                          {reqSyncResult.skip_diag.missing_client_ids.length} ontbrekende sublocaties (klik om te tonen)
+                        </summary>
+                        <div className="mt-1 max-h-40 overflow-y-auto space-y-0.5 font-mono text-muted-foreground">
+                          {reqSyncResult.skip_diag.missing_client_ids.map((entry, i) => {
+                            const [clientId, name, date] = entry.split('|');
+                            return <div key={i}>Client {clientId} — {name} — {date}</div>;
+                          })}
+                        </div>
+                      </details>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
