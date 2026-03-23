@@ -484,6 +484,9 @@ export async function syncRequisitions(
   await logProgress('6-STALE-CLEANUP', staleStats);
 
   // Metadata opslaan
+  // Diagnostiek als SKIP_DIAG entry in errors (zodat frontend het kan tonen)
+  result.errors.push(`SKIP_DIAG:${JSON.stringify(skipDiag)}`);
+
   if (syncLogId) {
     try {
       await adminClient
@@ -501,6 +504,7 @@ export async function syncRequisitions(
             debug_stale_marked: staleStats.marked,
             debug_stale_skipped_old: staleStats.skipped_old,
             debug_stale_skipped_status: staleStats.skipped_status,
+            skip_diagnostiek: skipDiag,
             ...metadata_fuc,
           },
         })
