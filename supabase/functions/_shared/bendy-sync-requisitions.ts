@@ -66,8 +66,19 @@ export async function syncRequisitions(
     assignedResult = fullAssigned;
   }
 
-  const openRecords = openResult.records;
-  const assignedRecords = assignedResult.records;
+  let openRecords = openResult.records;
+  let assignedRecords = assignedResult.records;
+
+  // Bij full sync: filter records ouder dan 90 dagen (voorkomt 37K+ records verwerken)
+  if (fullSyncCutoff) {
+    const cutoff = fullSyncCutoff.split('T')[0]; // YYYY-MM-DD
+    const beforeOpen = openRecords.length;
+    const beforeAssigned = assignedRecords.length;
+    openRecords = openRecords.filter((r: any) => !r.attributes?.date || r.attributes.date >= cutoff);
+    assignedRecords = assignedRecords.filter((r: any) => !r.attributes?.date || r.attributes.date >= cutoff);
+    logInfo(FUNCTION_NAME, `Full sync filter: open ${beforeOpen}→${openRecords.length}, assigned ${beforeAssigned}→${assignedRecords.length} (cutoff: ${cutoff})`);
+  }
+
   const allRecords = [...openRecords, ...assignedRecords];
   result.fetched = allRecords.length;
 
