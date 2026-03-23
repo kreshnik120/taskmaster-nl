@@ -49,13 +49,25 @@ const VACANCY_SAFE_COLUMNS = "id, titel, status, sublocation_id, created_at, upd
 
 // PII regex patronen voor server-side scan
 const PII_PATTERNS = [
-  /\b\d{9}\b/g,          // BSN (9 cijfers)
   /\b[A-Z]{2}\d{2}[A-Z0-9]{4}\d{7}([A-Z0-9]{0,3})?\b/g,  // IBAN
 ];
+
+// BSN 11-proef validatie: alleen echte BSN's filteren
+function isValidBSN(digits: string): boolean {
+  if (digits.length !== 9) return false;
+  const weights = [9, 8, 7, 6, 5, 4, 3, 2, -1];
+  let sum = 0;
+  for (let i = 0; i < 9; i++) {
+    sum += parseInt(digits[i]) * weights[i];
+  }
+  return sum > 0 && sum % 11 === 0;
+}
 
 function stripPII(obj: any): any {
   if (typeof obj === 'string') {
     let clean = obj;
+    // BSN: alleen filteren als 11-proef slaagt
+    clean = clean.replace(/\b\d{9}\b/g, (match) => isValidBSN(match) ? '[VERBORGEN]' : match);
     for (const pattern of PII_PATTERNS) {
       pattern.lastIndex = 0;
       clean = clean.replace(pattern, '[VERBORGEN]');
