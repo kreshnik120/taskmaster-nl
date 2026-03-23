@@ -187,10 +187,12 @@ export async function syncRequisitions(
       const eindTijd = extractTime(attrs.end_time);
 
       if (!attrs.date || !startTijd || !eindTijd) {
-        result.failed++;
-        result.errors.push(`Req ${bendyId}: datum/tijd ontbreekt`);
-        continue;
-      }
+          result.failed++;
+          if (!attrs.date) skipDiag.datum_ontbreekt++;
+          if (!startTijd || !eindTijd) skipDiag.tijd_ontbreekt++;
+          result.errors.push(`Req ${bendyId}: datum/tijd ontbreekt (date=${attrs.date}, start=${attrs.start_time}, end=${attrs.end_time})`);
+          continue;
+        }
 
       const existingDienst = dienstMap.get(bendyId);
 
