@@ -1,12 +1,12 @@
 
 
-# DIAG-4: Extra diensten per dag en locatie
+# DIAG-5: Bevestig duplicaat-patroon ingeplande diensten
 
 ## Actie
-Twee read-only SQL queries uitvoeren om de 15 extra diensten te lokaliseren per dag en sublocation. Geen codewijzigingen.
+Twee read-only SQL queries uitvoeren via `psql` om te bevestigen dat de 15 extra diensten veroorzaakt worden door meerdere Bendy requisitions voor dezelfde sublocation + datum + tijdslot. Geen codewijzigingen.
 
-1. **Query 1** — Alle ingeplande diensten op de 5 afwijkende dagen (di, wo, do, za, zo) met locatie, tijden en Bendy API status
-2. **Query 2** — Groepering per sublocation over de hele week → identificeert welke locaties de extra diensten genereren
+1. **Query 1** — Duplicaat-groepen: alle combinaties van locatie + datum + start + eind met meer dan 1 dienst, inclusief de bendy_ids
+2. **Query 2** — Totaaltelling: som van extra diensten en aantal groepen
 
-Resultaten worden als tabellen getoond.
+Verwacht resultaat: ~15 extra diensten in ~15 groepen, elk met 2 verschillende bendy_ids.
 
