@@ -1,13 +1,12 @@
 
 
-# DIAG-2: Diagnostiek diensten vs toewijzingen week 13
+# DIAG-3: Identificeer extra ingeplande diensten
 
 ## Actie
-Drie read-only SQL queries uitvoeren via `psql` om het verschil tussen 213 (abcito) en 155 (Bendy) diensten te analyseren. Geen codewijzigingen, geen migraties.
+Twee read-only SQL queries uitvoeren via `psql` om te identificeren welke dagen extra diensten hebben t.o.v. Bendy's weekoverzicht. Geen codewijzigingen.
 
-1. **Query 1** — Diensten per status + bron → toont of het verschil uit handmatige of geïmporteerde diensten komt
-2. **Query 2** — Toewijzingen per status → toont hoeveel diensten wel/niet een professional gekoppeld hebben
-3. **Query 3** — Bendy raw cache telling → toont wat Bendy werkelijk rapporteert voor deze week
+1. **Query 1** — Alle ingeplande diensten (volledig_bezet + voltooid) met datum, locatie, tijden en bendy_id → volledige lijst
+2. **Query 2** — Telling per dag met uren → directe vergelijking met Bendy (ma:17, di:20, wo:19, do:24, vr:20, za:30, zo:20)
 
 Resultaten worden als tabellen getoond.
 
