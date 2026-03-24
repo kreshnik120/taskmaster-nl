@@ -1,12 +1,12 @@
 
 
-# DIAG-3: Identificeer extra ingeplande diensten
+# DIAG-4: Extra diensten per dag en locatie
 
 ## Actie
-Twee read-only SQL queries uitvoeren via `psql` om te identificeren welke dagen extra diensten hebben t.o.v. Bendy's weekoverzicht. Geen codewijzigingen.
+Twee read-only SQL queries uitvoeren om de 15 extra diensten te lokaliseren per dag en sublocation. Geen codewijzigingen.
 
-1. **Query 1** — Alle ingeplande diensten (volledig_bezet + voltooid) met datum, locatie, tijden en bendy_id → volledige lijst
-2. **Query 2** — Telling per dag met uren → directe vergelijking met Bendy (ma:17, di:20, wo:19, do:24, vr:20, za:30, zo:20)
+1. **Query 1** — Alle ingeplande diensten op de 5 afwijkende dagen (di, wo, do, za, zo) met locatie, tijden en Bendy API status
+2. **Query 2** — Groepering per sublocation over de hele week → identificeert welke locaties de extra diensten genereren
 
 Resultaten worden als tabellen getoond.
 
