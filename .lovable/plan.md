@@ -1,17 +1,28 @@
 
 
-# P-DEDUP-2: Eenmalige migratie — Duplicaat-diensten samenvoegen
+# DIAG-6: Identificeer extra diensten — API vs Bendy UI
 
 ## Actie
-Vier SQL statements uitvoeren via de database insert tool om 13 duplicaat-diensten samen te voegen. Geen codewijzigingen.
+Vier read-only SQL queries uitvoeren via `psql` om de 56-diensten gap te analyseren. Geen codewijzigingen.
 
-1. **Stap 1** — Verplaats toewijzingen van loser-diensten naar de winner (oudste `id` per groep). Slaat over als professional al gekoppeld is aan winner.
-2. **Stap 2** — Update `gevraagd_aantal` op winner-diensten naar de groepsgrootte (2 of 3).
-3. **Stap 3** — Verwijder de 13 loser-diensten.
-4. **Stap 4** — Verificatie: tel diensten en uren deze week. Verwacht ~152 bezet, uren dichter bij 1050.5.
+**Belangrijk**: De queries uit het verzoek gebruiken `LEFT JOIN sublocations s`, maar de tabel heet `client_sublocations`. Dit wordt gecorrigeerd in de uitvoering.
 
-Alle queries gebruiken dezelfde CTE `duplicate_groups` (sublocation_id + datum + start_tijd + eind_tijd, HAVING COUNT > 1) als basis.
+### Queries
+
+1. **Open diensten per dag** — Dagelijkse telling van `status = 'open'` diensten. Vergelijk met Bendy UI (totaal 5).
+
+2. **Open diensten detail** — Alle 55 open diensten met locatie, tijden, `bendy_api_status` uit raw cache, en check op `flex_user` in de relationships (niet attributes). Dit onthult of "open" diensten in de API eigenlijk al toegewezen zijn in Bendy.
+
+3. **Resterende ingeplande duplicaten** — Groepen met `COUNT > 1` op sublocation+datum+start+eind bij bezette diensten. Verwacht: nog ~6 groepen na de eerdere migratie.
+
+4. **Ingepland per dag** — Dagelijkse telling bezette diensten + uren. Vergelijk met Bendy UI (totaal 150).
+
+### Correctie op flex_user check
+De Bendy API slaat `flex_user_company` op als een relationship, niet als attribute. De query wordt aangepast naar:
+```sql
+rc.raw_data->'relationships'->'flex_user_company'->'data'->>'id' IS NOT NULL
+```
 
 ## Niet aanraken
-Geen code, geen schema, geen edge functions.
+Geen code, geen schema, geen migraties.
 
