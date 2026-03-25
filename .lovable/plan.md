@@ -1,12 +1,17 @@
 
 
-# DIAG-5: Bevestig duplicaat-patroon ingeplande diensten
+# P-DEDUP-2: Eenmalige migratie — Duplicaat-diensten samenvoegen
 
 ## Actie
-Twee read-only SQL queries uitvoeren via `psql` om te bevestigen dat de 15 extra diensten veroorzaakt worden door meerdere Bendy requisitions voor dezelfde sublocation + datum + tijdslot. Geen codewijzigingen.
+Vier SQL statements uitvoeren via de database insert tool om 13 duplicaat-diensten samen te voegen. Geen codewijzigingen.
 
-1. **Query 1** — Duplicaat-groepen: alle combinaties van locatie + datum + start + eind met meer dan 1 dienst, inclusief de bendy_ids
-2. **Query 2** — Totaaltelling: som van extra diensten en aantal groepen
+1. **Stap 1** — Verplaats toewijzingen van loser-diensten naar de winner (oudste `id` per groep). Slaat over als professional al gekoppeld is aan winner.
+2. **Stap 2** — Update `gevraagd_aantal` op winner-diensten naar de groepsgrootte (2 of 3).
+3. **Stap 3** — Verwijder de 13 loser-diensten.
+4. **Stap 4** — Verificatie: tel diensten en uren deze week. Verwacht ~152 bezet, uren dichter bij 1050.5.
 
-Verwacht resultaat: ~15 extra diensten in ~15 groepen, elk met 2 verschillende bendy_ids.
+Alle queries gebruiken dezelfde CTE `duplicate_groups` (sublocation_id + datum + start_tijd + eind_tijd, HAVING COUNT > 1) als basis.
+
+## Niet aanraken
+Geen code, geen schema, geen edge functions.
 
