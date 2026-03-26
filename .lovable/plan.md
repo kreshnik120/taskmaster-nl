@@ -1,11 +1,14 @@
 
 
-# DIAG-9: Vergelijk positie-telling vs dienst-telling
+# DIAG-10: Identificeer de 4 extra posities op dinsdag 24 maart
 
 ## Actie
-Eén read-only SQL query uitvoeren via `psql`: `SUM(gevraagd_aantal)` per dag voor ingeplande diensten (week 23-29 maart). Vergelijk met Bendy UI tellingen (ma=17, di=20, wo=19, do=24, vr=20, za=30, zo=20).
+Twee read-only SQL queries uitvoeren via `psql`.
 
-Als `posities` matcht met Bendy, is de conclusie: Bendy telt posities (gevraagd_aantal), niet unieke diensten. De frontend moet dan `SUM(gevraagd_aantal)` gebruiken i.p.v. `COUNT(*)`.
+1. **Alle ingeplande diensten op di 24 maart** — 22 diensten met locatie, tijden, gevraagd_aantal, bendy_id en company_id. Vergelijk met Bendy UI's 20 entries.
 
-Geen wijzigingen, alleen lezen.
+2. **Groepeer per company_id (hele week)** — Telt diensten en posities per company_id voor alle ingeplande diensten. Als de extra diensten steeds dezelfde company_id delen, is dat het discriminerende filter.
+
+## Doel
+Bepalen of de discrepantie voortkomt uit een specifieke company/klant die in Bendy UI gefilterd wordt maar in de API wel meekomt. Geen wijzigingen, alleen lezen.
 
