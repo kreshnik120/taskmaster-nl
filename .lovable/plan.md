@@ -1,12 +1,11 @@
 
 
-# DIAG-8: Ontbrekende ingeplande dienst maandag 23 maart
+# DIAG-9: Vergelijk positie-telling vs dienst-telling
 
 ## Actie
-Twee read-only SQL queries uitvoeren via `psql`.
+Eén read-only SQL query uitvoeren via `psql`: `SUM(gevraagd_aantal)` per dag voor ingeplande diensten (week 23-29 maart). Vergelijk met Bendy UI tellingen (ma=17, di=20, wo=19, do=24, vr=20, za=30, zo=20).
 
-1. **Alle ingeplande diensten op ma 23 maart** — 16 diensten met locatie, tijden, gevraagd_aantal, bendy_id.
-2. **Overgeslagen records** — Bendy raw cache records met `date = 2026-03-23` en `status = closed` die NIET als dienst bestaan. Dit onthult de ontbrekende dienst en waarom die is overgeslagen (bijv. ontbrekende sublocation-match).
+Als `posities` matcht met Bendy, is de conclusie: Bendy telt posities (gevraagd_aantal), niet unieke diensten. De frontend moet dan `SUM(gevraagd_aantal)` gebruiken i.p.v. `COUNT(*)`.
 
 Geen wijzigingen, alleen lezen.
 
