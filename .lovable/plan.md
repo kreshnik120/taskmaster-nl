@@ -1,28 +1,20 @@
 
 
-# DIAG-6: Identificeer extra diensten — API vs Bendy UI
+# DIAG-7: Vind het filter dat Bendy UI toepast
 
 ## Actie
-Vier read-only SQL queries uitvoeren via `psql` om de 56-diensten gap te analyseren. Geen codewijzigingen.
-
-**Belangrijk**: De queries uit het verzoek gebruiken `LEFT JOIN sublocations s`, maar de tabel heet `client_sublocations`. Dit wordt gecorrigeerd in de uitvoering.
+Vier read-only SQL queries uitvoeren via `psql` om te ontdekken welk veld in de Bendy raw data het verschil verklaart tussen de 155 diensten in Bendy UI en de 224 records uit de API.
 
 ### Queries
 
-1. **Open diensten per dag** — Dagelijkse telling van `status = 'open'` diensten. Vergelijk met Bendy UI (totaal 5).
+1. **Alle attribute-velden** — `jsonb_object_keys` op `raw_data->'attributes'` voor requisitions in de cache. Zoekt naar velden als `published`, `state`, `visibility`, `number_of_people`.
 
-2. **Open diensten detail** — Alle 55 open diensten met locatie, tijden, `bendy_api_status` uit raw cache, en check op `flex_user` in de relationships (niet attributes). Dit onthult of "open" diensten in de API eigenlijk al toegewezen zijn in Bendy.
+2. **Alle relationship-types** — `jsonb_object_keys` op `raw_data->'relationships'`. Identificeert alle beschikbare relaties.
 
-3. **Resterende ingeplande duplicaten** — Groepen met `COUNT > 1` op sublocation+datum+start+eind bij bezette diensten. Verwacht: nog ~6 groepen na de eerdere migratie.
+3. **Open diensten detail (eerste 10)** — Alle attributen van open diensten, inclusief `number_of_people`, `published`, `state`, `company_id`, `client_id`. Vergelijk de 5 die in Bendy UI staan met de 50 extra.
 
-4. **Ingepland per dag** — Dagelijkse telling bezette diensten + uren. Vergelijk met Bendy UI (totaal 150).
+4. **Maandag ingepland detail** — Alle 16 ingeplande diensten op 23 maart met API-velden. Bendy UI toont er 17 — welke ontbreekt?
 
-### Correctie op flex_user check
-De Bendy API slaat `flex_user_company` op als een relationship, niet als attribute. De query wordt aangepast naar:
-```sql
-rc.raw_data->'relationships'->'flex_user_company'->'data'->>'id' IS NOT NULL
-```
-
-## Niet aanraken
-Geen code, geen schema, geen migraties.
+### Doel
+Het discriminerende veld vinden dat verklaart waarom Bendy UI minder diensten toont dan de API retourneert. Geen wijzigingen.
 
