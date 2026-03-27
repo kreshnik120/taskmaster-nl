@@ -1,5 +1,6 @@
 /**
  * BENDY SYNC — Requisitions (diensten) sync logic
+ * SYNC-FIX-1: Datumfiltering (A), source tagging (C), catch-up toewijzingen (B)
  */
 
 import { logInfo, logWarning } from './core.ts';
@@ -33,34 +34,38 @@ export async function syncRequisitions(
     } catch (_e) { /* ignore */ }
   };
 
+  // ═══ FIX A: Datumvenster berekenen ═══
+  const now = new Date();
+  const dateFrom = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const dateTo = new Date(now.getTime() + 56 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const dateFilterExtraParams: Record<string, string> = {
+    'filter[start_date_from]': dateFrom,
+    'filter[start_date_to]': dateTo,
+  };
+  logInfo(FUNCTION_NAME, `Datumvenster: ${dateFrom} → ${dateTo}`);
+
   // ═══ STAP 1: Haal data op (PARALLEL) ═══
-  // Delta mode: sort=-updated_at, stop bij records ouder dan cutoff (60s overlap window)
   const isDelta = syncType === 'incremental' && lastSyncAt;
   const cutoffDate = isDelta
     ? new Date(new Date(lastSyncAt).getTime() - 60_000).toISOString()
-    : null;
-
-  // Fallback: bij full sync, beperk tot records van laatste 90 dagen
-  const fullSyncCutoff = !isDelta
-    ? new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
     : null;
 
   let openResult: FetchResult;
   let assignedResult: FetchResult;
 
   if (isDelta && cutoffDate) {
-    logInfo(FUNCTION_NAME, `Delta requisition sync: cutoff=${cutoffDate}`);
+    logInfo(FUNCTION_NAME, `Delta requisition sync: cutoff=${cutoffDate}, dateFilter=${JSON.stringify(dateFilterExtraParams)}`);
     const [deltaOpen, deltaAssigned] = await Promise.all([
-      fetchDeltaBendyRecords(tenant, '/api/v2/requisitions/open', cutoffDate, adminClient),
-      fetchDeltaBendyRecords(tenant, '/api/v2/requisitions/assigned', cutoffDate, adminClient, { include: 'flex_user_company' }),
+      fetchDeltaBendyRecords(tenant, '/api/v2/requisitions/open', cutoffDate, adminClient, { ...dateFilterExtraParams }),
+      fetchDeltaBendyRecords(tenant, '/api/v2/requisitions/assigned', cutoffDate, adminClient, { include: 'flex_user_company', ...dateFilterExtraParams }),
     ]);
     openResult = deltaOpen;
     assignedResult = deltaAssigned;
   } else {
-    logInfo(FUNCTION_NAME, 'Full requisition sync (geen delta cutoff)');
+    logInfo(FUNCTION_NAME, `Full requisition sync, dateFilter=${JSON.stringify(dateFilterExtraParams)}`);
     const [fullOpen, fullAssigned] = await Promise.all([
-      fetchAllBendyRecords(tenant, '/api/v2/requisitions/open'),
-      fetchAllBendyRecords(tenant, '/api/v2/requisitions/assigned', { include: 'flex_user_company' }),
+      fetchAllBendyRecords(tenant, '/api/v2/requisitions/open', { ...dateFilterExtraParams }),
+      fetchAllBendyRecords(tenant, '/api/v2/requisitions/assigned', { include: 'flex_user_company', ...dateFilterExtraParams }),
     ]);
     openResult = fullOpen;
     assignedResult = fullAssigned;
@@ -69,21 +74,29 @@ export async function syncRequisitions(
   let openRecords = openResult.records;
   let assignedRecords = assignedResult.records;
 
-  // Bij full sync: filter records ouder dan 90 dagen (voorkomt 37K+ records verwerken)
-  if (fullSyncCutoff) {
-    const cutoff = fullSyncCutoff.split('T')[0]; // YYYY-MM-DD
-    const beforeOpen = openRecords.length;
-    const beforeAssigned = assignedRecords.length;
-    openRecords = openRecords.filter((r: any) => !r.attributes?.date || r.attributes.date >= cutoff);
-    assignedRecords = assignedRecords.filter((r: any) => !r.attributes?.date || r.attributes.date >= cutoff);
-    logInfo(FUNCTION_NAME, `Full sync filter: open ${beforeOpen}→${openRecords.length}, assigned ${beforeAssigned}→${assignedRecords.length} (cutoff: ${cutoff})`);
+  // ═══ FIX C: Tag records met bron-endpoint ═══
+  for (const r of openRecords) (r as any)._source = 'open';
+  for (const r of assignedRecords) (r as any)._source = 'assigned';
+
+  // ═══ FIX A fallback: In-memory datumfilter ═══
+  const beforeOpen = openRecords.length;
+  const beforeAssigned = assignedRecords.length;
+  openRecords = openRecords.filter((r: any) => {
+    const d = r.attributes?.date;
+    return !d || (d >= dateFrom && d <= dateTo);
+  });
+  assignedRecords = assignedRecords.filter((r: any) => {
+    const d = r.attributes?.date;
+    return !d || (d >= dateFrom && d <= dateTo);
+  });
+  if (beforeOpen !== openRecords.length || beforeAssigned !== assignedRecords.length) {
+    logInfo(FUNCTION_NAME, `In-memory datumfilter: open ${beforeOpen}→${openRecords.length}, assigned ${beforeAssigned}→${assignedRecords.length}`);
   }
 
   const allRecords = [...openRecords, ...assignedRecords];
   result.fetched = allRecords.length;
 
-  await logProgress('1-FETCH', { open: openRecords.length, assigned: assignedRecords.length, total: allRecords.length });
-
+  await logProgress('1-FETCH', { open: openRecords.length, assigned: assignedRecords.length, total: allRecords.length, dateFrom, dateTo });
 
   if (allRecords.length === 0) return result;
 
@@ -116,13 +129,19 @@ export async function syncRequisitions(
   const dienstUpdates: any[] = [];
   const mappingWrites: any[] = [];
 
-  // Diagnostiek: waarom worden diensten overgeslagen?
   const skipDiag = {
     sublocation_miss: 0,
     datum_ontbreekt: 0,
     tijd_ontbreekt: 0,
     missing_client_ids: [] as string[],
     bendy_status_verdeling: {} as Record<string, number>,
+  };
+
+  // ═══ FIX C: mapStatus met source parameter ═══
+  const mapStatus = (bendyStatus: string, source: string): string => {
+    if (source === 'assigned') return 'volledig_bezet';
+    if (bendyStatus === 'closed') return 'volledig_bezet';
+    return 'open';
   };
 
   const CHECKPOINT_INTERVAL = 500;
@@ -132,8 +151,8 @@ export async function syncRequisitions(
         const bendyId = String(record.id);
         const attrs = record.attributes || {};
         const rels = record.relationships || {};
+        const source = (record as any)._source || 'unknown';
 
-        // Tel Bendy status verdeling
         const rawStatus = String(attrs.status || 'unknown');
         skipDiag.bendy_status_verdeling[rawStatus] = (skipDiag.bendy_status_verdeling[rawStatus] || 0) + 1;
 
@@ -177,12 +196,6 @@ export async function syncRequisitions(
         if (pauzeMinuten > 480) pauzeMinuten = 480;
       }
 
-      const mapStatus = (bendyStatus: string): string => {
-        if (bendyStatus === 'open') return 'open';
-        if (bendyStatus === 'closed') return 'volledig_bezet';
-        return 'open';
-      };
-
       const deriveDienstType = (startTime: string | null): string => {
         if (!startTime) return 'dag';
         const hour = parseInt(startTime.split(':')[0], 10);
@@ -216,10 +229,16 @@ export async function syncRequisitions(
 
       if (existingDienst) {
         const updateData: Record<string, any> = {};
-        const newStatus = mapStatus(attrs.status);
-          if (existingDienst.status !== newStatus &&
+        const newStatus = mapStatus(attrs.status, source);
+        // FIX C: Sta herstel toe van geannuleerd → volledig_bezet (assigned endpoint)
+        if (existingDienst.status !== newStatus &&
             existingDienst.status !== 'voltooid') {
-          updateData.status = newStatus;
+          // Allow geannuleerd → volledig_bezet if source is assigned
+          if (existingDienst.status === 'geannuleerd' && source === 'assigned') {
+            updateData.status = newStatus;
+          } else if (existingDienst.status !== 'geannuleerd') {
+            updateData.status = newStatus;
+          }
         }
         if (existingDienst.datum !== attrs.date) updateData.datum = attrs.date;
         if (existingDienst.start_tijd !== startTijd) updateData.start_tijd = startTijd;
@@ -237,7 +256,7 @@ export async function syncRequisitions(
           org_id: orgId, sublocation_id: sublocationId, bendy_id: bendyId,
           titel: attrs.name || 'Bendy dienst', datum: attrs.date,
           start_tijd: startTijd, eind_tijd: eindTijd,
-          pauze_minuten: pauzeMinuten, status: mapStatus(attrs.status),
+          pauze_minuten: pauzeMinuten, status: mapStatus(attrs.status, source),
           dienst_type: deriveDienstType(startTijd),
           gevraagd_functie_niveau: deriveNiveau(attrs.comment),
           gevraagd_aantal: 1, publieke_opmerking: attrs.comment || null,
@@ -337,7 +356,7 @@ export async function syncRequisitions(
   }
 
   // ═══ STAP 5: Toewijzingen ═══
-  const twStats = { created: 0, skipped: 0, noMatch: 0, overlapError: 0 };
+  const twStats = { created: 0, skipped: 0, noMatch: 0, overlapError: 0, catchupCreated: 0, catchupNoMatch: 0 };
 
   // 5A: flex_user_company → user bendy_id map (via cache)
   const fucMap = new Map<string, string>();
@@ -412,6 +431,7 @@ export async function syncRequisitions(
   // 5C: bestaande toewijzingen pre-fetch
   const allDienstIds = [...dienstMap.values()].filter((d: any) => d.id).map((d: any) => d.id);
   const existingToewijzingen = new Set<string>();
+  const dienstenMetToewijzing = new Set<string>(); // track dienst_ids that have any toewijzing
   const TW_CHUNK = 500;
   for (let i = 0; i < allDienstIds.length; i += TW_CHUNK) {
     const chunk = allDienstIds.slice(i, i + TW_CHUNK);
@@ -421,11 +441,12 @@ export async function syncRequisitions(
       .in('dienst_id', chunk);
     (twData || []).forEach((tw: any) => {
       existingToewijzingen.add(`${tw.dienst_id}|${tw.professional_id}`);
+      dienstenMetToewijzing.add(tw.dienst_id);
     });
   }
   await logProgress('2D-EXISTING-TW', { existingCount: existingToewijzingen.size });
 
-  // 5D: Verzamel toewijzingen
+  // 5D: Verzamel toewijzingen uit huidige sync-run
   const toewijzingenToInsert: any[] = [];
   for (const req of allRecords) {
     const bendyId = String(req.id);
@@ -453,6 +474,7 @@ export async function syncRequisitions(
       continue;
     }
     existingToewijzingen.add(key);
+    dienstenMetToewijzing.add(dienst.id);
     toewijzingenToInsert.push({
       dienst_id: dienst.id,
       professional_id: prof.id,
@@ -486,6 +508,90 @@ export async function syncRequisitions(
     }
   }
 
+  // ═══ FIX B: STAP 5F — Catch-up toewijzingen voor bestaande diensten ═══
+  logInfo(FUNCTION_NAME, `STAP 5F: Catch-up toewijzingen starten...`);
+  const catchupInserts: any[] = [];
+
+  // Zoek diensten met status volledig_bezet, datum in sync-venster, ZONDER toewijzing
+  const dienstenZonderTw: { id: string; bendy_id: string }[] = [];
+  for (const [bendyId, dienst] of dienstMap.entries()) {
+    if (!dienst.id) continue;
+    if (dienst.status !== 'volledig_bezet') continue;
+    if (dienst.datum < dateFrom || dienst.datum > dateTo) continue;
+    if (dienstenMetToewijzing.has(dienst.id)) continue;
+    // Also skip if already in toewijzingenToInsert
+    if (toewijzingenToInsert.some((t: any) => t.dienst_id === dienst.id)) continue;
+    dienstenZonderTw.push({ id: dienst.id, bendy_id: bendyId });
+  }
+
+  logInfo(FUNCTION_NAME, `STAP 5F: ${dienstenZonderTw.length} diensten zonder toewijzing gevonden`);
+
+  if (dienstenZonderTw.length > 0) {
+    // Fetch bendy_raw_cache records for these diensten
+    const bendyIdsToLookup = dienstenZonderTw.map(d => d.bendy_id);
+    const cacheRecords = new Map<string, any>();
+    const CACHE_LOOKUP_CHUNK = 200;
+    for (let i = 0; i < bendyIdsToLookup.length; i += CACHE_LOOKUP_CHUNK) {
+      const chunk = bendyIdsToLookup.slice(i, i + CACHE_LOOKUP_CHUNK);
+      const { data: cacheData } = await adminClient
+        .from('bendy_raw_cache')
+        .select('bendy_id, raw_data')
+        .eq('org_id', orgId)
+        .eq('entity_type', 'requisitions')
+        .in('bendy_id', chunk);
+      (cacheData || []).forEach((c: any) => cacheRecords.set(c.bendy_id, c.raw_data));
+    }
+
+    for (const dienst of dienstenZonderTw) {
+      const cachedReq = cacheRecords.get(dienst.bendy_id);
+      if (!cachedReq) { twStats.catchupNoMatch++; continue; }
+
+      const fucId = cachedReq?.relationships?.flex_user_company?.data?.id;
+      if (!fucId) { twStats.catchupNoMatch++; continue; }
+
+      const userBendyId = fucMap.get(String(fucId));
+      if (!userBendyId) { twStats.catchupNoMatch++; continue; }
+
+      const prof = profMap.get(userBendyId);
+      if (!prof) { twStats.catchupNoMatch++; continue; }
+
+      const key = `${dienst.id}|${prof.id}`;
+      if (existingToewijzingen.has(key)) continue;
+      existingToewijzingen.add(key);
+
+      catchupInserts.push({
+        dienst_id: dienst.id,
+        professional_id: prof.id,
+        status: 'bevestigd',
+        positie_nr: 1,
+        toewijzing_notities: `SYNC-FIX-1 catch-up: fuc ${fucId}`,
+      });
+    }
+
+    // Insert catch-up toewijzingen with individual error handling
+    for (let i = 0; i < catchupInserts.length; i += TW_INSERT_CHUNK) {
+      const chunk = catchupInserts.slice(i, i + TW_INSERT_CHUNK);
+      const { error } = await adminClient.from('dienst_toewijzingen').insert(chunk);
+      if (error) {
+        const results = await Promise.allSettled(
+          chunk.map(tw => adminClient.from('dienst_toewijzingen').insert(tw))
+        );
+        for (const r of results) {
+          if (r.status === 'fulfilled' && !r.value.error) {
+            twStats.catchupCreated++;
+          } else {
+            twStats.overlapError++;
+          }
+        }
+      } else {
+        twStats.catchupCreated += chunk.length;
+      }
+    }
+  }
+
+  logInfo(FUNCTION_NAME, `STAP 5F: ${twStats.catchupCreated} catch-up toewijzingen aangemaakt, ${twStats.catchupNoMatch} geen match`);
+  await logProgress('5F-CATCHUP', { dienstenZonderTw: dienstenZonderTw.length, created: twStats.catchupCreated, noMatch: twStats.catchupNoMatch });
+
   await logProgress('5-TOEWIJZINGEN', twStats);
 
   // ═══ STAP 6: Stale requisitions cleanup (alleen bij full sync) ═══
@@ -516,7 +622,6 @@ export async function syncRequisitions(
   await logProgress('6-STALE-CLEANUP', staleStats);
 
   // Metadata opslaan
-  // Diagnostiek als SKIP_DIAG entry in errors (zodat frontend het kan tonen)
   result.errors.push(`SKIP_DIAG:${JSON.stringify(skipDiag)}`);
 
   if (syncLogId) {
@@ -529,6 +634,8 @@ export async function syncRequisitions(
             toewijzingen_skipped: twStats.skipped,
             toewijzingen_no_match: twStats.noMatch,
             toewijzingen_overlap: twStats.overlapError,
+            toewijzingen_catchup_created: twStats.catchupCreated,
+            toewijzingen_catchup_no_match: twStats.catchupNoMatch,
             debug_fuc_ids_from_reqs: fucIds.size,
             debug_fuc_map_size: fucMap.size,
             debug_prof_map_size: profMap.size,
@@ -536,6 +643,7 @@ export async function syncRequisitions(
             debug_stale_marked: staleStats.marked,
             debug_stale_skipped_old: staleStats.skipped_old,
             debug_stale_skipped_status: staleStats.skipped_status,
+            debug_date_filter: { from: dateFrom, to: dateTo },
             skip_diagnostiek: skipDiag,
             ...metadata_fuc,
           },
@@ -544,6 +652,6 @@ export async function syncRequisitions(
     } catch (_e) { /* ignore */ }
   }
 
-  logInfo(FUNCTION_NAME, `Requisition sync voltooid: ${result.fetched} opgehaald, ${result.created} nieuw, ${result.updated} bijgewerkt, ${result.failed} gefaald, toewijzingen: ${twStats.created} aangemaakt`);
+  logInfo(FUNCTION_NAME, `Requisition sync voltooid: ${result.fetched} opgehaald, ${result.created} nieuw, ${result.updated} bijgewerkt, ${result.failed} gefaald, toewijzingen: ${twStats.created} + ${twStats.catchupCreated} catch-up`);
   return result;
 }
