@@ -1,28 +1,20 @@
 
 
-# DATA-FIX-4: Open diensten corrigeren + sync reset
+# DATA-FIX-5: Spookdiensten annuleren + ontbrekende toewijzingen identificeren
 
 ## Stappen
 
-### 1. Reset vastgelopen sync
-Twee UPDATEs via insert tool:
-- `bendy_sync_log`: status → `failed` waar status = `running`
-- `bendy_sync_config`: sync_status → `idle` waar niet al idle
+### 1. Annuleer 54 "API-open" spookdiensten
+UPDATE `diensten` via insert tool: zet status naar `geannuleerd` voor diensten die in `bendy_raw_cache` als `open` staan, momenteel foutief `volledig_bezet` zijn, en geen toewijzing hebben. JOIN met `bendy_raw_cache` op `bendy_id`. Verwacht: 54 rijen.
 
-### 2. Bulk update: alle open → volledig_bezet
-UPDATE `diensten` SET status = `volledig_bezet` voor week 23-29 maart, status = `open`, bron = `geimporteerd`. Verwacht: ~54 rijen.
+### 2. Verificatie telling
+Read-only query via psql: tel open/ingepland/geannuleerd + uren voor week 23-29 maart. Verwacht: open=1, ingepland≈172, geannuleerd=54+.
 
-### 3. Drie echte open diensten terugzetten
-UPDATE `diensten` SET status = `open` voor de 3 specifieke diensten:
-- vr 27 16:00-20:00
-- za 28 08:00-15:30  
-- zo 29 Knegselstraat 25
-
-### 4. Verificatie
-Read-only query: tel open vs ingepland. Verwacht: open = 3.
+### 3. Toon 21 "closed" diensten zonder toewijzing
+Read-only query via psql: lijst van diensten met `closed` status in Bendy maar zonder `dienst_toewijzingen` rij. Inclusief medewerker-naam uit `raw_data->attributes->flex_user_company->flex_user_name`.
 
 ## Technisch
-- Stap 1-3: insert tool (data updates)
-- Stap 4: psql read query
+- Stap 1: insert tool (UPDATE statement)
+- Stap 2-3: psql read queries
 - Geen schema-wijzigingen, geen code changes
 
