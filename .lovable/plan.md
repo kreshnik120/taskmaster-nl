@@ -1,36 +1,26 @@
 
 
-# DIAG-11: Onderzoek vastgelopen requisition sync
+# DATA-FIX-2: Diensten updaten vanuit verse cache — week 13
 
-## Bevindingen
+## Samenvatting
+Vier SQL statements uitvoeren om: (1) vastgelopen sync vrijgeven, (2) cache-status checken, (3) diensten-status updaten vanuit cache, (4) resultaat verifiëren. Alleen week 23-29 maart, geen schema-wijzigingen.
 
-### 1. Edge Function Timeout: **60 seconden (default!)**
-De `bendy-sync` functie heeft **geen** `timeout` in `supabase/config.toml`. Het Supabase default is 60 seconden. Dit is de root cause: de sync wordt na 60s afgebroken door Supabase, maar de auto-cleanup markeert pas na 30 minuten als failed — waardoor de sync "hangt" in `running` status.
+## Stappen
 
-Andere functies zoals `backfill-embeddings` en `knowledge-graph-builder` hebben wél `timeout = 300`.
+### 1. Reset vastgelopen sync
+`UPDATE bendy_sync_log SET status='failed', completed_at=NOW(), errors=ARRAY['Handmatig gestopt — DATA-FIX-2'] WHERE status='running'` — maakt sync-lock vrij.
 
-### 2. Na "3-VERWERKT" komen zware DB-operaties
-Na regel 292 (`3-VERWERKT` checkpoint) volgen:
-- **STAP 4**: Batch upserts diensten (chunks van 200)
-- **STAP 4B**: Re-fetch van 50.000 diensten (`limit(50000)`)
-- **STAP 5A-5C**: Paginated fetch van users cache, professionals, en bestaande toewijzingen
-- **STAP 5D-5E**: Toewijzingen insert met fallback
-- **STAP 6**: Stale cleanup
+### 2. Check verse cache week 13
+Telt `open` vs `closed` requisitions in `bendy_raw_cache` voor 23-29 maart. Vergelijkt met eerdere telling (59 open + 165 closed).
 
-Dit zijn tientallen database round-trips die samen ver over 60 seconden uitkomen.
+### 3. Update diensten-status
+Matcht `diensten.bendy_id` op `bendy_raw_cache.bendy_id` en zet status naar `volledig_bezet` (closed) of `open` (open). Alleen `bron='geimporteerd'`, skip `voltooid`.
 
-### 3. Logs bevestigen
-De edge function logs tonen alleen `booted` en `shutdown` — geen error, geen completion. Dit is typisch voor een Supabase-enforced timeout (de functie wordt gewoon gekilld).
+### 4. Verificatie
+Telt per dag: diensten ingepland, posities ingepland (`SUM(gevraagd_aantal)`), en open diensten. Vergelijkt posities met Bendy UI tellingen.
 
-## Fix (1 wijziging)
-
-**`supabase/config.toml`**: Voeg `timeout = 300` toe aan de `[functions.bendy-sync]` sectie (5 minuten, maximaal toegestaan).
-
-```toml
-[functions.bendy-sync]
-verify_jwt = false
-timeout = 300
-```
-
-Dit geeft de sync 5 minuten per invocatie in plaats van 60 seconden. De 30-minuten auto-cleanup blijft als vangnet.
+## Technisch
+- Stap 1 en 3 gebruiken UPDATE (insert tool, geen migratie)
+- Stap 2 en 4 zijn read-only queries
+- Geen wijzigingen buiten week 13, geen schema changes
 
