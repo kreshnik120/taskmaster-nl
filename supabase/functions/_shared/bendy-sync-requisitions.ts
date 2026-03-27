@@ -125,7 +125,9 @@ export async function syncRequisitions(
     bendy_status_verdeling: {} as Record<string, number>,
   };
 
-  for (const record of allRecords) {
+  const CHECKPOINT_INTERVAL = 500;
+  for (let idx = 0; idx < allRecords.length; idx++) {
+    const record = allRecords[idx];
     try {
         const bendyId = String(record.id);
         const attrs = record.attributes || {};
