@@ -1,58 +1,36 @@
 
 
-# FIX-TIMEOUT-1: Requisition sync timeout fixen
+# DIAG-11: Onderzoek vastgelopen requisition sync
 
-## Analyse
+## Bevindingen
 
-De sync timed out na 10 minuten. De hoofdloop (regels 128-265) is in-memory en snel. De bottleneck zit waarschijnlijk in:
-- **STAP 4B**: Re-fetch van 50.000 diensten na inserts (regel 310-325)
-- **STAP 5C**: Pre-fetch toewijzingen in chunks van 500 over alle dienstIds (regel 401-413)
-- **STAP 5E**: Individuele fallback inserts bij overlap-fouten (regel 455-475)
-- **Auto-cleanup**: Markeert syncs als failed na 10 minuten (regel 58-76)
+### 1. Edge Function Timeout: **60 seconden (default!)**
+De `bendy-sync` functie heeft **geen** `timeout` in `supabase/config.toml`. Het Supabase default is 60 seconden. Dit is de root cause: de sync wordt na 60s afgebroken door Supabase, maar de auto-cleanup markeert pas na 30 minuten als failed — waardoor de sync "hangt" in `running` status.
 
-De in-memory verwerkingsloop zelf hoeft niet gebatcht — die is al snel. Het probleem is de 10-minuten timeout die de sync als "failed" markeert terwijl deze nog draait.
+Andere functies zoals `backfill-embeddings` en `knowledge-graph-builder` hebben wél `timeout = 300`.
 
-## Wijzigingen
+### 2. Na "3-VERWERKT" komen zware DB-operaties
+Na regel 292 (`3-VERWERKT` checkpoint) volgen:
+- **STAP 4**: Batch upserts diensten (chunks van 200)
+- **STAP 4B**: Re-fetch van 50.000 diensten (`limit(50000)`)
+- **STAP 5A-5C**: Paginated fetch van users cache, professionals, en bestaande toewijzingen
+- **STAP 5D-5E**: Toewijzingen insert met fallback
+- **STAP 6**: Stale cleanup
 
-### 1. Timeout verhogen naar 30 minuten
-**Bestand**: `supabase/functions/bendy-sync/index.ts` (regels 58-63)
+Dit zijn tientallen database round-trips die samen ver over 60 seconden uitkomen.
 
-Wijzig `TEN_MINUTES_MS` naar `THIRTY_MINUTES_MS = 30 * 60 * 1000`. Pas ook de error-message aan.
+### 3. Logs bevestigen
+De edge function logs tonen alleen `booted` en `shutdown` — geen error, geen completion. Dit is typisch voor een Supabase-enforced timeout (de functie wordt gewoon gekilld).
 
-### 2. Timeout verhogen in cleanup-stale-jobs
-**Bestand**: `supabase/functions/cleanup-stale-jobs/index.ts`
+## Fix (1 wijziging)
 
-Dezelfde 10-minuten check daar ook naar 30 minuten verhogen.
+**`supabase/config.toml`**: Voeg `timeout = 300` toe aan de `[functions.bendy-sync]` sectie (5 minuten, maximaal toegestaan).
 
-### 3. Batch-checkpoints toevoegen aan de hoofdloop
-**Bestand**: `supabase/functions/_shared/bendy-sync-requisitions.ts` (regels 128-265)
-
-Voeg na elke 500 records een `logProgress` checkpoint toe zodat de voortgang zichtbaar is in de sync logs:
-
-```typescript
-const CHECKPOINT_INTERVAL = 500;
-for (let idx = 0; idx < allRecords.length; idx++) {
-  const record = allRecords[idx];
-  // ... bestaande logica ...
-  
-  if ((idx + 1) % CHECKPOINT_INTERVAL === 0) {
-    await logProgress('3-BATCH', {
-      progress: `${idx + 1}/${allRecords.length}`,
-      inserts: dienstInserts.length,
-      updates: dienstUpdates.length,
-      skipped: result.skipped,
-    });
-  }
-}
+```toml
+[functions.bendy-sync]
+verify_jwt = false
+timeout = 300
 ```
 
-### 4. Deploy edge functions
-Na wijzigingen automatisch gedeployed.
-
-## Niet aanraken
-- Cache-ophaal logica (STAP 1)
-- Delta sync logica
-- Database schema
-- Stale cleanup logica
-- Toewijzingen logica
+Dit geeft de sync 5 minuten per invocatie in plaats van 60 seconden. De 30-minuten auto-cleanup blijft als vangnet.
 
