@@ -125,7 +125,9 @@ export async function syncRequisitions(
     bendy_status_verdeling: {} as Record<string, number>,
   };
 
-  for (const record of allRecords) {
+  const CHECKPOINT_INTERVAL = 500;
+  for (let idx = 0; idx < allRecords.length; idx++) {
+    const record = allRecords[idx];
     try {
         const bendyId = String(record.id);
         const attrs = record.attributes || {};
@@ -261,6 +263,16 @@ export async function syncRequisitions(
       const msg = error instanceof Error ? error.message : String(error);
       result.errors.push(`Req ${record.id}: ${msg.substring(0, 200)}`);
       if (result.errors.length > 20) break;
+    }
+
+    if ((idx + 1) % CHECKPOINT_INTERVAL === 0) {
+      await logProgress('3-BATCH', {
+        progress: `${idx + 1}/${allRecords.length}`,
+        inserts: dienstInserts.length,
+        updates: dienstUpdates.length,
+        skipped: result.skipped,
+        failed: result.failed,
+      });
     }
   }
 

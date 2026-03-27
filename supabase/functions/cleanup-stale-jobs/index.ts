@@ -8,16 +8,16 @@ Deno.serve(async (req) => {
 
   try {
     const now = new Date();
-    const tenMinAgo = new Date(now.getTime() - 10 * 60 * 1000).toISOString();
-    const fifteenMinAgo = new Date(now.getTime() - 15 * 60 * 1000).toISOString();
+    const thirtyMinAgo = new Date(now.getTime() - 30 * 60 * 1000).toISOString();
+    const thirtyFiveMinAgo = new Date(now.getTime() - 35 * 60 * 1000).toISOString();
 
-    // 1) Fail stuck processing jobs (older than 10 min)
+    // 1) Fail stuck processing jobs (older than 30 min)
     const { data: stuckJobs } = await supabase
       .from('processing_jobs')
       .select('id, file_path')
       .eq('status', 'processing')
       .is('completed_at', null)
-      .lt('started_at', tenMinAgo);
+      .lt('started_at', thirtyMinAgo);
 
     let failedJobs = 0;
     let affectedFiles = new Set<string>();
@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
         .from('processing_jobs')
         .update({
           status: 'failed',
-          error_message: 'Timeout: verwerking duurde langer dan 10 minuten',
+          error_message: 'Timeout: verwerking duurde langer dan 30 minuten',
           completed_at: new Date().toISOString()
         })
         .in('id', stuckJobs.map(j => j.id));
@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
       .select('file_path')
       .eq('status', 'processing')
       .is('processed_at', null)
-      .lt('created_at', fifteenMinAgo);
+      .lt('created_at', thirtyFiveMinAgo);
 
     let zombieDocs = 0;
 
