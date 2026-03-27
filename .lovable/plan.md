@@ -1,41 +1,84 @@
 
 
-# DATA-FIX-7: Bulk fix 120 ontbrekende toewijzingen + sync reset
+# SYNC-FIX-1: Drie kernproblemen in Bendy sync oplossen
 
-## Wat
-Drie database-operaties om (1) de vastgelopen sync te resetten, (2) ~120 ontbrekende dienst_toewijzingen aan te maken, en (3) te verifiëren.
+## Overzicht
+Drie wijzigingen in `supabase/functions/_shared/bendy-sync-requisitions.ts` en één kleine wijziging in `bendy-helpers.ts` om CPU timeouts, ontbrekende toewijzingen en spookdiensten structureel op te lossen.
 
-## Stappen
+---
 
-### 1. Reset vastgelopen sync
-Twee UPDATEs via insert tool:
-- `bendy_sync_log`: status → `failed` voor alle `running` entries
-- `bendy_sync_config`: sync_status → `idle` waar niet al idle
+## Fix A: CPU timeout — datumfiltering
 
-### 2. INSERT 120 ontbrekende toewijzingen
-Via insert tool — dezelfde mapping als DATA-FIX-6 maar nu voor alle weken vanaf 1 maart:
-```sql
-INSERT INTO dienst_toewijzingen (dienst_id, professional_id, status, positie_nr, toewijzing_notities)
-SELECT d.id, p.id, 'bevestigd', 1, 'DATA-FIX-7: bulk fix'
-FROM diensten d
-JOIN bendy_raw_cache brc ON brc.bendy_id = d.bendy_id::text
-JOIN bendy_raw_cache cu ON cu.entity_type = 'users'
-  AND cu.raw_data->'relationships'->'company'->'data'->>'id' =
-      brc.raw_data->'relationships'->'flex_user_company'->'data'->>'id'
-JOIN professionals p ON p.bendy_id = cu.bendy_id
-WHERE d.datum >= '2026-03-01'
-  AND d.bron = 'geimporteerd'
-  AND d.status IN ('volledig_bezet','voltooid')
-  AND brc.raw_data->'attributes'->>'status' = 'closed'
-  AND NOT EXISTS (SELECT 1 FROM dienst_toewijzingen dt WHERE dt.dienst_id = d.id)
+**Bestand**: `bendy-sync-requisitions.ts` (regels 51-67) + `bendy-helpers.ts` (regels 159-190, 197-297)
+
+**Aanpak**: Voeg `filter[start_date_from]` en `filter[start_date_to]` toe als extra params bij zowel `fetchDeltaBendyRecords` als `fetchAllBendyRecords` aanroepen.
+
+- `start_date_from` = vandaag − 14 dagen
+- `start_date_to` = vandaag + 56 dagen
+
+Dit reduceert de dataset van ~61K naar een paar duizend records.
+
+**Fallback**: Voeg ook een in-memory datumfilter toe in stap 3 (regel 129+): skip records met `attrs.date` buiten het venster. Dit vangt het geval op dat Bendy de filter-params negeert.
+
+---
+
+## Fix B: Ontbrekende toewijzingen — catch-up mechanisme
+
+**Bestand**: `bendy-sync-requisitions.ts` (na stap 5D, rond regel 463)
+
+**Probleem**: Stap 5 draait alleen voor records in `allRecords` (= wat deze sync-run ophaalde). Diensten die in een eerdere sync zijn aangemaakt maar sindsdien van open→closed zijn gegaan, worden gemist als de delta sync ze niet opnieuw ophaalt.
+
+**Aanpak**: Voeg een **stap 5F** toe na de bestaande toewijzingen-insert:
+
+1. Query alle `diensten` met status `volledig_bezet` zonder toewijzing, datum binnen het sync-venster
+2. Voor elk: zoek in `bendy_raw_cache` het bijbehorende record, haal `flex_user_company` id op
+3. Map via `fucMap` en `profMap` (al gebouwd in 5A/5B)
+4. Insert met try/catch per record (overlap-bescherming)
+5. Log resultaat: `STAP 5F: ${created} catch-up toewijzingen`
+
+---
+
+## Fix C: Spookdiensten — onderscheid open vs assigned endpoint
+
+**Bestand**: `bendy-sync-requisitions.ts` (regels 69-84 en 180-184)
+
+**Aanpak**: Tag records met hun bron-endpoint voordat ze worden samengevoegd:
+
+```typescript
+// Na fetch, vóór merge (regel ~69)
+for (const r of openRecords) r._source = 'open';
+for (const r of assignedRecords) r._source = 'assigned';
 ```
-Verwacht: ~120 rijen (mogelijk minder door overlap-trigger).
 
-### 3. Verificatie
-Read-only query: tel ingepland vs nog_zonder_toewijzing per week. Verwacht: nog_zonder_toewijzing ≈ 0.
+Pas `mapStatus` aan (regel 180-184):
 
-## Technisch
-- Stap 1-2: insert tool (UPDATE/INSERT statements)
-- Stap 3: psql read query
-- Geen schema-wijzigingen, geen code changes
+```typescript
+const mapStatus = (bendyStatus: string, source: string): string => {
+  if (source === 'assigned') return 'volledig_bezet';
+  if (bendyStatus === 'closed') return 'volledig_bezet';
+  return 'open';
+};
+```
+
+Gebruik `mapStatus(attrs.status, record._source)` bij zowel insert (regel 240) als update (regel 219).
+
+Extra: bij updates, sta herstel toe van `geannuleerd` → `volledig_bezet` als record nu van assigned endpoint komt (spookdiensten die eerder geannuleerd werden maar inmiddels wel gevuld zijn).
+
+---
+
+## Bestanden die wijzigen
+
+| Bestand | Wijziging |
+|---|---|
+| `bendy-sync-requisitions.ts` | Datumfilter params (A), source tagging + mapStatus (C), catch-up toewijzingen stap 5F (B) |
+
+## Niet aanraken
+- Database schema — geen wijzigingen
+- `bendy-sync-users.ts` — werkt correct
+- `cleanup-stale-jobs/index.ts` — niet gerelateerd
+- `bendy-helpers.ts` — geen wijzigingen nodig (filter params gaan via extraParams)
+- Bestaande diensten of toewijzingen
+
+## Verificatie
+Na deployment: handmatige incremental sync triggeren, daarna drie queries draaien om te checken: (1) sync slaagt binnen 60s, (2) nieuwe toewijzingen aangemaakt, (3) geen nieuwe spookdiensten.
 
