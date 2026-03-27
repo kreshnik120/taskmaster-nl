@@ -54,18 +54,18 @@ export async function syncRequisitions(
   let assignedResult: FetchResult;
 
   if (isDelta && cutoffDate) {
-    logInfo(FUNCTION_NAME, `Delta requisition sync: cutoff=${cutoffDate}, dateFilter=${dateFilterParams}`);
+    logInfo(FUNCTION_NAME, `Delta requisition sync: cutoff=${cutoffDate}, dateFilter=${JSON.stringify(dateFilterExtraParams)}`);
     const [deltaOpen, deltaAssigned] = await Promise.all([
-      fetchDeltaBendyRecords(tenant, `/api/v2/requisitions/open?${dateFilterParams}`, cutoffDate, adminClient),
-      fetchDeltaBendyRecords(tenant, `/api/v2/requisitions/assigned?${dateFilterParams}`, cutoffDate, adminClient, { include: 'flex_user_company' }),
+      fetchDeltaBendyRecords(tenant, '/api/v2/requisitions/open', cutoffDate, adminClient, { ...dateFilterExtraParams }),
+      fetchDeltaBendyRecords(tenant, '/api/v2/requisitions/assigned', cutoffDate, adminClient, { include: 'flex_user_company', ...dateFilterExtraParams }),
     ]);
     openResult = deltaOpen;
     assignedResult = deltaAssigned;
   } else {
-    logInfo(FUNCTION_NAME, `Full requisition sync, dateFilter=${dateFilterParams}`);
+    logInfo(FUNCTION_NAME, `Full requisition sync, dateFilter=${JSON.stringify(dateFilterExtraParams)}`);
     const [fullOpen, fullAssigned] = await Promise.all([
-      fetchAllBendyRecords(tenant, `/api/v2/requisitions/open?${dateFilterParams}`),
-      fetchAllBendyRecords(tenant, `/api/v2/requisitions/assigned?${dateFilterParams}`, { include: 'flex_user_company' }),
+      fetchAllBendyRecords(tenant, '/api/v2/requisitions/open', { ...dateFilterExtraParams }),
+      fetchAllBendyRecords(tenant, '/api/v2/requisitions/assigned', { include: 'flex_user_company', ...dateFilterExtraParams }),
     ]);
     openResult = fullOpen;
     assignedResult = fullAssigned;
