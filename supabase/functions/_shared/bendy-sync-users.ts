@@ -40,7 +40,7 @@ export async function syncUsers(
 
   if (isDelta && cutoffDate) {
     logInfo(FUNCTION_NAME, `Delta professional sync: cutoff=${cutoffDate}`);
-    const deltaResult = await fetchDeltaBendyRecords(tenant, '/api/v2/users', cutoffDate, { include: 'groups,company' });
+    const deltaResult = await fetchDeltaBendyRecords(tenant, '/api/v2/users', cutoffDate, adminClient, { include: 'groups,company' });
     bendyUsers = deltaResult.records;
     bendyIncluded = deltaResult.included;
   } else {

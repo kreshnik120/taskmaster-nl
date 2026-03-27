@@ -51,8 +51,8 @@ export async function syncRequisitions(
   if (isDelta && cutoffDate) {
     logInfo(FUNCTION_NAME, `Delta requisition sync: cutoff=${cutoffDate}`);
     const [deltaOpen, deltaAssigned] = await Promise.all([
-      fetchDeltaBendyRecords(tenant, '/api/v2/requisitions/open', cutoffDate),
-      fetchDeltaBendyRecords(tenant, '/api/v2/requisitions/assigned', cutoffDate, { include: 'flex_user_company' }),
+      fetchDeltaBendyRecords(tenant, '/api/v2/requisitions/open', cutoffDate, adminClient),
+      fetchDeltaBendyRecords(tenant, '/api/v2/requisitions/assigned', cutoffDate, adminClient, { include: 'flex_user_company' }),
     ]);
     openResult = deltaOpen;
     assignedResult = deltaAssigned;
