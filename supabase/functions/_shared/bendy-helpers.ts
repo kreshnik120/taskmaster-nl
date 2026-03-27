@@ -190,29 +190,32 @@ export async function fetchAllBendyRecords(tenant: string, endpoint: string, ext
 }
 
 /**
- * Delta fetch: haalt records op gesorteerd op -updated_at (JSON:API sort),
- * stopt zodra een hele pagina ouder is dan cutoffDate.
- * De caller trekt 60 seconden af van last_sync als overlap window (clock skew).
+ * Delta fetch met cache-vergelijking: haalt pagina's op en vergelijkt elk record
+ * met bendy_raw_cache. Stopt zodra een volledige pagina alleen ongewijzigde records bevat.
+ * Werkt onafhankelijk van API-sortering.
  */
 export async function fetchDeltaBendyRecords(
   tenant: string,
   endpoint: string,
   cutoffDate: string,
+  adminClient: any,
   extraParams?: Record<string, string>,
 ): Promise<FetchResult & { earlyStop: boolean; pagesScanned: number }> {
   const allRecords: any[] = [];
   const allIncluded: any[] = [];
   let page = 1;
   let earlyStop = false;
-  const cutoffMs = new Date(cutoffDate).getTime();
+  let totalChanged = 0;
 
-  while (page <= MAX_PAGES) {
-    const offset = (page - 1) * PAGE_SIZE;
+  // Determine entity_type for cache lookup based on endpoint
+  const entityType = endpoint.includes('/users') ? 'users' : 'requisitions';
+
+  while (page <= DELTA_MAX_PAGES) {
+    const offset = (page - 1) * DELTA_PAGE_SIZE;
     const response = await fetchBendyApi(tenant, endpoint, {
       ...(extraParams || {}),
-      'limit': String(PAGE_SIZE),
+      'limit': String(DELTA_PAGE_SIZE),
       'offset': String(offset),
-      'sort': '-updated_at',
     });
 
     const records = response?.data || [];
@@ -225,32 +228,71 @@ export async function fetchDeltaBendyRecords(
       }
     }
 
-    // Tel records op deze pagina die nieuwer zijn dan cutoff
-    let newOnPage = 0;
+    if (records.length === 0) break;
+
+    // Verzamel bendy_id's van deze pagina
+    const pageIds = records.map((r: any) => String(r.id));
+
+    // Query cache voor deze id's
+    let cacheMap = new Map<string, string | null>();
+    try {
+      const { data: cacheRows } = await adminClient
+        .from('bendy_raw_cache')
+        .select('bendy_id, raw_data')
+        .eq('entity_type', entityType)
+        .eq('tenant', tenant)
+        .in('bendy_id', pageIds);
+
+      for (const row of (cacheRows || [])) {
+        const cachedUpdatedAt = row.raw_data?.attributes?.updated_at || null;
+        cacheMap.set(row.bendy_id, cachedUpdatedAt);
+      }
+    } catch (err) {
+      // Cache query failed — treat all as changed (safe fallback)
+      logWarning(FUNCTION_NAME, `Cache query failed pagina ${page}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // Vergelijk: tel gewijzigde records
+    let changedOnPage = 0;
+    const changedRecords: any[] = [];
     for (const record of records) {
-      const updatedAt = record.attributes?.updated_at;
-      if (!updatedAt || new Date(updatedAt).getTime() >= cutoffMs) {
-        newOnPage++; // Geen updated_at = behandel als nieuw (veilig)
+      const bendyId = String(record.id);
+      const apiUpdatedAt = record.attributes?.updated_at || null;
+      const cachedUpdatedAt = cacheMap.get(bendyId);
+
+      // Record is "gewijzigd" als:
+      // 1. Niet in cache (nieuw record)
+      // 2. Cache heeft andere updated_at
+      // 3. Cache query failed (cacheMap leeg → alles is changed)
+      const isNew = cachedUpdatedAt === undefined;
+      const isChanged = !isNew && apiUpdatedAt !== cachedUpdatedAt;
+
+      if (isNew || isChanged) {
+        changedOnPage++;
+        changedRecords.push(record);
       }
     }
 
+    // Voeg ALLE records toe (niet alleen gewijzigde) — de callers verwachten volledige data
+    // voor matching en status-updates
     allRecords.push(...records);
     allIncluded.push(...included);
+    totalChanged += changedOnPage;
 
-    logInfo(FUNCTION_NAME, `Delta pagina ${page}: ${records.length} records, ${newOnPage} nieuw/gewijzigd`);
+    logInfo(FUNCTION_NAME, `Delta pagina ${page}: ${records.length} records, ${changedOnPage} gewijzigd/nieuw`);
 
-    // Stop als GEEN records op deze pagina nieuwer zijn dan cutoff
-    if (newOnPage === 0 && records.length > 0) {
+    // Stop als GEEN records op deze pagina gewijzigd zijn t.o.v. cache
+    if (changedOnPage === 0) {
       earlyStop = true;
-      logInfo(FUNCTION_NAME, `Delta early stop na pagina ${page}: alle records ouder dan cutoff`);
+      logInfo(FUNCTION_NAME, `Delta early stop na pagina ${page}: 0 gewijzigde records (alle ${records.length} ongewijzigd in cache)`);
       break;
     }
 
-    if (records.length < PAGE_SIZE) break;
+    if (records.length < DELTA_PAGE_SIZE) break;
     page++;
   }
 
-  logInfo(FUNCTION_NAME, `fetchDeltaBendyRecords ${endpoint}: ${allRecords.length} in ${page} pagina('s), earlyStop: ${earlyStop}`);
+  logInfo(FUNCTION_NAME, `fetchDeltaBendyRecords ${endpoint}: ${allRecords.length} opgehaald in ${page} pagina('s), ${totalChanged} gewijzigd, earlyStop: ${earlyStop}`);
   return { records: allRecords, included: allIncluded, earlyStop, pagesScanned: page };
 }
 
