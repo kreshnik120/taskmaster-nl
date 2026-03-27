@@ -19,7 +19,7 @@ export const BENDY_REQUEST_TIMEOUT_MS = 25_000;
 const TOKEN_EXPIRY_MARGIN_MS = 5 * 60 * 1000;
 const MAX_PAGES = 50;
 const PAGE_SIZE = 100;
-const DELTA_PAGE_SIZE = 500;
+const DELTA_PAGE_SIZE = 100;
 const DELTA_MAX_PAGES = 200;
 
 export interface BendyTenantConfig {
