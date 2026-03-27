@@ -8,6 +8,7 @@ verify_jwt = false
 
 [functions.bendy-sync]
 verify_jwt = false
+timeout = 300
 schedule = "0 */4 * * *"
 # Purpose: Bendy data sync engine (clients, later users/requisitions)
 # Auth: JWT + admin role for manual, SERVICE_ROLE_KEY for cron
