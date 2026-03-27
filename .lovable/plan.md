@@ -1,51 +1,41 @@
 
 
-# DATA-FIX-6: Ontbrekende dienst_toewijzingen aanmaken voor 21 closed diensten
+# DATA-FIX-7: Bulk fix 120 ontbrekende toewijzingen + sync reset
 
 ## Wat
-INSERT 21 rijen in `dienst_toewijzingen` voor diensten die in Bendy als `closed` staan met een gekoppelde professional, maar waar de toewijzing ontbreekt in abcito.
+Drie database-operaties om (1) de vastgelopen sync te resetten, (2) ~120 ontbrekende dienst_toewijzingen aan te maken, en (3) te verifiëren.
 
-## Waarom
-De sync heeft deze 21 koppelingen gemist. De mapping flex_user_company → user → professional is 100% compleet (alle 21 matchen).
+## Stappen
 
-## Stap 1 — INSERT ontbrekende toewijzingen
-Via database insert tool:
+### 1. Reset vastgelopen sync
+Twee UPDATEs via insert tool:
+- `bendy_sync_log`: status → `failed` voor alle `running` entries
+- `bendy_sync_config`: sync_status → `idle` waar niet al idle
 
+### 2. INSERT 120 ontbrekende toewijzingen
+Via insert tool — dezelfde mapping als DATA-FIX-6 maar nu voor alle weken vanaf 1 maart:
 ```sql
 INSERT INTO dienst_toewijzingen (dienst_id, professional_id, status, positie_nr, toewijzing_notities)
-SELECT
-  d.id,
-  p.id,
-  'bevestigd',
-  1,
-  'DATA-FIX-6: handmatig aangemaakt op basis van Bendy flex_user_company'
+SELECT d.id, p.id, 'bevestigd', 1, 'DATA-FIX-7: bulk fix'
 FROM diensten d
 JOIN bendy_raw_cache brc ON brc.bendy_id = d.bendy_id::text
 JOIN bendy_raw_cache cu ON cu.entity_type = 'users'
-  AND cu.raw_data->'relationships'->'company'->'data'->>'id' = brc.raw_data->'relationships'->'flex_user_company'->'data'->>'id'
+  AND cu.raw_data->'relationships'->'company'->'data'->>'id' =
+      brc.raw_data->'relationships'->'flex_user_company'->'data'->>'id'
 JOIN professionals p ON p.bendy_id = cu.bendy_id
-WHERE d.datum BETWEEN '2026-03-23' AND '2026-03-29'
-  AND d.status != 'geannuleerd'
+WHERE d.datum >= '2026-03-01'
+  AND d.bron = 'geimporteerd'
+  AND d.status IN ('volledig_bezet','voltooid')
   AND brc.raw_data->'attributes'->>'status' = 'closed'
   AND NOT EXISTS (SELECT 1 FROM dienst_toewijzingen dt WHERE dt.dienst_id = d.id)
 ```
+Verwacht: ~120 rijen (mogelijk minder door overlap-trigger).
 
-Verwacht: 21 rijen ingevoegd.
+### 3. Verificatie
+Read-only query: tel ingepland vs nog_zonder_toewijzing per week. Verwacht: nog_zonder_toewijzing ≈ 0.
 
-## Stap 2 — Verificatie
-Read-only query: tel diensten zonder toewijzing voor deze week. Verwacht: 0 (behalve de 1 open dienst van vr 27).
-
-```sql
-SELECT
-  COUNT(*) FILTER (WHERE status = 'open') as open,
-  COUNT(*) FILTER (WHERE status IN ('volledig_bezet','voltooid')) as ingepland,
-  COUNT(*) FILTER (WHERE status = 'geannuleerd') as geannuleerd
-FROM diensten
-WHERE datum BETWEEN '2026-03-23' AND '2026-03-29';
-```
-
-## Niet aanraken
-- Geen schema-wijzigingen
-- Geen code changes
-- Alleen week 23-29 maart
+## Technisch
+- Stap 1-2: insert tool (UPDATE/INSERT statements)
+- Stap 3: psql read query
+- Geen schema-wijzigingen, geen code changes
 
