@@ -264,6 +264,16 @@ export async function syncRequisitions(
       result.errors.push(`Req ${record.id}: ${msg.substring(0, 200)}`);
       if (result.errors.length > 20) break;
     }
+
+    if ((idx + 1) % CHECKPOINT_INTERVAL === 0) {
+      await logProgress('3-BATCH', {
+        progress: `${idx + 1}/${allRecords.length}`,
+        inserts: dienstInserts.length,
+        updates: dienstUpdates.length,
+        skipped: result.skipped,
+        failed: result.failed,
+      });
+    }
   }
 
   const nullBendyCount = dienstInserts.filter((d: any) => !d.bendy_id).length;
