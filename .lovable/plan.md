@@ -1,20 +1,28 @@
 
 
-# FIX-EARLYSTOP-2: DELTA_PAGE_SIZE verlagen naar 100
+# DATA-FIX-4: Open diensten corrigeren + sync reset
 
-## Wat
-Één constante wijzigen in `supabase/functions/_shared/bendy-helpers.ts`: `DELTA_PAGE_SIZE` van 500 naar 100.
+## Stappen
 
-## Waarom
-Bendy API geeft 504 timeout bij pagina's van 500 records. 100 records per pagina werkte eerder wel.
+### 1. Reset vastgelopen sync
+Twee UPDATEs via insert tool:
+- `bendy_sync_log`: status → `failed` waar status = `running`
+- `bendy_sync_config`: sync_status → `idle` waar niet al idle
 
-## Wijziging
-**Bestand:** `supabase/functions/_shared/bendy-helpers.ts`
+### 2. Bulk update: alle open → volledig_bezet
+UPDATE `diensten` SET status = `volledig_bezet` voor week 23-29 maart, status = `open`, bron = `geimporteerd`. Verwacht: ~54 rijen.
 
-```
-WAS:  const DELTA_PAGE_SIZE = 500;
-WORDT: const DELTA_PAGE_SIZE = 100;
-```
+### 3. Drie echte open diensten terugzetten
+UPDATE `diensten` SET status = `open` voor de 3 specifieke diensten:
+- vr 27 16:00-20:00
+- za 28 08:00-15:30  
+- zo 29 Knegselstraat 25
 
-Geen andere wijzigingen.
+### 4. Verificatie
+Read-only query: tel open vs ingepland. Verwacht: open = 3.
+
+## Technisch
+- Stap 1-3: insert tool (data updates)
+- Stap 4: psql read query
+- Geen schema-wijzigingen, geen code changes
 
