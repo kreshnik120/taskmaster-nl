@@ -38,7 +38,10 @@ export async function syncRequisitions(
   const now = new Date();
   const dateFrom = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   const dateTo = new Date(now.getTime() + 56 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const dateFilterParams = `filter[start_date_from]=${dateFrom}&filter[start_date_to]=${dateTo}`;
+  const dateFilterExtraParams: Record<string, string> = {
+    'filter[start_date_from]': dateFrom,
+    'filter[start_date_to]': dateTo,
+  };
   logInfo(FUNCTION_NAME, `Datumvenster: ${dateFrom} → ${dateTo}`);
 
   // ═══ STAP 1: Haal data op (PARALLEL) ═══
