@@ -100,7 +100,7 @@ export function PlanningWeekKalender({
   const { open, ingepland, geannuleerd } = useMemo(() => splitByStatus(diensten), [diensten]);
 
   const ingeplandUren = useMemo(
-    () => ingepland.reduce((s, d) => s + (d.netto_uren || 0) * (d.gevraagd_aantal || 1), 0),
+    () => ingepland.reduce((s, d) => s + (d.netto_uren || 0), 0),
     [ingepland]
   );
 
