@@ -399,7 +399,7 @@ async function handleCronSync(syncType: string = 'incremental'): Promise<Respons
           .single();
 
         try {
-          const syncResult = await syncFn();
+          const syncResult = await syncFn(syncLog?.id);
           const duration = Date.now() - entityStart;
 
           if (syncLog?.id) {
