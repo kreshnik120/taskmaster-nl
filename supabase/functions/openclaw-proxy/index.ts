@@ -463,6 +463,7 @@ async function handleGetDiensten(supabase: ReturnType<typeof createClient>, body
     .order("datum", { ascending: true })
     .limit(limit);
 
+  if (body.dienst_id) query = query.eq("id", body.dienst_id as string);
   if (body.org_id) query = query.eq("org_id", body.org_id as string);
   if (body.status) query = query.eq("status", body.status as string);
   if (body.sublocation_id) query = query.eq("sublocation_id", body.sublocation_id as string);
