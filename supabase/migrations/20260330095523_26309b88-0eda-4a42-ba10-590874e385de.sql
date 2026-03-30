@@ -1,0 +1,1 @@
+UPDATE bendy_sync_config SET sync_status = 'idle', error_message = NULL, updated_at = NOW() WHERE tenant = 'citozorg' AND sync_status = 'running';
