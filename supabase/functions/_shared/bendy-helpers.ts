@@ -185,6 +185,11 @@ export async function fetchAllBendyRecords(tenant: string, endpoint: string, ext
     logInfo(FUNCTION_NAME, `Pagina ${page} (offset ${offset}): ${records.length} records opgehaald (totaal: ${allRecords.length})${totalFromMeta ? ` van ${totalFromMeta}` : ''}`);
 
     if (records.length < PAGE_SIZE) break;
+    // Hard cap: voorkom CPU timeout bij grote datasets
+    if (allRecords.length >= MAX_TOTAL_RECORDS) {
+      logInfo(FUNCTION_NAME, `Hard cap bereikt: ${allRecords.length} records >= ${MAX_TOTAL_RECORDS}, stop pagineren voor ${endpoint}`);
+      break;
+    }
     page++;
   }
 
