@@ -1,52 +1,33 @@
 
 
-# FIX-NACHTUREN-1: Netto uren formule fix + mismatch correctie
+# FIX: `get_professionals` filter op `professional_id`
 
-## Probleem
-1. **netto_uren GENERATED ALWAYS formule** is kapot voor nachtdiensten (eind_tijd < start_tijd). PostgreSQL `TIME + INTERVAL '24 hours'` wraps terug naar dezelfde waarde. **20 actieve diensten** hebben negatieve uren.
-2. **1 status mismatch**: bendy_id 17070296 is ten onrechte geannuleerd door stale cleanup.
+## Wat verandert
+In `supabase/functions/openclaw-proxy/index.ts`, functie `handleGetProfessionals` (regel 408-426): een optionele `professional_id` filter toevoegen.
 
-## Taak 1: Fix netto_uren formule (database migratie)
+## Wijziging
 
-Drop en re-create de `netto_uren` kolom met de correcte formule:
+```typescript
+async function handleGetProfessionals(supabase, body) {
+  const orgId = body.org_id as string | undefined;
+  const professionalId = body.professional_id as string | undefined;  // NIEUW
 
-```sql
-ALTER TABLE public.diensten DROP COLUMN IF EXISTS netto_uren;
+  let query = supabase
+    .from("professionals")
+    .select("id, full_name, email, telefoonnummer, functie_niveau, status, org_id")
+    .is("deleted_at", null);
 
-ALTER TABLE public.diensten
-  ADD COLUMN netto_uren NUMERIC(10,2) GENERATED ALWAYS AS (
-    CASE
-      WHEN eind_tijd > start_tijd THEN
-        EXTRACT(EPOCH FROM (eind_tijd - start_tijd)) / 3600.0 
-        - COALESCE(pauze_minuten, 0) / 60.0
-      WHEN eind_tijd < start_tijd THEN
-        (EXTRACT(EPOCH FROM (eind_tijd - start_tijd)) + 86400) / 3600.0 
-        - COALESCE(pauze_minuten, 0) / 60.0
-      ELSE 0
-    END
-  ) STORED;
+  if (professionalId) query = query.eq("id", professionalId);  // NIEUW
+  if (orgId) query = query.eq("org_id", orgId);
+
+  const { data, error } = await query.order("full_name", { ascending: true });
+  // ... rest blijft gelijk
+}
 ```
 
-Dit fixt automatisch alle 31 negatieve uren records — geen UPDATE nodig.
-
-## Taak 2: Status mismatch correctie (data update)
-
-```sql
-UPDATE diensten SET status = 'open' WHERE bendy_id = '17070296';
-```
-
-## Taak 3: Verificatie
-
-- Controleer `SELECT COUNT(*) FROM diensten WHERE netto_uren < 0` → verwacht: **0**
-- Hercheck week 23-29 maart uren totaal (zal stijgen omdat negatieve uren nu positief zijn)
-- Bevestig dienst 17070296 status = 'open'
+## Verificatie
+Na deploy: POST naar openclaw-proxy met `{ "action": "get_professionals", "professional_id": "<UUID>" }` en bevestig dat exact 1 record terugkomt.
 
 ## Niet aanraken
-- Sync code, bendy_raw_cache, frontend
-- De andere 2 "mismatches" (17500302 en 17144130) — die zijn correct
-
-## Verwacht resultaat
-- 0 diensten met negatieve uren
-- Nauwkeurigere urentotalen in de planning
-- 17070296 terug als open dienst
+- Geen andere handlers, geen database wijzigingen, geen frontend
 
