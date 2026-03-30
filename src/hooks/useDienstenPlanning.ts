@@ -236,7 +236,7 @@ export function useDienstenPlanning(filters: DienstFilters) {
 
     const totaalUrenWeek = rawDiensten
       .filter((d) => ["volledig_bezet", "deels_bezet", "open"].includes(d.status))
-      .reduce((sum, d) => sum + (d.netto_uren || 0), 0);
+      .reduce((sum, d) => sum + (d.netto_uren || 0) * (d.gevraagd_aantal || 1), 0);
 
     return { vandaag, dezeWeek, openDiensten, bezettingsgraad, totaalUrenWeek };
   }, [rawDiensten]);
