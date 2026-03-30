@@ -1,84 +1,61 @@
 
 
-# SYNC-FIX-1: Drie kernproblemen in Bendy sync oplossen
+# DIAG-20 Resultaten + Fix Plan
 
-## Overzicht
-Drie wijzigingen in `supabase/functions/_shared/bendy-sync-requisitions.ts` en één kleine wijziging in `bendy-helpers.ts` om CPU timeouts, ontbrekende toewijzingen en spookdiensten structureel op te lossen.
+## Diagnose
 
----
+### Sync logs (laatste 5 requisition syncs)
+| status | records_fetched | duur_sec | errors |
+|---|---|---|---|
+| failed | 0 | 1832 | Auto-cleanup: sync langer dan 30 min |
+| failed | 0 | 307 | Handmatig gestopt — SYNC-FIX-1 v2 |
+| failed | 0 | 1566 | Handmatig gestopt — SYNC-FIX-1 deploy |
+| failed | 0 | 3553 | Handmatig gestopt — DATA-FIX-7 |
+| failed | 0 | 1066 | Handmatig gestopt — DATA-FIX-4 |
 
-## Fix A: CPU timeout — datumfiltering
+Alle metadata is leeg — de sync bereikt nooit de verwerkingsfase.
 
-**Bestand**: `bendy-sync-requisitions.ts` (regels 51-67) + `bendy-helpers.ts` (regels 159-190, 197-297)
-
-**Aanpak**: Voeg `filter[start_date_from]` en `filter[start_date_to]` toe als extra params bij zowel `fetchDeltaBendyRecords` als `fetchAllBendyRecords` aanroepen.
-
-- `start_date_from` = vandaag − 14 dagen
-- `start_date_to` = vandaag + 56 dagen
-
-Dit reduceert de dataset van ~61K naar een paar duizend records.
-
-**Fallback**: Voeg ook een in-memory datumfilter toe in stap 3 (regel 129+): skip records met `attrs.date` buiten het venster. Dit vangt het geval op dat Bendy de filter-params negeert.
-
----
-
-## Fix B: Ontbrekende toewijzingen — catch-up mechanisme
-
-**Bestand**: `bendy-sync-requisitions.ts` (na stap 5D, rond regel 463)
-
-**Probleem**: Stap 5 draait alleen voor records in `allRecords` (= wat deze sync-run ophaalde). Diensten die in een eerdere sync zijn aangemaakt maar sindsdien van open→closed zijn gegaan, worden gemist als de delta sync ze niet opnieuw ophaalt.
-
-**Aanpak**: Voeg een **stap 5F** toe na de bestaande toewijzingen-insert:
-
-1. Query alle `diensten` met status `volledig_bezet` zonder toewijzing, datum binnen het sync-venster
-2. Voor elk: zoek in `bendy_raw_cache` het bijbehorende record, haal `flex_user_company` id op
-3. Map via `fucMap` en `profMap` (al gebouwd in 5A/5B)
-4. Insert met try/catch per record (overlap-bescherming)
-5. Log resultaat: `STAP 5F: ${created} catch-up toewijzingen`
-
----
-
-## Fix C: Spookdiensten — onderscheid open vs assigned endpoint
-
-**Bestand**: `bendy-sync-requisitions.ts` (regels 69-84 en 180-184)
-
-**Aanpak**: Tag records met hun bron-endpoint voordat ze worden samengevoegd:
-
-```typescript
-// Na fetch, vóór merge (regel ~69)
-for (const r of openRecords) r._source = 'open';
-for (const r of assignedRecords) r._source = 'assigned';
-```
-
-Pas `mapStatus` aan (regel 180-184):
-
-```typescript
-const mapStatus = (bendyStatus: string, source: string): string => {
-  if (source === 'assigned') return 'volledig_bezet';
-  if (bendyStatus === 'closed') return 'volledig_bezet';
-  return 'open';
-};
-```
-
-Gebruik `mapStatus(attrs.status, record._source)` bij zowel insert (regel 240) als update (regel 219).
-
-Extra: bij updates, sta herstel toe van `geannuleerd` → `volledig_bezet` als record nu van assigned endpoint komt (spookdiensten die eerder geannuleerd werden maar inmiddels wel gevuld zijn).
-
----
-
-## Bestanden die wijzigen
-
-| Bestand | Wijziging |
+### Sync lock
+| sync_status | updated_at |
 |---|---|
-| `bendy-sync-requisitions.ts` | Datumfilter params (A), source tagging + mapStatus (C), catch-up toewijzingen stap 5F (B) |
+| **running** | 2026-03-27 15:11:38 |
 
-## Niet aanraken
-- Database schema — geen wijzigingen
-- `bendy-sync-users.ts` — werkt correct
-- `cleanup-stale-jobs/index.ts` — niet gerelateerd
-- `bendy-helpers.ts` — geen wijzigingen nodig (filter params gaan via extraParams)
-- Bestaande diensten of toewijzingen
+Lock zit vast sinds **3 dagen**. De cron draait elke minuut, ziet `running`, en skipt in 50ms.
 
-## Verificatie
-Na deployment: handmatige incremental sync triggeren, daarna drie queries draaien om te checken: (1) sync slaagt binnen 60s, (2) nieuwe toewijzingen aangemaakt, (3) geen nieuwe spookdiensten.
+### Waarom SYNC-FIX-2 NIET nodig is
+De user dacht dat `_shared/bendy-sync-requisitions.ts` een dood bestand is, maar `index.ts` regel 38 importeert het:
+```typescript
+import { syncRequisitions } from '../_shared/bendy-sync-requisitions.ts';
+```
+SYNC-FIX-1 is dus al op het juiste bestand toegepast. De code is correct, maar wordt niet bereikt door de vastgelopen lock.
+
+## Plan: Lock reset + verificatie
+
+### Stap 1 — Reset lock
+```sql
+UPDATE bendy_sync_config
+SET sync_status = 'idle', error_message = NULL, updated_at = NOW()
+WHERE tenant = 'citozorg' AND sync_status = 'running';
+```
+
+### Stap 2 — Wacht op volgende cron run (1-2 minuten)
+De cron triggert elke minuut een incremental sync. Na de reset zou deze moeten slagen.
+
+### Stap 3 — Verificatie (na 2 min)
+```sql
+SELECT status, records_fetched,
+  EXTRACT(EPOCH FROM (completed_at - started_at))::int as duur_sec,
+  metadata->'debug_date_filter' as datumfilter,
+  metadata->'toewijzingen_created' as tw_created
+FROM bendy_sync_log
+WHERE entity_type = 'requisitions_open'
+ORDER BY started_at DESC
+LIMIT 3;
+```
+Verwacht: `status=success`, `records_fetched` in de honderden, `duur_sec < 120`.
+
+## Technisch
+- Eén UPDATE statement via database tool
+- Geen code changes nodig
+- Geen schema wijzigingen
 
