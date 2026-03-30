@@ -1,21 +1,29 @@
 
 
-# SYNC-FIX-4: Datumfilter + metadata debuggen
+# FIX-UREN-1: Uren weergave matchen met Bendy
 
 ## Probleem
-De sync slaagt nu (14s, success), maar:
-- **16.545 records** ipv ~449 → datumfilter niet actief
-- **metadata = null** → debug info wordt niet weggeschreven
-- De CPU-fix (skip cache/mapping) compenseert, maar 16K records is onnodig
+Bendy telt uren × posities (1213.92). abcito toont `SUM(netto_uren)` = 1131.3. Het verschil (~83 uur) komt doordat diensten met `gevraagd_aantal > 1` slechts één keer meetellen.
 
-## Diagnose nodig
-Ik moet het huidige bestand lezen om te zien waarom:
-1. De `dateFilterParams` niet worden meegegeven aan `fetchAllBendyRecords`
-2. Het metadata-blok aan het einde van de sync niet schrijft
-3. Het in-memory `inDateRange` filter niet werkt
+## Wijzigingen (2 plekken)
 
-## Voorstel
-Laat me eerst `bendy-sync-requisitions.ts` lezen (huidige staat na SYNC-FIX-3) om de exacte regels te identificeren. Dan ontwerp ik een gerichte fix.
+### 1. `src/hooks/useDienstenPlanning.ts` — regel 239
+Stats berekening voor het dashboard.
 
-**Wil je dat ik het bestand inspecteer en een fix-plan maak?**
+**Was:** `sum + (d.netto_uren || 0)`
+**Wordt:** `sum + (d.netto_uren || 0) * (d.gevraagd_aantal || 1)`
+
+### 2. `src/components/planning/PlanningWeekKalender.tsx` — regel 103
+Uren-subtotaal bij "Ingeplande diensten" sectie.
+
+**Was:** `s + (d.netto_uren || 0)`
+**Wordt:** `s + (d.netto_uren || 0) * (d.gevraagd_aantal || 1)`
+
+## Niet aanraken
+- `DienstCard.tsx` / `DienstDetailSheet.tsx` / `PlanningLijstWeergave.tsx` — daar is `netto_uren` per individuele dienst correct
+- De `netto_uren` kolom zelf (GENERATED)
+- De sync code
+
+## Verificatie
+Na fix: dashboard toont ≈1221 uur voor week 23-29 maart (dicht bij Bendy's 1213.92).
 
