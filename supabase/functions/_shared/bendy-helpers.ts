@@ -21,6 +21,9 @@ const MAX_PAGES = 50;
 const PAGE_SIZE = 100;
 const DELTA_PAGE_SIZE = 100;
 const DELTA_MAX_PAGES = 200;
+// Hard cap: stop fetching als we dit aantal records bereiken (per endpoint)
+// Bendy API negeert limit/offset params en retourneert ~780 records/pagina
+const MAX_TOTAL_RECORDS = 8000;
 
 export interface BendyTenantConfig {
   baseUrl: string;
