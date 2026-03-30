@@ -103,15 +103,25 @@ export async function syncRequisitions(
   if (allRecords.length === 0) return result;
 
   // ═══ STAP 2: Pre-fetch lokale data ═══
-  const { data: existingDiensten } = await adminClient
-    .from('diensten')
-    .select('id, bendy_id, status, datum, start_tijd, eind_tijd, sublocation_id')
-    .eq('org_id', orgId)
-    .not('bendy_id', 'is', null)
-    .limit(50000);
+  // Paginated fetch to avoid Supabase 1000-row cap (FIX-DEDUP-1B)
+  let allExistingDiensten: any[] = [];
+  let dienstOffset = 0;
+  const DIENST_PAGE = 1000;
+  while (true) {
+    const { data: chunk } = await adminClient
+      .from('diensten')
+      .select('id, bendy_id, status, datum, start_tijd, eind_tijd, sublocation_id')
+      .eq('org_id', orgId)
+      .not('bendy_id', 'is', null)
+      .range(dienstOffset, dienstOffset + DIENST_PAGE - 1);
+    if (!chunk || chunk.length === 0) break;
+    allExistingDiensten.push(...chunk);
+    if (chunk.length < DIENST_PAGE) break;
+    dienstOffset += DIENST_PAGE;
+  }
 
   const dienstMap = new Map<string, any>();
-  (existingDiensten || []).forEach((d: any) => dienstMap.set(d.bendy_id, d));
+  allExistingDiensten.forEach((d: any) => dienstMap.set(d.bendy_id, d));
 
   const { data: sublocations } = await adminClient
     .from('client_sublocations')
