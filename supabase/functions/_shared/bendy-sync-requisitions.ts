@@ -83,11 +83,13 @@ export async function syncRequisitions(
   const beforeAssigned = assignedRecords.length;
   openRecords = openRecords.filter((r: any) => {
     const d = r.attributes?.date;
-    return !d || (d >= dateFrom && d <= dateTo);
+    if (!d) return false; // Skip records zonder datum
+    return d >= dateFrom && d <= dateTo;
   });
   assignedRecords = assignedRecords.filter((r: any) => {
     const d = r.attributes?.date;
-    return !d || (d >= dateFrom && d <= dateTo);
+    if (!d) return false; // Skip records zonder datum
+    return d >= dateFrom && d <= dateTo;
   });
   if (beforeOpen !== openRecords.length || beforeAssigned !== assignedRecords.length) {
     logInfo(FUNCTION_NAME, `In-memory datumfilter: open ${beforeOpen}→${openRecords.length}, assigned ${beforeAssigned}→${assignedRecords.length}`);

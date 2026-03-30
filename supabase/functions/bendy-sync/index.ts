@@ -383,7 +383,7 @@ async function handleCronSync(syncType: string = 'incremental'): Promise<Respons
       // Helper: sync entity met eigen log entry
       const runSync = async (
         entityType: string,
-        syncFn: () => Promise<SyncResult>
+        syncFn: (syncLogId?: string) => Promise<SyncResult>
       ) => {
         const entityStart = Date.now();
         const { data: syncLog } = await adminClient
