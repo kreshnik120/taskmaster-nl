@@ -407,12 +407,14 @@ async function handleUpdateTask(supabase: ReturnType<typeof createClient>, body:
 
 async function handleGetProfessionals(supabase: ReturnType<typeof createClient>, body: Record<string, unknown>) {
   const orgId = body.org_id as string | undefined;
+  const professionalId = body.professional_id as string | undefined;
 
   let query = supabase
     .from("professionals")
     .select("id, full_name, email, telefoonnummer, functie_niveau, status, org_id")
     .is("deleted_at", null);
 
+  if (professionalId) query = query.eq("id", professionalId);
   if (orgId) query = query.eq("org_id", orgId);
 
   const { data, error } = await query.order("full_name", { ascending: true });
