@@ -245,6 +245,7 @@ export async function syncRequisitions(
         if (existingDienst.datum !== attrs.date) updateData.datum = attrs.date;
         if (existingDienst.start_tijd !== startTijd) updateData.start_tijd = startTijd;
         if (existingDienst.eind_tijd !== eindTijd) updateData.eind_tijd = eindTijd;
+        if (existingDienst.pauze_minuten !== pauzeMinuten) updateData.pauze_minuten = pauzeMinuten;
 
         if (Object.keys(updateData).length > 0) {
           dienstUpdates.push({ id: existingDienst.id, data: updateData });
