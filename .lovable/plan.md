@@ -1,46 +1,40 @@
 
 
-# FIX: `get_diensten` filter op `dienst_id`
+# S53-FIX-CRON: Frequente sync + pauze_minuten change detection
 
-## Wat verandert
-In `supabase/functions/openclaw-proxy/index.ts`, functie `handleGetDiensten` (regel 457-479): een optionele `dienst_id` filter toevoegen, identiek aan het patroon dat we eerder voor `professional_id` hebben toegepast.
+## Overzicht
+Twee wijzigingen: (1) cron interval van 4 uur naar 5 minuten, (2) pauze_minuten opnemen in change detection zodat wijzigingen uit Bendy correct worden overgenomen.
 
-## Wijziging (1 regel toevoegen)
+## Stap 1: Cron interval verkorten
+**Bestand:** `supabase/config.toml`
 
-Op regel 466, vóór de bestaande filters, voegen we toe:
+Regel met `[functions.bendy-sync]` schedule wijzigen van `"0 */4 * * *"` naar `"*/5 * * * *"`.
 
-```typescript
-if (body.dienst_id) query = query.eq("id", body.dienst_id as string);
+## Stap 2A: pauze_minuten toevoegen aan prefetch SELECT
+**Bestand:** `supabase/functions/_shared/bendy-sync-requisitions.ts` (regel 113)
+
+```
+WAS:  .select('id, bendy_id, status, datum, start_tijd, eind_tijd, sublocation_id')
+WORDT: .select('id, bendy_id, status, datum, start_tijd, eind_tijd, pauze_minuten, sublocation_id')
 ```
 
-De functie wordt dan:
+## Stap 2B: pauze_minuten change detection toevoegen
+**Bestand:** `supabase/functions/_shared/bendy-sync-requisitions.ts` (na regel 247)
 
+Na de bestaande `eind_tijd` vergelijking, toevoegen:
 ```typescript
-async function handleGetDiensten(supabase, body) {
-  const limit = Math.min(Number(body.limit) || 50, 100);
-
-  let query = supabase
-    .from("diensten")
-    .select(DIENST_SAFE_COLUMNS)
-    .order("datum", { ascending: true })
-    .limit(limit);
-
-  if (body.dienst_id) query = query.eq("id", body.dienst_id as string);  // NIEUW
-  if (body.org_id) query = query.eq("org_id", body.org_id as string);
-  if (body.status) query = query.eq("status", body.status as string);
-  if (body.sublocation_id) query = query.eq("sublocation_id", body.sublocation_id as string);
-  if (body.is_spoed) query = query.eq("is_spoed", true);
-  if (body.datum_van) query = query.gte("datum", body.datum_van as string);
-  if (body.datum_tot) query = query.lte("datum", body.datum_tot as string);
-
-  const { data, error } = await query;
-  // ... rest blijft gelijk
-}
+if (existingDienst.pauze_minuten !== pauzeMinuten) updateData.pauze_minuten = pauzeMinuten;
 ```
 
-## Verificatie
-Na deploy: POST naar openclaw-proxy met `{ "action": "get_diensten", "dienst_id": "<UUID>" }` → verwacht exact 1 record.
+De variabele `pauzeMinuten` wordt al berekend op regel 192-199, dus geen extra extractie nodig.
+
+## Stap 3: Deploy
+Redeploy `bendy-sync` edge function.
 
 ## Niet aanraken
-- Geen andere handlers, geen database wijzigingen, geen frontend
+- Stale cleanup, lock mechanisme, frontend, andere edge functions
+
+## Verificatie
+- Na 5 minuten: nieuwe `sync_requisitions` entry in `bendy_sync_log`
+- Pauze wijziging in Bendy → binnen 5 min overgenomen in abcito
 
