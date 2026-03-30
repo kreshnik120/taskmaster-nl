@@ -110,7 +110,7 @@ export async function syncRequisitions(
   while (true) {
     const { data: chunk } = await adminClient
       .from('diensten')
-      .select('id, bendy_id, status, datum, start_tijd, eind_tijd, sublocation_id')
+      .select('id, bendy_id, status, datum, start_tijd, eind_tijd, pauze_minuten, sublocation_id')
       .eq('org_id', orgId)
       .not('bendy_id', 'is', null)
       .range(dienstOffset, dienstOffset + DIENST_PAGE - 1);
