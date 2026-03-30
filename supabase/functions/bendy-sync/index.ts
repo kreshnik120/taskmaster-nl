@@ -451,11 +451,11 @@ async function handleCronSync(syncType: string = 'incremental'): Promise<Respons
           await runSync('clients', () => syncClients(adminClient, tenant, lock.orgId, 'full'));
           await runSync('users', () => syncUsers(adminClient, tenant, lock.orgId, 'full'));
           await runSync('documents', () => syncDocuments(adminClient, tenant, lock.orgId, 'full'));
-          await runSync('requisitions_open', () => syncRequisitions(adminClient, tenant, lock.orgId, 'full'));
+          await runSync('requisitions_open', (logId) => syncRequisitions(adminClient, tenant, lock.orgId, 'full', logId));
         } else {
           // Delta sync: alleen requisitions + users (snel)
-          await runSync('requisitions_open', () =>
-            syncRequisitions(adminClient, tenant, lock.orgId, 'incremental', undefined, lock.lastIncrementalSyncAt)
+          await runSync('requisitions_open', (logId) =>
+            syncRequisitions(adminClient, tenant, lock.orgId, 'incremental', logId, lock.lastIncrementalSyncAt)
           );
           await runSync('users', () =>
             syncUsers(adminClient, tenant, lock.orgId, 'incremental', lock.lastIncrementalSyncAt)
