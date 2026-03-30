@@ -156,11 +156,7 @@ export async function syncRequisitions(
         const rawStatus = String(attrs.status || 'unknown');
         skipDiag.bendy_status_verdeling[rawStatus] = (skipDiag.bendy_status_verdeling[rawStatus] || 0) + 1;
 
-      cacheWrites.push({
-        org_id: orgId, tenant, entity_type: 'requisitions',
-        bendy_id: bendyId, raw_data: record,
-        fetched_at: new Date().toISOString(),
-      });
+      // Cache write overgeslagen (CPU optimalisatie SYNC-FIX-3)
 
       const clientBendyId = rels.client?.data?.id ? String(rels.client.data.id) : null;
       const sublocationId = clientBendyId ? subMap.get(clientBendyId) : null;
@@ -171,13 +167,7 @@ export async function syncRequisitions(
           if (clientBendyId && skipDiag.missing_client_ids.length < 50) {
             skipDiag.missing_client_ids.push(`${clientBendyId}|${attrs.name || ''}|${attrs.date || ''}`);
           }
-          mappingWrites.push({
-            org_id: orgId, tenant, entity_type: 'dienst',
-            bendy_id: bendyId, local_id: '00000000-0000-0000-0000-000000000000',
-            sync_status: 'pending',
-            conflict_data: { reason: 'sublocation_not_found', client_bendy_id: clientBendyId, name: attrs.name, date: attrs.date },
-            last_synced_at: new Date().toISOString(),
-          });
+          // Mapping write overgeslagen (CPU optimalisatie SYNC-FIX-3)
           continue;
         }
 
@@ -270,13 +260,7 @@ export async function syncRequisitions(
         result.created++;
       }
 
-      mappingWrites.push({
-        org_id: orgId, tenant, entity_type: 'dienst',
-        bendy_id: bendyId,
-        local_id: existingDienst?.id || '00000000-0000-0000-0000-000000000000',
-        sync_status: 'synced', bendy_updated_at: attrs.updated_at,
-        last_synced_at: new Date().toISOString(),
-      });
+      // Mapping write overgeslagen (CPU optimalisatie SYNC-FIX-3)
     } catch (error) {
       result.failed++;
       const msg = error instanceof Error ? error.message : String(error);
@@ -314,7 +298,7 @@ export async function syncRequisitions(
   });
 
   // ═══ STAP 4: Batch DB writes ═══
-  if (cacheWrites.length > 0) await batchUpsert(adminClient, 'bendy_raw_cache', cacheWrites, 'tenant,entity_type,bendy_id');
+  logInfo(FUNCTION_NAME, `Cache upsert overgeslagen: ${cacheWrites.length} records (CPU optimalisatie)`);
   if (dienstUpdates.length > 0) await parallelUpdates(adminClient, 'diensten', dienstUpdates);
   if (dienstInserts.length > 0) {
     const CHUNK = 200;
@@ -325,15 +309,10 @@ export async function syncRequisitions(
         .upsert(chunk, { onConflict: 'org_id,bendy_id' })
         .select('id, bendy_id');
       if (error) logWarning(FUNCTION_NAME, `Diensten upsert chunk ${i}/${dienstInserts.length} fout: ${error.message}`);
-      if (upserted) {
-        for (const row of upserted) {
-          const mapping = mappingWrites.find((m: any) => m.bendy_id === row.bendy_id && m.sync_status === 'synced');
-          if (mapping && row.id) mapping.local_id = row.id;
-        }
-      }
+      // mapping local_id update overgeslagen (SYNC-FIX-3)
     }
   }
-  if (mappingWrites.length > 0) await batchUpsert(adminClient, 'bendy_id_mapping', mappingWrites, 'tenant,entity_type,bendy_id');
+  logInfo(FUNCTION_NAME, `Mapping writes overgeslagen: ${mappingWrites.length} records (CPU optimalisatie)`);
 
   await logProgress('4-GESCHREVEN', { created: result.created, updated: result.updated });
 
@@ -598,24 +577,7 @@ export async function syncRequisitions(
   const staleStats = { marked: 0, skipped_old: 0, skipped_status: 0 };
 
   if (!isDelta) {
-    const seenBendyIds = new Set<string>();
-    for (const record of allRecords) {
-      seenBendyIds.add(String(record.id));
-    }
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const cutoffDateStr = yesterday.toISOString().split('T')[0];
-
-    for (const [bendyId, dienst] of dienstMap.entries()) {
-      if (seenBendyIds.has(bendyId)) continue;
-      if (dienst.datum < cutoffDateStr) { staleStats.skipped_old++; continue; }
-      if (['geannuleerd', 'voltooid'].includes(dienst.status)) { staleStats.skipped_status++; continue; }
-      const { error } = await adminClient
-        .from('diensten')
-        .update({ status: 'geannuleerd', updated_at: new Date().toISOString() })
-        .eq('id', dienst.id);
-      if (!error) staleStats.marked++;
-    }
+    logInfo(FUNCTION_NAME, 'Stale cleanup overgeslagen (datumfilter actief, diensten buiten venster zijn niet stale)');
   } else {
     logInfo(FUNCTION_NAME, 'Stale cleanup overgeslagen (delta sync)');
   }
