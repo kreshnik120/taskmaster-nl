@@ -1,88 +1,52 @@
 
 
-# FIX-DEDUP-1B: Ontbrekende diensten aanmaken vanuit cache + dienstMap pagination fix
+# FIX-NACHTUREN-1: Netto uren formule fix + mismatch correctie
 
 ## Probleem
-De 12 "geabsorbeerde" Bendy records worden niet opnieuw aangemaakt door de sync omdat:
-1. De Bendy API endpoints (`/open` en `/assigned`) retourneren deze 12 bendy_ids waarschijnlijk niet meer
-2. De sync leest alleen de API, niet de `bendy_raw_cache`
-3. **Bonus bug:** de `dienstMap` prefetch (regel 111) gebruikt `.limit(50000)` maar Supabase kapt af op 1000 rijen → slechts ~1000 van de 2088 bestaande diensten worden geladen, waardoor de sync ~8900 "created" rapporteert (eigenlijk upserts)
+1. **netto_uren GENERATED ALWAYS formule** is kapot voor nachtdiensten (eind_tijd < start_tijd). PostgreSQL `TIME + INTERVAL '24 hours'` wraps terug naar dezelfde waarde. **20 actieve diensten** hebben negatieve uren.
+2. **1 status mismatch**: bendy_id 17070296 is ten onrechte geannuleerd door stale cleanup.
 
-## Oplossing (2 onderdelen)
+## Taak 1: Fix netto_uren formule (database migratie)
 
-### Onderdeel A: Maak de 12 diensten direct aan vanuit cache-data
-
-Database migratie die de 12 diensten INSERT op basis van de `bendy_raw_cache` data. Alle 12 hebben:
-- Geldige sublocation mappings (geverifieerd)
-- Status `closed` → wordt `volledig_bezet`
-- Geldige datum/tijd attributen
+Drop en re-create de `netto_uren` kolom met de correcte formule:
 
 ```sql
-INSERT INTO diensten (org_id, sublocation_id, bendy_id, titel, datum, start_tijd, eind_tijd, 
-  pauze_minuten, status, dienst_type, gevraagd_aantal, bron, accepteerbaar)
-SELECT 
-  d_existing.org_id,
-  cs.id AS sublocation_id,
-  brc.bendy_id,
-  brc.raw_data->'attributes'->>'name' AS titel,
-  (brc.raw_data->'attributes'->>'date')::date AS datum,
-  -- extract start/end times from ISO strings
-  ...
-  'volledig_bezet', 'dag', 1, 'geimporteerd', true
-FROM bendy_raw_cache brc
-JOIN client_sublocations cs ON cs.bendy_id = (brc.raw_data->'relationships'->'client'->'data'->>'id')
-CROSS JOIN (SELECT org_id FROM diensten WHERE bron = 'geimporteerd' LIMIT 1) d_existing
-WHERE brc.entity_type = 'requisitions'
-  AND brc.bendy_id IN ('17371957','17054825','17301162','16919983','17220283',
-    '16513055','16480201','17220285','17174147','16513056','17352594','17243102')
-  AND NOT EXISTS (SELECT 1 FROM diensten d WHERE d.bendy_id = brc.bendy_id)
-ON CONFLICT (org_id, bendy_id) DO NOTHING;
+ALTER TABLE public.diensten DROP COLUMN IF EXISTS netto_uren;
+
+ALTER TABLE public.diensten
+  ADD COLUMN netto_uren NUMERIC(10,2) GENERATED ALWAYS AS (
+    CASE
+      WHEN eind_tijd > start_tijd THEN
+        EXTRACT(EPOCH FROM (eind_tijd - start_tijd)) / 3600.0 
+        - COALESCE(pauze_minuten, 0) / 60.0
+      WHEN eind_tijd < start_tijd THEN
+        (EXTRACT(EPOCH FROM (eind_tijd - start_tijd)) + 86400) / 3600.0 
+        - COALESCE(pauze_minuten, 0) / 60.0
+      ELSE 0
+    END
+  ) STORED;
 ```
 
-### Onderdeel B: Fix dienstMap pagination (bendy-sync-requisitions.ts)
+Dit fixt automatisch alle 31 negatieve uren records — geen UPDATE nodig.
 
-Vervang de `.limit(50000)` op regel 106-111 door paginated fetching (hetzelfde patroon als al gebruikt voor professionals op regel 390-405):
+## Taak 2: Status mismatch correctie (data update)
 
-```typescript
-// Was:
-const { data: existingDiensten } = await adminClient
-  .from('diensten')
-  .select('id, bendy_id, status, datum, start_tijd, eind_tijd, sublocation_id')
-  .eq('org_id', orgId)
-  .not('bendy_id', 'is', null)
-  .limit(50000);
-
-// Wordt:
-let allExistingDiensten: any[] = [];
-let dienstOffset = 0;
-const DIENST_PAGE = 1000;
-while (true) {
-  const { data: chunk } = await adminClient
-    .from('diensten')
-    .select('id, bendy_id, status, datum, start_tijd, eind_tijd, sublocation_id')
-    .eq('org_id', orgId)
-    .not('bendy_id', 'is', null)
-    .range(dienstOffset, dienstOffset + DIENST_PAGE - 1);
-  if (!chunk || chunk.length === 0) break;
-  allExistingDiensten.push(...chunk);
-  if (chunk.length < DIENST_PAGE) break;
-  dienstOffset += DIENST_PAGE;
-}
+```sql
+UPDATE diensten SET status = 'open' WHERE bendy_id = '17070296';
 ```
 
-Dit lost het "8900 created" probleem op — na deze fix zal de sync correct ~0 created / ~0 updated rapporteren als er niets veranderd is.
+## Taak 3: Verificatie
+
+- Controleer `SELECT COUNT(*) FROM diensten WHERE netto_uren < 0` → verwacht: **0**
+- Hercheck week 23-29 maart uren totaal (zal stijgen omdat negatieve uren nu positief zijn)
+- Bevestig dienst 17070296 status = 'open'
 
 ## Niet aanraken
-- Sync API fetch logica (open/assigned endpoints)
-- bendy_raw_cache
-- netto_uren kolom
-- Frontend code (FIX-UREN-1 revert is al gedaan)
+- Sync code, bendy_raw_cache, frontend
+- De andere 2 "mismatches" (17500302 en 17144130) — die zijn correct
 
 ## Verwacht resultaat
-- 12 nieuwe diensten in de planning voor week 23-29 maart
-- Totaal ingepland: ~184-185 (was 173)
-- Sync log toont correcte aantallen (niet meer ~8900 "created")
-
-## Verificatie
-Na uitvoering: hercheck VERIF-3 queries (tellingen week 23-29 maart)
+- 0 diensten met negatieve uren
+- Nauwkeurigere urentotalen in de planning
+- 17070296 terug als open dienst
 
