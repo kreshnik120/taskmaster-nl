@@ -158,6 +158,7 @@ export async function fetchBendyApi(tenant: string, endpoint: string, params?: R
 export interface FetchResult {
   records: any[];
   included: any[];
+  hitCap: boolean;
 }
 
 export async function fetchAllBendyRecords(tenant: string, endpoint: string, extraParams?: Record<string, string>): Promise<FetchResult> {
@@ -194,8 +195,12 @@ export async function fetchAllBendyRecords(tenant: string, endpoint: string, ext
     page++;
   }
 
-  logInfo(FUNCTION_NAME, `fetchAllBendyRecords ${endpoint}: ${allRecords.length} totaal na ${page} pagina('s)`);
-  return { records: allRecords, included: allIncluded };
+  const hitCap = allRecords.length >= MAX_TOTAL_RECORDS;
+  if (hitCap) {
+    logWarning(FUNCTION_NAME, `⚠️ Hard cap bereikt voor ${endpoint}: ${allRecords.length} records — stale-detectie wordt onveilig`);
+  }
+  logInfo(FUNCTION_NAME, `fetchAllBendyRecords ${endpoint}: ${allRecords.length} totaal na ${page} pagina('s), hitCap=${hitCap}`);
+  return { records: allRecords, included: allIncluded, hitCap };
 }
 
 /**
@@ -307,7 +312,7 @@ export async function fetchDeltaBendyRecords(
   }
 
   logInfo(FUNCTION_NAME, `fetchDeltaBendyRecords ${endpoint}: ${allRecords.length} opgehaald in ${page} pagina('s), ${totalChanged} gewijzigd, earlyStop: ${earlyStop}`);
-  return { records: allRecords, included: allIncluded, earlyStop, pagesScanned: page };
+  return { records: allRecords, included: allIncluded, hitCap: false, earlyStop, pagesScanned: page };
 }
 
 // ============================================
