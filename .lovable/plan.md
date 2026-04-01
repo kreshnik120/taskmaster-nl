@@ -1,31 +1,22 @@
 
 
-# FIX: Full sync triggeren + cron-job verificatie
+# Plan: Trigger Full Bendy Sync + Vergelijk Week 14
 
-## Probleem
-De sync draait als `incremental`, waardoor:
-1. Stale-detectie (Stap 6) wordt overgeslagen — alleen `full` syncs activeren dit
-2. Bestaande fout-open diensten niet worden herbeoordeeld (ongewijzigde records worden niet opgehaald)
-3. De consistency fix (5G) slechts 7 van ~35 gevallen vingt (rest heeft geen toewijzing in DB)
+## Stap 1: Trigger volledige Bendy sync
+Roep de `bendy-sync` edge function aan met `sync_type: 'full'` en `entity_type: 'requisitions'` via `curl_edge_functions`. Dit activeert:
+- De deduplicatie-fix (assigned > open bij overlap)
+- Stale-detectie (Stap 6) voor ghost-open diensten
+- Status-consistentie (Stap 5G)
 
-## Onderzoek nodig
-Controleer hoe de cron-job (Job 41) de sync triggert — het memory zegt `sync_type: full`, maar het sync-log toont `incremental`. Mogelijk is de edge function entry point of de cron payload incorrect.
+## Stap 2: Vergelijk Week 14 cijfers
+Na de sync, query de database voor Week 14 (30 maart – 5 april 2026):
+- `SELECT status, COUNT(*), SUM(uren)` grouped by status
+- Vergelijk met Bendy's cijfers: **14 open**, **196 ingepland**, **1388.75 uur**
 
-## Stap 1: Verifieer de cron-job configuratie
-Check de `bendy-sync` edge function entry point om te zien welke `sync_type` wordt doorgegeven wanneer de cron trigger binnenkomt (`trigger === 'scheduler'`).
+## Stap 3: Rapporteer verschil
+Presenteer een voor/na vergelijking met de Bendy-referentiecijfers.
 
-## Stap 2: Fix sync_type voor cron-triggered runs
-Als de cron-job `incremental` stuurt in plaats van `full`, wijzig de edge function zodat scheduled runs altijd `sync_type: 'full'` gebruiken. Dit zorgt ervoor dat:
-- Stale-detectie elke 10 minuten draait
-- Alle records opnieuw worden geëvalueerd met de dedup-fix
-- Catch-up toewijzingen worden aangemaakt
-
-## Stap 3: Handmatige full sync
-Na de fix, trigger een handmatige full sync om de 42 "ghost-open" diensten direct te corrigeren.
-
-## Verwacht resultaat na full sync
-- ~28 ghost-open diensten zonder toewijzing: worden ofwel gecorrigeerd naar `volledig_bezet` (als ze op assigned endpoint staan) of `geannuleerd` (als ze niet meer in de API staan)
-- Open diensten dalen van 42 naar ~14 (overeenkomend met Bendy)
-- Ingeplande diensten stijgen van 187 naar ~196
-- Uren-verschil van ~145 uur wordt grotendeels opgelost
+## Technisch
+- **Edge function call**: `POST /bendy-sync` met body `{"sync_type": "full", "entity_type": "requisitions"}`
+- **DB query**: `SELECT status, COUNT(*), SUM(EXTRACT(EPOCH FROM (eind_tijd - start_tijd))/3600) FROM diensten WHERE datum BETWEEN '2026-03-30' AND '2026-04-05' GROUP BY status`
 
