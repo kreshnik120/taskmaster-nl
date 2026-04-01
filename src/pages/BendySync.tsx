@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { WeekVergelijking } from "@/components/bendy/WeekVergelijking";
 import { RefreshCw, Power, Play, Database, Clock, AlertTriangle, CheckCircle2, MinusCircle, Users, FileText, Shield, ChevronDown, Calendar } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { PageContainer } from "@/components/ui/page-container";
