@@ -689,6 +689,17 @@ async function handleSearch(supabase: ReturnType<typeof createClient>, body: Rec
     );
   }
 
+  if (!entityType || entityType === "sublocations") {
+    promises.push(
+      supabase
+        .from("client_sublocations")
+        .select("id, naam, adres, doelgroep_omschrijving, location_id, gekoppelde_bv_org_id")
+        .or(`naam.ilike.${q},adres.ilike.${q},doelgroep_omschrijving.ilike.${q}`)
+        .limit(50)
+        .then(({ data }) => { results.sublocations = data || []; })
+    );
+  }
+
   await Promise.all(promises);
   return jsonResponse(stripPII(results));
 }
