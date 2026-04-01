@@ -624,6 +624,12 @@ export async function syncRequisitions(
   const MAX_STALE_PER_RUN = 50;
 
   if (!isDelta) {
+    // Veiligheidscheck: sla stale-detectie over als een endpoint de hard cap heeft bereikt
+    // Bij incomplete data zouden we valse annuleringen maken
+    if (openResult.hitCap || assignedResult.hitCap) {
+      logWarning(FUNCTION_NAME, `STAP 6: OVERGESLAGEN — hard cap bereikt (open=${openResult.hitCap}, assigned=${assignedResult.hitCap}). Stale-detectie onveilig bij onvolledige dataset.`);
+      staleStats.checked = -1; // markeer als overgeslagen
+    } else {
     // Bouw set van alle bendy_ids die we in deze sync-run gezien hebben
     const seenBendyIds = new Set<string>();
     for (const record of allRecords) {
