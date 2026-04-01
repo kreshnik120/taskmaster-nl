@@ -1,73 +1,56 @@
 
 
-# Diagnose: Waarom minder diensten in het systeem dan in Bendy
+# FIX: Stale-detectie en status-reconciliatie voor Bendy-sync
 
-## Root Cause gevonden
+## Probleem (samenvatting)
+- 36 diensten staan als "open" in het systeem maar zijn in Bendy ingevuld of verwijderd
+- 7 ingeplande diensten ontbreken (59 uur verschil)
+- 1 dienst heeft een toewijzing maar status "open" (inconsistentie)
+- Oorzaak: geen mechanisme om diensten te detecteren die uit de Bendy API verdwijnen
 
-Het probleem zit **niet** in open→assigned status-updates. Het zit in **52 diensten die onterecht op "geannuleerd" staan**.
+## Oplossing: 2-staps reconciliatie
 
-### Bewijs uit de data:
-- **Bendy** zegt: 194 ingepland + 6 open = 200 diensten, 1373.25 uur
-- **Systeem** zegt: 187 ingepland + 42 open + **54 geannuleerd** = 283 diensten, 1314.25 uur
-- Van die 54 geannuleerde diensten staan **52 in Bendy nog als "open"** (niet cancelled)
-- Slechts 2 zijn in Bendy daadwerkelijk "closed"
+### Stap 1: Stale-detectie na sync (in `sync-requisitions.ts`)
 
-### Hoe is dit gebeurd?
-Een **oude stale cleanup** (nu uitgeschakeld) heeft op **23 maart om 13:00** in één bulk 32 diensten op "geannuleerd" gezet. Eerdere runs op 13 en 16 maart deden hetzelfde met nog eens 21 diensten. Deze diensten waren in Bendy gewoon nog open/assigned.
+Na het verwerken van alle open + assigned records, voeg een reconciliatie-stap toe:
 
-### Waarom herstelt de sync dit niet?
-De code op **regel 236-243** blokkeert expliciet status-updates van `geannuleerd` naar iets anders — behalve als `source === 'assigned'`. Dus:
-- `geannuleerd` → `open` (van open endpoint): **GEBLOKKEERD**
-- `geannuleerd` → `volledig_bezet` (van assigned endpoint): **WEL TOEGESTAAN**
+1. Verzamel alle bendy_ids die de sync heeft gezien (zowel open als assigned endpoint)
+2. Vergelijk met alle "open" en "deels_bezet" diensten in de database (binnen het datumvenster)
+3. Diensten die NIET in de API-response voorkomen → markeer als `geannuleerd` met opmerking "Niet meer in Bendy API"
+4. Veiligheidsmaatregel: maximaal 50 diensten per run annuleren (voorkomt bulk-fout bij API-storing)
 
-Maar deze 52 diensten staan in Bendy als "open", dus ze komen van het **open endpoint** en worden geblokkeerd.
+**Bestand:** `supabase/functions/_shared/bendy-sync-requisitions.ts`
+- Na de batch-updates (Stap 4), een nieuw blok "Stap 6: Stale-detectie"
+- Bouw een `Set<string>` van alle verwerkte bendy_ids
+- Query alle open/deels_bezet diensten in het datumvenster die een bendy_id hebben
+- Filter diensten waarvan de bendy_id NIET in de set zit
+- Update hun status naar `geannuleerd` via batch-update
+- Log het aantal in de sync-result
 
-## Oplossing
+### Stap 2: Status-consistentie check (in `sync-requisitions.ts`)
 
-### Code-wijziging in `bendy-sync-requisitions.ts` (regel 236-243)
+Na de catch-up toewijzingen (Stap 5F), voeg een consistentie-check toe:
 
-**Huidige logica:**
-```typescript
-if (existingDienst.status === 'geannuleerd' && source === 'assigned') {
-  updateData.status = newStatus;  // alleen assigned mag herstellen
-} else if (existingDienst.status !== 'geannuleerd') {
-  updateData.status = newStatus;  // geannuleerd wordt nooit overschreven door open
-}
-```
+- Query diensten met status "open" die WEL een actieve toewijzing hebben
+- Update deze naar `volledig_bezet`
 
-**Nieuwe logica:**
-```typescript
-// Bendy is leidend: als een dienst in Bendy bestaat (open of assigned),
-// mag de status altijd hersteld worden — ook vanuit geannuleerd
-if (existingDienst.status !== 'geannuleerd') {
-  updateData.status = newStatus;
-} else {
-  // geannuleerd → herstel als Bendy het record nog kent
-  updateData.status = newStatus;
-}
-```
+**Bestand:** `supabase/functions/_shared/bendy-sync-requisitions.ts`
+- Na Stap 5F, een nieuw blok voor status-consistentie
+- Simpele UPDATE query: `status = 'volledig_bezet' WHERE status = 'open' AND EXISTS(toewijzing)`
 
-Vereenvoudigd: **verwijder de geannuleerd-blokkade volledig**. Als een dienst in Bendy op het open of assigned endpoint staat, is het niet geannuleerd — Bendy is leidend. De enige status die niet overschreven mag worden is `voltooid` (dat is al afgehandeld op regel 237).
+### Geen wijzigingen aan
+- Database schema
+- Frontend
+- pg_cron configuratie
+- Andere sync-modules
 
-### Vereenvoudigde wijziging (regels 235-244):
-```typescript
-if (existingDienst.status !== newStatus &&
-    existingDienst.status !== 'voltooid') {
-  updateData.status = newStatus;
-}
-```
+## Verwacht resultaat
+- Na volgende sync: 36 spook-open diensten worden geannuleerd of correct gemarkeerd
+- De 1 inconsistente dienst (met toewijzing maar status open) wordt volledig_bezet
+- Uren en aantallen komen overeen met Bendy (of zeer dicht erbij)
 
-Dit vervangt de complexe if/else boom met een simpele regel: alles behalve `voltooid` mag overschreven worden door Bendy.
-
-### Verwacht resultaat na volgende sync-run
-- 52 diensten gaan van `geannuleerd` → `open` (ze staan op Bendy's open endpoint)
-- Als sommige inmiddels ook op het assigned endpoint staan, worden ze `volledig_bezet`
-- Het uren-verschil van ~59 uur wordt (grotendeels) opgelost
-- Het verschil van 194 vs 187 ingeplande diensten wordt kleiner
-
-### Geen andere wijzigingen
-- Database schema: ongewijzigd
-- Frontend: ongewijzigd
-- pg_cron: ongewijzigd
-- Andere sync-modules: ongewijzigd
+## Risico-mitigatie
+- Maximum 50 stale-annuleringen per run (voorkomt cascade bij API-downtime)
+- Alleen diensten binnen het datumvenster (-14 tot +56 dagen) worden gecontroleerd
+- Logging van elke annulering in sync-result voor audittrail
 
