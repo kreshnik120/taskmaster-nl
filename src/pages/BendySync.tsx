@@ -2244,6 +2244,9 @@ export default function BendySync() {
             )}
           </CardContent>
         </Card>
+
+        {/* Week Vergelijking Monitor */}
+        <WeekVergelijking />
       </div>
     </PageContainer>
   );
