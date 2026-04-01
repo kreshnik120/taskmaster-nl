@@ -158,6 +158,7 @@ export async function fetchBendyApi(tenant: string, endpoint: string, params?: R
 export interface FetchResult {
   records: any[];
   included: any[];
+  hitCap: boolean;
 }
 
 export async function fetchAllBendyRecords(tenant: string, endpoint: string, extraParams?: Record<string, string>): Promise<FetchResult> {
