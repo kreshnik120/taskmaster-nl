@@ -1,33 +1,37 @@
 
 
-# FIX: UI Requisition Sync draait nog steeds als 'incremental'
+# Plan: Monitoring Agent + Onderzoek Ontbrekende Diensten
 
-## Probleem
-De "Requisition Sync Starten" knop in de UI stuurt `sync_type: 'incremental'` (regel 1390 van `BendySync.tsx`). Hierdoor wordt stale-detectie (Stap 6) overgeslagen en blijven ghost-open diensten bestaan.
+## Analyse
 
-Bewijs uit de sync log:
-- `sync_type: incremental` 
-- `debug_stale_marked: 0, debug_stale_checked: 0`
+De dedup-fix en stale-detectie werken correct. Het nieuwe probleem is **ontbrekende diensten**: 6 open en 9 ingeplande diensten uit Bendy staan niet in onze database. De 88 geannuleerde diensten (547.5 uur) verklaren het urenverschil — sommige hiervan zijn mogelijk onterecht geannuleerd.
 
-De cron-fix van eerder werkt alleen voor `trigger === 'scheduler'`, niet voor handmatige UI-triggers.
+## Stap 1: Onderzoek geannuleerde diensten Week 14
 
-## Oplossing
+Query de 88 geannuleerde diensten om te zien:
+- Hoeveel hebben een `bendy_id` dat WEL in de laatste API-batch zat
+- Of de stale-detectie te agressief was (records die wél bestaan maar net niet in de batch zaten door paginatie-limieten)
 
-**Bestand:** `src/pages/BendySync.tsx` — regel 1390
+## Stap 2: Controleer of de 8000-record limiet het probleem is
 
-Wijzig `sync_type: 'incremental'` → `sync_type: 'full'` voor de requisition sync knop.
+De sync haalt max 8000 records per endpoint. Met 8151 open records overschrijdt dit de limiet — **diensten na record 8000 worden niet opgehaald**. Dit verklaart waarom sommige open diensten ontbreken.
 
-```typescript
-// WAS:
-body: { action: 'sync_requisitions', tenant: 'citozorg', sync_type: 'incremental' }
+**Fix**: Verhoog de API-limiet of implementeer paginatie voor het open endpoint.
 
-// WORDT:
-body: { action: 'sync_requisitions', tenant: 'citozorg', sync_type: 'full' }
-```
+## Stap 3: Voeg een monitoring-query toe aan de BendySync pagina
+
+Voeg een "Week Vergelijking" sectie toe aan de BendySync UI die automatisch na elke sync:
+- De status-verdeling per week toont
+- Een vergelijking met verwachte Bendy-cijfers maakt
+- Afwijkingen groter dan 5% markeert met een waarschuwing
+
+### Technisch
+- **Bestand**: `src/pages/BendySync.tsx` — nieuwe sectie onder sync logs
+- **Query**: `SELECT status, COUNT(*), SUM(uren) FROM diensten WHERE datum BETWEEN week_start AND week_end GROUP BY status`
+- **Edge function**: Mogelijk `bendy-sync-requisitions.ts` — paginatie toevoegen als de 8000-limiet het probleem is
 
 ## Verwacht resultaat
-- Stale-detectie (Stap 6) activeert: ghost-open diensten worden `geannuleerd` (max 50 per run)
-- Deduplicatie-fix wordt toegepast op alle records
-- Status-consistentie (Stap 5G) draait mee
-- Na 1-2 full syncs: open diensten dalen van 26 → ~14 (Bendy-referentie)
+- Inzicht in waarom 15 diensten ontbreken
+- Automatische monitoring na elke sync
+- Fix voor de API-limiet als dat de oorzaak blijkt
 
