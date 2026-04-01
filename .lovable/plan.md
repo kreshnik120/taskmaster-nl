@@ -1,37 +1,56 @@
 
 
-# Plan: Monitoring Agent + Onderzoek Ontbrekende Diensten
+# Plan: Requisitions toevoegen aan cron-job + stale-detectie fixen
 
 ## Analyse
 
-De dedup-fix en stale-detectie werken correct. Het nieuwe probleem is **ontbrekende diensten**: 6 open en 9 ingeplande diensten uit Bendy staan niet in onze database. De 88 geannuleerde diensten (547.5 uur) verklaren het urenverschil — sommige hiervan zijn mogelijk onterecht geannuleerd.
+Twee problemen gevonden:
 
-## Stap 1: Onderzoek geannuleerde diensten Week 14
+1. **Geen automatische requisition sync**: De cron-job (pg_cron Job 41, elke 10 min) synchroniseert alleen clients. Requisitions worden nooit automatisch gesynchroniseerd.
 
-Query de 88 geannuleerde diensten om te zien:
-- Hoeveel hebben een `bendy_id` dat WEL in de laatste API-batch zat
-- Of de stale-detectie te agressief was (records die wél bestaan maar net niet in de batch zaten door paginatie-limieten)
+2. **Stale-detectie te agressief**: 34 diensten in Week 14 zijn auto-geannuleerd, maar 6 daarvan hadden open moeten blijven (8 open i.p.v. Bendy's 14). Dit komt waarschijnlijk doordat het open endpoint meer dan 10.000 records retourneert en de hard cap records afkapt — waardoor bestaande diensten als "stale" worden gemarkeerd.
 
-## Stap 2: Controleer of de 8000-record limiet het probleem is
+## Stap 1: Requisitions toevoegen aan cron-synchronisatie
 
-De sync haalt max 8000 records per endpoint. Met 8151 open records overschrijdt dit de limiet — **diensten na record 8000 worden niet opgehaald**. Dit verklaart waarom sommige open diensten ontbreken.
+**Bestand**: `supabase/functions/bendy-sync/index.ts`
 
-**Fix**: Verhoog de API-limiet of implementeer paginatie voor het open endpoint.
+Voeg `sync_requisitions` toe aan de `handleCronSync` functie, zodat requisitions automatisch elke 10 minuten worden gesynchroniseerd met `sync_type: 'full'`.
 
-## Stap 3: Voeg een monitoring-query toe aan de BendySync pagina
+## Stap 2: Stale-detectie veiliger maken
 
-Voeg een "Week Vergelijking" sectie toe aan de BendySync UI die automatisch na elke sync:
-- De status-verdeling per week toont
-- Een vergelijking met verwachte Bendy-cijfers maakt
-- Afwijkingen groter dan 5% markeert met een waarschuwing
+**Bestand**: `supabase/functions/_shared/bendy-sync-requisitions.ts`
 
-### Technisch
-- **Bestand**: `src/pages/BendySync.tsx` — nieuwe sectie onder sync logs
-- **Query**: `SELECT status, COUNT(*), SUM(uren) FROM diensten WHERE datum BETWEEN week_start AND week_end GROUP BY status`
-- **Edge function**: Mogelijk `bendy-sync-requisitions.ts` — paginatie toevoegen als de 8000-limiet het probleem is
+De stale-detectie (Stap 6) markeert diensten als geannuleerd wanneer hun `bendy_id` niet in de API-response voorkomt. Als de hard cap (10.000) wordt bereikt, ontbreken records — wat leidt tot vals-positieve annuleringen.
+
+**Fix**: Sla stale-detectie over als een van de endpoints de hard cap heeft bereikt. Voeg een vlag toe vanuit `fetchAllBendyRecords` die aangeeft of de cap is geraakt:
+
+```typescript
+// In stale-detectie (Stap 6):
+if (openResult.hitCap || assignedResult.hitCap) {
+  logInfo(FUNCTION_NAME, 'STAP 6: Overgeslagen — hard cap bereikt, onvolledige dataset');
+} else {
+  // bestaande stale-detectie logica
+}
+```
+
+**Bestand**: `supabase/functions/_shared/bendy-helpers.ts`
+
+Voeg `hitCap: boolean` toe aan het `FetchResult` interface en zet dit op `true` wanneer `allRecords.length >= MAX_TOTAL_RECORDS`.
+
+## Stap 3: Herstel onterecht geannuleerde diensten
+
+Na de fix, trigger een handmatige full sync. Diensten die eerder als stale werden gemarkeerd maar wél in de API voorkomen, worden automatisch hersteld (Bendy is leidend, geannuleerd kan worden hersteld naar open/volledig_bezet).
 
 ## Verwacht resultaat
-- Inzicht in waarom 15 diensten ontbreken
-- Automatische monitoring na elke sync
-- Fix voor de API-limiet als dat de oorzaak blijkt
+- Requisitions worden elke 10 min automatisch gesynchroniseerd
+- Geen valse annuleringen meer door incomplete API-data
+- Na 1 sync: open diensten stijgen van 8 → ~14, ingepland van 187 → ~196
+
+## Technische details
+
+| Bestand | Wijziging |
+|---|---|
+| `bendy-sync/index.ts` | `handleCronSync`: requisitions toevoegen |
+| `bendy-helpers.ts` | `FetchResult.hitCap` vlag + logica |
+| `bendy-sync-requisitions.ts` | Stap 6: skip als hitCap = true |
 
