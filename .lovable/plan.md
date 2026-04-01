@@ -1,48 +1,48 @@
 
 
-# STAP 1: Sublocations search toevoegen aan openclaw-proxy
+# FIX: Deduplicatie openRecords vs assignedRecords
 
-## Huidige situatie
-De `handleSearch` functie in `openclaw-proxy/index.ts` (regel 636-694) ondersteunt 4 entity_types: `professionals`, `clients`, `diensten`, `tasks`. Bij `entity_type=sublocations` wordt niets uitgevoerd en een leeg object `{}` geretourneerd.
+## Root Cause
 
-## Belangrijk: tabel heet `client_sublocations`
-Er is geen tabel `sublocations` — de juiste tabel is **`client_sublocations`** met deze relevante kolommen:
-- `id` (uuid)
-- `naam` (text) — niet `name`
-- `adres` (text) — niet `address`
-- `doelgroep_omschrijving` (text) — vergelijkbaar met zorgzwaarte
-- `location_id` (uuid) — parent location
-- `gekoppelde_bv_org_id` (uuid) — org koppeling
+De Bendy `/api/v2/requisitions/open` endpoint retourneert **zowel open ALS closed** records:
+- `bendy_status_verdeling: { "open": 8220, "closed": 8437 }` → totaal 16.657 records
 
-## Wijziging
-
-**Bestand:** `supabase/functions/openclaw-proxy/index.ts`
-
-Voeg na het `tasks`-blok (regel 689-690) een nieuw blok toe voor `sublocations`:
-
+Het probleem zit in regel 98:
 ```typescript
-if (!entityType || entityType === "sublocations") {
-  promises.push(
-    supabase
-      .from("client_sublocations")
-      .select("id, naam, adres, doelgroep_omschrijving, location_id, gekoppelde_bv_org_id")
-      .or(`naam.ilike.${q},adres.ilike.${q},doelgroep_omschrijving.ilike.${q}`)
-      .limit(50)
-      .then(({ data }) => { results.sublocations = data || []; })
-  );
-}
+const allRecords = [...openRecords, ...assignedRecords];
 ```
 
-Dit volgt exact het bestaande patroon van de andere entity_types, met:
-- **ILIKE** op `naam`, `adres`, en `doelgroep_omschrijving` (case-insensitive)
-- Limit op **50** (zoals gevraagd)
-- Resultaat als `{ "sublocations": [...] }` (consistent met andere types)
+Wanneer een dienst op **BEIDE** endpoints voorkomt (open + assigned), wordt deze twee keer verwerkt:
 
-## Geen andere wijzigingen
+1. **Eerste pass** (open, source='open'): bendy status='open' → `mapStatus` = `'open'` → queue update van `volledig_bezet` → `open` (**DOWNGRADE**)
+2. **Tweede pass** (assigned, source='assigned'): `existingDienst.status` is nog steeds de **DB-snapshot** (`volledig_bezet`), newStatus='volledig_bezet' → zelfde → **SKIP**
+
+Resultaat: alleen de downgrade wordt uitgevoerd. **36 diensten worden onterecht van `volledig_bezet` naar `open` gezet.**
+
+## Oplossing
+
+**Bestand:** `supabase/functions/_shared/bendy-sync-requisitions.ts`
+
+Na regel 97 (na het taggen en filteren), voeg deduplicatie toe: als een `bendy_id` in zowel `openRecords` als `assignedRecords` zit, gebruik alleen de assigned versie (die is autoritatief).
+
+```typescript
+// ═══ DEDUP: assigned is leidend bij overlap ═══
+const assignedIds = new Set(assignedRecords.map((r: any) => String(r.id)));
+openRecords = openRecords.filter((r: any) => !assignedIds.has(String(r.id)));
+```
+
+Dit plaatsen we **vóór** `const allRecords = [...openRecords, ...assignedRecords]` (regel 98).
+
+## Verwacht resultaat
+- ~36 records die op beide endpoints staan worden niet meer als 'open' verwerkt
+- Alleen de assigned versie wordt gebruikt → status `volledig_bezet`
+- De 6 echt open diensten (alleen op open endpoint) blijven correct
+- Het uren-verschil van ~130 uur wordt grotendeels opgelost
+- Het verschil 187 vs 194 ingeplande diensten wordt kleiner
+
+## Geen andere wijzigingen nodig
 - Database schema: ongewijzigd
 - Frontend: ongewijzigd
-- Andere actions in openclaw-proxy: ongewijzigd
-
-## Verificatie
-Na deploy testen met de opgegeven curl command (met `entity_type: "sublocations"`).
+- Stale-detectie (Stap 6): blijft werken, nu met correctere `seenBendyIds`
+- Status-consistentie (Stap 5G): nog steeds actief als vangnet
 
