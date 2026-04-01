@@ -1,40 +1,25 @@
 
 
-# S53-FIX-CRON: Frequente sync + pauze_minuten change detection
+# S53-FIX-LOCK: Reset sync lock
 
-## Overzicht
-Twee wijzigingen: (1) cron interval van 4 uur naar 5 minuten, (2) pauze_minuten opnemen in change detection zodat wijzigingen uit Bendy correct worden overgenomen.
+## Diagnose
+- `bendy_sync_config.sync_status` = **'running'** sinds 2026-03-31 03:00:05 UTC
+- Laatste succesvolle sync: 03:00:39 (users entity) — daarna geen runs meer
+- Sync draaide correct elke 10 minuten van 02:20 t/m 03:00
 
-## Stap 1: Cron interval verkorten
-**Bestand:** `supabase/config.toml`
+## Stap 1: Reset lock via migratie
 
-Regel met `[functions.bendy-sync]` schedule wijzigen van `"0 */4 * * *"` naar `"*/5 * * * *"`.
+SQL migratie uitvoeren:
 
-## Stap 2A: pauze_minuten toevoegen aan prefetch SELECT
-**Bestand:** `supabase/functions/_shared/bendy-sync-requisitions.ts` (regel 113)
-
-```
-WAS:  .select('id, bendy_id, status, datum, start_tijd, eind_tijd, sublocation_id')
-WORDT: .select('id, bendy_id, status, datum, start_tijd, eind_tijd, pauze_minuten, sublocation_id')
-```
-
-## Stap 2B: pauze_minuten change detection toevoegen
-**Bestand:** `supabase/functions/_shared/bendy-sync-requisitions.ts` (na regel 247)
-
-Na de bestaande `eind_tijd` vergelijking, toevoegen:
-```typescript
-if (existingDienst.pauze_minuten !== pauzeMinuten) updateData.pauze_minuten = pauzeMinuten;
+```sql
+UPDATE bendy_sync_config
+SET sync_status = 'idle', error_message = NULL, updated_at = NOW()
+WHERE sync_status = 'running';
 ```
 
-De variabele `pauzeMinuten` wordt al berekend op regel 192-199, dus geen extra extractie nodig.
-
-## Stap 3: Deploy
-Redeploy `bendy-sync` edge function.
+## Stap 2: Verificatie
+Na 5-10 minuten wachten, controleren of nieuwe entries in `bendy_sync_log` verschijnen met `entity_type = 'requisitions_open'`.
 
 ## Niet aanraken
-- Stale cleanup, lock mechanisme, frontend, andere edge functions
-
-## Verificatie
-- Na 5 minuten: nieuwe `sync_requisitions` entry in `bendy_sync_log`
-- Pauze wijziging in Bendy → binnen 5 min overgenomen in abcito
+- Edge function code, frontend, andere tabellen
 
