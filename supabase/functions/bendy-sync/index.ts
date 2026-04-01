@@ -511,7 +511,8 @@ Deno.serve(async (req) => {
   }
 
   if (body.trigger === 'scheduler') {
-    const cronSyncType = body.sync_type || 'incremental';
+    // Cron-triggered syncs always run as 'full' to ensure stale-detection (Step 6) executes
+    const cronSyncType = body.sync_type || 'full';
     logInfo(FUNCTION_NAME, `Cron trigger ontvangen: ${cronSyncType}`);
     return handleCronSync(cronSyncType);
   }
