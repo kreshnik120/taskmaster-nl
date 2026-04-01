@@ -312,7 +312,7 @@ export async function fetchDeltaBendyRecords(
   }
 
   logInfo(FUNCTION_NAME, `fetchDeltaBendyRecords ${endpoint}: ${allRecords.length} opgehaald in ${page} pagina('s), ${totalChanged} gewijzigd, earlyStop: ${earlyStop}`);
-  return { records: allRecords, included: allIncluded, earlyStop, pagesScanned: page };
+  return { records: allRecords, included: allIncluded, hitCap: false, earlyStop, pagesScanned: page };
 }
 
 // ============================================
