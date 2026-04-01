@@ -1,22 +1,33 @@
 
 
-# Plan: Trigger Full Bendy Sync + Vergelijk Week 14
+# FIX: UI Requisition Sync draait nog steeds als 'incremental'
 
-## Stap 1: Trigger volledige Bendy sync
-Roep de `bendy-sync` edge function aan met `sync_type: 'full'` en `entity_type: 'requisitions'` via `curl_edge_functions`. Dit activeert:
-- De deduplicatie-fix (assigned > open bij overlap)
-- Stale-detectie (Stap 6) voor ghost-open diensten
-- Status-consistentie (Stap 5G)
+## Probleem
+De "Requisition Sync Starten" knop in de UI stuurt `sync_type: 'incremental'` (regel 1390 van `BendySync.tsx`). Hierdoor wordt stale-detectie (Stap 6) overgeslagen en blijven ghost-open diensten bestaan.
 
-## Stap 2: Vergelijk Week 14 cijfers
-Na de sync, query de database voor Week 14 (30 maart – 5 april 2026):
-- `SELECT status, COUNT(*), SUM(uren)` grouped by status
-- Vergelijk met Bendy's cijfers: **14 open**, **196 ingepland**, **1388.75 uur**
+Bewijs uit de sync log:
+- `sync_type: incremental` 
+- `debug_stale_marked: 0, debug_stale_checked: 0`
 
-## Stap 3: Rapporteer verschil
-Presenteer een voor/na vergelijking met de Bendy-referentiecijfers.
+De cron-fix van eerder werkt alleen voor `trigger === 'scheduler'`, niet voor handmatige UI-triggers.
 
-## Technisch
-- **Edge function call**: `POST /bendy-sync` met body `{"sync_type": "full", "entity_type": "requisitions"}`
-- **DB query**: `SELECT status, COUNT(*), SUM(EXTRACT(EPOCH FROM (eind_tijd - start_tijd))/3600) FROM diensten WHERE datum BETWEEN '2026-03-30' AND '2026-04-05' GROUP BY status`
+## Oplossing
+
+**Bestand:** `src/pages/BendySync.tsx` — regel 1390
+
+Wijzig `sync_type: 'incremental'` → `sync_type: 'full'` voor de requisition sync knop.
+
+```typescript
+// WAS:
+body: { action: 'sync_requisitions', tenant: 'citozorg', sync_type: 'incremental' }
+
+// WORDT:
+body: { action: 'sync_requisitions', tenant: 'citozorg', sync_type: 'full' }
+```
+
+## Verwacht resultaat
+- Stale-detectie (Stap 6) activeert: ghost-open diensten worden `geannuleerd` (max 50 per run)
+- Deduplicatie-fix wordt toegepast op alle records
+- Status-consistentie (Stap 5G) draait mee
+- Na 1-2 full syncs: open diensten dalen van 26 → ~14 (Bendy-referentie)
 
