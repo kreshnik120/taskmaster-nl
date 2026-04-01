@@ -1,48 +1,31 @@
 
 
-# FIX: Deduplicatie openRecords vs assignedRecords
+# FIX: Full sync triggeren + cron-job verificatie
 
-## Root Cause
+## Probleem
+De sync draait als `incremental`, waardoor:
+1. Stale-detectie (Stap 6) wordt overgeslagen — alleen `full` syncs activeren dit
+2. Bestaande fout-open diensten niet worden herbeoordeeld (ongewijzigde records worden niet opgehaald)
+3. De consistency fix (5G) slechts 7 van ~35 gevallen vingt (rest heeft geen toewijzing in DB)
 
-De Bendy `/api/v2/requisitions/open` endpoint retourneert **zowel open ALS closed** records:
-- `bendy_status_verdeling: { "open": 8220, "closed": 8437 }` → totaal 16.657 records
+## Onderzoek nodig
+Controleer hoe de cron-job (Job 41) de sync triggert — het memory zegt `sync_type: full`, maar het sync-log toont `incremental`. Mogelijk is de edge function entry point of de cron payload incorrect.
 
-Het probleem zit in regel 98:
-```typescript
-const allRecords = [...openRecords, ...assignedRecords];
-```
+## Stap 1: Verifieer de cron-job configuratie
+Check de `bendy-sync` edge function entry point om te zien welke `sync_type` wordt doorgegeven wanneer de cron trigger binnenkomt (`trigger === 'scheduler'`).
 
-Wanneer een dienst op **BEIDE** endpoints voorkomt (open + assigned), wordt deze twee keer verwerkt:
+## Stap 2: Fix sync_type voor cron-triggered runs
+Als de cron-job `incremental` stuurt in plaats van `full`, wijzig de edge function zodat scheduled runs altijd `sync_type: 'full'` gebruiken. Dit zorgt ervoor dat:
+- Stale-detectie elke 10 minuten draait
+- Alle records opnieuw worden geëvalueerd met de dedup-fix
+- Catch-up toewijzingen worden aangemaakt
 
-1. **Eerste pass** (open, source='open'): bendy status='open' → `mapStatus` = `'open'` → queue update van `volledig_bezet` → `open` (**DOWNGRADE**)
-2. **Tweede pass** (assigned, source='assigned'): `existingDienst.status` is nog steeds de **DB-snapshot** (`volledig_bezet`), newStatus='volledig_bezet' → zelfde → **SKIP**
+## Stap 3: Handmatige full sync
+Na de fix, trigger een handmatige full sync om de 42 "ghost-open" diensten direct te corrigeren.
 
-Resultaat: alleen de downgrade wordt uitgevoerd. **36 diensten worden onterecht van `volledig_bezet` naar `open` gezet.**
-
-## Oplossing
-
-**Bestand:** `supabase/functions/_shared/bendy-sync-requisitions.ts`
-
-Na regel 97 (na het taggen en filteren), voeg deduplicatie toe: als een `bendy_id` in zowel `openRecords` als `assignedRecords` zit, gebruik alleen de assigned versie (die is autoritatief).
-
-```typescript
-// ═══ DEDUP: assigned is leidend bij overlap ═══
-const assignedIds = new Set(assignedRecords.map((r: any) => String(r.id)));
-openRecords = openRecords.filter((r: any) => !assignedIds.has(String(r.id)));
-```
-
-Dit plaatsen we **vóór** `const allRecords = [...openRecords, ...assignedRecords]` (regel 98).
-
-## Verwacht resultaat
-- ~36 records die op beide endpoints staan worden niet meer als 'open' verwerkt
-- Alleen de assigned versie wordt gebruikt → status `volledig_bezet`
-- De 6 echt open diensten (alleen op open endpoint) blijven correct
-- Het uren-verschil van ~130 uur wordt grotendeels opgelost
-- Het verschil 187 vs 194 ingeplande diensten wordt kleiner
-
-## Geen andere wijzigingen nodig
-- Database schema: ongewijzigd
-- Frontend: ongewijzigd
-- Stale-detectie (Stap 6): blijft werken, nu met correctere `seenBendyIds`
-- Status-consistentie (Stap 5G): nog steeds actief als vangnet
+## Verwacht resultaat na full sync
+- ~28 ghost-open diensten zonder toewijzing: worden ofwel gecorrigeerd naar `volledig_bezet` (als ze op assigned endpoint staan) of `geannuleerd` (als ze niet meer in de API staan)
+- Open diensten dalen van 42 naar ~14 (overeenkomend met Bendy)
+- Ingeplande diensten stijgen van 187 naar ~196
+- Uren-verschil van ~145 uur wordt grotendeels opgelost
 
