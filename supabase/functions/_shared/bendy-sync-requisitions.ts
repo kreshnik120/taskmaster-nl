@@ -677,6 +677,7 @@ export async function syncRequisitions(
     } else {
       logInfo(FUNCTION_NAME, `STAP 6: Geen stale diensten gevonden (${staleStats.checked} gecontroleerd)`);
     }
+    } // einde hitCap else-blok
   } else {
     logInfo(FUNCTION_NAME, 'Stale cleanup overgeslagen (delta sync)');
   }
