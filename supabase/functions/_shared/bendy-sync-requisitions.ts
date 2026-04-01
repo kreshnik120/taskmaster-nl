@@ -232,15 +232,11 @@ export async function syncRequisitions(
       if (existingDienst) {
         const updateData: Record<string, any> = {};
         const newStatus = mapStatus(attrs.status, source);
-        // FIX C: Sta herstel toe van geannuleerd → volledig_bezet (assigned endpoint)
+        // Bendy is leidend: als een dienst in Bendy bestaat, mag status altijd hersteld worden
+        // Enige uitzondering: voltooid (afgehandeld) wordt niet overschreven
         if (existingDienst.status !== newStatus &&
             existingDienst.status !== 'voltooid') {
-          // Allow geannuleerd → volledig_bezet if source is assigned
-          if (existingDienst.status === 'geannuleerd' && source === 'assigned') {
-            updateData.status = newStatus;
-          } else if (existingDienst.status !== 'geannuleerd') {
-            updateData.status = newStatus;
-          }
+          updateData.status = newStatus;
         }
         if (existingDienst.datum !== attrs.date) updateData.datum = attrs.date;
         if (existingDienst.start_tijd !== startTijd) updateData.start_tijd = startTijd;
