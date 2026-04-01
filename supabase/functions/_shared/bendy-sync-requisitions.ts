@@ -95,6 +95,14 @@ export async function syncRequisitions(
     logInfo(FUNCTION_NAME, `In-memory datumfilter: open ${beforeOpen}→${openRecords.length}, assigned ${beforeAssigned}→${assignedRecords.length}`);
   }
 
+  // ═══ DEDUP: assigned is leidend bij overlap ═══
+  const assignedIds = new Set(assignedRecords.map((r: any) => String(r.id)));
+  const beforeDedup = openRecords.length;
+  openRecords = openRecords.filter((r: any) => !assignedIds.has(String(r.id)));
+  if (beforeDedup !== openRecords.length) {
+    logInfo(FUNCTION_NAME, `Dedup: ${beforeDedup - openRecords.length} open records verwijderd (bestaan ook op assigned endpoint)`);
+  }
+
   const allRecords = [...openRecords, ...assignedRecords];
   result.fetched = allRecords.length;
 
