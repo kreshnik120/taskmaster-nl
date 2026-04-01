@@ -582,11 +582,87 @@ export async function syncRequisitions(
 
   await logProgress('5-TOEWIJZINGEN', twStats);
 
-  // ═══ STAP 6: Stale requisitions cleanup (alleen bij full sync) ═══
-  const staleStats = { marked: 0, skipped_old: 0, skipped_status: 0 };
+  // ═══ STAP 5G: Status-consistentie check ═══
+  // Diensten met status "open" die WEL een actieve toewijzing hebben → volledig_bezet
+  const consistencyStats = { fixed: 0 };
+  try {
+    const openDienstenMetTw: string[] = [];
+    for (const [bendyId, dienst] of dienstMap.entries()) {
+      if (!dienst.id) continue;
+      if (dienst.status !== 'open') continue;
+      if (dienstenMetToewijzing.has(dienst.id)) {
+        openDienstenMetTw.push(dienst.id);
+      }
+    }
+    if (openDienstenMetTw.length > 0) {
+      const CONSIST_CHUNK = 200;
+      for (let i = 0; i < openDienstenMetTw.length; i += CONSIST_CHUNK) {
+        const chunk = openDienstenMetTw.slice(i, i + CONSIST_CHUNK);
+        await adminClient
+          .from('diensten')
+          .update({ status: 'volledig_bezet' })
+          .in('id', chunk);
+      }
+      consistencyStats.fixed = openDienstenMetTw.length;
+      logInfo(FUNCTION_NAME, `STAP 5G: ${consistencyStats.fixed} open diensten met toewijzing → volledig_bezet`);
+    }
+  } catch (e) {
+    logWarning(FUNCTION_NAME, `STAP 5G fout: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  await logProgress('5G-CONSISTENTIE', consistencyStats);
+
+  // ═══ STAP 6: Stale-detectie — diensten die uit Bendy verdwenen zijn ═══
+  const staleStats = { marked: 0, skipped_old: 0, skipped_status: 0, checked: 0 };
+  const MAX_STALE_PER_RUN = 50;
 
   if (!isDelta) {
-    logInfo(FUNCTION_NAME, 'Stale cleanup overgeslagen (datumfilter actief, diensten buiten venster zijn niet stale)');
+    // Bouw set van alle bendy_ids die we in deze sync-run gezien hebben
+    const seenBendyIds = new Set<string>();
+    for (const record of allRecords) {
+      seenBendyIds.add(String(record.id));
+    }
+
+    // Haal alle open/deels_bezet diensten in het datumvenster op
+    let staleCandidates: any[] = [];
+    let staleOffset = 0;
+    while (true) {
+      const { data: chunk } = await adminClient
+        .from('diensten')
+        .select('id, bendy_id, status, datum')
+        .eq('org_id', orgId)
+        .not('bendy_id', 'is', null)
+        .in('status', ['open', 'deels_bezet'])
+        .gte('datum', dateFrom)
+        .lte('datum', dateTo)
+        .range(staleOffset, staleOffset + 999);
+      if (!chunk || chunk.length === 0) break;
+      staleCandidates.push(...chunk);
+      if (chunk.length < 1000) break;
+      staleOffset += 1000;
+    }
+
+    staleStats.checked = staleCandidates.length;
+
+    // Filter: diensten die NIET in de API-response voorkomen
+    const staleToCancel = staleCandidates
+      .filter(d => !seenBendyIds.has(d.bendy_id))
+      .slice(0, MAX_STALE_PER_RUN); // veiligheidslimiet
+
+    if (staleToCancel.length > 0) {
+      const staleIds = staleToCancel.map(d => d.id);
+      const STALE_CHUNK = 100;
+      for (let i = 0; i < staleIds.length; i += STALE_CHUNK) {
+        const chunk = staleIds.slice(i, i + STALE_CHUNK);
+        await adminClient
+          .from('diensten')
+          .update({ status: 'geannuleerd', prive_opmerking: 'Auto: niet meer in Bendy API' })
+          .in('id', chunk);
+      }
+      staleStats.marked = staleToCancel.length;
+      logInfo(FUNCTION_NAME, `STAP 6: ${staleStats.marked} stale diensten → geannuleerd (van ${staleStats.checked} gecontroleerd)`);
+    } else {
+      logInfo(FUNCTION_NAME, `STAP 6: Geen stale diensten gevonden (${staleStats.checked} gecontroleerd)`);
+    }
   } else {
     logInfo(FUNCTION_NAME, 'Stale cleanup overgeslagen (delta sync)');
   }
@@ -612,8 +688,8 @@ export async function syncRequisitions(
             debug_prof_map_size: profMap.size,
             debug_existing_tw: existingToewijzingen.size,
             debug_stale_marked: staleStats.marked,
-            debug_stale_skipped_old: staleStats.skipped_old,
-            debug_stale_skipped_status: staleStats.skipped_status,
+            debug_stale_checked: staleStats.checked,
+            debug_consistency_fixed: consistencyStats.fixed,
             debug_date_filter: { from: dateFrom, to: dateTo },
             skip_diagnostiek: skipDiag,
             ...metadata_fuc,
