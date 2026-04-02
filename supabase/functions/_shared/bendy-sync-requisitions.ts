@@ -670,6 +670,13 @@ export async function syncRequisitions(
     for (const record of allRecords) {
       seenBendyIds.add(String(record.id));
     }
+    // Voeg ook skipped records toe (sublocation_miss etc.) zodat ze niet als stale worden gemarkeerd
+    if (seenBendyIdsForStale) {
+      for (const id of seenBendyIdsForStale) {
+        seenBendyIds.add(id);
+      }
+      logInfo(FUNCTION_NAME, `STAP 6: ${seenBendyIdsForStale.size} skipped bendy_ids toegevoegd aan seenBendyIds`);
+    }
 
     // Haal alle open/deels_bezet diensten in het datumvenster op
     let staleCandidates: any[] = [];
