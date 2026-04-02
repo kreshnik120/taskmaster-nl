@@ -424,6 +424,7 @@ export function NieuweDienstModal({ open, onClose, editDienst }: NieuweDienstMod
         aangemaakt_door: user.id,
         is_spoed: isSpoed,
         kleur: kleur,
+        netto_uren: duur,
       };
 
       if (isEdit) {
