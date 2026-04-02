@@ -259,11 +259,42 @@ export async function syncRequisitions(
         }
         existingDienst.bendy_id = bendyId;
       } else {
+        // ═══ DEDUP: Skip open dienst als volledig_bezet al bestaat voor hetzelfde slot ═══
+        const newStatus = mapStatus(attrs.status, source);
+        if (newStatus === 'open') {
+          const slotKey = `${sublocationId}|${attrs.date}|${startTijd}|${eindTijd}`;
+          const existingSlot = Array.from(dienstMap.values()).find(
+            (ed: any) => ed.sublocation_id === sublocationId && ed.datum === attrs.date
+              && ed.start_tijd === startTijd && ed.eind_tijd === eindTijd
+              && ed.status === 'volledig_bezet'
+          );
+          const pendingBezet = dienstInserts.find(
+            (di: any) => di.sublocation_id === sublocationId && di.datum === attrs.date
+              && di.start_tijd === startTijd && di.eind_tijd === eindTijd
+              && di.status === 'volledig_bezet'
+          );
+          if (existingSlot || pendingBezet) {
+            result.skipped++;
+            result.errors.push(`DEDUP_SKIP: bendy_id ${bendyId} open maar slot al bezet (${slotKey})`);
+            continue;
+          }
+        }
+
+        // ═══ Bereken netto_uren ═══
+        const calcNettoUren = (): number => {
+          const [sh, sm] = startTijd.split(':').map(Number);
+          const [eh, em] = eindTijd.split(':').map(Number);
+          let brutoMin = (eh * 60 + em) - (sh * 60 + sm);
+          if (brutoMin <= 0) brutoMin += 24 * 60;
+          return Math.round(((brutoMin - pauzeMinuten) / 60) * 100) / 100;
+        };
+
         dienstInserts.push({
           org_id: orgId, sublocation_id: sublocationId, bendy_id: bendyId,
           titel: attrs.name || 'Bendy dienst', datum: attrs.date,
           start_tijd: startTijd, eind_tijd: eindTijd,
-          pauze_minuten: pauzeMinuten, status: mapStatus(attrs.status, source),
+          pauze_minuten: pauzeMinuten, netto_uren: calcNettoUren(),
+          status: newStatus,
           dienst_type: deriveDienstType(startTijd),
           gevraagd_functie_niveau: deriveNiveau(attrs.comment),
           gevraagd_aantal: 1, publieke_opmerking: attrs.comment || null,
