@@ -188,7 +188,9 @@ export async function syncRequisitions(
           if (clientBendyId && skipDiag.missing_client_ids.length < 50) {
             skipDiag.missing_client_ids.push(`${clientBendyId}|${attrs.name || ''}|${attrs.date || ''}`);
           }
-          // Mapping write overgeslagen (CPU optimalisatie SYNC-FIX-3)
+          // FIX: Voeg skipped bendy_ids toe aan seenBendyIds zodat stale-detectie ze niet annuleert
+          if (!seenBendyIdsForStale) seenBendyIdsForStale = new Set<string>();
+          seenBendyIdsForStale.add(String(record.id));
           continue;
         }
 
