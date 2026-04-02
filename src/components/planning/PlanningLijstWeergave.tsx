@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { DienstStatusBadge } from "./DienstStatusBadge";
 import { DienstQuickActions } from "./DienstQuickActions";
 import { Progress } from "@/components/ui/progress";
+import { berekenBezetting } from "@/utils/bezetting";
 import type { DienstData } from "@/hooks/useDienstenPlanning";
 
 interface PlanningLijstWeergaveProps {

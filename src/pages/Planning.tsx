@@ -128,6 +128,7 @@ const Planning = () => {
       vereiste_certificeringen: dienst.vereiste_certificeringen,
       is_spoed: dienst.is_spoed,
       kleur: dienst.kleur,
+      netto_uren: dienst.netto_uren,
       bron: "gekopieerd",
       org_id: dienst.org_id,
       aangemaakt_door: user.id,
