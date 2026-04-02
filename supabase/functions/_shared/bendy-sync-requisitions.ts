@@ -147,6 +147,7 @@ export async function syncRequisitions(
   // ═══ STAP 3: Verwerk in-memory ═══
   const cacheWrites: any[] = [];
   const dienstInserts: any[] = [];
+  let seenBendyIdsForStale: Set<string> | null = null; // Tracks skipped bendy_ids for stale-detection safety
   const dienstUpdates: any[] = [];
   const mappingWrites: any[] = [];
 
@@ -188,7 +189,9 @@ export async function syncRequisitions(
           if (clientBendyId && skipDiag.missing_client_ids.length < 50) {
             skipDiag.missing_client_ids.push(`${clientBendyId}|${attrs.name || ''}|${attrs.date || ''}`);
           }
-          // Mapping write overgeslagen (CPU optimalisatie SYNC-FIX-3)
+          // FIX: Voeg skipped bendy_ids toe aan seenBendyIds zodat stale-detectie ze niet annuleert
+          if (!seenBendyIdsForStale) seenBendyIdsForStale = new Set<string>();
+          seenBendyIdsForStale.add(String(record.id));
           continue;
         }
 
@@ -281,20 +284,11 @@ export async function syncRequisitions(
           }
         }
 
-        // ═══ Bereken netto_uren ═══
-        const calcNettoUren = (): number => {
-          const [sh, sm] = startTijd.split(':').map(Number);
-          const [eh, em] = eindTijd.split(':').map(Number);
-          let brutoMin = (eh * 60 + em) - (sh * 60 + sm);
-          if (brutoMin <= 0) brutoMin += 24 * 60;
-          return Math.round(((brutoMin - pauzeMinuten) / 60) * 100) / 100;
-        };
-
         dienstInserts.push({
           org_id: orgId, sublocation_id: sublocationId, bendy_id: bendyId,
           titel: attrs.name || 'Bendy dienst', datum: attrs.date,
           start_tijd: startTijd, eind_tijd: eindTijd,
-          pauze_minuten: pauzeMinuten, netto_uren: calcNettoUren(),
+          pauze_minuten: pauzeMinuten,
           status: newStatus,
           dienst_type: deriveDienstType(startTijd),
           gevraagd_functie_niveau: deriveNiveau(attrs.comment),
@@ -350,15 +344,27 @@ export async function syncRequisitions(
   logInfo(FUNCTION_NAME, `Cache upsert overgeslagen: ${cacheWrites.length} records (CPU optimalisatie)`);
   if (dienstUpdates.length > 0) await parallelUpdates(adminClient, 'diensten', dienstUpdates);
   if (dienstInserts.length > 0) {
+    // Dedup inserts by bendy_id (API kan duplicaten retourneren)
+    const seenInsertIds = new Map<string, number>();
+    const dedupedInserts: any[] = [];
+    for (let i = 0; i < dienstInserts.length; i++) {
+      const bid = dienstInserts[i].bendy_id;
+      if (!seenInsertIds.has(bid)) {
+        seenInsertIds.set(bid, dedupedInserts.length);
+        dedupedInserts.push(dienstInserts[i]);
+      }
+    }
+    if (dedupedInserts.length !== dienstInserts.length) {
+      logInfo(FUNCTION_NAME, `Dedup inserts: ${dienstInserts.length} → ${dedupedInserts.length}`);
+    }
     const CHUNK = 200;
-    for (let i = 0; i < dienstInserts.length; i += CHUNK) {
-      const chunk = dienstInserts.slice(i, i + CHUNK);
+    for (let i = 0; i < dedupedInserts.length; i += CHUNK) {
+      const chunk = dedupedInserts.slice(i, i + CHUNK);
       const { data: upserted, error } = await adminClient
         .from('diensten')
         .upsert(chunk, { onConflict: 'org_id,bendy_id' })
         .select('id, bendy_id');
-      if (error) logWarning(FUNCTION_NAME, `Diensten upsert chunk ${i}/${dienstInserts.length} fout: ${error.message}`);
-      // mapping local_id update overgeslagen (SYNC-FIX-3)
+      if (error) logWarning(FUNCTION_NAME, `Diensten upsert chunk ${i}/${dedupedInserts.length} fout: ${error.message}`);
     }
   }
   logInfo(FUNCTION_NAME, `Mapping writes overgeslagen: ${mappingWrites.length} records (CPU optimalisatie)`);
@@ -666,6 +672,13 @@ export async function syncRequisitions(
     const seenBendyIds = new Set<string>();
     for (const record of allRecords) {
       seenBendyIds.add(String(record.id));
+    }
+    // Voeg ook skipped records toe (sublocation_miss etc.) zodat ze niet als stale worden gemarkeerd
+    if (seenBendyIdsForStale) {
+      for (const id of seenBendyIdsForStale) {
+        seenBendyIds.add(id);
+      }
+      logInfo(FUNCTION_NAME, `STAP 6: ${seenBendyIdsForStale.size} skipped bendy_ids toegevoegd aan seenBendyIds`);
     }
 
     // Haal alle open/deels_bezet diensten in het datumvenster op

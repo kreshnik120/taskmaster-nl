@@ -21,10 +21,9 @@ const MAX_PAGES = 50;
 const PAGE_SIZE = 100;
 const DELTA_PAGE_SIZE = 100;
 const DELTA_MAX_PAGES = 200;
-// Hard cap: stop fetching als we dit aantal records bereiken (per endpoint)
-// Bendy API negeert limit/offset params en retourneert ~780 records/pagina
-// Verhoogd van 10000 → 15000: open (10.080) en assigned (10.647) endpoints overschreden limiet
-const MAX_TOTAL_RECORDS = 15000;
+// Hard cap per endpoint: Bendy API negeert datumfilters, retourneert ALLE records
+// Open: ~10k, Assigned: ~11k → cap op 25000 om alles op te halen
+const MAX_TOTAL_RECORDS = 25000;
 
 export interface BendyTenantConfig {
   baseUrl: string;
@@ -187,7 +186,6 @@ export async function fetchAllBendyRecords(tenant: string, endpoint: string, ext
     logInfo(FUNCTION_NAME, `Pagina ${page} (offset ${offset}): ${records.length} records opgehaald (totaal: ${allRecords.length})${totalFromMeta ? ` van ${totalFromMeta}` : ''}`);
 
     if (records.length < PAGE_SIZE) break;
-    // Hard cap: voorkom CPU timeout bij grote datasets
     if (allRecords.length >= MAX_TOTAL_RECORDS) {
       logInfo(FUNCTION_NAME, `Hard cap bereikt: ${allRecords.length} records >= ${MAX_TOTAL_RECORDS}, stop pagineren voor ${endpoint}`);
       break;
@@ -303,7 +301,6 @@ export async function fetchDeltaBendyRecords(
     }
 
     if (records.length < DELTA_PAGE_SIZE) break;
-    // Hard cap: voorkom CPU timeout bij grote datasets
     if (allRecords.length >= MAX_TOTAL_RECORDS) {
       logInfo(FUNCTION_NAME, `Delta hard cap bereikt: ${allRecords.length} records >= ${MAX_TOTAL_RECORDS}, stop pagineren voor ${endpoint}`);
       break;
