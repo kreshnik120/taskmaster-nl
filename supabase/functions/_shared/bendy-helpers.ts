@@ -23,8 +23,8 @@ const DELTA_PAGE_SIZE = 100;
 const DELTA_MAX_PAGES = 200;
 // Hard cap: stop fetching als we dit aantal records bereiken (per endpoint)
 // Bendy API negeert limit/offset params en retourneert ~780 records/pagina
-// Verhoogd van 8000 → 10000: open endpoint levert 8100+ records, limiet zorgde voor ontbrekende diensten
-const MAX_TOTAL_RECORDS = 10000;
+// Verhoogd van 10000 → 15000: open (10.080) en assigned (10.647) endpoints overschreden limiet
+const MAX_TOTAL_RECORDS = 15000;
 
 export interface BendyTenantConfig {
   baseUrl: string;
