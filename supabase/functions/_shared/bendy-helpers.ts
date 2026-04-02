@@ -301,8 +301,8 @@ export async function fetchDeltaBendyRecords(
     }
 
     if (records.length < DELTA_PAGE_SIZE) break;
-    if (allRecords.length >= MAX_RECORDS_PER_WINDOW) {
-      logInfo(FUNCTION_NAME, `Delta window cap bereikt: ${allRecords.length} records >= ${MAX_RECORDS_PER_WINDOW}, stop pagineren voor ${endpoint}`);
+    if (allRecords.length >= MAX_TOTAL_RECORDS) {
+      logInfo(FUNCTION_NAME, `Delta hard cap bereikt: ${allRecords.length} records >= ${MAX_TOTAL_RECORDS}, stop pagineren voor ${endpoint}`);
       break;
     }
     page++;
