@@ -284,20 +284,11 @@ export async function syncRequisitions(
           }
         }
 
-        // ═══ Bereken netto_uren ═══
-        const calcNettoUren = (): number => {
-          const [sh, sm] = startTijd.split(':').map(Number);
-          const [eh, em] = eindTijd.split(':').map(Number);
-          let brutoMin = (eh * 60 + em) - (sh * 60 + sm);
-          if (brutoMin <= 0) brutoMin += 24 * 60;
-          return Math.round(((brutoMin - pauzeMinuten) / 60) * 100) / 100;
-        };
-
         dienstInserts.push({
           org_id: orgId, sublocation_id: sublocationId, bendy_id: bendyId,
           titel: attrs.name || 'Bendy dienst', datum: attrs.date,
           start_tijd: startTijd, eind_tijd: eindTijd,
-          pauze_minuten: pauzeMinuten, netto_uren: calcNettoUren(),
+          pauze_minuten: pauzeMinuten,
           status: newStatus,
           dienst_type: deriveDienstType(startTijd),
           gevraagd_functie_niveau: deriveNiveau(attrs.comment),
