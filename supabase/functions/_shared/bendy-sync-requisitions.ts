@@ -344,15 +344,27 @@ export async function syncRequisitions(
   logInfo(FUNCTION_NAME, `Cache upsert overgeslagen: ${cacheWrites.length} records (CPU optimalisatie)`);
   if (dienstUpdates.length > 0) await parallelUpdates(adminClient, 'diensten', dienstUpdates);
   if (dienstInserts.length > 0) {
+    // Dedup inserts by bendy_id (API kan duplicaten retourneren)
+    const seenInsertIds = new Map<string, number>();
+    const dedupedInserts: any[] = [];
+    for (let i = 0; i < dienstInserts.length; i++) {
+      const bid = dienstInserts[i].bendy_id;
+      if (!seenInsertIds.has(bid)) {
+        seenInsertIds.set(bid, dedupedInserts.length);
+        dedupedInserts.push(dienstInserts[i]);
+      }
+    }
+    if (dedupedInserts.length !== dienstInserts.length) {
+      logInfo(FUNCTION_NAME, `Dedup inserts: ${dienstInserts.length} → ${dedupedInserts.length}`);
+    }
     const CHUNK = 200;
-    for (let i = 0; i < dienstInserts.length; i += CHUNK) {
-      const chunk = dienstInserts.slice(i, i + CHUNK);
+    for (let i = 0; i < dedupedInserts.length; i += CHUNK) {
+      const chunk = dedupedInserts.slice(i, i + CHUNK);
       const { data: upserted, error } = await adminClient
         .from('diensten')
         .upsert(chunk, { onConflict: 'org_id,bendy_id' })
         .select('id, bendy_id');
-      if (error) logWarning(FUNCTION_NAME, `Diensten upsert chunk ${i}/${dienstInserts.length} fout: ${error.message}`);
-      // mapping local_id update overgeslagen (SYNC-FIX-3)
+      if (error) logWarning(FUNCTION_NAME, `Diensten upsert chunk ${i}/${dedupedInserts.length} fout: ${error.message}`);
     }
   }
   logInfo(FUNCTION_NAME, `Mapping writes overgeslagen: ${mappingWrites.length} records (CPU optimalisatie)`);
