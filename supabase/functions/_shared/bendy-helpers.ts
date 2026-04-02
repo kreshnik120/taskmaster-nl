@@ -21,8 +21,9 @@ const MAX_PAGES = 50;
 const PAGE_SIZE = 100;
 const DELTA_PAGE_SIZE = 100;
 const DELTA_MAX_PAGES = 200;
-// Per-window cap: max records per date-window chunk (veiligheid)
-const MAX_RECORDS_PER_WINDOW = 5000;
+// Hard cap per endpoint: Bendy API negeert datumfilters, retourneert ALLE records
+// Open: ~10k, Assigned: ~11k → cap op 25000 om alles op te halen
+const MAX_TOTAL_RECORDS = 25000;
 
 export interface BendyTenantConfig {
   baseUrl: string;
