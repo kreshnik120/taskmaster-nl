@@ -147,6 +147,7 @@ export async function syncRequisitions(
   // ═══ STAP 3: Verwerk in-memory ═══
   const cacheWrites: any[] = [];
   const dienstInserts: any[] = [];
+  let seenBendyIdsForStale: Set<string> | null = null; // Tracks skipped bendy_ids for stale-detection safety
   const dienstUpdates: any[] = [];
   const mappingWrites: any[] = [];
 
