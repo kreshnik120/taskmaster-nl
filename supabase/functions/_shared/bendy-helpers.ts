@@ -159,7 +159,73 @@ export interface FetchResult {
   hitCap: boolean;
 }
 
+/**
+ * Date-windowed fetch: splits het datumvenster in wekelijkse blokken
+ * zodat elk blok ruim onder de API-limiet blijft.
+ * Retourneert altijd hitCap=false omdat alle data wordt opgehaald.
+ */
 export async function fetchAllBendyRecords(tenant: string, endpoint: string, extraParams?: Record<string, string>): Promise<FetchResult> {
+  const dateFrom = extraParams?.['filter[start_date_from]'];
+  const dateTo = extraParams?.['filter[start_date_to]'];
+
+  // Als er geen datumfilter is, gebruik oude single-window methode
+  if (!dateFrom || !dateTo) {
+    return fetchAllBendyRecordsSingleWindow(tenant, endpoint, extraParams);
+  }
+
+  // Splits in wekelijkse blokken
+  const allRecords: any[] = [];
+  const allIncluded: any[] = [];
+  const seenIds = new Set<string>();
+  
+  const startDate = new Date(dateFrom);
+  const endDate = new Date(dateTo);
+  let windowStart = new Date(startDate);
+  let windowIndex = 0;
+
+  while (windowStart <= endDate) {
+    const windowEnd = new Date(windowStart);
+    windowEnd.setDate(windowEnd.getDate() + 6); // 7-daags venster
+    if (windowEnd > endDate) windowEnd.setTime(endDate.getTime());
+
+    const windowFromStr = windowStart.toISOString().split('T')[0];
+    const windowToStr = windowEnd.toISOString().split('T')[0];
+
+    const windowParams = {
+      ...(extraParams || {}),
+      'filter[start_date_from]': windowFromStr,
+      'filter[start_date_to]': windowToStr,
+    };
+
+    logInfo(FUNCTION_NAME, `Window ${windowIndex}: ${windowFromStr} → ${windowToStr}`);
+
+    const windowResult = await fetchAllBendyRecordsSingleWindow(tenant, endpoint, windowParams);
+
+    // Dedup op ID (overlap tussen vensters)
+    for (const r of windowResult.records) {
+      const id = String(r.id);
+      if (!seenIds.has(id)) {
+        seenIds.add(id);
+        allRecords.push(r);
+      }
+    }
+    allIncluded.push(...windowResult.included);
+
+    if (windowResult.hitCap) {
+      logWarning(FUNCTION_NAME, `Window ${windowIndex} (${windowFromStr}→${windowToStr}) raakte cap van ${MAX_RECORDS_PER_WINDOW} — overweeg kleiner venster`);
+    }
+
+    logInfo(FUNCTION_NAME, `Window ${windowIndex}: ${windowResult.records.length} opgehaald, totaal nu: ${allRecords.length}`);
+
+    windowStart.setDate(windowStart.getDate() + 7);
+    windowIndex++;
+  }
+
+  logInfo(FUNCTION_NAME, `fetchAllBendyRecords ${endpoint}: ${allRecords.length} totaal via ${windowIndex} windows, hitCap=false`);
+  return { records: allRecords, included: allIncluded, hitCap: false };
+}
+
+async function fetchAllBendyRecordsSingleWindow(tenant: string, endpoint: string, extraParams?: Record<string, string>): Promise<FetchResult> {
   const allRecords: any[] = [];
   const allIncluded: any[] = [];
   let page = 1;
@@ -185,19 +251,15 @@ export async function fetchAllBendyRecords(tenant: string, endpoint: string, ext
     logInfo(FUNCTION_NAME, `Pagina ${page} (offset ${offset}): ${records.length} records opgehaald (totaal: ${allRecords.length})${totalFromMeta ? ` van ${totalFromMeta}` : ''}`);
 
     if (records.length < PAGE_SIZE) break;
-    // Hard cap: voorkom CPU timeout bij grote datasets
-    if (allRecords.length >= MAX_TOTAL_RECORDS) {
-      logInfo(FUNCTION_NAME, `Hard cap bereikt: ${allRecords.length} records >= ${MAX_TOTAL_RECORDS}, stop pagineren voor ${endpoint}`);
+    if (allRecords.length >= MAX_RECORDS_PER_WINDOW) {
+      logInfo(FUNCTION_NAME, `Window cap bereikt: ${allRecords.length} records >= ${MAX_RECORDS_PER_WINDOW}, stop pagineren voor ${endpoint}`);
       break;
     }
     page++;
   }
 
-  const hitCap = allRecords.length >= MAX_TOTAL_RECORDS;
-  if (hitCap) {
-    logWarning(FUNCTION_NAME, `⚠️ Hard cap bereikt voor ${endpoint}: ${allRecords.length} records — stale-detectie wordt onveilig`);
-  }
-  logInfo(FUNCTION_NAME, `fetchAllBendyRecords ${endpoint}: ${allRecords.length} totaal na ${page} pagina('s), hitCap=${hitCap}`);
+  const hitCap = allRecords.length >= MAX_RECORDS_PER_WINDOW;
+  logInfo(FUNCTION_NAME, `fetchSingleWindow ${endpoint}: ${allRecords.length} totaal na ${page} pagina('s), hitCap=${hitCap}`);
   return { records: allRecords, included: allIncluded, hitCap };
 }
 
