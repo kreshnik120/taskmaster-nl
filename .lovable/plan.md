@@ -1,35 +1,45 @@
 
 
-# Plan: Hard Cap Verhogen + Bestaande Duplicaten Opschonen
+# Plan: Duplicaten Definitief Oplossen
 
 ## Probleem
 
-Beide Bendy endpoints overschrijden de 10.000 record limiet (open: 10.080, assigned: 10.647). Dit veroorzaakt:
-- Ontbrekende diensten (Week 14: 6 open + 9 ingepland missen)
-- Stale-detectie permanent uitgeschakeld
-- Data-integriteit niet te garanderen
+Er zijn **15 actieve duplicaat-paren** waarbij een `open` dienst naast een `volledig_bezet` dienst bestaat op exact dezelfde sublocation/datum/tijden. De vorige cleanup-migratie heeft slechts een deel geraakt, en de sync-dedup-logica faalt omdat de check alleen kijkt naar de in-memory `dienstMap` — niet naar de database.
 
-## Stap 1: Hard cap verhogen naar 15.000
+## Stap 1: Database cleanup — alle bestaande duplicaten
 
-**Bestand**: `supabase/functions/_shared/bendy-helpers.ts`
+SQL migratie die ALLE `open` diensten annuleert waar een `volledig_bezet` equivalent bestaat op dezelfde sublocation+datum+start+eind:
 
-Verhoog `MAX_TOTAL_RECORDS` van 10.000 naar 15.000. Dit geeft ruimte voor groei en garandeert dat alle huidige records (10.080 open, 10.647 assigned) volledig worden opgehaald. Stale-detectie kan dan weer veilig draaien.
+```sql
+UPDATE diensten d_open
+SET status = 'geannuleerd', updated_at = now()
+FROM diensten d_bezet
+WHERE d_open.status = 'open' 
+  AND d_bezet.status = 'volledig_bezet'
+  AND d_open.sublocation_id = d_bezet.sublocation_id
+  AND d_open.datum = d_bezet.datum
+  AND d_open.start_tijd = d_bezet.start_tijd
+  AND d_open.eind_tijd = d_bezet.eind_tijd
+  AND d_open.id != d_bezet.id;
+```
 
-## Stap 2: Bestaande duplicaten opschonen (Week 15)
+## Stap 2: Sync-dedup versterken
 
-Er zijn 5 slot-duplicaten waar een `open` en `volledig_bezet` dienst naast elkaar bestaan op dezelfde sublocation/datum/tijden. De dedup-logica in de sync voorkomt nieuwe duplicaten, maar bestaande moeten handmatig worden opgeruimd.
+**Bestand**: `supabase/functions/_shared/bendy-sync-requisitions.ts`
 
-**Actie**: SQL migratie die voor elke slot-match waar `volledig_bezet` bestaat, de `open` variant op `geannuleerd` zet.
+Het huidige probleem: de dedup-check kijkt alleen naar de `dienstMap` (in-memory map van bestaande diensten geladen aan het begin). Maar als de `volledig_bezet` dienst pas later in dezelfde sync-run wordt verwerkt (vanuit het assigned-endpoint), is die nog niet in de map wanneer de `open` versie eerder wordt verwerkt.
 
-## Stap 3: Re-sync en verificatie
+**Fix**: Verwerk het **assigned endpoint eerst**, dan het open endpoint. Zo staat de `volledig_bezet` dienst altijd al in de map wanneer de `open` variant wordt gecontroleerd. Daarnaast: voeg een extra database-check toe als fallback.
 
-Na de fixes een nieuwe full sync triggeren en Week 14 vergelijken met Bendy-referentie (14 open, 196 ingepland, 1.388,75 uur).
+## Stap 3: Re-deploy en verificatie
+
+Re-deploy edge function, trigger sync, bevestig 0 duplicaten.
 
 ## Technisch
 
-| Bestand | Wijziging |
+| Onderdeel | Wijziging |
 |---|---|
-| `bendy-helpers.ts` | `MAX_TOTAL_RECORDS`: 10000 → 15000 |
-| Database migratie | UPDATE 5 `open` duplicaten → `geannuleerd` |
-| Edge function | Re-deploy na cap-verhoging |
+| Database migratie | Annuleer alle open duplicaten |
+| `bendy-sync-requisitions.ts` | Verwerk assigned vóór open; database-fallback dedup |
+| Edge function | Re-deploy |
 
