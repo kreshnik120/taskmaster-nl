@@ -103,7 +103,8 @@ export async function syncRequisitions(
     logInfo(FUNCTION_NAME, `Dedup: ${beforeDedup - openRecords.length} open records verwijderd (bestaan ook op assigned endpoint)`);
   }
 
-  const allRecords = [...openRecords, ...assignedRecords];
+  // Assigned eerst verwerken zodat volledig_bezet in dienstInserts staat vóór open dedup-check
+  const allRecords = [...assignedRecords, ...openRecords];
   result.fetched = allRecords.length;
 
   await logProgress('1-FETCH', { open: openRecords.length, assigned: assignedRecords.length, total: allRecords.length, dateFrom, dateTo });
