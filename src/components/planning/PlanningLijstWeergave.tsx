@@ -39,9 +39,8 @@ export function PlanningLijstWeergave({ diensten, onDienstClick, onEdit, onCopy,
 
       {/* Rows */}
       {diensten.map((d) => {
-        const bezet = d.toewijzingen.filter((t) => ["bevestigd", "positief"].includes(t.status)).length;
         const gevraagd = d.gevraagd_aantal || 1;
-        const pct = Math.min(Math.round((bezet / gevraagd) * 100), 100);
+        const { bezet, pct } = berekenBezetting(d.toewijzingen, gevraagd);
         const formatTijd = (t: string) => t?.slice(0, 5) ?? "";
 
         const row = (
