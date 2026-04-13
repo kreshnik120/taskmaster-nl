@@ -1,62 +1,51 @@
 
-# Analyse: Verschil Bendy UI vs. Ons Systeem — Week 14
+
+# Dashboard Strakker & Cleaner — Verbeterplan
 
 ## Bevindingen
 
-### Bendy UI toont (jouw screenshot):
-- **13 openstaande diensten**
-- **198 ingeplande diensten, 1398.25 uur**
-- **Totaal: 211 actieve diensten**
+Na visuele inspectie en code-analyse zijn dit de punten die strakker en cleaner kunnen:
 
-### Onze database toont:
-- **7 open diensten**
-- **187 ingepland (volledig_bezet), 1315.25 uur**
-- **Totaal: 194 actieve diensten**
-- **89 geannuleerde diensten** (waarvan 82 onterecht)
+### 1. Dubbele header op Team-tab
+De Team-tab toont **twee headers**: de pagina-header ("Dashboard / Team") EN de `DashboardHeader` component ("Overzicht / Team statistieken en voortgang" + Vernieuwen-knop). Dit is redundant en verspilt verticale ruimte.
 
-### Verschil: 17 diensten missen (6 open + 11 ingepland)
+**Fix**: Verwijder de `DashboardHeader` component uit de Team-tab. Verplaats de "Vernieuwen"-knop naar de pagina-header (rechtsboven, naast de tabs).
 
----
+### 2. TabsTrigger-code is 5x herhaald
+Elke tab-trigger (Mijn Werk, Kalender, Lijst, Opvolging, Team) heeft ~15 regels vrijwel identieke code met alleen de naam/icoon/kleur anders. Dit maakt de component onnodig lang (400 regels).
 
-## Oorzaak: Kettingreactie van 3 bugs
+**Fix**: Maak een `tabConfig`-array en render de triggers met `.map()`. Reduceert ~75 regels naar ~20.
 
-### Bug 1: Valse annuleringen op 1 april (HOOFDOORZAAK)
-Op 1 april om 13:51 heeft de stale-detectie **34 diensten** onterecht geannuleerd met melding "Auto: niet meer in Bendy API". Dit gebeurde omdat:
-- De oude hard cap van 10.000 was bereikt (API leverde 10.080 open + 10.413 assigned)
-- De `hitCap`-veiligheidsvlag bestond **nog niet** op dat moment
-- ~600 records werden niet opgehaald → stale-detectie zag ze niet → markeerde ze als verdwenen
-- Eerder (23 maart, 13-16 maart) waren al 54 diensten op dezelfde manier geannuleerd
+### 3. Mijn Werk: TodayFocus + Reminders nemen halve pagina in
+De twee cards (TodayFocusCard + UpcomingRemindersWidget) staan in een 2-kolom grid en nemen veel ruimte in, terwijl de data vaak minimaal is (loading states, lege lijsten). De view-toggle (Bord/Weekkalender) staat los eronder.
 
-### Bug 2: Hard cap nog steeds te laag
-Na onze verhoging naar 15.000 haalt de sync nu 15.219 closed + 15.120 open = **30.339 records**. Maar `hitCap` is NOG STEEDS `true` (stale_checked = -1), wat betekent dat stale-detectie permanent uitgeschakeld blijft. De sync kan niet verifiëren of records echt verdwenen zijn.
+**Fix**: Combineer de focus-items en view-toggle in een compacte toolbar-achtige rij bovenaan. TodayFocus wordt een inline samenvattingsregel i.p.v. een volledige card. Reminders worden een collapsible badge-trigger.
 
-### Bug 3: Geannuleerde diensten worden niet hersteld
-De sync-logica (regels 241-260) herstelt geannuleerde diensten als de API ze retourneert. De sync op 2 april updatte 540 records, maar de 82 wrongly-cancelled diensten werden NIET hersteld. Dit betekent dat de API ze niet meer retourneert — waarschijnlijk zijn ze in Bendy van "open" naar "assigned" verplaatst (status veranderd) maar vallen ze buiten de 15.000-limiet van één van beide endpoints.
+### 4. StatCards inconsistente styling
+De 4 KPI-kaarten op Team gebruiken de `StatCard` component met `glass-liquid-card` classes, maar de kaarten op andere pagina's (Recruitment, Facturatie) gebruiken de `KPICard` component. Twee verschillende KPI-systemen.
 
----
+**Fix**: Migreer `StatCards` naar de bestaande `KPICard`-component met `variant="violet"` (Team-context). Eén consistent KPI-systeem.
 
-## Fixplan
+### 5. Lege secties nemen te veel ruimte in
+"Verlopen Taken" en "Komende Week" tonen volledige Card-containers met headers, zelfs als ze leeg zijn ("Geen verlopen taken", "Geen taken gepland"). Dit verspilt ruimte.
 
-### Stap 1: Eenmalige database-herstel (SQL migratie)
-Alle diensten in week 14 die `geannuleerd` staan met "Auto: niet meer in Bendy API" EN waarvan het bendy_id nog steeds bestaat in de `bendy_raw_cache` → status terugzetten naar `open`. De eerstvolgende sync corrigeert dan de status naar het juiste (open of volledig_bezet).
+**Fix**: Lege secties tonen als compacte inline-meldingen (geen volledige Card) of worden verborgen met een subtle indicator.
 
-### Stap 2: Hard cap verwijderen, paginatie per datum gebruiken
-Het probleem is structureel: er zijn **meer dan 15.000 records per endpoint**. In plaats van de cap steeds te verhogen, moet de fetch-logica het datumvenster opsplitsen in kleinere blokken (bijv. per week) zodat elk blok onder de limiet blijft. Dit garandeert dat ALLE records worden opgehaald.
+### 6. Progress bars blauw i.p.v. context-kleur
+De voortgangsbalken in Per Medewerker en Per Bron zijn standaard blauw (`<Progress>`), terwijl de Team-tab violet als context-kleur heeft.
 
-### Stap 3: Stale-detectie robuuster maken
-Voeg skipped records (sublocation_miss) toe aan `seenBendyIds` zodat ze niet per ongeluk als "verdwenen" worden gemarkeerd. Dit is een extra veiligheidslaag.
+**Fix**: Geef de `Progress`-component een violet kleur via `className` of een `indicatorClassName` prop die past bij de glass-card-violet context.
 
-### Stap 4: Sync triggeren en verificeren
-Na de fixes een sync draaien en week 14 vergelijken:
-- Open: 7 → verwacht ~13
-- Ingepland: 187 → verwacht ~198
-- Uren: 1315 → verwacht ~1398
+## Implementatieplan
 
-## Technisch
+| # | Wijziging | Bestanden |
+|---|-----------|-----------|
+| 1 | Dubbele header verwijderen, Vernieuwen-knop naar pagina-header | `UnifiedDashboard.tsx`, verwijder `DashboardHeader` uit Team-tab |
+| 2 | TabsTrigger refactoren naar map-loop | `UnifiedDashboard.tsx` |
+| 3 | TodayFocus + Reminders compacter maken als toolbar | `UnifiedDashboard.tsx`, `TodayFocusCard.tsx` |
+| 4 | StatCards migreren naar KPICard-component | `UnifiedDashboard.tsx`, mogelijk `StatCards.tsx` verwijderen |
+| 5 | Lege secties compacter renderen | `OverdueTasksList.tsx`, `UpcomingTasksList.tsx` |
+| 6 | Progress bars context-kleur geven | `AssigneeProgress.tsx`, `SourceProgress.tsx` |
 
-| Bestand | Wijziging |
-|---|---|
-| Database migratie | Herstel ~82 onterecht geannuleerde diensten |
-| `bendy-helpers.ts` | Verwijder globale MAX_TOTAL_RECORDS, vervang door datum-windowed fetching |
-| `bendy-sync-requisitions.ts` | Stale-detectie: voeg skipped bendy_ids toe aan seenBendyIds |
-| Edge function | Re-deploy + full sync |
+Geen database-wijzigingen nodig. Puur UI/UX cleanup.
+
