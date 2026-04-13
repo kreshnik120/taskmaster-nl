@@ -45,8 +45,6 @@ import {
   UpcomingTasksList,
 } from "@/components/dashboard-stats";
 
-
-
 // Lazy load embedded views for performance
 const EmbeddedListView = lazy(() => import("@/components/dashboard/EmbeddedListView"));
 const EmbeddedCalendarView = lazy(() => import("@/components/dashboard/EmbeddedCalendarView"));
@@ -180,26 +178,29 @@ export default function UnifiedDashboard() {
       {/* Tabs - DRY with map */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="grid grid-cols-3 md:grid-cols-5 w-full glass-liquid-premium glass-specular-premium p-1.5 gap-1">
-          {TAB_CONFIG.map(({ value, label, icon: Icon, colorKey }) => (
-            <TabsTrigger 
-              key={value}
-              value={value} 
-              className={cn(
-                "gap-2 relative transition-all duration-300 ease-out-expo",
-                activeTab === value && [
-                  `bg-tab-${colorKey}-100 dark:bg-tab-${colorKey}-900/50`,
-                  `text-tab-${colorKey}-700 dark:text-tab-${colorKey}-300`,
-                  `shadow-tab-${colorKey}`
-                ]
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              <span className="hidden sm:inline">{label}</span>
-              {activeTab === value && (
-                <span className={`absolute -bottom-[1px] left-2 right-2 h-[3px] rounded-full bg-tab-${colorKey}-500 shadow-[0_2px_8px_currentColor]`} />
-              )}
-            </TabsTrigger>
-          ))}
+          {TAB_CONFIG.map(({ value, label, icon: Icon, colorKey }) => {
+            const colors = getTabColors(colorKey);
+            return (
+              <TabsTrigger 
+                key={value}
+                value={value} 
+                className={cn(
+                  "gap-2 relative transition-all duration-300 ease-out-expo",
+                  activeTab === value && [
+                    colors.background,
+                    colors.accent,
+                    colors.shadow
+                  ]
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                <span className="hidden sm:inline">{label}</span>
+                {activeTab === value && (
+                  <span className={cn("absolute -bottom-[1px] left-2 right-2 h-[3px] rounded-full shadow-[0_2px_8px_currentColor]", colors.indicator)} />
+                )}
+              </TabsTrigger>
+            );
+          })}
         </TabsList>
 
         {/* Tab 1: Mijn Werk */}
