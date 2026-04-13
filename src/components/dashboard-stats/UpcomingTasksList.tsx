@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, ChevronRight } from "lucide-react";
+import { Calendar, ChevronRight, CalendarCheck } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { UpcomingTask } from "@/hooks/useDashboardStats";
@@ -35,7 +35,7 @@ export function UpcomingTasksList({ tasks, isLoading, maxItems = 5 }: UpcomingTa
 
   if (isLoading) {
     return (
-      <Card>
+      <Card className="glass-card-violet">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-lg">
             <Calendar className="h-5 w-5" />
@@ -43,34 +43,26 @@ export function UpcomingTasksList({ tasks, isLoading, maxItems = 5 }: UpcomingTa
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="h-14 bg-muted animate-pulse rounded" />
+          {[1, 2].map(i => (
+            <div key={i} className="h-12 bg-muted/30 animate-pulse rounded-xl" />
           ))}
         </CardContent>
       </Card>
     );
   }
 
+  // Empty state: compact inline message
   if (tasks.length === 0) {
     return (
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Calendar className="h-5 w-5" />
-            Komende Week
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Geen taken gepland voor de komende 7 dagen
-          </p>
-        </CardContent>
-      </Card>
+      <div className="flex items-center gap-2 p-3 rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/20 dark:border-white/10">
+        <CalendarCheck className="h-4 w-4 text-muted-foreground shrink-0" />
+        <span className="text-sm text-muted-foreground">Geen taken gepland voor de komende 7 dagen</span>
+      </div>
     );
   }
 
   return (
-    <Card className="glass-card-slate">
+    <Card className="glass-card-violet">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-lg">
           <Calendar className="h-5 w-5" />
@@ -85,7 +77,7 @@ export function UpcomingTasksList({ tasks, isLoading, maxItems = 5 }: UpcomingTa
           <div
             key={task.id}
             onClick={() => handleClick(task.id)}
-            className="p-3 rounded-xl cursor-pointer transition-all duration-200 group bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border border-white/30 dark:border-white/12 shadow-[0_2px_6px_hsla(215,25%,48%,0.06)] hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_12px_hsla(215,25%,48%,0.12)]"
+            className="p-3 rounded-xl cursor-pointer transition-all duration-200 group bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm border border-white/30 dark:border-white/12 shadow-[0_2px_6px_hsla(270,45%,55%,0.06)] hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-[0_4px_12px_hsla(270,45%,55%,0.12)]"
           >
             <div className="flex items-start gap-3">
               <div className="flex-1 min-w-0">
@@ -93,12 +85,8 @@ export function UpcomingTasksList({ tasks, isLoading, maxItems = 5 }: UpcomingTa
                   {task.title}
                 </p>
                 <div className="flex flex-wrap gap-2 mt-1 text-xs text-muted-foreground">
-                  {task.assignee && (
-                    <span>👤 {task.assignee}</span>
-                  )}
-                  <span>
-                    📅 {format(new Date(task.dueDate), 'EEEE d MMM', { locale: nl })}
-                  </span>
+                  {task.assignee && <span>👤 {task.assignee}</span>}
+                  <span>📅 {format(new Date(task.dueDate), 'EEEE d MMM', { locale: nl })}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
