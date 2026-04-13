@@ -61,12 +61,6 @@ const TabLoadingFallback = () => (
   </div>
 );
 
-interface Application {
-  id: string;
-  pipeline_stage: string;
-  created_at: string;
-  updated_at: string | null;
-}
 
 export default function UnifiedDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
