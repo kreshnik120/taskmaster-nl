@@ -70,8 +70,6 @@ export default function UnifiedDashboard() {
   // Tab 2: Team Overzicht data
   const { data: stats, isLoading: statsLoading, error: statsError } = useDashboardStats();
   
-  // Tab 3: Recruitment data - inline fetch for UrgencyActionPanel
-  const [urgencyApplications, setUrgencyApplications] = useState<Application[]>([]);
   
   // Mijn Werk view toggle (persisted)
   const [mijnWerkView, setMijnWerkView] = useState<"bord" | "kalender">(
@@ -110,23 +108,6 @@ export default function UnifiedDashboard() {
     toast.success("Statistieken vernieuwd");
   };
 
-  // Load urgency applications for Recruitment tab
-  const loadUrgencyApplications = async () => {
-    try {
-      const { data } = await supabase
-        .from("professional_applications")
-        .select("id, pipeline_stage, created_at, updated_at")
-        .is("deleted_at", null)
-        .in("pipeline_stage", ["nieuw", "screening", "interview", "goedgekeurd"]);
-      setUrgencyApplications(data || []);
-    } catch (error) {
-      console.error("Error loading urgency applications:", error);
-    }
-  };
-
-  useEffect(() => {
-    loadUrgencyApplications();
-  }, []);
 
   // Handle taskId from URL (for deeplinks)
   useEffect(() => {
