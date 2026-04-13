@@ -34,6 +34,11 @@ export function useDiplomaUpgradeNotifications(
   onApplicationClick?: (applicationId: string) => void
 ) {
   const notifiedIds = useRef<Set<string>>(new Set());
+  const onClickRef = useRef(onApplicationClick);
+
+  useEffect(() => {
+    onClickRef.current = onApplicationClick;
+  }, [onApplicationClick]);
 
   useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null;
@@ -83,11 +88,11 @@ export function useDiplomaUpgradeNotifications(
             toast.success('🎓 Diploma Geverifieerd door DUO!', {
               description: `Het diploma van ${candidateName} is succesvol geüpgraded naar verified_duo (100% betrouwbaar)`,
               duration: 12000,
-              action: notification.application_id && onApplicationClick ? {
+              action: notification.application_id && onClickRef.current ? {
                 label: "Bekijk",
                 onClick: () => {
-                  if (notification.application_id) {
-                    onApplicationClick(notification.application_id);
+                  if (notification.application_id && onClickRef.current) {
+                    onClickRef.current(notification.application_id);
                   }
                 }
               } : undefined,
@@ -107,5 +112,5 @@ export function useDiplomaUpgradeNotifications(
         supabase.removeChannel(channel);
       }
     };
-  }, [onApplicationClick]);
+  }, []);
 }

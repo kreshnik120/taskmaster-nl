@@ -94,6 +94,11 @@ export function useProactiveMatchNotifications(
 ) {
   const clientsCache = useRef<Client[]>([]);
   const notifiedApplicationIds = useRef<Set<string>>(new Set());
+  const onClickRef = useRef(onApplicationClick);
+
+  useEffect(() => {
+    onClickRef.current = onApplicationClick;
+  }, [onApplicationClick]);
 
   // Load sublocations once and map to Client interface
   useEffect(() => {
@@ -164,9 +169,9 @@ export function useProactiveMatchNotifications(
             
             toast.success(`🌟 Nieuwe match gevonden!`, {
               description: `${candidateName} (${bestMatch.score}% match met ${bestMatch.client.name || bestMatch.client.company})`,
-              action: onApplicationClick ? {
+              action: onClickRef.current ? {
                 label: "Bekijk",
-                onClick: () => onApplicationClick(newApp.id)
+                onClick: () => onClickRef.current?.(newApp.id)
               } : undefined,
               duration: 8000,
             });
@@ -178,5 +183,5 @@ export function useProactiveMatchNotifications(
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [onApplicationClick]);
+  }, []);
 }

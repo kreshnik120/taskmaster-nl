@@ -130,13 +130,13 @@ const Sollicitaties = () => {
   const { fullGreeting } = useGreeting(displayName);
 
   // Proactive AI match notifications - shows toast when new high-match applications arrive
-  const handleNotificationClick = (applicationId: string) => {
+  const handleNotificationClick = useCallback((applicationId: string) => {
     const app = applications.find(a => a.id === applicationId);
     if (app) {
       setSelectedApplication(app);
       setDetailModalOpen(true);
     }
-  };
+  }, [applications]);
   
   useProactiveMatchNotifications(handleNotificationClick);
   
