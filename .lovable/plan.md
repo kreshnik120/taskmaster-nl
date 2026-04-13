@@ -1,54 +1,72 @@
 
 
-# Bevindingen: Dashboard Cleanup Audit
+# Dode Code Analyse — Geverifieerd
 
-## 1 Kritieke Bug: Dynamische Tailwind-klassen werken NIET
+Elke entry hieronder is geverifieerd: **nul imports** vanuit actieve code in het hele project.
 
-**Ernst: HOOG** — De tab-triggers hebben geen actieve styling (achtergrondkleur, tekstkleur, shadow).
+## Frontend Components (0 imports)
 
-In `UnifiedDashboard.tsx` regels 189-199 worden template literals gebruikt:
-```
-`bg-tab-${colorKey}-100 dark:bg-tab-${colorKey}-900/50`
-`text-tab-${colorKey}-700 dark:text-tab-${colorKey}-300`
-`shadow-tab-${colorKey}`
-```
-En regel 199:
-```
-`bg-tab-${colorKey}-500`
-```
+| Bestand | Verificatie |
+|---|---|
+| `src/components/SystemMonitor.tsx` | 0 imports gevonden |
+| `src/components/GlobalOfflineBanner.tsx` | 0 imports gevonden |
+| `src/components/UnifiedActionHub.tsx` | 0 imports gevonden |
+| `src/components/QuickTimerButton.tsx` | 0 imports gevonden |
+| `src/components/UserProfileCard.tsx` | 0 imports gevonden |
+| `src/components/ClientSelectionDialog.tsx` | 0 imports gevonden |
+| `src/components/SublocationSelectionDialog.tsx` | 0 imports gevonden |
+| `src/components/ActiveProcessWidget.tsx` | Alleen geimporteerd door `ProcessTimeline` (zie hieronder) — maar `ActiveProcessWidget` zelf heeft 0 imports |
 
-Tailwind JIT kan dynamische klassen **niet** detecteren. De `safelist` is leeg. Dit betekent dat actieve tabs geen achtergrond, tekstkleur of indicator-lijn krijgen.
+**Kettenreactie**: `ActiveProcessWidget` importeert `ProcessTimeline`, maar `ActiveProcessWidget` zelf wordt nergens gebruikt. `ProcessTimeline` wordt WEL nog gebruikt door `TaskDetailModal`, dus die blijft. Alleen `ActiveProcessWidget.tsx` is dood.
 
-**Fix**: Gebruik de bestaande statische klassen uit `getTabColors()`:
-```typescript
-activeTab === value && [
-  getTabColors(colorKey).background,  // statisch: "bg-tab-kalender-100 dark:bg-tab-kalender-900/50"
-  getTabColors(colorKey).accent,      // statisch: "text-tab-kalender-700 dark:text-tab-kalender-300"
-  getTabColors(colorKey).shadow,      // statisch: "shadow-tab-kalender"
-]
-```
-En voor de indicator-lijn:
-```typescript
-<span className={cn("absolute -bottom-[1px] left-2 right-2 h-[3px] rounded-full shadow-[0_2px_8px_currentColor]", getTabColors(colorKey).indicator)} />
-```
+**Hook**: `useBackendHealth` wordt alleen gebruikt door `GlobalOfflineBanner` (ook dood) — dus ook dood.
 
-## 2 Minor: Dode export `DashboardHeader`
+## Frontend Page
 
-`DashboardHeader` wordt nog steeds geëxporteerd vanuit `dashboard-stats/index.ts` maar wordt nergens meer geïmporteerd. Het bestand `DashboardHeader.tsx` is nu dode code.
+| Bestand | Verificatie |
+|---|---|
+| `src/pages/Beschikbaarheid.tsx` | Route in App.tsx redirect naar `/planning?tab=beschikbaarheid`. Pagina zelf wordt NERGENS geimporteerd. De beschikbaarheid-componenten die het gebruikt (`BeschikbaarheidWeekKalender`, etc.) worden WEL nog door Planning.tsx gebruikt — alleen de page-wrapper is dood. |
 
-**Fix**: Verwijder de export uit `index.ts` en verwijder `DashboardHeader.tsx`.
+## Edge Functions (0 aanroepen vanuit frontend EN andere functions)
 
-## 3 Minor: Lege regels / unused import cleanup
+| Function | Verificatie |
+|---|---|
+| `auto-send-interview-slots` | 0 aanroepen in src/ of andere edge functions. Code zelf zegt "DEPRECATED". |
+| `backfill-embeddings` | 0 aanroepen in src/ of andere edge functions. Code zelf zegt "DEPRECATED: replaced by generate-embedding". |
+| `cleanup-test-data` | 0 aanroepen in src/. Alleen self-referencing logs. Utility voor handmatige cleanup — **optioneel** verwijderen. |
+| `cleanup-stuck-test-runs` | 0 aanroepen in src/ of andere edge functions. |
+| `cleanup-stale-jobs` | 0 aanroepen in src/ of andere edge functions. |
+| `cleanup-orchestrator-state` | 0 aanroepen in src/ of andere edge functions. |
+| `cleanup-fast-path-patterns` | 0 aanroepen in src/ of andere edge functions. |
 
-Regel 48-49 bevat dubbele lege regels. Verder zijn alle imports correct en worden ze gebruikt.
+**NIET dood** (geverifieerd): `schedule-interview` (gebruikt door orchestrator + handle-application-reply + react-agent), `send-interview-email` (gebruikt door orchestrator), `auto-backfill-orchestrator` (gebruikt door 3 UI components).
 
-## Samenvatting
+## Implementatieplan
 
-| # | Ernst | Probleem | Fix |
-|---|-------|----------|-----|
-| 1 | **HOOG** | Dynamische Tailwind-klassen breken tab-styling | Vervang template literals door `getTabColors()` statische klassen |
-| 2 | Laag | Dode `DashboardHeader` export + bestand | Verwijder |
-| 3 | Cosmetisch | Dubbele lege regels | Opruimen |
+### Stap 1: Verwijder 8 dode frontend bestanden
+- `SystemMonitor.tsx`
+- `GlobalOfflineBanner.tsx`
+- `UnifiedActionHub.tsx`
+- `QuickTimerButton.tsx`
+- `UserProfileCard.tsx`
+- `ClientSelectionDialog.tsx`
+- `SublocationSelectionDialog.tsx`
+- `ActiveProcessWidget.tsx`
 
-De rest van de cleanup (StatCards → KPICard, lege states, Progress indicatorClassName) is correct geïmplementeerd en functioneel.
+### Stap 2: Verwijder 1 dode hook
+- `useBackendHealth.ts`
+
+### Stap 3: Verwijder 1 dode page
+- `pages/Beschikbaarheid.tsx` (route is al een redirect)
+
+### Stap 4: Verwijder 6 dode edge functions
+- `auto-send-interview-slots/`
+- `backfill-embeddings/`
+- `cleanup-test-data/`
+- `cleanup-stuck-test-runs/`
+- `cleanup-stale-jobs/`
+- `cleanup-orchestrator-state/`
+- `cleanup-fast-path-patterns/`
+
+**Totaal: 16 bestanden/directories verwijderen. Geen actieve code wordt geraakt.**
 
