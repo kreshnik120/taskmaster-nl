@@ -46,9 +46,7 @@ import {
   UpcomingTasksList,
 } from "@/components/dashboard-stats";
 
-// Tab 3: Recruitment - Components
-import { RecruitmentKPIs } from "@/components/dashboard/RecruitmentKPIs";
-import { UrgencyActionPanel } from "@/components/recruitment/UrgencyActionPanel";
+// Recruitment components available for future use
 
 // Lazy load embedded views for performance
 const EmbeddedListView = lazy(() => import("@/components/dashboard/EmbeddedListView"));
