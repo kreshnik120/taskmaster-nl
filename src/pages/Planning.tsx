@@ -23,7 +23,7 @@ import { toast } from "sonner";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import type { DienstFilters, DienstData } from "@/hooks/useDienstenPlanning";
 
-const BeschikbaarheidContent = lazy(() => import("@/pages/Beschikbaarheid"));
+const BeschikbaarheidContent = lazy(() => import("@/components/beschikbaarheid/BeschikbaarheidTab"));
 
 function getDefaultWeekStart() {
   return format(startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd");
