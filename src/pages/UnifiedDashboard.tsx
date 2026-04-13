@@ -45,7 +45,7 @@ import {
   UpcomingTasksList,
 } from "@/components/dashboard-stats";
 
-// Recruitment components available for future use
+
 
 // Lazy load embedded views for performance
 const EmbeddedListView = lazy(() => import("@/components/dashboard/EmbeddedListView"));
