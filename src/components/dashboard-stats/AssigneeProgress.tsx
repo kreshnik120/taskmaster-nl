@@ -111,7 +111,7 @@ export function AssigneeProgress({ assignees, isLoading }: AssigneeProgressProps
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <Progress value={progress} className="flex-1 h-2" />
+                <Progress value={progress} className="flex-1 h-2" indicatorClassName="bg-tab-team-500" />
                 <span className="text-xs text-muted-foreground w-10 text-right">
                   {progress}%
                 </span>

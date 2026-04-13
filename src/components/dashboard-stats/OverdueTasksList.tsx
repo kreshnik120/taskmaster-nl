@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, ChevronRight } from "lucide-react";
+import { AlertTriangle, ChevronRight, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -24,38 +24,29 @@ export function OverdueTasksList({ tasks, isLoading, maxItems = 5 }: OverdueTask
 
   if (isLoading) {
     return (
-      <Card className="border-destructive/20 bg-destructive/5">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-lg text-destructive">
-            <AlertTriangle className="h-5 w-5" />
-            Verlopen Taken
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="h-14 bg-muted/50 animate-pulse rounded" />
-          ))}
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (tasks.length === 0) {
-    return (
-      <Card>
+      <Card className="glass-card-violet">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-lg">
             <AlertTriangle className="h-5 w-5" />
             Verlopen Taken
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground flex items-center gap-2">
-            <span className="text-green-600">✓</span>
-            Geen verlopen taken
-          </p>
+        <CardContent className="space-y-2">
+          {[1, 2].map(i => (
+            <div key={i} className="h-12 bg-muted/30 animate-pulse rounded-xl" />
+          ))}
         </CardContent>
       </Card>
+    );
+  }
+
+  // Empty state: compact inline message instead of full card
+  if (tasks.length === 0) {
+    return (
+      <div className="flex items-center gap-2 p-3 rounded-xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm border border-white/20 dark:border-white/10">
+        <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+        <span className="text-sm text-muted-foreground">Geen verlopen taken</span>
+      </div>
     );
   }
 
@@ -90,21 +81,13 @@ export function OverdueTasksList({ tasks, isLoading, maxItems = 5 }: OverdueTask
                   {task.title}
                 </p>
                 <div className="flex flex-wrap gap-2 mt-1 text-xs text-muted-foreground">
-                  {task.assignee && (
-                    <span>👤 {task.assignee}</span>
-                  )}
-                  <span>
-                    📅 {format(new Date(task.dueDate), 'd MMM', { locale: nl })}
-                  </span>
-                  {task.sourceName && (
-                    <span>📄 {task.sourceName}</span>
-                  )}
+                  {task.assignee && <span>👤 {task.assignee}</span>}
+                  <span>📅 {format(new Date(task.dueDate), 'd MMM', { locale: nl })}</span>
+                  {task.sourceName && <span>📄 {task.sourceName}</span>}
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <Badge variant="destructive">
-                  {task.daysOverdue}d verlopen
-                </Badge>
+                <Badge variant="destructive">{task.daysOverdue}d verlopen</Badge>
                 <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
               </div>
             </div>

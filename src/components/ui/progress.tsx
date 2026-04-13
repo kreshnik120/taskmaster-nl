@@ -5,12 +5,13 @@ import { cn } from "@/lib/utils";
 
 interface ProgressProps extends React.ComponentPropsWithoutRef<typeof ProgressPrimitive.Root> {
   size?: 'xs' | 'sm' | 'md' | 'lg';
+  indicatorClassName?: string;
 }
 
 const Progress = React.forwardRef<
   React.ElementRef<typeof ProgressPrimitive.Root>,
   ProgressProps
->(({ className, value, size = 'sm', ...props }, ref) => {
+>(({ className, value, size = 'sm', indicatorClassName, ...props }, ref) => {
   const heightClasses = {
     xs: 'h-0.5',   // 2px
     sm: 'h-1',     // 4px - Apple default
@@ -34,7 +35,8 @@ const Progress = React.forwardRef<
       <ProgressPrimitive.Indicator
         className={cn(
           "h-full w-full flex-1 bg-primary transition-all duration-300 ease-out rounded-full",
-          "shadow-[inset_0_1px_1px_rgba(255,255,255,0.3),0_1px_2px_rgba(0,0,0,0.1)]"
+          "shadow-[inset_0_1px_1px_rgba(255,255,255,0.3),0_1px_2px_rgba(0,0,0,0.1)]",
+          indicatorClassName
         )}
         style={{ transform: `translateX(-${100 - (value || 0)}%)` }}
       />

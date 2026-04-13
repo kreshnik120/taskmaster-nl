@@ -1,6 +1,6 @@
 import { useEffect, useState, Suspense, lazy } from "react";
 import { useSearchParams } from "react-router-dom";
-import { LayoutDashboard, LayoutGrid, User, Users, Briefcase, List, Calendar, TrendingUp, Loader2 } from "lucide-react";
+import { LayoutDashboard, LayoutGrid, User, Users, List, Calendar, TrendingUp, Loader2, RefreshCw } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -8,6 +8,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { getTabColors } from "@/lib/constants/designTokens";
 import { PageContainer, ContextColor } from "@/components/ui/page-container";
+import { Button } from "@/components/ui/button";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 // Tab-to-Context Color Mapping for dynamic PageContainer
 const TAB_CONTEXT_MAP: Record<string, ContextColor> = {
@@ -16,8 +19,17 @@ const TAB_CONTEXT_MAP: Record<string, ContextColor> = {
   'lijst': 'slate',
   'opvolging': 'amber',
   'team': 'violet',
-  
 };
+
+// Tab configuration for DRY rendering
+const TAB_CONFIG = [
+  { value: 'mijn-werk', label: 'Mijn Werk', icon: User, colorKey: 'mijn-werk' },
+  { value: 'kalender', label: 'Kalender', icon: Calendar, colorKey: 'kalender' },
+  { value: 'lijst', label: 'Lijst', icon: List, colorKey: 'lijst' },
+  { value: 'opvolging', label: 'Opvolging', icon: TrendingUp, colorKey: 'opvolging' },
+  { value: 'team', label: 'Team', icon: Users, colorKey: 'team' },
+] as const;
+
 // Tab 1: Mijn Werk - Components
 import { TodayFocusCard } from "@/components/dashboard/TodayFocusCard";
 import { UpcomingRemindersWidget } from "@/components/UpcomingRemindersWidget";
@@ -27,7 +39,6 @@ import { MyTasksFlowSection } from "@/components/dashboard/MyTasksFlowSection";
 // Tab 2: Team Overzicht - Components
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import {
-  DashboardHeader,
   StatCards,
   AssigneeProgress,
   SourceProgress,
@@ -62,6 +73,7 @@ interface Application {
 export default function UnifiedDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAdmin, isManager } = useUserRole();
+  const queryClient = useQueryClient();
   
   // Tab 2: Team Overzicht data
   const { data: stats, isLoading: statsLoading, error: statsError } = useDashboardStats();
@@ -100,6 +112,12 @@ export default function UnifiedDashboard() {
     setSearchParams({ tab: value });
   };
 
+  // Refresh handler for Team tab
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+    toast.success("Statistieken vernieuwd");
+  };
+
   // Load urgency applications for Recruitment tab
   const loadUrgencyApplications = async () => {
     try {
@@ -124,27 +142,22 @@ export default function UnifiedDashboard() {
     if (taskId) {
       setSelectedTaskId(taskId);
       setTaskModalOpen(true);
-      // Switch to mijn-werk tab if not already there
       if (activeTab !== 'mijn-werk') {
         setSearchParams({ tab: 'mijn-werk', taskId });
       }
     }
   }, [searchParams]);
 
-  // Callback when modal closes - remove taskId from URL
+  // Callback when modal closes
   const handleTaskModalClose = (open: boolean) => {
     setTaskModalOpen(open);
     if (!open) {
       setSelectedTaskId(null);
-      // Remove taskId from URL, keep tab
       setSearchParams({ tab: activeTab });
     }
   };
 
-  // Callback when task is updated
-  const handleTaskUpdated = () => {
-    // Refresh happens via real-time subscription
-  };
+  const handleTaskUpdated = () => {};
 
   return (
     <PageContainer 
@@ -152,7 +165,7 @@ export default function UnifiedDashboard() {
       className="space-y-6 p-6"
       withVignette={true}
     >
-      {/* Page Header - Dynamic Color */}
+      {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className={cn(
@@ -176,119 +189,57 @@ export default function UnifiedDashboard() {
             </p>
           </div>
         </div>
+
+        {/* Refresh button for Team tab */}
+        {activeTab === 'team' && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={statsLoading}
+            className="shrink-0"
+          >
+            <RefreshCw className={cn("h-4 w-4 mr-2", statsLoading && "animate-spin")} />
+            Vernieuwen
+          </Button>
+        )}
       </div>
 
-      {/* Tabs */}
+      {/* Tabs - DRY with map */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="grid grid-cols-3 md:grid-cols-5 w-full glass-liquid-premium glass-specular-premium p-1.5 gap-1">
-          {/* Mijn Werk */}
-          <TabsTrigger 
-            value="mijn-werk" 
-            className={cn(
-              "gap-2 relative transition-all duration-300 ease-out-expo",
-              activeTab === "mijn-werk" && [
-                "bg-tab-mijn-werk-100 dark:bg-tab-mijn-werk-900/50",
-                "text-tab-mijn-werk-700 dark:text-tab-mijn-werk-300",
-                "shadow-tab-mijn-werk"
-              ]
-            )}
-          >
-            <User className="h-4 w-4" />
-            <span className="hidden sm:inline">Mijn Werk</span>
-            {activeTab === "mijn-werk" && (
-              <span className="absolute -bottom-[1px] left-2 right-2 h-[3px] rounded-full bg-tab-mijn-werk-500 shadow-[0_2px_8px_currentColor]" />
-            )}
-          </TabsTrigger>
-          
-          {/* Kalender */}
-          <TabsTrigger 
-            value="kalender" 
-            className={cn(
-              "gap-2 relative transition-all duration-300 ease-out-expo",
-              activeTab === "kalender" && [
-                "bg-tab-kalender-100 dark:bg-tab-kalender-900/50",
-                "text-tab-kalender-700 dark:text-tab-kalender-300",
-                "shadow-tab-kalender"
-              ]
-            )}
-          >
-            <Calendar className="h-4 w-4" />
-            <span className="hidden sm:inline">Kalender</span>
-            {activeTab === "kalender" && (
-              <span className="absolute -bottom-[1px] left-2 right-2 h-[3px] rounded-full bg-tab-kalender-500 shadow-[0_2px_8px_currentColor]" />
-            )}
-          </TabsTrigger>
-          
-          {/* Lijst */}
-          <TabsTrigger 
-            value="lijst" 
-            className={cn(
-              "gap-2 relative transition-all duration-300 ease-out-expo",
-              activeTab === "lijst" && [
-                "bg-tab-lijst-100 dark:bg-tab-lijst-900/50",
-                "text-tab-lijst-700 dark:text-tab-lijst-300",
-                "shadow-tab-lijst"
-              ]
-            )}
-          >
-            <List className="h-4 w-4" />
-            <span className="hidden sm:inline">Lijst</span>
-            {activeTab === "lijst" && (
-              <span className="absolute -bottom-[1px] left-2 right-2 h-[3px] rounded-full bg-tab-lijst-500 shadow-[0_2px_8px_currentColor]" />
-            )}
-          </TabsTrigger>
-          
-          {/* Opvolging */}
-          <TabsTrigger 
-            value="opvolging" 
-            className={cn(
-              "gap-2 relative transition-all duration-300 ease-out-expo",
-              activeTab === "opvolging" && [
-                "bg-tab-opvolging-100 dark:bg-tab-opvolging-900/50",
-                "text-tab-opvolging-700 dark:text-tab-opvolging-300",
-                "shadow-tab-opvolging"
-              ]
-            )}
-          >
-            <TrendingUp className="h-4 w-4" />
-            <span className="hidden sm:inline">Opvolging</span>
-            {activeTab === "opvolging" && (
-              <span className="absolute -bottom-[1px] left-2 right-2 h-[3px] rounded-full bg-tab-opvolging-500 shadow-[0_2px_8px_currentColor]" />
-            )}
-          </TabsTrigger>
-          
-          {/* Team */}
-          <TabsTrigger 
-            value="team" 
-            className={cn(
-              "gap-2 relative transition-all duration-300 ease-out-expo",
-              activeTab === "team" && [
-                "bg-tab-team-100 dark:bg-tab-team-900/50",
-                "text-tab-team-700 dark:text-tab-team-300",
-                "shadow-tab-team"
-              ]
-            )}
-          >
-            <Users className="h-4 w-4" />
-            <span className="hidden sm:inline">Team</span>
-            {activeTab === "team" && (
-              <span className="absolute -bottom-[1px] left-2 right-2 h-[3px] rounded-full bg-tab-team-500 shadow-[0_2px_8px_currentColor]" />
-            )}
-          </TabsTrigger>
-          
+          {TAB_CONFIG.map(({ value, label, icon: Icon, colorKey }) => (
+            <TabsTrigger 
+              key={value}
+              value={value} 
+              className={cn(
+                "gap-2 relative transition-all duration-300 ease-out-expo",
+                activeTab === value && [
+                  `bg-tab-${colorKey}-100 dark:bg-tab-${colorKey}-900/50`,
+                  `text-tab-${colorKey}-700 dark:text-tab-${colorKey}-300`,
+                  `shadow-tab-${colorKey}`
+                ]
+              )}
+            >
+              <Icon className="h-4 w-4" />
+              <span className="hidden sm:inline">{label}</span>
+              {activeTab === value && (
+                <span className={`absolute -bottom-[1px] left-2 right-2 h-[3px] rounded-full bg-tab-${colorKey}-500 shadow-[0_2px_8px_currentColor]`} />
+              )}
+            </TabsTrigger>
+          ))}
         </TabsList>
 
-        {/* Tab 1: Mijn Werk - Week Calendar */}
+        {/* Tab 1: Mijn Werk */}
         <TabsContent value="mijn-werk" className="mt-6">
-          <div className="space-y-6">
-            <div className="grid gap-6 md:grid-cols-2">
-              <TodayFocusCard />
-              <UpcomingRemindersWidget />
-            </div>
-            
-            {/* View toggle */}
-            <div className="flex justify-end">
-              <ToggleGroup type="single" value={mijnWerkView} onValueChange={handleViewChange} className="glass-liquid-premium p-1 rounded-lg">
+          <div className="space-y-4">
+            {/* Compact toolbar: Focus + Reminders + View toggle */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <div className="flex-1 flex flex-col sm:flex-row items-start sm:items-center gap-3 min-w-0">
+                <TodayFocusCard />
+                <UpcomingRemindersWidget />
+              </div>
+              <ToggleGroup type="single" value={mijnWerkView} onValueChange={handleViewChange} className="glass-liquid-premium p-1 rounded-lg shrink-0">
                 <ToggleGroupItem value="bord" className="gap-1.5 px-3 text-xs">
                   <LayoutGrid className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">Bord</span>
@@ -311,11 +262,9 @@ export default function UnifiedDashboard() {
           </div>
         </TabsContent>
 
-        {/* Tab 2: Team Overzicht - Transparent container */}
+        {/* Tab 2: Team Overzicht - No duplicate header */}
         <TabsContent value="team" className="mt-6">
           <div className="space-y-6">
-            <DashboardHeader isLoading={statsLoading} />
-            
             {statsError ? (
               <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive">
                 Er is een fout opgetreden bij het laden van de statistieken.
@@ -356,7 +305,7 @@ export default function UnifiedDashboard() {
           </div>
         </TabsContent>
 
-        {/* Tab 3: Lijst - Transparent container */}
+        {/* Tab 3: Lijst */}
         <TabsContent value="lijst" className="mt-6">
           <div className="space-y-6">
             <Suspense fallback={<TabLoadingFallback />}>
@@ -365,7 +314,7 @@ export default function UnifiedDashboard() {
           </div>
         </TabsContent>
 
-        {/* Tab 5: Kalender - Transparent container */}
+        {/* Tab 4: Kalender */}
         <TabsContent value="kalender" className="mt-6">
           <div className="space-y-6">
             <Suspense fallback={<TabLoadingFallback />}>
@@ -374,7 +323,7 @@ export default function UnifiedDashboard() {
           </div>
         </TabsContent>
 
-        {/* Tab 6: Opvolging - Transparent container */}
+        {/* Tab 5: Opvolging */}
         <TabsContent value="opvolging" className="mt-6">
           <div className="space-y-6">
             <Suspense fallback={<TabLoadingFallback />}>
