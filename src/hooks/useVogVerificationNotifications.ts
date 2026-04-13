@@ -35,6 +35,11 @@ export function useVogVerificationNotifications(
   onApplicationClick?: (applicationId: string) => void
 ) {
   const notifiedIds = useRef<Set<string>>(new Set());
+  const onClickRef = useRef(onApplicationClick);
+
+  useEffect(() => {
+    onClickRef.current = onApplicationClick;
+  }, [onApplicationClick]);
 
   useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null;
@@ -89,11 +94,11 @@ export function useVogVerificationNotifications(
             toast.success('📜 VOG Geverifieerd via GAAV!', {
               description,
               duration: 12000,
-              action: notification.application_id && onApplicationClick ? {
+              action: notification.application_id && onClickRef.current ? {
                 label: "Bekijk",
                 onClick: () => {
-                  if (notification.application_id) {
-                    onApplicationClick(notification.application_id);
+                  if (notification.application_id && onClickRef.current) {
+                    onClickRef.current(notification.application_id);
                   }
                 }
               } : undefined,
@@ -113,5 +118,5 @@ export function useVogVerificationNotifications(
         supabase.removeChannel(channel);
       }
     };
-  }, [onApplicationClick]);
+  }, []);
 }
