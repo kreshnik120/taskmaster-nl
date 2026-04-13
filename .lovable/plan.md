@@ -1,51 +1,54 @@
 
 
-# Dashboard Strakker & Cleaner — Verbeterplan
+# Bevindingen: Dashboard Cleanup Audit
 
-## Bevindingen
+## 1 Kritieke Bug: Dynamische Tailwind-klassen werken NIET
 
-Na visuele inspectie en code-analyse zijn dit de punten die strakker en cleaner kunnen:
+**Ernst: HOOG** — De tab-triggers hebben geen actieve styling (achtergrondkleur, tekstkleur, shadow).
 
-### 1. Dubbele header op Team-tab
-De Team-tab toont **twee headers**: de pagina-header ("Dashboard / Team") EN de `DashboardHeader` component ("Overzicht / Team statistieken en voortgang" + Vernieuwen-knop). Dit is redundant en verspilt verticale ruimte.
+In `UnifiedDashboard.tsx` regels 189-199 worden template literals gebruikt:
+```
+`bg-tab-${colorKey}-100 dark:bg-tab-${colorKey}-900/50`
+`text-tab-${colorKey}-700 dark:text-tab-${colorKey}-300`
+`shadow-tab-${colorKey}`
+```
+En regel 199:
+```
+`bg-tab-${colorKey}-500`
+```
 
-**Fix**: Verwijder de `DashboardHeader` component uit de Team-tab. Verplaats de "Vernieuwen"-knop naar de pagina-header (rechtsboven, naast de tabs).
+Tailwind JIT kan dynamische klassen **niet** detecteren. De `safelist` is leeg. Dit betekent dat actieve tabs geen achtergrond, tekstkleur of indicator-lijn krijgen.
 
-### 2. TabsTrigger-code is 5x herhaald
-Elke tab-trigger (Mijn Werk, Kalender, Lijst, Opvolging, Team) heeft ~15 regels vrijwel identieke code met alleen de naam/icoon/kleur anders. Dit maakt de component onnodig lang (400 regels).
+**Fix**: Gebruik de bestaande statische klassen uit `getTabColors()`:
+```typescript
+activeTab === value && [
+  getTabColors(colorKey).background,  // statisch: "bg-tab-kalender-100 dark:bg-tab-kalender-900/50"
+  getTabColors(colorKey).accent,      // statisch: "text-tab-kalender-700 dark:text-tab-kalender-300"
+  getTabColors(colorKey).shadow,      // statisch: "shadow-tab-kalender"
+]
+```
+En voor de indicator-lijn:
+```typescript
+<span className={cn("absolute -bottom-[1px] left-2 right-2 h-[3px] rounded-full shadow-[0_2px_8px_currentColor]", getTabColors(colorKey).indicator)} />
+```
 
-**Fix**: Maak een `tabConfig`-array en render de triggers met `.map()`. Reduceert ~75 regels naar ~20.
+## 2 Minor: Dode export `DashboardHeader`
 
-### 3. Mijn Werk: TodayFocus + Reminders nemen halve pagina in
-De twee cards (TodayFocusCard + UpcomingRemindersWidget) staan in een 2-kolom grid en nemen veel ruimte in, terwijl de data vaak minimaal is (loading states, lege lijsten). De view-toggle (Bord/Weekkalender) staat los eronder.
+`DashboardHeader` wordt nog steeds geëxporteerd vanuit `dashboard-stats/index.ts` maar wordt nergens meer geïmporteerd. Het bestand `DashboardHeader.tsx` is nu dode code.
 
-**Fix**: Combineer de focus-items en view-toggle in een compacte toolbar-achtige rij bovenaan. TodayFocus wordt een inline samenvattingsregel i.p.v. een volledige card. Reminders worden een collapsible badge-trigger.
+**Fix**: Verwijder de export uit `index.ts` en verwijder `DashboardHeader.tsx`.
 
-### 4. StatCards inconsistente styling
-De 4 KPI-kaarten op Team gebruiken de `StatCard` component met `glass-liquid-card` classes, maar de kaarten op andere pagina's (Recruitment, Facturatie) gebruiken de `KPICard` component. Twee verschillende KPI-systemen.
+## 3 Minor: Lege regels / unused import cleanup
 
-**Fix**: Migreer `StatCards` naar de bestaande `KPICard`-component met `variant="violet"` (Team-context). Eén consistent KPI-systeem.
+Regel 48-49 bevat dubbele lege regels. Verder zijn alle imports correct en worden ze gebruikt.
 
-### 5. Lege secties nemen te veel ruimte in
-"Verlopen Taken" en "Komende Week" tonen volledige Card-containers met headers, zelfs als ze leeg zijn ("Geen verlopen taken", "Geen taken gepland"). Dit verspilt ruimte.
+## Samenvatting
 
-**Fix**: Lege secties tonen als compacte inline-meldingen (geen volledige Card) of worden verborgen met een subtle indicator.
+| # | Ernst | Probleem | Fix |
+|---|-------|----------|-----|
+| 1 | **HOOG** | Dynamische Tailwind-klassen breken tab-styling | Vervang template literals door `getTabColors()` statische klassen |
+| 2 | Laag | Dode `DashboardHeader` export + bestand | Verwijder |
+| 3 | Cosmetisch | Dubbele lege regels | Opruimen |
 
-### 6. Progress bars blauw i.p.v. context-kleur
-De voortgangsbalken in Per Medewerker en Per Bron zijn standaard blauw (`<Progress>`), terwijl de Team-tab violet als context-kleur heeft.
-
-**Fix**: Geef de `Progress`-component een violet kleur via `className` of een `indicatorClassName` prop die past bij de glass-card-violet context.
-
-## Implementatieplan
-
-| # | Wijziging | Bestanden |
-|---|-----------|-----------|
-| 1 | Dubbele header verwijderen, Vernieuwen-knop naar pagina-header | `UnifiedDashboard.tsx`, verwijder `DashboardHeader` uit Team-tab |
-| 2 | TabsTrigger refactoren naar map-loop | `UnifiedDashboard.tsx` |
-| 3 | TodayFocus + Reminders compacter maken als toolbar | `UnifiedDashboard.tsx`, `TodayFocusCard.tsx` |
-| 4 | StatCards migreren naar KPICard-component | `UnifiedDashboard.tsx`, mogelijk `StatCards.tsx` verwijderen |
-| 5 | Lege secties compacter renderen | `OverdueTasksList.tsx`, `UpcomingTasksList.tsx` |
-| 6 | Progress bars context-kleur geven | `AssigneeProgress.tsx`, `SourceProgress.tsx` |
-
-Geen database-wijzigingen nodig. Puur UI/UX cleanup.
+De rest van de cleanup (StatCards → KPICard, lege states, Progress indicatorClassName) is correct geïmplementeerd en functioneel.
 
