@@ -25,7 +25,7 @@ const log = logger.create('Auth');
 interface InvitationData {
   invitation_id: string;
   email: string;
-  role: 'admin' | 'manager' | 'user';
+  role: 'admin' | 'manager' | 'finance' | 'user';
   is_valid: boolean;
 }
 
@@ -773,7 +773,8 @@ const Auth = () => {
                     Je wordt uitgenodigd als{' '}
                     <span className="font-semibold">
                       {inviteData.role === 'admin' ? 'Administrator' : 
-                       inviteData.role === 'manager' ? 'Manager' : 'Medewerker'}
+                       inviteData.role === 'manager' ? 'Manager' : 
+                       inviteData.role === 'finance' ? 'Finance' : 'Medewerker'}
                     </span>
                   </AlertTitle>
                 </Alert>
