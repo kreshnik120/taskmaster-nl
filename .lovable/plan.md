@@ -1,46 +1,42 @@
+# Alle automatische processen stopzetten
 
+## Wat er nu automatisch draait
 
-# Bevindingen: Wat Werkt Niet Goed
+In de database staan **21 actieve geplande taken** (cron jobs) die zelfstandig edge functions aanroepen. De belangrijkste:
 
-## Overzicht
-
-Na grondig onderzoek van de codebase, build logs, runtime errors, en console logs is er **1 actief bug** gevonden en **0 build errors**.
-
----
-
-## BUG: Realtime Subscriptions Loopen (Ernst: MEDIUM)
-
-### Probleem
-De console logs tonen dat `DiplomaUpgrade` en `VogVerification` realtime subscriptions zich **continu opnieuw instellen** — setup → CLOSED → CHANNEL_ERROR → setup → SUBSCRIBED → cleanup → setup, in een eindeloze loop.
-
-### Oorzaak
-In `src/pages/Sollicitaties.tsx` regel 133-139 wordt `handleNotificationClick` als gewone functie gedefinieerd (niet met `useCallback`). Omdat Sollicitaties bij elke render een nieuwe functie-referentie maakt, en alle 3 hooks (`useDiplomaUpgradeNotifications`, `useVogVerificationNotifications`, `useProactiveMatchNotifications`) die callback als dependency hebben in hun `useEffect`, worden de subscriptions elke render afgebroken en opnieuw opgezet.
-
-Dit veroorzaakt:
-- **Onnodige Supabase realtime verbindingen** (meerdere per seconde)
-- **CHANNEL_ERROR logs** in de console
-- **Potentieel gemiste notificaties** tijdens reconnects
-
-### Fix
-1. **Sollicitaties.tsx**: Wrap `handleNotificationClick` in `useCallback` met `[applications]` als dependency
-2. **Alternatief (robuuster)**: In alle 3 hooks, gebruik een `useRef` voor de callback i.p.v. het als useEffect-dependency te gebruiken — dan wordt de subscription nooit opnieuw opgezet
-
-De robuustere aanpak is optie 2: gebruik `useRef` in elke hook om de callback op te slaan, zodat de `useEffect` dependency array leeg is en de subscription stabiel blijft.
-
-### Bestanden
-| Bestand | Wijziging |
+| Frequentie | Taak |
 |---|---|
-| `src/pages/Sollicitaties.tsx` | `useCallback` wrapper rond `handleNotificationClick` |
-| `src/hooks/useDiplomaUpgradeNotifications.ts` | Callback via `useRef` i.p.v. dependency |
-| `src/hooks/useVogVerificationNotifications.ts` | Callback via `useRef` i.p.v. dependency |
-| `src/hooks/useProactiveMatchNotifications.ts` | Callback via `useRef` i.p.v. dependency |
+| elke 2 min | `auto-generate-embeddings` |
+| elke 5 min | `master-scheduler-autonomous`, `ai-agent-orchestrator` (2x), `auto-restart-backfill`, `ultra-knowledge-graph` |
+| elke 10 min | `bendy-delta-sync-10min`, `system-health-monitor` |
+| elke 20/30/35 min | `data-quality-auditor`, `smart-deduplicator`, `source-validator` |
+| dagelijks | `bendy-full-sync-nightly`, `meta-orchestrator`, `synapse-pruner`, `professional-enricher`, `cleanup-deleted-knowledge`, `monitor-document-expiry`, `retroactive-training-evaluator`, `ultra-daily-report` |
+| wekelijks | `invoke-mega-forecast-generator` |
 
----
+## Aanpak
 
-## Overige Status
+Alle 21 taken worden **op inactief gezet** (niet verwijderd). Ze blijven met hun volledige definitie in de database staan, zodat je ze later met één handeling weer kunt aanzetten — los van elkaar of allemaal tegelijk.
 
-- **Build**: Geen errors, alleen 1 cosmetische CSS warning
-- **Deleted files**: Geen leftover imports gevonden — alle 16 verwijderde bestanden zijn schoon opgeruimd
-- **Dashboard refactor**: Tabs, KPICards, Progress bars, empty states — alles werkt correct
-- **BeschikbaarheidTab**: Correct gekoppeld via lazy import in Planning.tsx, alle sub-componenten bestaan
+Concreet:
 
+1. Een database-migratie zet `active = false` voor elke taak in `cron.job`.
+2. Lopende sync-locks van Bendy worden vrijgegeven, zodat er geen taak blijft hangen op de status "running".
+3. Verificatie: query bevestigt dat er 0 actieve taken over zijn.
+
+Wat blijft werken: alles wat je zelf in de app aanklikt (handmatige sync, facturen genereren, AI-chat). Alleen de zelfstandig startende achtergrondtaken stoppen.
+
+Wat stopt: automatische Bendy-synchronisatie (data veroudert vanaf nu tot je handmatig synct), AI-leer/opschoontaken, monitoring en notificaties over verlopende documenten.
+
+## Terugdraaien
+
+Later weer aanzetten gebeurt met dezelfde methode omgekeerd (`active = true`), per taak of in één keer.
+
+## Technisch
+
+| Onderdeel | Wijziging |
+|---|---|
+| Database migratie | `UPDATE cron.job SET active = false` voor alle 21 jobs (via `cron.alter_job`) |
+| Bendy sync-state | Openstaande `running` locks resetten naar `idle`/`failed` |
+| Verificatie | `SELECT count(*) FROM cron.job WHERE active` moet 0 zijn |
+
+Geen wijzigingen in frontend-code of edge functions — die blijven ongewijzigd en inzetbaar voor handmatig gebruik.
